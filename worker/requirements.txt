@@ -1,0 +1,16 @@
+torch>=2.0.0
+torchvision
+opencv-python
+numpy
+pillow
+trimesh
+pygltflib
+boto3
+websockets
+pynvml
+psutil
+PyWavelets
+scipy
+redis
+httpx
+pytest

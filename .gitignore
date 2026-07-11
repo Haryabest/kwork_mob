@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+*.db
+
+# Node
+node_modules/
+.next/
+dist/
+build/
+.expo/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.pem
+*.key
+credentials.json
+
+# Logs & temp
+logs/
+*.log
+tmp/
+/tmp/
+
+# Docker volumes
+data/
+
+# Mobile
+apps/mobile/android/
+apps/mobile/ios/
+*.jks
+*.keystore
+
+# Worker checkpoints
+worker/checkpoints/
+
+# Coverage
+htmlcov/
+.coverage
+coverage/

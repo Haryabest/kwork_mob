@@ -1,0 +1,137 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kwork}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kwork_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-kwork_mob}
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kwork"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    ports:
+      - "8123:8123"
+      - "9009:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  orchestrator:
+    build: ./backend/orchestrator
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: http://minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./backend/orchestrator:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  celery-worker:
+    build: ./backend/orchestrator
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+
+  celery-beat:
+    build: ./backend/orchestrator
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3003:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - orchestrator
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  clickhouse_data:
+  grafana_data:
