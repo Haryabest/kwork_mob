@@ -16,12 +16,46 @@ export function WorkersPage() {
     grace_period: number;
   }>>([]);
   const [summary, setSummary] = useState({ online: 0, total: 0, queue_normal: 0, queue_high: 0 });
+  const [cloud, setCloud] = useState<Array<{
+    id: number;
+    provider: string;
+    instance_id: string;
+    worker_id: string;
+    gpu: string;
+    status: string;
+    rub_per_hour: number;
+  }>>([]);
+  const [rules, setRules] = useState<Array<{
+    id: number;
+    name: string;
+    queue_threshold: number;
+    launch_count: number;
+    provider: string;
+    gpu: string;
+    idle_timeout_min: number;
+    max_cloud_workers: number;
+    is_active: boolean;
+  }>>([]);
+  const [costs, setCosts] = useState({ today_rub: 0, month_rub: 0, burn_rub_per_hour: 0, running_instances: 0 });
   const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [provider, setProvider] = useState<string | null>('intelion');
+  const [gpu, setGpu] = useState('rtx4090');
+  const [count, setCount] = useState(1);
+  const [busy, setBusy] = useState(false);
 
   async function load() {
-    const { data } = await api.get<{ summary: typeof summary; items: typeof items }>('/admin/workers');
-    setSummary(data.summary);
-    setItems(data.items ?? []);
+    const [w, c, r, cost] = await Promise.all([
+      api.get<{ summary: typeof summary; items: typeof items }>('/admin/workers'),
+      api.get<{ items: typeof cloud }>('/admin/cloud/instances'),
+      api.get<{ items: typeof rules }>('/admin/cloud/autoscaling/rules'),
+      api.get<typeof costs>('/admin/cloud/costs'),
+    ]);
+    setSummary(w.data.summary);
+    setItems(w.data.items ?? []);
+    setCloud(c.data.items ?? []);
+    setRules(r.data.items ?? []);
+    setCosts(cost.data);
   }
 
   useEffect(() => {
@@ -34,11 +68,16 @@ export function WorkersPage() {
     <>
       <PageHeader
         title="Воркеры"
-        description="Состояние GPU-очередей и распределение нагрузки"
+        description="GPU-очередь · Intelion/Immers create/start/stop · авто-масштаб"
         action={
-          <Button leftSection={<IconRefresh size={16} />} onClick={() => load()}>
-            Обновить
-          </Button>
+          <Group>
+            <Button leftSection={<IconPlus size={16} />} onClick={() => setCreateOpen(true)}>
+              Облачный инстанс
+            </Button>
+            <Button leftSection={<IconRefresh size={16} />} onClick={() => load()}>
+              Обновить
+            </Button>
+          </Group>
         }
       />
       <MetricGrid
@@ -46,7 +85,7 @@ export function WorkersPage() {
           { label: 'Онлайн', value: String(summary.online), hint: `из ${summary.total}`, color: 'teal' },
           { label: 'Очередь normal', value: String(summary.queue_normal) },
           { label: 'Очередь high', value: String(summary.queue_high) },
-          { label: 'Всего воркеров', value: String(summary.total) },
+          { label: 'Burn ₽/ч', value: String(costs.burn_rub_per_hour), hint: `сегодня ${costs.today_rub} ₽` },
         ]}
       />
       <ShellTable
@@ -92,6 +131,136 @@ export function WorkersPage() {
             : [['—', 'Нет воркеров', 'Heartbeat ещё не приходил', '—', '—', '—']]
         }
       />
+
+      <PageHeader title="Облачные инстансы" description={`Месяц: ${costs.month_rub} ₽ · running: ${costs.running_instances}`} />
+      <ShellTable
+        headers={['Провайдер', 'Instance', 'Worker', 'GPU', 'Статус', '₽/ч', '']}
+        rows={
+          cloud.length
+            ? cloud.map((c) => [
+                c.provider,
+                c.instance_id,
+                c.worker_id,
+                c.gpu,
+                <StateBadge key={`cs-${c.id}`} value={c.status} />,
+                String(c.rub_per_hour),
+                <Group key={`ca-${c.id}`} gap={4}>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    loading={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        await api.post(`/admin/cloud/instances/${c.instance_id}/start`);
+                        await load();
+                      } catch (e) {
+                        notifications.show({ color: 'red', message: getApiError(e) });
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Start
+                  </Button>
+                  <Button
+                    size="xs"
+                    color="orange"
+                    variant="light"
+                    loading={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        await api.post(`/admin/cloud/instances/${c.instance_id}/stop`);
+                        await load();
+                      } catch (e) {
+                        notifications.show({ color: 'red', message: getApiError(e) });
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Stop
+                  </Button>
+                </Group>,
+              ])
+            : [['—', 'Нет облачных инстансов', '—', '—', '—', '—', '—']]
+        }
+      />
+
+      <PageHeader
+        title="Авто-масштаб"
+        description="Celery каждые 30с · queue_threshold → create · idle → stop"
+        action={
+          <Button
+            size="sm"
+            variant="light"
+            onClick={async () => {
+              try {
+                const { data } = await api.post('/admin/cloud/autoscaling/run');
+                notifications.show({ color: 'teal', message: JSON.stringify(data) });
+                await load();
+              } catch (e) {
+                notifications.show({ color: 'red', message: getApiError(e) });
+              }
+            }}
+          >
+            Run once
+          </Button>
+        }
+      />
+      <ShellTable
+        headers={['Имя', 'Порог Q', 'Launch', 'Провайдер', 'GPU', 'Idle мин', 'Max', 'Active']}
+        rows={
+          rules.length
+            ? rules.map((r) => [
+                r.name,
+                String(r.queue_threshold),
+                String(r.launch_count),
+                r.provider,
+                r.gpu,
+                String(r.idle_timeout_min),
+                String(r.max_cloud_workers),
+                r.is_active ? 'да' : 'нет',
+              ])
+            : [['—', 'Правил нет — создайте через PUT /admin/cloud/autoscaling/rules', '—', '—', '—', '—', '—', '—']]
+        }
+      />
+
+      <Modal opened={createOpen} onClose={() => setCreateOpen(false)} title="Создать облачный воркер" centered>
+        <Stack>
+          <Select
+            label="Провайдер"
+            data={[
+              { value: 'intelion', label: 'Intelion Cloud' },
+              { value: 'immers', label: 'Immers Cloud' },
+            ]}
+            value={provider}
+            onChange={setProvider}
+          />
+          <TextInput label="GPU" value={gpu} onChange={(e) => setGpu(e.currentTarget.value)} />
+          <NumberInput label="Количество" value={count} onChange={(v) => setCount(Number(v) || 1)} min={1} max={10} />
+          <Button
+            loading={busy}
+            onClick={async () => {
+              if (!provider) return;
+              setBusy(true);
+              try {
+                await api.post('/admin/cloud/instances', { provider, gpu, count });
+                notifications.show({ color: 'teal', message: 'Инстанс создан' });
+                setCreateOpen(false);
+                await load();
+              } catch (e) {
+                notifications.show({ color: 'red', message: getApiError(e) });
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Запустить
+          </Button>
+        </Stack>
+      </Modal>
     </>
   );
 }

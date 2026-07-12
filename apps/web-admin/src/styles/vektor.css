@@ -1,0 +1,192 @@
+/* 3dvektor staff — пространство, фактура, не «карточный» дефолт */
+
+:root {
+  --vz-gap: 1.5rem;
+  --vz-gap-lg: 2rem;
+  --vz-ink: #374151;
+  --vz-mute: #6d6c77;
+  --vz-surface: #ffffff;
+  --vz-canvas: #f4f6fb;
+  --vz-rail: linear-gradient(180deg, #0057b8 0%, #0381e9 50%, #9403fd 100%);
+  --vz-glow: 0 18px 40px rgba(0, 87, 184, 0.07);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background: var(--vz-canvas);
+}
+
+body {
+  color: var(--vz-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Диагональная сетка — лёгкая «инженерная» фактура */
+.vz-canvas {
+  background-color: var(--vz-canvas);
+  background-image:
+    linear-gradient(135deg, rgba(3, 129, 233, 0.05) 0%, transparent 42%),
+    linear-gradient(315deg, rgba(148, 3, 253, 0.04) 0%, transparent 38%),
+    repeating-linear-gradient(
+      -18deg,
+      transparent,
+      transparent 11px,
+      rgba(0, 87, 184, 0.03) 11px,
+      rgba(0, 87, 184, 0.03) 12px
+    );
+  min-height: 100%;
+}
+
+.vz-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vz-gap-lg);
+  max-width: none;
+  margin: 0;
+  width: 100%;
+}
+
+.vz-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.25rem;
+  border-bottom: none;
+}
+
+.vz-page-header h2,
+.vz-page-header .mantine-Title-root {
+  letter-spacing: -0.03em;
+}
+
+.vz-page-header::after {
+  content: '';
+  flex-basis: 100%;
+  height: 3px;
+  max-width: 4.5rem;
+  border-radius: 999px;
+  background: var(--vz-rail);
+  margin-top: -0.35rem;
+}
+
+.vz-surface {
+  background: var(--vz-surface);
+  border-radius: 18px;
+  box-shadow: var(--vz-glow);
+  border: 1px solid rgba(0, 87, 184, 0.06);
+  position: relative;
+  overflow: hidden;
+  padding: 1.25rem 1.35rem 1.25rem 1.5rem;
+}
+
+.vz-surface::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--vz-rail);
+}
+
+.vz-metric-value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.vz-grid {
+  display: grid;
+  gap: var(--vz-gap);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 576px) {
+  .vz-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 992px) {
+  .vz-grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .vz-grid-2-lg {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Мобилка: крупные зоны нажатия, меньше визуального шума */
+@media (max-width: 575px) {
+  :root {
+    --vz-gap: 1.15rem;
+    --vz-gap-lg: 1.5rem;
+  }
+
+  .vz-surface {
+    border-radius: 16px;
+    padding: 1.1rem 1.1rem 1.1rem 1.25rem;
+  }
+
+  .vz-page-header {
+    align-items: flex-start;
+  }
+
+  .mantine-AppShell-header {
+    padding-inline: 0.75rem !important;
+  }
+
+  .mantine-AppShell-main {
+    padding: 0.85rem !important;
+  }
+
+  .mantine-NavLink-root {
+    min-height: 48px;
+    padding-block: 0.55rem !important;
+  }
+
+  .mantine-Button-root {
+    min-height: 44px;
+  }
+
+  .mantine-Table-table {
+    font-size: 0.875rem;
+  }
+}
+
+.mantine-SimpleGrid-root {
+  gap: var(--vz-gap) !important;
+}
+
+.mantine-Tabs-list {
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  border-bottom: none !important;
+}
+
+.mantine-Tabs-tab {
+  border-radius: 999px !important;
+  padding: 0.55rem 1rem !important;
+  border: 1px solid rgba(0, 87, 184, 0.14) !important;
+  background: #fff !important;
+  color: #374151 !important;
+  font-weight: 600 !important;
+  min-height: 42px;
+}
+
+.mantine-Tabs-tab[data-active],
+.mantine-Tabs-tab[data-active]:hover {
+  background-image: linear-gradient(135deg, #0057b8 0%, #0381e9 45%, #9403fd 100%) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  box-shadow: 0 8px 18px rgba(0, 87, 184, 0.28);
+}
+
+.mantine-Tabs-tab::before,
+.mantine-Tabs-tab[data-active]::before {
+  display: none !important;
+}

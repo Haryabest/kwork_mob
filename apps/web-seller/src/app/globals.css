@@ -1,0 +1,263 @@
+/* 3dvektor seller — §20 кабинет */
+
+:root {
+  --vz-gap: 1.5rem;
+  --vz-gap-lg: 2rem;
+  --vz-ink: #374151;
+  --vz-mute: #6d6c77;
+  --vz-surface: #ffffff;
+  --vz-canvas: #eef2f8;
+  --vz-rail: linear-gradient(180deg, #0057b8 0%, #0381e9 48%, #9403fd 100%);
+  --vz-glow: 0 20px 44px rgba(0, 55, 120, 0.08);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  color: var(--vz-ink);
+  background: var(--vz-canvas);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.vz-canvas {
+  background-color: var(--vz-canvas);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 0% -10%, rgba(3, 129, 233, 0.14), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(148, 3, 253, 0.1), transparent 50%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 28%),
+    repeating-linear-gradient(
+      -22deg,
+      transparent,
+      transparent 13px,
+      rgba(0, 87, 184, 0.028) 13px,
+      rgba(0, 87, 184, 0.028) 14px
+    );
+  min-height: 100%;
+}
+
+.vz-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vz-gap-lg);
+  max-width: none;
+  margin: 0;
+  width: 100%;
+}
+
+.vz-page-header {
+  padding-bottom: 0.15rem;
+}
+
+.vz-page-header::after {
+  content: '';
+  display: block;
+  height: 3px;
+  width: 3.75rem;
+  border-radius: 999px;
+  background: var(--vz-rail);
+  margin-top: 0.85rem;
+}
+
+.vz-surface {
+  background: var(--vz-surface);
+  border-radius: 20px;
+  box-shadow: var(--vz-glow);
+  border: 1px solid rgba(0, 87, 184, 0.07);
+  position: relative;
+  overflow: hidden;
+  padding: 1.35rem 1.4rem 1.35rem 1.55rem;
+}
+
+.vz-surface::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--vz-rail);
+}
+
+.vz-surface-flat {
+  padding: 0;
+}
+
+.vz-surface-flat::before {
+  border-radius: 20px 0 0 20px;
+}
+
+.vz-metric-value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.vz-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.75rem 1.25rem;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(3, 129, 233, 0.08), transparent 55%);
+}
+
+.vz-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.vz-filters {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: 1fr;
+  margin-bottom: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .vz-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 960px) {
+  .vz-filters {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: end;
+  }
+}
+
+.vz-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -0.25rem;
+  padding: 0 0.25rem;
+}
+
+.vz-auth-card {
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(0, 55, 120, 0.14);
+  border: 1px solid rgba(0, 87, 184, 0.08);
+  padding: 1.75rem 1.6rem 1.6rem;
+  position: relative;
+  overflow: hidden;
+  animation: vz-pop 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.vz-auth-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--vz-rail);
+}
+
+@keyframes vz-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.vz-logo-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--vz-rail);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: -0.04em;
+}
+
+.mantine-SimpleGrid-root {
+  gap: var(--vz-gap) !important;
+}
+
+.mantine-Tabs-list {
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  border-bottom: none !important;
+}
+
+.mantine-Tabs-tab {
+  border-radius: 999px !important;
+  padding: 0.55rem 1.05rem !important;
+  min-height: 42px;
+  border: 1px solid rgba(0, 87, 184, 0.14) !important;
+  background: #fff !important;
+  color: #374151 !important;
+  font-weight: 600 !important;
+}
+
+.mantine-Tabs-tab[data-active],
+.mantine-Tabs-tab[data-active]:hover {
+  background-image: linear-gradient(135deg, #0057b8 0%, #0381e9 45%, #9403fd 100%) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  box-shadow: 0 8px 18px rgba(0, 87, 184, 0.28);
+}
+
+/* убрать дефолтную underline-линию Mantine */
+.mantine-Tabs-tab::before,
+.mantine-Tabs-tab[data-active]::before {
+  display: none !important;
+}
+
+@media (max-width: 575px) {
+  :root {
+    --vz-gap: 1.1rem;
+    --vz-gap-lg: 1.35rem;
+  }
+
+  .vz-surface {
+    border-radius: 16px;
+    padding: 1.1rem 1.05rem 1.1rem 1.2rem;
+  }
+
+  .vz-auth-card {
+    width: 92vw;
+    padding: 1.4rem 1.15rem;
+  }
+
+  .mantine-AppShell-main {
+    padding: 0.75rem !important;
+  }
+
+  .mantine-NavLink-root {
+    min-height: 48px;
+  }
+
+  .mantine-Button-root {
+    min-height: 44px;
+  }
+
+  .mantine-TextInput-input,
+  .mantine-PasswordInput-input,
+  .mantine-Select-input,
+  .mantine-Textarea-input {
+    min-height: 44px;
+  }
+}

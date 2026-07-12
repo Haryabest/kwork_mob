@@ -1,11 +1,82 @@
 'use client';
 
-import { Card, Group, Select, Table, Text, Title } from '@mantine/core';
+import { Button, Group, Stack, Table, Text, Title } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import { useEffect, useState } from 'react';
 import { SellerShell } from '../../../components/SellerShell';
+import { api, apiMessage } from '../../../services/api';
+
+type Row = { id: number; user_id?: number; action: string; details?: unknown; created_at?: string };
 
 export default function AuditPage() {
-  return <SellerShell><Title order={2}>Журнал аудита</Title><Text c="dimmed" size="sm" mb="lg">Действия сотрудников в компании</Text><Card withBorder>
-    <Group grow mb="md"><Select label="Сотрудник" placeholder="Все сотрудники" data={[]} /><Select label="Событие" placeholder="Все события" data={['Вход', 'Создание заказа', 'Изменение роли']} /></Group>
-    <Table><Table.Thead><Table.Tr><Table.Th>Дата</Table.Th><Table.Th>Сотрудник</Table.Th><Table.Th>Действие</Table.Th><Table.Th>IP-адрес</Table.Th></Table.Tr></Table.Thead><Table.Tbody><Table.Tr><Table.Td colSpan={4}><Text ta="center" c="dimmed" py="xl">Событий пока нет</Text></Table.Td></Table.Tr></Table.Tbody></Table>
-  </Card></SellerShell>;
+  const [items, setItems] = useState<Row[]>([]);
+
+  async function load() {
+    const { data } = await api.get<{ items: Row[] }>('/company/audit');
+    setItems(data.items ?? []);
+  }
+
+  useEffect(() => {
+    load().catch((e) => notifications.show({ color: 'red', message: apiMessage(e) }));
+  }, []);
+
+  async function exportCsv() {
+    try {
+      const { data } = await api.get('/company/audit/export', { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'audit.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    }
+  }
+
+  return (
+    <SellerShell>
+      <Group justify="space-between" mb="lg">
+        <div>
+          <Title order={2}>Аудит</Title>
+          <Text c="dimmed" size="sm">
+            Действия сотрудников компании
+          </Text>
+        </div>
+        <Button variant="light" onClick={exportCsv}>
+          Export CSV
+        </Button>
+      </Group>
+      <Table>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>ID</Table.Th>
+            <Table.Th>User</Table.Th>
+            <Table.Th>Action</Table.Th>
+            <Table.Th>When</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {items.length === 0 ? (
+            <Table.Tr>
+              <Table.Td colSpan={4}>
+                <Text ta="center" c="dimmed" py="xl">
+                  Пусто
+                </Text>
+              </Table.Td>
+            </Table.Tr>
+          ) : (
+            items.map((r) => (
+              <Table.Tr key={r.id}>
+                <Table.Td>{r.id}</Table.Td>
+                <Table.Td>{r.user_id ?? '—'}</Table.Td>
+                <Table.Td>{r.action}</Table.Td>
+                <Table.Td>{r.created_at ?? '—'}</Table.Td>
+              </Table.Tr>
+            ))
+          )}
+        </Table.Tbody>
+      </Table>
+    </SellerShell>
+  );
 }

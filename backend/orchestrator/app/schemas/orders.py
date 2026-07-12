@@ -44,3 +44,7 @@ class OrderCreateRequest(BaseModel):
     birth_date: str | None = None  # для 18+
     scale_calibration: dict | None = None
     task_uuid: str = Field(description="UUID для идемпотентности")
+    photos_prefix: str | None = Field(
+        default=None,
+        description="Префикс ключей фото в MinIO (photos/{task_uuid}/)",
+    )

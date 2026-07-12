@@ -38,6 +38,16 @@ async def send_password_reset_email(email: str, reset_token: str) -> str | None:
     return None
 
 
+async def send_marketing_email(email: str, subject: str, body: str) -> None:
+    """Маркетинговое письмо; в dev без SMTP — только лог."""
+    footer = "\n\n---\nОтписаться от маркетинга: настройки профиля (marketing_opt_in)."
+    full = body + footer
+    if settings.is_development and not settings.SMTP_HOST:
+        logger.info("DEV marketing email → %s | %s | %s", email, subject, body[:200])
+        return
+    await _send_email(email, subject, full)
+
+
 async def _send_email(to: str, subject: str, body: str) -> None:
     if not settings.SMTP_HOST:
         raise RuntimeError("SMTP не настроен")

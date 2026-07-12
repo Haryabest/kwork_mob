@@ -1,32 +1,13 @@
 'use client';
 
-import { MantineProvider, createTheme, type MantineColorsTuple } from '@mantine/core';
+import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import type { ReactNode } from 'react';
-
-const brand: MantineColorsTuple = [
-  '#e8f7f6',
-  '#d0efed',
-  '#a3ddd9',
-  '#6fc8c2',
-  '#3fb0a8',
-  '#1f9a91',
-  '#0B7A73',
-  '#09635e',
-  '#074e4a',
-  '#053a37',
-];
-
-const theme = createTheme({
-  primaryColor: 'brand',
-  fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
-  defaultRadius: 'md',
-  colors: { brand },
-});
+import { brandTheme } from '../theme/brand';
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <MantineProvider theme={theme} defaultColorScheme="light">
+    <MantineProvider theme={brandTheme} defaultColorScheme="light">
       <Notifications position="top-right" />
       {children}
     </MantineProvider>

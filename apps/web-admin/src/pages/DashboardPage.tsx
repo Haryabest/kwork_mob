@@ -1,4 +1,5 @@
-import { Badge, Card, Group, SimpleGrid, Text, ThemeIcon, Title, Tabs, Progress } from '@mantine/core';
+import { useState } from 'react';
+import { Badge, Group, Progress, Text, Title } from '@mantine/core';
 import {
   IconAlertTriangle,
   IconCash,
@@ -7,62 +8,129 @@ import {
 } from '@tabler/icons-react';
 
 const STATS = [
-  { label: 'В очереди', value: '42', icon: IconClock, color: 'blue' },
-  { label: 'Воркеры online', value: '18 / 20', icon: IconServer, color: 'teal' },
-  { label: 'Выручка сегодня', value: '84 230 ₽', icon: IconCash, color: 'brand' },
-  { label: 'NSFW на проверке', value: '7', icon: IconAlertTriangle, color: 'orange' },
+  { label: 'В очереди', value: '42', icon: IconClock },
+  { label: 'Воркеры online', value: '18 / 20', icon: IconServer },
+  { label: 'Выручка сегодня', value: '84 230 ₽', icon: IconCash },
+  { label: 'NSFW на проверке', value: '7', icon: IconAlertTriangle },
+] as const;
+
+const TABS = [
+  {
+    id: 'ops',
+    label: 'Операции',
+    cards: [
+      { title: 'Очередь заказов', value: '42 задания', percent: 68 },
+      { title: 'Среднее время выполнения', value: '2 мин 14 сек', percent: 45 },
+    ],
+  },
+  {
+    id: 'finance',
+    label: 'Финансы',
+    cards: [
+      { title: 'Выручка за 7 дней', value: '528 400 ₽', percent: 74 },
+      { title: 'Возвраты', value: '1.2%', percent: 12 },
+    ],
+  },
+  {
+    id: 'b2b',
+    label: 'B2B',
+    cards: [
+      { title: 'Активные компании', value: '142', percent: 63 },
+      { title: 'MRR B2B', value: '214 000 ₽', percent: 58 },
+    ],
+  },
+  {
+    id: 'quality',
+    label: 'Качество',
+    cards: [
+      { title: 'Средний рейтинг', value: '4.8 / 5', percent: 96 },
+      { title: 'Пересъёмки', value: '3.1%', percent: 31 },
+    ],
+  },
+  {
+    id: 'moderation',
+    label: 'Модерация',
+    cards: [
+      { title: 'Проверено за сутки', value: '1 284', percent: 82 },
+      { title: 'Отклонено', value: '7 материалов', percent: 7 },
+    ],
+  },
 ] as const;
 
 export default function DashboardPage() {
+  const [tab, setTab] = useState<(typeof TABS)[number]['id']>('ops');
+  const active = TABS.find((t) => t.id === tab) ?? TABS[0];
+
   return (
-    <>
-      <Group justify="space-between" mb="lg">
+    <div className="vz-page">
+      <div className="vz-page-header">
         <div>
           <Title order={2}>Дашборд</Title>
-          <Text c="dimmed" size="sm">
-            Активные заказы, EWT, загрузка воркеров
+          <Text c="#6d6c77" size="sm" mt={6}>
+            Очередь, EWT и загрузка GPU-воркеров
           </Text>
         </div>
-        <Badge variant="light" color="teal">
-          ClickHouse · обновлено сейчас
+        <Badge variant="light" color="brand" radius="sm">
+          Live · ClickHouse
         </Badge>
-      </Group>
+      </div>
 
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
+      <div className="vz-grid vz-grid-2 vz-grid-4">
         {STATS.map((s) => (
-          <Card key={s.label} shadow="sm" padding="lg" radius="md" withBorder>
-            <Group justify="space-between">
-              <Text size="sm" c="dimmed">
+          <div key={s.label} className="vz-surface">
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <Text size="sm" c="#6d6c77">
                 {s.label}
               </Text>
-              <ThemeIcon variant="light" color={s.color} radius="md">
-                <s.icon size={18} />
-              </ThemeIcon>
+              <s.icon size={18} color="#0057b8" stroke={1.6} />
             </Group>
-            <Text fw={700} size="xl" mt="sm">
+            <Text fw={700} size="xl" mt={14} className="vz-metric-value">
               {s.value}
             </Text>
-          </Card>
+          </div>
         ))}
-      </SimpleGrid>
-      <Tabs defaultValue="ops" mt="lg">
-        <Tabs.List>
-          <Tabs.Tab value="ops">Операции</Tabs.Tab>
-          <Tabs.Tab value="finance">Финансы</Tabs.Tab>
-          <Tabs.Tab value="b2b">B2B</Tabs.Tab>
-          <Tabs.Tab value="quality">Качество</Tabs.Tab>
-          <Tabs.Tab value="moderation">Модерация</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="ops" pt="md"><SimpleGrid cols={{ base: 1, md: 2 }}><ChartCard title="Очередь заказов" value="42 задания" percent={68} /><ChartCard title="Среднее время выполнения" value="2 мин 14 сек" percent={45} /></SimpleGrid></Tabs.Panel>
-        <Tabs.Panel value="finance" pt="md"><SimpleGrid cols={{ base: 1, md: 2 }}><ChartCard title="Выручка за 7 дней" value="528 400 ₽" percent={74} /><ChartCard title="Возвраты" value="1.2%" percent={12} /></SimpleGrid></Tabs.Panel>
-        <Tabs.Panel value="b2b" pt="md"><SimpleGrid cols={{ base: 1, md: 2 }}><ChartCard title="Активные компании" value="142" percent={63} /><ChartCard title="MRR B2B" value="214 000 ₽" percent={58} /></SimpleGrid></Tabs.Panel>
-        <Tabs.Panel value="quality" pt="md"><SimpleGrid cols={{ base: 1, md: 2 }}><ChartCard title="Средний рейтинг" value="4.8 / 5" percent={96} /><ChartCard title="Пересъёмки" value="3.1%" percent={31} /></SimpleGrid></Tabs.Panel>
-        <Tabs.Panel value="moderation" pt="md"><SimpleGrid cols={{ base: 1, md: 2 }}><ChartCard title="Проверено за сутки" value="1 284" percent={82} /><ChartCard title="Отклонено" value="7 материалов" percent={7} /></SimpleGrid></Tabs.Panel>
-      </Tabs>
-    </>
-  );
-}
+      </div>
 
-function ChartCard({ title, value, percent }: { title: string; value: string; percent: number }) {
-  return <Card withBorder><Text fw={600}>{title}</Text><Text size="xl" fw={700} mt="md">{value}</Text><Progress value={percent} mt="md" /></Card>;
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.55rem' }}>
+        {TABS.map((t) => {
+          const on = t.id === tab;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              style={{
+                border: on ? 'none' : '1px solid rgba(0,87,184,0.14)',
+                background: on
+                  ? 'linear-gradient(135deg, #0057b8 0%, #0381E9 45%, #9403fd 100%)'
+                  : '#fff',
+                color: on ? '#fff' : '#374151',
+                borderRadius: 999,
+                padding: '0.55rem 1.05rem',
+                fontWeight: 600,
+                fontSize: '0.875rem',
+                cursor: 'pointer',
+                minHeight: 44,
+                fontFamily: 'inherit',
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="vz-grid vz-grid-2-lg">
+        {active.cards.map((c) => (
+          <div key={c.title} className="vz-surface">
+            <Text fw={600}>{c.title}</Text>
+            <Text size="xl" fw={700} mt="lg" className="vz-metric-value">
+              {c.value}
+            </Text>
+            <Progress value={c.percent} mt="lg" size="md" radius="xl" color="brand" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

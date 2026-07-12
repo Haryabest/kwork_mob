@@ -11,7 +11,7 @@ import {
   ThemeIcon,
   UnstyledButton,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import {
   IconBell,
   IconBuilding,
@@ -68,40 +68,53 @@ export default function AppLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [opened, { toggle }] = useDisclosure();
+  const [opened, { toggle, close }] = useDisclosure();
+  const isMobile = useMediaQuery('(max-width: 767px)');
 
   const items = NAV.filter((item) => user && item.roles.includes(user.role));
 
   return (
     <AppShell
-      header={{ height: 60 }}
-      navbar={{ width: 260, breakpoint: 'sm', collapsed: { mobile: !opened } }}
-      padding="md"
+      header={{ height: isMobile ? 56 : 64 }}
+      navbar={{
+        width: 268,
+        breakpoint: 'sm',
+        collapsed: { mobile: !opened },
+      }}
+      padding={0}
     >
-      <AppShell.Header px="md">
-        <Group h="100%" justify="space-between">
-          <Group>
+      <AppShell.Header px={{ base: 'sm', sm: 'md' }}>
+        <Group h="100%" justify="space-between" wrap="nowrap">
+          <Group wrap="nowrap" gap="sm">
             <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <ThemeIcon size="lg" radius="md" variant="light" color="brand">
-              <IconStack2 size={18} />
+            <ThemeIcon
+              size={isMobile ? 'md' : 'lg'}
+              radius="md"
+              style={{
+                backgroundImage: 'linear-gradient(135deg, #0057b8 0%, #0381E9 45%, #9403fd 100%)',
+              }}
+            >
+              <IconStack2 size={18} color="#fff" />
             </ThemeIcon>
             <Box>
-              <Text fw={700} size="sm" lh={1.2}>
-                KWork Staff
+              <Text fw={700} size="sm" lh={1.15}>
+                3dvektor
               </Text>
-              <Text size="xs" c="dimmed">
-                {user ? STAFF_ROLE_LABELS[user.role] : ''}
+              <Text size="xs" c="#6d6c77" visibleFrom="xs">
+                {user ? STAFF_ROLE_LABELS[user.role] : 'Staff'}
               </Text>
             </Box>
           </Group>
-          <Group gap="xs">
-            <Badge variant="light" color="brand">
+          <Group gap="xs" wrap="nowrap">
+            <Badge variant="light" color="brand" visibleFrom="sm" maw={180} style={{ overflow: 'hidden' }}>
               {user?.email}
             </Badge>
-            <UnstyledButton onClick={logout}>
-              <Group gap={6}>
-                <IconLogout size={16} />
-                <Text size="sm">Выйти</Text>
+            <UnstyledButton onClick={logout} style={{ minHeight: 44, paddingInline: 8 }}>
+              <Group gap={6} wrap="nowrap">
+                <IconLogout size={18} />
+                <Text size="sm" visibleFrom="sm">
+                  Выйти
+                </Text>
               </Group>
             </UnstyledButton>
           </Group>
@@ -110,7 +123,7 @@ export default function AppLayout() {
 
       <AppShell.Navbar p="md">
         <AppShell.Section grow component={ScrollArea}>
-          <Stack gap={4}>
+          <Stack gap={8}>
             {items.map((item) => {
               const Icon = item.icon;
               return (
@@ -121,7 +134,7 @@ export default function AppLayout() {
                   active={isActive(location.pathname, item.path)}
                   onClick={() => {
                     navigate(item.path);
-                    if (opened) toggle();
+                    close();
                   }}
                 />
               );
@@ -130,8 +143,10 @@ export default function AppLayout() {
         </AppShell.Section>
       </AppShell.Navbar>
 
-      <AppShell.Main>
-        <Outlet />
+      <AppShell.Main className="vz-canvas">
+        <Box p={{ base: 'sm', sm: 'md', lg: 'lg' }} style={{ width: '100%' }}>
+          <Outlet />
+        </Box>
       </AppShell.Main>
     </AppShell>
   );

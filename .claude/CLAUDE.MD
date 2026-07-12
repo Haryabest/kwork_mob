@@ -10,8 +10,9 @@ B2B-платформа 3D-моделей товаров для Wildberries/Ozon.
 | Orchestrator | `backend/orchestrator/` | FastAPI, SQLAlchemy, Redis, Celery | 8000 |
 | Worker | `worker/` | Python, CUDA, TRELLIS, Docker | — |
 | Mobile | `apps/mobile/` | **Flutter / Dart** | — |
-| Staff Panel | `apps/web-admin/` | React, Vite, **Mantine + Tabler Icons** | 3001 |
-| Web Seller | `apps/web-seller/` | Next.js, **Mantine + Tabler Icons** | 3000 |
+| Staff Panel (admin + support) | `apps/web-admin/` | React, Vite, Mantine · роли admin/support_agent | **3001** |
+| Web Seller | `apps/web-seller/` | Next.js, Mantine | **3000** |
+| ~~web-support~~ | — | **не использовать** → всё в web-admin :3001 | — |
 | Shared types | `packages/shared/` | TypeScript | — |
 
 Infra: `docker-compose.yml`, конфиги в `infra/` (nginx, prometheus, clickhouse).
@@ -46,8 +47,12 @@ API prefix: `/api/v1`. Docs: `/api/docs`. Health: `/health`.
 worker_agent.py      — WebSocket-агент, Redlock, пайплайн
 scripts/             — remove_background, trellis_generate, retopology,
                        bake_pbr, apply_watermark, compress_draco, validate_glb
+cloud/               — Intelion/Immers: provision.py «в два клика»
 dev-tools/compute_fid.py — только dev, не в Docker
 ```
+
+Облачные GPU: Intelion (`intelion.cloud/api`), Immers (`immers.cloud/api`) — см. `Адреса Облачных Воркеров.txt`.
+Архитектура 4 слоя: оркестратор → Storage HA ×2 → GPU-воркеры → мобилка (`Архитектура 3dvektor.txt`).
 
 ## Frontend (3 клиента — разные аудитории)
 

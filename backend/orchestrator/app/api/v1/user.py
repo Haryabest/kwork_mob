@@ -31,6 +31,8 @@ def _user_payload(user: User) -> dict:
         "role": user.staff_role or "user",
         "balance": user.balance,
         "marketing_opt_in": user.marketing_opt_in,
+        "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,
+        "age_verified": bool(user.age_verified_at),
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
@@ -104,7 +106,7 @@ async def topup_balance(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Пополнение баланса через ЮKassa (mock без ключей)."""
+    """Пополнение баланса через ЮKassa (только production API, без mock)."""
     from app.core.config import settings
     from app.services.yookassa import yookassa_service
 
@@ -112,26 +114,15 @@ async def topup_balance(
     payment = await yookassa_service.create_payment(
         amount,
         f"Пополнение баланса KWork Mob ({user.email})",
-        return_url=f"{settings.API_BASE_URL.replace(':8000', ':3000')}/balance",
-        metadata={"user_id": str(user.id), "amount": str(amount)},
+        return_url=f"{settings.SELLER_PUBLIC_URL}/balance",
+        metadata={"purpose": "topup", "user_id": str(user.id), "amount": str(amount)},
     )
-
-    if payment.get("mock"):
-        user.balance += amount
-        db.add(
-            Transaction(
-                user_id=user.id,
-                amount=amount,
-                tx_type="topup",
-                description="Пополнение (mock ЮKassa)",
-                external_id=payment["id"],
-            )
-        )
-        await db.commit()
-        payment["status"] = "succeeded"
-        payment["balance"] = user.balance
-
-    return payment
+    return {
+        "id": payment["id"],
+        "status": payment["status"],
+        "confirmation_url": payment["confirmation_url"],
+        "amount": amount,
+    }
 
 
 @router.get("/models")

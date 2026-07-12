@@ -1,16 +1,87 @@
-"""Заказы: создание, статус, отмена + постановка в очередь."""
+"""Заказы: создание, статус, отмена, оплата ЮKassa + очередь + фото."""
 
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_db_user
-from app.models import Order, Transaction, User
+from app.models import Company, Model3D, Order, Transaction, User
 from app.schemas.orders import OrderCreateRequest
+from app.services import photos as photos_service
+from app.services.age_gate import ensure_age_gate
+from app.services.events import publish_order_status
+from app.services.nsfw import nsfw_service
+from app.services import promocodes as promo_svc
+from app.services import tariffs as tariff_svc
+from app.services import upsells as upsell_svc
+from app.services.company_members import enforce_member_limits
+from app.services import company_balance as company_bal
 from app.services.queue import queue_service
+from app.services.yookassa import yookassa_service
 
 router = APIRouter()
+
+
+class PhotosPrepareRequest(BaseModel):
+    task_uuid: str | None = None
+
+
+def _task_payload(order: Order, user_id: int, photos_prefix: str | None = None) -> dict:
+    prefix = photos_prefix or f"photos/{order.task_uuid}/"
+    return {
+        "category": order.category,
+        "tier": order.tier,
+        "user_id": user_id,
+        "order_id": order.id,
+        "company_id": order.company_id,
+        "photos_bucket": settings.MINIO_BUCKET_PHOTOS,
+        "photos_prefix": prefix,
+        "models_bucket": settings.MINIO_BUCKET_MODELS,
+        "upsell_options": order.upsell_options or [],
+        "scale_calibration": order.scale_calibration,
+    }
+
+
+@router.get("/upsells")
+async def list_upsells(db: AsyncSession = Depends(get_db)):
+    return {"items": await upsell_svc.list_prices(db)}
+
+
+def _nsfw_http_detail(block_id: int, result: dict) -> dict:
+    return {
+        "code": "forbidden_content",
+        "message": "Контент отклонён модерацией. Средства возвращены, аккаунт на проверке до 24ч.",
+        "block_id": block_id,
+        "confidence": result.get("confidence"),
+        "method": result.get("method"),
+    }
+
+
+@router.post("/photos/prepare")
+async def prepare_photos_upload(
+    body: PhotosPrepareRequest,
+    user: User = Depends(get_current_db_user),
+):
+    """Presigned PUT на photos/{task_uuid}/view_00…11.jpg."""
+    _ = user
+    task_uuid = body.task_uuid or str(uuid.uuid4())
+    return photos_service.prepare_presigned_uploads(task_uuid)
+
+
+@router.post("/photos/upload")
+async def upload_order_photos(
+    files: list[UploadFile] = File(...),
+    task_uuid: str = Query(...),
+    user: User = Depends(get_current_db_user),
+):
+    """Multipart: ровно 12 файлов → MinIO."""
+    _ = user
+    return await photos_service.upload_files_to_prefix(task_uuid, files)
 
 
 @router.post("/create")
@@ -24,11 +95,35 @@ async def create_order(
             400,
             "Вы выбрали запрещённую категорию. Заказ будет отклонён без возврата средств.",
         )
+    if nsfw_service.check_blacklist(body.category.value):
+        raise HTTPException(400, "Категория в чёрном списке")
+
+    await ensure_age_gate(
+        db, user, category=body.category.value, birth_date=body.birth_date
+    )
+
     existing = await db.scalar(select(Order).where(Order.task_uuid == body.task_uuid))
     if existing:
         return {"id": existing.id, "status": existing.status, "idempotent": True}
 
-    amount = 2990 if body.tier.value == "small" else 5990
+    try:
+        photos_service.require_all_photos(body.task_uuid)
+    except HTTPException:
+        raise HTTPException(
+            400,
+            "Загрузите 12 ракурсов в MinIO (POST /orders/photos/prepare + upload) перед созданием заказа",
+        ) from None
+
+    # §10.8: NSFW до списания и до очереди
+    nsfw = await nsfw_service.check_task_photos(body.task_uuid)
+
+    base_amount = await tariff_svc.get_amount(db, body.tier.value)
+    upsell_codes, upsell_amount = await upsell_svc.calc_upsell_amount(
+        db, [o.value for o in body.upsell_options]
+    )
+    if "real_scale" in upsell_codes and not body.scale_calibration:
+        raise HTTPException(400, "Для real_scale укажите scale_calibration {width,height,depth} в метрах")
+
     order = Order(
         user_id=user.id,
         company_id=body.company_id,
@@ -36,13 +131,64 @@ async def create_order(
         category=body.category.value,
         tier=body.tier.value,
         status="pending",
-        amount=amount,
+        amount=base_amount + upsell_amount,
+        amount_original=base_amount,
+        discount_amount=0,
+        upsell_options=upsell_codes,
+        upsell_amount=upsell_amount,
+        scale_calibration=body.scale_calibration,
     )
     db.add(order)
     await db.flush()
 
-    # Списание с баланса при достаточности → очередь
-    if user.balance >= amount:
+    amount = base_amount + upsell_amount
+    discount = 0
+    if body.promocode:
+        amount, discount, promo = await promo_svc.apply_to_amount(
+            db,
+            plain=body.promocode,
+            user=user,
+            tier=body.tier.value,
+            amount=base_amount + upsell_amount,
+            company_id=body.company_id,
+            order_id=order.id,
+        )
+        order.amount = amount
+        order.discount_amount = discount
+        order.promocode_id = promo.id if promo else None
+
+    photos_prefix = body.photos_prefix or photos_service.photos_prefix(body.task_uuid)
+    priority = "high" if body.tier.value == "large" else "normal"
+
+    await enforce_member_limits(
+        db,
+        user=user,
+        company_id=body.company_id,
+        category=body.category.value,
+        amount=amount,
+    )
+
+    if nsfw.get("is_nsfw"):
+        block = await nsfw_service.block_order(
+            db, order=order, user=user, result=nsfw, refund=True, charged=False
+        )
+        await db.commit()
+        raise HTTPException(403, detail=_nsfw_http_detail(block.id, nsfw))
+
+    charged = False
+    if body.company_id:
+        company = await db.get(Company, body.company_id)
+        if company and company.balance >= amount:
+            await company_bal.charge_company(
+                db,
+                company=company,
+                amount=amount,
+                user=user,
+                description=f"Заказ #{order.id} ({body.tier.value})",
+                order_id=order.id,
+            )
+            charged = True
+    if not charged and user.balance >= amount:
         user.balance -= amount
         db.add(
             Transaction(
@@ -53,25 +199,144 @@ async def create_order(
                 description=f"Заказ #{order.id} ({body.tier.value})",
             )
         )
+        charged = True
+
+    if charged:
         order.status = "queued"
         await queue_service.enqueue(
             db,
             task_id=body.task_uuid,
             order_id=order.id,
             company_id=body.company_id,
-            payload={
-                "category": body.category.value,
-                "tier": body.tier.value,
-                "user_id": user.id,
-            },
-            priority="normal",
+            payload=_task_payload(order, user.id, photos_prefix),
+            priority=priority,
         )
     else:
         order.status = "awaiting_payment"
 
     await db.commit()
     await db.refresh(order)
-    return {"id": order.id, "status": order.status, "amount": order.amount, "balance": user.balance}
+    if order.status == "queued":
+        await publish_order_status(
+            user_id=user.id,
+            order_id=order.id,
+            task_id=order.task_uuid,
+            status="queued",
+        )
+    return {
+        "id": order.id,
+        "status": order.status,
+        "amount": order.amount,
+        "upsell_amount": order.upsell_amount,
+        "upsell_options": order.upsell_options,
+        "balance": user.balance,
+        "task_uuid": order.task_uuid,
+        "photos_prefix": photos_prefix,
+    }
+
+
+@router.post("/{order_id}/pay")
+async def pay_order(
+    order_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    order = await db.get(Order, order_id)
+    if not order or order.user_id != user.id:
+        raise HTTPException(404, "Заказ не найден")
+    if order.status not in ("awaiting_payment", "pending"):
+        raise HTTPException(400, f"Заказ в статусе {order.status}, оплата не нужна")
+
+    nsfw = await nsfw_service.check_task_photos(order.task_uuid)
+    if nsfw.get("is_nsfw"):
+        block = await nsfw_service.block_order(
+            db, order=order, user=user, result=nsfw, refund=True, charged=False
+        )
+        await db.commit()
+        raise HTTPException(403, detail=_nsfw_http_detail(block.id, nsfw))
+
+    if user.balance >= order.amount:
+        user.balance -= order.amount
+        db.add(
+            Transaction(
+                user_id=user.id,
+                company_id=order.company_id,
+                amount=-order.amount,
+                tx_type="charge",
+                description=f"Заказ #{order.id}",
+            )
+        )
+        order.status = "queued"
+        await queue_service.enqueue(
+            db,
+            task_id=order.task_uuid,
+            order_id=order.id,
+            company_id=order.company_id,
+            payload=_task_payload(order, user.id),
+            priority="high" if order.tier == "large" else "normal",
+        )
+        await db.commit()
+        await publish_order_status(
+            user_id=user.id,
+            order_id=order.id,
+            task_id=order.task_uuid,
+            status="queued",
+        )
+        return {"id": order.id, "status": "queued", "paid_from_balance": True}
+
+    payment = await yookassa_service.create_payment(
+        order.amount,
+        f"Оплата заказа #{order.id} KWork Mob",
+        return_url=f"{settings.SELLER_PUBLIC_URL}/orders/{order.id}",
+        metadata={
+            "purpose": "order",
+            "user_id": user.id,
+            "order_id": order.id,
+            "amount": order.amount,
+        },
+        idempotence_key=f"order-{order.id}-{order.task_uuid}",
+    )
+    return {
+        "id": order.id,
+        "status": order.status,
+        "payment_id": payment["id"],
+        "confirmation_url": payment["confirmation_url"],
+        "amount": order.amount,
+    }
+
+
+@router.get("/{order_id}")
+async def get_order(
+    order_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    order = await db.get(Order, order_id)
+    if not order or order.user_id != user.id:
+        raise HTTPException(404, "Заказ не найден")
+    model = await db.scalar(select(Model3D).where(Model3D.order_id == order.id))
+    pos = await queue_service.position_for_task(order.task_uuid)
+    ewt = await queue_service.estimate_wait_time(pos) if pos else None
+    return {
+        "id": order.id,
+        "task_uuid": order.task_uuid,
+        "category": order.category,
+        "tier": order.tier,
+        "status": order.status,
+        "amount": order.amount,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
+        "queue_position": pos,
+        "ewt_sec": ewt,
+        "model": (
+            {
+                "uuid": model.uuid,
+                "glb_url": model.glb_url,
+                "publish_status": model.publish_status,
+            }
+            if model
+            else None
+        ),
+    }
 
 
 @router.get("/{order_id}/status")
@@ -83,7 +348,16 @@ async def order_status(
     order = await db.get(Order, order_id)
     if not order or order.user_id != user.id:
         raise HTTPException(404, "Заказ не найден")
-    return {"id": order.id, "status": order.status, "amount": order.amount}
+    pos = await queue_service.position_for_task(order.task_uuid)
+    ewt = await queue_service.estimate_wait_time(pos) if pos else None
+    return {
+        "id": order.id,
+        "status": order.status,
+        "amount": order.amount,
+        "task_uuid": order.task_uuid,
+        "queue_position": pos,
+        "ewt_sec": ewt,
+    }
 
 
 @router.post("/{order_id}/cancel")
@@ -95,10 +369,16 @@ async def cancel_order(
     order = await db.get(Order, order_id)
     if not order or order.user_id != user.id:
         raise HTTPException(404, "Заказ не найден")
-    if order.status not in ("pending", "queued", "paid"):
+    if order.status not in ("pending", "queued", "paid", "awaiting_payment"):
         raise HTTPException(400, "Заказ нельзя отменить")
     order.status = "cancelled"
     await db.commit()
+    await publish_order_status(
+        user_id=user.id,
+        order_id=order.id,
+        task_id=order.task_uuid,
+        status="cancelled",
+    )
     return {"id": order.id, "status": order.status}
 
 

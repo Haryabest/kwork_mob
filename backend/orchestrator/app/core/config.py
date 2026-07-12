@@ -61,6 +61,15 @@ class Settings(BaseSettings):
 
     YOOKASSA_SHOP_ID: str = ""
     YOOKASSA_SECRET_KEY: str = ""
+    SELLER_PUBLIC_URL: str = "http://localhost:3000"
+
+    WORKER_TOKEN: str = "worker-dev-token"
+
+    # Облако Intelion / Immers (§11.3.3 / §14.7)
+    CLOUD_PROVIDER: str = "intelion"
+    CLOUD_API_TOKEN: str = ""
+    CLOUD_API_BASE: str = ""
+    CLOUD_API_MOCK: bool = False
 
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3"
@@ -69,7 +78,20 @@ class Settings(BaseSettings):
     HEARTBEAT_INTERVAL_SECONDS: int = 5
     HEARTBEAT_TIMEOUT_SECONDS: int = 20
 
+    # Эскалации §4.2 / §13
+    ESCALATION_QUEUE_MINUTES: int = 30
+    ESCALATION_PROCESSING_MINUTES: int = 20
+    ESCALATION_MAX: int = 3
+
     WATERMARK_HMAC_SECRET: str = "change-me-watermark"
+
+    # NSFW §10.8: off | heuristic | nudenet | auto
+    NSFW_MODE: str = "auto"
+    NSFW_THRESHOLD: float = 0.85
+    NSFW_FORCE_BLOCK: bool = False
+
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
 
     # Staff panel (§11): VPN WireGuard/Tailscale + TOTP 2FA
     ADMIN_VPN_REQUIRED: bool = False

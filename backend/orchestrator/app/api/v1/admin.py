@@ -362,3 +362,11 @@ async def queue_stats(_: dict = Depends(require_admin), db: AsyncSession = Depen
     queued = await db.scalar(select(func.count()).select_from(TaskQueue).where(TaskQueue.status == "queued"))
     lengths = await queue_service.queue_lengths()
     return {"pg_queued": int(queued or 0), "redis": lengths}
+
+
+@router.get("/metrics/dashboard")
+async def metrics_dashboard(_: dict = Depends(require_admin)):
+    """Агрегаты ClickHouse для admin dashboard (§12)."""
+    from app.services.metrics import dashboard_aggregates
+
+    return await dashboard_aggregates()

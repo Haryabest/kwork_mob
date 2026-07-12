@@ -32,6 +32,30 @@ class QueueService:
         """Dual-write: INSERT task_queue + RPUSH Redis."""
         existing = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))
         if existing:
+            if existing.status in ("queued", "failed"):
+                existing.status = "queued"
+                existing.payload_json = payload
+                existing.priority = priority
+                await db.flush()
+                redis = await get_redis()
+                item = json.dumps(
+                    {"task_id": task_id, "order_id": order_id, "payload": payload},
+                    ensure_ascii=False,
+                )
+                # не дублировать, если уже в списке
+                known = False
+                for key in (self.QUEUE_HIGH, self.QUEUE_NORMAL):
+                    for raw in await redis.lrange(key, 0, -1):
+                        try:
+                            if json.loads(raw).get("task_id") == task_id:
+                                known = True
+                                break
+                        except json.JSONDecodeError:
+                            continue
+                    if known:
+                        break
+                if not known:
+                    await redis.rpush(self._key(priority), item)
             return existing
 
         row = TaskQueue(
@@ -51,6 +75,42 @@ class QueueService:
             json.dumps({"task_id": task_id, "order_id": order_id, "payload": payload}, ensure_ascii=False),
         )
         return row
+
+    async def dequeue(self) -> dict[str, Any] | None:
+        """LPOP high → normal. Возвращает {task_id, order_id, payload}."""
+        redis = await get_redis()
+        for key in (self.QUEUE_HIGH, self.QUEUE_NORMAL):
+            raw = await redis.lpop(key)
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not data.get("task_id"):
+                continue
+            return data
+        return None
+
+    async def remove_from_redis(self, task_id: str) -> int:
+        """Удалить все вхождения task_id из queue:high/normal."""
+        redis = await get_redis()
+        removed = 0
+        for key in (self.QUEUE_HIGH, self.QUEUE_NORMAL):
+            items = await redis.lrange(key, 0, -1)
+            keep: list[str] = []
+            for raw in items:
+                try:
+                    if json.loads(raw).get("task_id") == task_id:
+                        removed += 1
+                        continue
+                except json.JSONDecodeError:
+                    pass
+                keep.append(raw)
+            await redis.delete(key)
+            if keep:
+                await redis.rpush(key, *keep)
+        return removed
 
     async def sync_from_postgres(self, db: AsyncSession) -> int:
         """Восстановить в Redis задачи со статусом queued, которых нет в списках."""
@@ -100,6 +160,20 @@ class QueueService:
     async def estimate_wait_time(self, position: int) -> int:
         """EWT в секундах (~3 мин на задачу)."""
         return max(position, 1) * 180
+
+    async def position_for_task(self, task_id: str) -> int | None:
+        redis = await get_redis()
+        pos = 0
+        for key in (self.QUEUE_HIGH, self.QUEUE_NORMAL):
+            items = await redis.lrange(key, 0, -1)
+            for raw in items:
+                pos += 1
+                try:
+                    if json.loads(raw).get("task_id") == task_id:
+                        return pos
+                except json.JSONDecodeError:
+                    continue
+        return None
 
 
 queue_service = QueueService()

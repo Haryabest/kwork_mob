@@ -3,8 +3,8 @@ torchvision
 opencv-python
 numpy
 pillow
-trimesh
-pygltflib
+trimesh>=4.0.0
+pygltflib>=1.16.0
 boto3
 websockets
 pynvml
@@ -14,3 +14,8 @@ scipy
 redis
 httpx
 pytest
+rembg>=2.0.50
+onnxruntime-gpu>=1.16.0; platform_system!="Darwin"
+onnxruntime>=1.16.0; platform_system=="Darwin"
+open3d>=0.18.0
+draco

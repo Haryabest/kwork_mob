@@ -1,0 +1,170 @@
+# HA storage stack (§4 / §20 / Архитектура): MinIO 2-node, Redis Sentinel, PG Patroni
+# Использование (отдельный compose, не смешивать с dev single-node без миграции данных):
+#   docker compose -f docker-compose.ha.yml up -d
+#
+# Оркестратор подключается к:
+#   POSTGRES via patroni VIP / haproxy :5432
+#   REDIS via sentinel redis://...  (REDIS_URL с sentinel — см. docs/deployment)
+#   MINIO via minio-primary:9000 (client failover на replica через MINIO_ENDPOINT)
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.16
+    command:
+      - etcd
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd-data
+    volumes:
+      - etcd_data:/etcd-data
+
+  postgres-primary:
+    image: postgres:16-alpine
+    hostname: postgres-primary
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kwork}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kwork_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-kwork_mob}
+      PATRONI_SCOPE: kwork
+      PATRONI_NAME: postgres-primary
+      PATRONI_RESTAPI_CONNECT_ADDRESS: postgres-primary:8008
+      PATRONI_POSTGRESQL_CONNECT_ADDRESS: postgres-primary:5432
+      PATRONI_ETCD3_HOSTS: etcd:2379
+      PATRONI_SUPERUSER_USERNAME: ${POSTGRES_USER:-kwork}
+      PATRONI_SUPERUSER_PASSWORD: ${POSTGRES_PASSWORD:-kwork_secret}
+      PATRONI_REPLICATION_USERNAME: replicator
+      PATRONI_REPLICATION_PASSWORD: ${POSTGRES_REPLICATOR_PASSWORD:-replicator_secret}
+    volumes:
+      - pg_primary_data:/var/lib/postgresql/data
+      - ./infra/ha/patroni/primary.yml:/etc/patroni/patroni.yml:ro
+    command: ["postgres", "-c", "wal_level=replica", "-c", "max_wal_senders=10", "-c", "hot_standby=on"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kwork}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-replica:
+    image: postgres:16-alpine
+    hostname: postgres-replica
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kwork}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kwork_secret}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-kwork_secret}
+    volumes:
+      - pg_replica_data:/var/lib/postgresql/data
+      - ./infra/ha/patroni/replica-entrypoint.sh:/entrypoint-replica.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint-replica.sh"]
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+
+  redis-master:
+    image: redis:7-alpine
+    command: redis-server /etc/redis/redis.conf
+    volumes:
+      - ./infra/ha/redis/redis-master.conf:/etc/redis/redis.conf:ro
+      - redis_master_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-replica:
+    image: redis:7-alpine
+    command: redis-server /etc/redis/redis-replica.conf
+    volumes:
+      - ./infra/ha/redis/redis-replica.conf:/etc/redis/redis-replica.conf:ro
+      - redis_replica_data:/data
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+  redis-sentinel-1:
+    image: redis:7-alpine
+    command: redis-sentinel /etc/redis/sentinel.conf
+    volumes:
+      - ./infra/ha/redis/sentinel.conf:/etc/redis/sentinel.conf:ro
+    depends_on:
+      - redis-master
+      - redis-replica
+
+  redis-sentinel-2:
+    image: redis:7-alpine
+    command: redis-sentinel /etc/redis/sentinel.conf
+    volumes:
+      - ./infra/ha/redis/sentinel.conf:/etc/redis/sentinel.conf:ro
+    depends_on:
+      - redis-master
+      - redis-replica
+
+  redis-sentinel-3:
+    image: redis:7-alpine
+    command: redis-sentinel /etc/redis/sentinel.conf
+    volumes:
+      - ./infra/ha/redis/sentinel.conf:/etc/redis/sentinel.conf:ro
+    depends_on:
+      - redis-master
+      - redis-replica
+
+  minio-1:
+    image: minio/minio:latest
+    hostname: minio-1
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_SERVER_URL: http://minio-1:9000
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    volumes:
+      - minio1_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-2:
+    image: minio/minio:latest
+    hostname: minio-2
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_SERVER_URL: http://minio-2:9000
+    ports:
+      - "9012:9000"
+      - "9013:9001"
+    volumes:
+      - minio2_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-replicate:
+    image: minio/mc:latest
+    depends_on:
+      minio-1:
+        condition: service_healthy
+      minio-2:
+        condition: service_healthy
+    volumes:
+      - ./infra/ha/minio/setup-replication.sh:/setup-replication.sh:ro
+    entrypoint: ["/bin/sh", "/setup-replication.sh"]
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+
+volumes:
+  etcd_data:
+  pg_primary_data:
+  pg_replica_data:
+  redis_master_data:
+  redis_replica_data:
+  minio1_data:
+  minio2_data:

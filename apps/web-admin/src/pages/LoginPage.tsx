@@ -100,15 +100,46 @@ export default function LoginPage() {
         display: 'grid',
         placeItems: 'center',
         background:
-          'radial-gradient(circle at 20% 20%, rgba(11,122,115,0.14), transparent 42%), radial-gradient(circle at 80% 80%, rgba(15,76,92,0.10), transparent 40%), #f4f7f7',
+          'radial-gradient(circle at 18% 12%, rgba(3,129,233,0.22), transparent 36%), radial-gradient(circle at 88% 88%, rgba(148,3,253,0.16), transparent 34%), repeating-linear-gradient(-18deg, transparent, transparent 14px, rgba(0,87,184,0.035) 14px, rgba(0,87,184,0.035) 15px), #f4f6fb',
         padding: 16,
       }}
     >
-      <Paper shadow="md" radius="lg" p="xl" w={440} maw="100%" withBorder>
-        <Stack gap="md">
+      <Paper
+        shadow="none"
+        radius="lg"
+        p={{ base: 'lg', sm: 'xl' }}
+        w={440}
+        maw="100%"
+        style={{
+          boxShadow: '0 18px 40px rgba(0, 87, 184, 0.1)',
+          border: '1px solid rgba(0,87,184,0.08)',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 4,
+            background: 'linear-gradient(180deg, #0057b8, #9403fd)',
+          }}
+        />
+        <Stack gap="lg">
           <div>
-            <Title order={2}>Staff Panel</Title>
-            <Text c="dimmed" size="sm">
+            <Title
+              order={2}
+              style={{
+                backgroundImage: 'linear-gradient(135deg, #0057b8, #0381E9 50%, #9403fd)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              3dvektor Staff
+            </Title>
+            <Text c="#6d6c77" size="sm">
               VPN (WireGuard/Tailscale) + 2FA (TOTP) · JWT 8ч · idle 30 мин
             </Text>
           </div>

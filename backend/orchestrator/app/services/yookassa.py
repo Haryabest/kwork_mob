@@ -1,4 +1,4 @@
-"""Интеграция с ЮKassa (§8). Без ключей — mock-режим для dev."""
+"""Интеграция с ЮKassa (§8). Production: без ключей — ошибка, без mock."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 
 import httpx
+from fastapi import HTTPException
 
 from app.core.config import settings
 
@@ -21,6 +22,13 @@ class YookassaService:
     def configured(self) -> bool:
         return bool(self.shop_id and self.secret_key)
 
+    def require_configured(self) -> None:
+        if not self.configured:
+            raise HTTPException(
+                503,
+                "ЮKassa не настроена: задайте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY",
+            )
+
     async def create_payment(
         self,
         amount_rub: int,
@@ -31,24 +39,14 @@ class YookassaService:
         idempotence_key: str | None = None,
     ) -> dict[str, Any]:
         """Создать платёж. amount_rub — целые рубли."""
+        self.require_configured()
         key = idempotence_key or str(uuid.uuid4())
-        if not self.configured:
-            pid = f"mock_{uuid.uuid4().hex[:16]}"
-            return {
-                "id": pid,
-                "status": "pending",
-                "confirmation_url": f"{settings.API_BASE_URL}/api/docs#mock-payment-{pid}",
-                "amount": amount_rub,
-                "mock": True,
-                "metadata": metadata or {},
-            }
-
         payload = {
             "amount": {"value": f"{amount_rub:.2f}", "currency": "RUB"},
             "confirmation": {"type": "redirect", "return_url": return_url},
             "capture": True,
             "description": description[:128],
-            "metadata": metadata or {},
+            "metadata": {k: str(v) for k, v in (metadata or {}).items()},
         }
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
@@ -57,21 +55,32 @@ class YookassaService:
                 auth=(self.shop_id, self.secret_key),
                 headers={"Idempotence-Key": key},
             )
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                raise HTTPException(502, f"ЮKassa error: {resp.text[:500]}")
             data = resp.json()
         return {
             "id": data["id"],
             "status": data.get("status", "pending"),
             "confirmation_url": (data.get("confirmation") or {}).get("confirmation_url"),
             "amount": amount_rub,
-            "mock": False,
-            "metadata": data.get("metadata") or metadata or {},
+            "metadata": data.get("metadata") or payload["metadata"],
             "raw": data,
         }
 
+    async def get_payment(self, payment_id: str) -> dict[str, Any]:
+        """Проверка платежа на стороне ЮKassa (webhook verification)."""
+        self.require_configured()
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                f"{self.API}/payments/{payment_id}",
+                auth=(self.shop_id, self.secret_key),
+            )
+            if resp.status_code >= 400:
+                raise HTTPException(502, f"ЮKassa get payment error: {resp.text[:500]}")
+            return resp.json()
+
     async def create_refund(self, payment_id: str, amount_rub: int, reason: str) -> dict[str, Any]:
-        if not self.configured or payment_id.startswith("mock_"):
-            return {"id": f"mock_refund_{uuid.uuid4().hex[:12]}", "status": "succeeded", "mock": True}
+        self.require_configured()
         payload = {
             "payment_id": payment_id,
             "amount": {"value": f"{amount_rub:.2f}", "currency": "RUB"},
@@ -84,17 +93,23 @@ class YookassaService:
                 auth=(self.shop_id, self.secret_key),
                 headers={"Idempotence-Key": str(uuid.uuid4())},
             )
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                raise HTTPException(502, f"ЮKassa refund error: {resp.text[:500]}")
             return resp.json()
 
     def parse_webhook(self, body: dict[str, Any]) -> dict[str, Any]:
         """Извлечь полезные поля из уведомления ЮKassa."""
         obj = body.get("object") or {}
+        amount_raw = (obj.get("amount") or {}).get("value", 0)
+        try:
+            amount = int(float(amount_raw))
+        except (TypeError, ValueError):
+            amount = 0
         return {
             "event": body.get("event"),
             "payment_id": obj.get("id"),
             "status": obj.get("status"),
-            "amount": int(float((obj.get("amount") or {}).get("value", 0))),
+            "amount": amount,
             "metadata": obj.get("metadata") or {},
         }
 

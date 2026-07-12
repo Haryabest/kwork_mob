@@ -80,5 +80,15 @@ class MinioService:
         except ClientError:
             return False
 
+    def download_bytes(self, bucket: str, key: str) -> bytes:
+        obj = self.client.get_object(Bucket=bucket, Key=key)
+        try:
+            return obj["Body"].read()
+        finally:
+            try:
+                obj["Body"].close()
+            except Exception:  # noqa: BLE001
+                pass
+
 
 minio_service = MinioService()

@@ -154,8 +154,10 @@
 ## C1. Инфраструктура воркера
 
 - [ ] Docker CUDA image, TRELLIS + веса
-- [ ] `worker_agent.py`: WS connect, ready, heartbeat, metrics (pynvml)
-- [ ] Redlock перед start_task
+- [x] `worker_agent.py`: WS connect, ready, heartbeat, metrics (pynvml)
+- [x] Redlock перед start_task + MinIO DL/UL + stub GLB
+- [x] Orchestrator `/ws/worker` + dispatcher + `/ws/queue` Pub/Sub
+- [x] ЮKassa без mock (create + webhook verify)
 - [ ] Checkpoint каждые 30с / по этапам
 - [ ] Graceful shutdown при T≥85°C
 - [ ] Overheating → статус + освобождение
@@ -316,7 +318,7 @@
 - [ ] Тема цветов WB/Ozon (§19.1)
 - [ ] Onboarding 4 экрана
 - [ ] Auth / verify / type select
-- [ ] Push (FCM/APNs) + fallback SMS/email
+- [ ] Push (FCM/APNs) + fallback email
 - [ ] Offline drafts, local storage manager
 
 ## H2. Съёмка
@@ -432,6 +434,8 @@
 - [ ] Grafana dashboards
 - [ ] Alert → Telegram/email ≤ 30 сек
 - [ ] Semi-auto cloud workers: alert queue>20 или busy>5 мин
+- [x] Каркас cloud provision Intelion/Immers (`worker/cloud/`) + env
+- [ ] Реальный create/start/stop инстанса по OpenAPI провайдера
 
 ## K5. Secrets & config
 
@@ -443,8 +447,7 @@
 
 # PHASE L — Интеграции внешние (§14) (недели 13–15)
 
-- [ ] Email SMTP production
-- [ ] SMS provider fallback
+- [ ] Email SMTP production (единственный notification provider + fallback для push)
 - [ ] FCM + APNs
 - [ ] Ollama (локальный сервер) для support
 - [ ] YooKassa prod shop

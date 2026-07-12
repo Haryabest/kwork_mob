@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.database import get_db
 
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 
 class UserRole(str, Enum):
@@ -99,8 +100,30 @@ async def get_current_db_user(
     user = await db.get(User, int(token_data["sub"]))
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Пользователь не найден")
-    if user.status == "blocked":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Аккаунт заблокирован")
+    if user.status in ("blocked", "blocked_pending_review", "blocked_permanent"):
+        detail = (
+            "Аккаунт на проверке модерации (NSFW)"
+            if user.status == "blocked_pending_review"
+            else "Аккаунт заблокирован"
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
+    return user
+
+
+async def get_current_db_user_optional(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(optional_security)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if not credentials:
+        return None
+    token_data = decode_token(credentials.credentials, TokenType.ACCESS)
+    from app.models import User
+
+    user = await db.get(User, int(token_data["sub"]))
+    if not user:
+        return None
+    if user.status in ("blocked", "blocked_pending_review", "blocked_permanent"):
+        return None
     return user
 
 
