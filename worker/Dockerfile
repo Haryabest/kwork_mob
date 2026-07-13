@@ -15,13 +15,35 @@ ARG INSTALL_TRELLIS=1
 ARG DOWNLOAD_WEIGHTS=1
 ARG TRELLIS_REPO=https://github.com/microsoft/TRELLIS.git
 ARG INSTALL_SAM=1
+ARG INSTALL_BLENDER=1
+ARG INSTALL_INSTANT_MESHES=1
+ARG BLENDER_VERSION=4.2.3
 
 RUN apt-get update && apt-get install -y \
     python3.10 python3-pip libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 \
-    libxrender-dev libgomp1 git wget unzip ffmpeg curl ca-certificates \
-    nodejs npm postgresql-client && \
+    libxrender-dev libgomp1 git wget unzip ffmpeg curl ca-certificates xz-utils \
+    nodejs npm postgresql-client cmake g++ libx11-dev libxi-dev libgl1-mesa-dev && \
     rm -rf /var/lib/apt/lists/* && \
     npm install -g @gltf-transform/cli || true
+
+# Blender LTS headless (§6.4 PBR bake, §6 video_360 / USDZ)
+RUN if [ "$INSTALL_BLENDER" = "1" ]; then \
+      mkdir -p /opt/blender && \
+      wget -q -O /tmp/blender.tar.xz \
+        "https://download.blender.org/release/Blender${BLENDER_VERSION%.*}/blender-${BLENDER_VERSION}-linux-x64.tar.xz" && \
+      tar -xJf /tmp/blender.tar.xz -C /opt/blender --strip-components=1 && \
+      ln -sf /opt/blender/blender /usr/local/bin/blender && \
+      rm -f /tmp/blender.tar.xz && \
+      blender --version; \
+    fi
+
+# Instant Meshes → /usr/local/bin/instant_meshes (§5 / §6.3)
+COPY scripts/install_instant_meshes.sh /tmp/install_instant_meshes.sh
+RUN if [ "$INSTALL_INSTANT_MESHES" = "1" ]; then \
+      chmod +x /tmp/install_instant_meshes.sh && \
+      bash /tmp/install_instant_meshes.sh /usr/local/bin/instant_meshes || \
+        echo "[warn] Instant Meshes install failed — Open3D fallback"; \
+    fi && rm -f /tmp/install_instant_meshes.sh
 
 WORKDIR /app
 
@@ -72,7 +94,11 @@ ENV PYTHONUNBUFFERED=1 \
     WORKER_E2E_BUDGET_LOCAL_SEC=180 \
     PYTHONPATH=/app/scripts:/app/trellis \
     ORCHESTRATOR_WS_URL=ws://orchestrator:8000/ws/worker \
-    ORCHESTRATOR_WS_FALLBACK_URL=
+    ORCHESTRATOR_WS_FALLBACK_URL= \
+    BLENDER_BIN=/usr/local/bin/blender \
+    INSTANT_MESHES_BIN=/usr/local/bin/instant_meshes \
+    RETOPO_ENGINE=instant_meshes \
+    RETOPO_TARGET_FACES=150000
 
 ENTRYPOINT ["/usr/local/bin/worker_entrypoint.sh"]
 CMD ["python3", "/usr/local/bin/worker_agent.py"]

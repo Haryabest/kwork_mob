@@ -67,8 +67,17 @@ async def update_settings(db: AsyncSession, data: dict[str, Any]) -> OwnerTaxSet
 
 
 def settings_public(row: OwnerTaxSettings) -> dict:
+    # УСН = ИП/ООО без НДС; ОСНО = с НДС 20% (§8.6)
+    tax_system = "npd"
+    if row.mode == "self_employed":
+        tax_system = "npd"
+    elif int(row.vat_rate or 0) == 20:
+        tax_system = "osno"
+    else:
+        tax_system = "usn"
     return {
         "mode": row.mode,
+        "tax_system": tax_system,
         "full_name": row.full_name,
         "inn": row.inn,
         "phone": row.phone,
@@ -83,6 +92,60 @@ def settings_public(row: OwnerTaxSettings) -> dict:
         "vat_rate": row.vat_rate,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
+
+
+def yookassa_vat_code(tax: OwnerTaxSettings) -> int:
+    """Коды НДС ЮKassa: 1=без НДС, 4=20%."""
+    if tax.mode == "self_employed" or int(tax.vat_rate or 0) == 0:
+        return 1
+    return 4
+
+
+def build_yookassa_receipt(
+    *,
+    tax: OwnerTaxSettings,
+    customer_email: str,
+    description: str,
+    amount_rub: int,
+    customer_name: str | None = None,
+) -> dict[str, Any]:
+    """Чек 54-ФЗ через ЮKassa (§2.9 / §8.6.4). Без «Мой налог»."""
+    email = (customer_email or "").strip() or "noreply@kworkmob.local"
+    customer: dict[str, Any] = {"email": email}
+    # ФИО опционально; иначе «Клиент» (§2.10)
+    name = (customer_name or "").strip() or "Клиент"
+    customer["full_name"] = name[:256]
+    return {
+        "customer": customer,
+        "items": [
+            {
+                "description": (description or "Услуга KWork Mob")[:128],
+                "quantity": "1.00",
+                "amount": {"value": f"{amount_rub:.2f}", "currency": "RUB"},
+                "vat_code": yookassa_vat_code(tax),
+                "payment_mode": "full_payment",
+                "payment_subject": "service",
+            }
+        ],
+    }
+
+
+async def build_receipt_for_payment(
+    db: AsyncSession,
+    *,
+    customer_email: str,
+    description: str,
+    amount_rub: int,
+    customer_name: str | None = None,
+) -> dict[str, Any]:
+    tax = await get_settings(db)
+    return build_yookassa_receipt(
+        tax=tax,
+        customer_email=customer_email,
+        description=description,
+        amount_rub=amount_rub,
+        customer_name=customer_name,
+    )
 
 
 def _seller_line(tax: OwnerTaxSettings) -> str:

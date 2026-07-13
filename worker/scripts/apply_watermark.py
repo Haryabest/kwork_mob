@@ -118,6 +118,51 @@ def _load_meta(task_dir: Path) -> dict:
     }
 
 
+def _decode_gltf_image(gltf, image_index: int) -> Image.Image | None:
+    """Извлечь реальную diffuse из GLB (uri data: / bufferView)."""
+    import base64
+
+    if gltf.images is None or image_index is None or image_index >= len(gltf.images):
+        return None
+    img = gltf.images[image_index]
+    raw: bytes | None = None
+    uri = getattr(img, "uri", None)
+    if uri and isinstance(uri, str) and uri.startswith("data:"):
+        try:
+            raw = base64.b64decode(uri.split(",", 1)[1])
+        except Exception:  # noqa: BLE001
+            raw = None
+    elif getattr(img, "bufferView", None) is not None:
+        try:
+            bv = gltf.bufferViews[img.bufferView]
+            blob = gltf.binary_blob()
+            if blob is not None:
+                off = int(getattr(bv, "byteOffset", 0) or 0)
+                length = int(bv.byteLength)
+                raw = bytes(blob[off : off + length])
+        except Exception as exc:  # noqa: BLE001
+            print(f"[apply_watermark] bufferView extract failed: {exc}")
+            raw = None
+    if not raw:
+        return None
+    try:
+        return Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[apply_watermark] image decode failed: {exc}")
+        return None
+
+
+def _synthetic_diffuse(size: int = 512) -> Image.Image:
+    arr = np.zeros((size, size, 3), dtype=np.uint8)
+    for y in range(size):
+        arr[y, :, 0] = 100 + (y % 128)
+        arr[y, :, 1] = 120 + ((y * 3) % 100)
+        arr[y, :, 2] = 140 + ((y * 5) % 80)
+    for x in range(size):
+        arr[:, x, 1] = np.clip(arr[:, x, 1].astype(np.int16) + (x % 40), 0, 255).astype(np.uint8)
+    return Image.fromarray(arr, "RGB")
+
+
 def _apply_to_glb(src: Path, dst: Path, meta: dict, secret: str, strength: float) -> str:
     """Встроить DWT в diffuse (или создать) + HMAC в extras."""
     try:
@@ -154,16 +199,18 @@ def _apply_to_glb(src: Path, dst: Path, meta: dict, secret: str, strength: float
                 image_index = tex.source
                 break
 
-    if image_index is not None and gltf.images:
-        # извлечь байты сложно без blob URI — генерируем новую карту поверх
-        diffuse_img = Image.new("RGB", (256, 256), (180, 180, 180))
-    else:
-        diffuse_img = Image.new("RGB", (256, 256), (160, 165, 170))
-        # простой градиент чтобы не был плоским
-        arr = np.asarray(diffuse_img)
-        for y in range(256):
-            arr[y, :, 0] = 120 + (y // 2)
-        diffuse_img = Image.fromarray(arr)
+    if image_index is not None:
+        diffuse_img = _decode_gltf_image(gltf, image_index)
+    if diffuse_img is None:
+        # fallback: baked diffuse из pbr_maps рядом с исходником
+        sibling = src.parent / "pbr_maps" / "diffuse.png"
+        if sibling.exists():
+            try:
+                diffuse_img = Image.open(sibling).convert("RGB")
+            except Exception:  # noqa: BLE001
+                diffuse_img = None
+    if diffuse_img is None:
+        diffuse_img = _synthetic_diffuse(512)
 
     marked = embed_dwt_dct(diffuse_img, bits, strength=strength)
     buf = io.BytesIO()

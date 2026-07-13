@@ -64,9 +64,24 @@ class CompanyMember(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     role: Mapped[str] = mapped_column(String(50))
+    role_id: Mapped[int | None] = mapped_column(ForeignKey("company_roles.id"))
     max_concurrent_orders: Mapped[int | None] = mapped_column(Integer)
     monthly_spending_limit: Mapped[int | None] = mapped_column(Integer)
     allowed_categories: Mapped[list | None] = mapped_column(ARRAY(Text))
+
+
+class CompanyRole(Base):
+    """Кастомные / системные роли компании (§2.5.3)."""
+
+    __tablename__ = "company_roles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    slug: Mapped[str] = mapped_column(String(50))
+    permissions: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Order(Base):
@@ -87,6 +102,9 @@ class Order(Base):
     scale_calibration: Mapped[dict | None] = mapped_column(JSONB)
     promocode_id: Mapped[int | None] = mapped_column(Integer)
     yookassa_payment_id: Mapped[str | None] = mapped_column(String(64))
+    zip_sha256: Mapped[str | None] = mapped_column(String(64))
+    customer_name: Mapped[str | None] = mapped_column(String(255))
+    receipt_email: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -101,6 +119,7 @@ class Model3D(Base):
     glb_url: Mapped[str | None] = mapped_column(Text)
     usdz_url: Mapped[str | None] = mapped_column(Text)
     watermark_hmac: Mapped[str | None] = mapped_column(String(128))
+    file_sha256: Mapped[str | None] = mapped_column(String(64))
     publish_status: Mapped[str] = mapped_column(String(30), default="not_published")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -381,12 +400,13 @@ class Transaction(Base):
     __tablename__ = "transactions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"))
     amount: Mapped[int] = mapped_column(Integer)
     tx_type: Mapped[str] = mapped_column(String(30))  # topup | charge | refund
     description: Mapped[str | None] = mapped_column(Text)
     external_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    anonymized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -480,6 +500,39 @@ class CompanyWebhookDelivery(Base):
     ok: Mapped[bool] = mapped_column(Boolean, default=False)
     status_code: Mapped[int | None] = mapped_column(Integer)
     error: Mapped[str | None] = mapped_column(Text)
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=10)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|delivered|failed|dlq
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReferralLink(Base):
+    """Реферальные ссылки кампании (§11.7)."""
+
+    __tablename__ = "referral_links"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"), index=True)
+    referrer_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True)
+    reward_promocode_id: Mapped[int | None] = mapped_column(ForeignKey("promocodes.id"))
+    uses: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CampaignEntitlement(Base):
+    """Начисленные бонусы кампаний (nth_free / timed / referral)."""
+
+    __tablename__ = "campaign_entitlements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(40))
+    promocode_id: Mapped[int | None] = mapped_column(ForeignKey("promocodes.id"))
+    meta: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -607,3 +660,49 @@ class PublicationBonusSettings(Base):
     promocode_ttl_days: Mapped[int] = mapped_column(Integer, default=30)
     max_uses: Mapped[int] = mapped_column(Integer, default=1)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class DeviceToken(Base):
+    """FCM/APNs токены устройств (§3.4.3)."""
+
+    __tablename__ = "device_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token: Mapped[str] = mapped_column(Text, unique=True, index=True)
+    platform: Mapped[str] = mapped_column(String(20), default="android")
+    app_version: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ModelFeedback(Base):
+    """Оценка модели 1–5 + причины (§7 / §11.2.4)."""
+
+    __tablename__ = "model_feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    model_uuid: Mapped[str] = mapped_column(String(36), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"))
+    rating: Mapped[int] = mapped_column(Integer)  # 1..5
+    reasons: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DeletionRequest(Base):
+    """Запрос на право забвения (§2.8.3), SLA 30 дней."""
+
+    __tablename__ = "deletion_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    email_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processed_by: Mapped[int | None] = mapped_column(Integer)
+    meta: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))

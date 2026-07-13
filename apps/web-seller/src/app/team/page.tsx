@@ -136,6 +136,7 @@ export default function TeamPage() {
       <SubNav
         items={[
           { href: '/team/roles', label: 'Роли' },
+          { href: '/team/webhooks', label: 'Webhooks' },
           { href: '/team/policies', label: 'Политики' },
           { href: '/team/audit', label: 'Аудит' },
           { href: '/team/sessions', label: 'Сессии' },

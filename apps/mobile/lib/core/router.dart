@@ -1,20 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
+import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/features/auth/auth_screen.dart';
+import 'package:kwork_mobile/features/company/shoot_link_screen.dart';
 import 'package:kwork_mobile/features/home/home_shell.dart';
+import 'package:kwork_mobile/features/models/model_viewer_screen.dart';
 import 'package:kwork_mobile/features/onboarding/onboarding_screen.dart';
-import 'package:kwork_mobile/features/placeholder/placeholder_screen.dart';
+import 'package:kwork_mobile/features/queue/queue_screen.dart';
 import 'package:kwork_mobile/features/shoot/category_screen.dart';
+import 'package:kwork_mobile/features/shoot/guided_dome_screen.dart';
+import 'package:kwork_mobile/features/shoot/quality_review_screen.dart';
+import 'package:kwork_mobile/features/shoot/upload_checkout_screen.dart';
+import 'package:kwork_mobile/services/device_benchmark.dart';
+import 'package:kwork_mobile/services/push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-GoRouter createRouter(ApiClient api) {
+GoRouter createRouter({
+  required ApiClient api,
+  required AppSession session,
+  required PushService push,
+}) {
   return GoRouter(
     initialLocation: '/splash',
     routes: [
       GoRoute(
         path: '/splash',
-        builder: (context, state) => _SplashScreen(api: api),
+        builder: (context, state) => _SplashScreen(api: api, session: session, push: push),
       ),
       GoRoute(
         path: '/onboarding',
@@ -22,31 +35,68 @@ GoRouter createRouter(ApiClient api) {
       ),
       GoRoute(
         path: '/auth',
-        builder: (context, state) => AuthScreen(api: api),
+        builder: (context, state) => AuthScreen(api: api, session: session, push: push),
       ),
       GoRoute(
         path: '/home',
-        builder: (context, state) => HomeShell(api: api),
+        builder: (context, state) => HomeShell(api: api, session: session),
         routes: [
           GoRoute(
             path: 'shoot',
-            builder: (context, state) => const CategoryScreen(),
+            builder: (context, state) => CategoryScreen(api: api, session: session),
+          ),
+          GoRoute(
+            path: 'shoot/dome',
+            builder: (context, state) {
+              final extra = state.extra;
+              if (extra is Map) {
+                return GuidedDomeScreen(
+                  modelUuid: extra['uuid'] as String,
+                  reshootIndex: extra['reshoot'] as int?,
+                );
+              }
+              return GuidedDomeScreen(modelUuid: extra as String);
+            },
+          ),
+          GoRoute(
+            path: 'shoot/review',
+            builder: (context, state) =>
+                QualityReviewScreen(modelUuid: state.extra as String),
+          ),
+          GoRoute(
+            path: 'shoot/upload',
+            builder: (context, state) => UploadCheckoutScreen(
+              api: api,
+              session: session,
+              modelUuid: state.extra as String,
+            ),
+          ),
+          GoRoute(
+            path: 'shoot-link',
+            builder: (context, state) => ShootLinkScreen(api: api, session: session),
           ),
           GoRoute(
             path: 'queue',
-            builder: (context, state) => const PlaceholderScreen(titleKey: 'queue'),
+            builder: (context, state) =>
+                QueueScreen(api: api, session: session),
           ),
           GoRoute(
-            path: 'orders',
-            builder: (context, state) => const PlaceholderScreen(titleKey: 'orders'),
+            path: 'queue/:orderId',
+            builder: (context, state) => QueueScreen(
+              api: api,
+              session: session,
+              orderId: int.parse(state.pathParameters['orderId']!),
+            ),
           ),
           GoRoute(
-            path: 'support',
-            builder: (context, state) => const PlaceholderScreen(titleKey: 'support'),
-          ),
-          GoRoute(
-            path: 'profile',
-            builder: (context, state) => const PlaceholderScreen(titleKey: 'profile'),
+            path: 'models/:uuid',
+            builder: (context, state) => ModelViewerScreen(
+              api: api,
+              modelUuid: state.pathParameters['uuid']!,
+              model: state.extra is Map
+                  ? Map<String, dynamic>.from(state.extra! as Map)
+                  : null,
+            ),
           ),
         ],
       ),
@@ -55,8 +105,15 @@ GoRouter createRouter(ApiClient api) {
 }
 
 class _SplashScreen extends StatefulWidget {
-  const _SplashScreen({required this.api});
+  const _SplashScreen({
+    required this.api,
+    required this.session,
+    required this.push,
+  });
+
   final ApiClient api;
+  final AppSession session;
+  final PushService push;
 
   @override
   State<_SplashScreen> createState() => _SplashScreenState();
@@ -70,9 +127,29 @@ class _SplashScreenState extends State<_SplashScreen> {
   }
 
   Future<void> _boot() async {
+    await widget.session.loadPersisted();
     final prefs = await SharedPreferences.getInstance();
     final onboarded = prefs.getBool('onboarded') ?? false;
     final loggedIn = await widget.api.hasToken;
+
+    // §3.8: бенчмарк при первом запуске (фон)
+    try {
+      final bench = DeviceBenchmark.instance;
+      await bench.loadPersisted();
+      if (await bench.needsRun) {
+        // ignore: unawaited_futures
+        bench.run();
+      }
+    } catch (_) {}
+
+    if (loggedIn) {
+      try {
+        final me = await widget.api.me();
+        widget.session.applyMe(me);
+        await widget.session.setCompanies(await widget.api.myCompanies());
+        await widget.push.init();
+      } catch (_) {}
+    }
     if (!mounted) return;
     if (!onboarded) {
       context.go('/onboarding');
@@ -85,6 +162,8 @@ class _SplashScreenState extends State<_SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return const FScaffold(
+      child: Center(child: CircularProgressIndicator()),
+    );
   }
 }

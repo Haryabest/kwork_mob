@@ -131,6 +131,12 @@ async def mark_completed(
         )
     except Exception:  # noqa: BLE001
         pass
+    try:
+        from app.services import campaigns as camp_svc
+
+        await camp_svc.on_order_completed(db, user_id=order.user_id, order_id=order.id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("campaign nth_free hook: %s", exc)
     await db.commit()
     await publish_order_status(
         user_id=order.user_id,
@@ -148,8 +154,43 @@ async def mark_failed(db: AsyncSession, task_id: str, error: str) -> Order | Non
         return None
     row.status = "failed"
     order = await db.get(Order, row.order_id)
+    refund_meta: dict | None = None
     if order and order.status not in ("cancelled", "completed"):
         order.status = "failed"
+        # §6.12: quality gate / фатальный fail → полный возврат
+        if order.amount > 0:
+            try:
+                from app.models import User as UserModel
+                from app.services.refunds import refund_order
+
+                user = await db.get(UserModel, order.user_id)
+                refund_meta = await refund_order(
+                    db,
+                    order,
+                    reason=f"task_failed: {error[:200]}",
+                    user=user,
+                    prefer_card=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("refund on mark_failed task=%s: %s", task_id, exc)
+                refund_meta = {"refunded": False, "error": str(exc)[:200]}
+    try:
+        from app.services import company_webhooks as wh
+
+        if order:
+            await wh.emit(
+                db,
+                company_id=order.company_id,
+                event="order.failed",
+                payload={
+                    "order_id": order.id,
+                    "task_id": task_id,
+                    "error": error[:500],
+                    "refund": refund_meta,
+                },
+            )
+    except Exception:  # noqa: BLE001
+        pass
     await db.commit()
     if order:
         await publish_order_status(
@@ -157,7 +198,7 @@ async def mark_failed(db: AsyncSession, task_id: str, error: str) -> Order | Non
             order_id=order.id,
             task_id=task_id,
             status="failed",
-            extra={"error": error[:500]},
+            extra={"error": error[:500], "refund": refund_meta},
         )
     return order
 

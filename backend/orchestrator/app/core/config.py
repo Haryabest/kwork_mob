@@ -32,13 +32,17 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "kwork_mob"
 
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_SENTINELS: str = ""  # host:26379,host2:26379
+    REDIS_SENTINEL_MASTER: str = "mymaster"
+    REDIS_SENTINEL_PASSWORD: str = ""
+    REDIS_PASSWORD: str = ""
 
     MINIO_ENDPOINT: str = "http://localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET_PHOTOS: str = "photos"
     MINIO_BUCKET_MODELS: str = "models"
-    MINIO_BUCKET_BACKUPS: str = "backups"
+    MINIO_DISK_TOTAL_BYTES: int = 0  # для % заполнения в /storage/smart
 
     CLICKHOUSE_HOST: str = "localhost"
     CLICKHOUSE_PORT: int = 8123
@@ -93,6 +97,11 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
 
+    # FCM (§3.4.3 / §11.8)
+    FCM_SERVER_KEY: str = ""
+    FCM_SERVICE_ACCOUNT_JSON: str = ""  # path to service account JSON
+    FCM_PROJECT_ID: str = ""
+
     # Staff panel (§11): VPN WireGuard/Tailscale + TOTP 2FA
     ADMIN_VPN_REQUIRED: bool = False
     # CIDR через запятую: Tailscale CGNAT + типичные WG
@@ -109,7 +118,22 @@ class Settings(BaseSettings):
         "http://localhost:3001",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
+        "https://www.wildberries.ru",
+        "https://wildberries.ru",
+        "https://www.ozon.ru",
+        "https://ozon.ru",
+        "https://seller.wildberries.ru",
+        "https://seller.ozon.ru",
     ]
+
+    # §10.3 Referer check на выдачу download
+    DOWNLOAD_REFERER_CHECK: bool = True
+    DOWNLOAD_ALLOW_EMPTY_REFERER: bool = True  # native mobile без Referer
+    DOWNLOAD_REFERER_HOSTS: str = ""  # доп. хосты через запятую
+
+    @property
+    def download_referer_hosts(self) -> list[str]:
+        return [c.strip() for c in self.DOWNLOAD_REFERER_HOSTS.split(",") if c.strip()]
 
     @property
     def vpn_cidrs(self) -> list[str]:

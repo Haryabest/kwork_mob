@@ -1,14 +1,16 @@
-"""Интеграция с ЮKassa (§8). Production: без ключей — ошибка, без mock."""
+"""ЮKassa: платежи, СБП QR, чеки 54-ФЗ (§8.6.4 / §8.12)."""
 
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from fastapi import HTTPException
 
 from app.core.config import settings
+
+PaymentMethod = Literal["redirect", "sbp_qr"]
 
 
 class YookassaService:
@@ -37,17 +39,30 @@ class YookassaService:
         return_url: str,
         metadata: dict[str, Any] | None = None,
         idempotence_key: str | None = None,
+        payment_method: PaymentMethod = "redirect",
+        receipt: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Создать платёж. amount_rub — целые рубли."""
+        """Создать платёж (карта redirect или СБП QR) + опциональный чек."""
         self.require_configured()
+        if amount_rub < 1:
+            raise HTTPException(400, "amount_rub >= 1")
         key = idempotence_key or str(uuid.uuid4())
-        payload = {
+
+        if payment_method == "sbp_qr":
+            confirmation: dict[str, Any] = {"type": "qr"}
+        else:
+            confirmation = {"type": "redirect", "return_url": return_url}
+
+        payload: dict[str, Any] = {
             "amount": {"value": f"{amount_rub:.2f}", "currency": "RUB"},
-            "confirmation": {"type": "redirect", "return_url": return_url},
+            "confirmation": confirmation,
             "capture": True,
             "description": description[:128],
             "metadata": {k: str(v) for k, v in (metadata or {}).items()},
         }
+        if receipt:
+            payload["receipt"] = receipt
+
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 f"{self.API}/payments",
@@ -58,17 +73,21 @@ class YookassaService:
             if resp.status_code >= 400:
                 raise HTTPException(502, f"ЮKassa error: {resp.text[:500]}")
             data = resp.json()
+
+        conf = data.get("confirmation") or {}
         return {
             "id": data["id"],
             "status": data.get("status", "pending"),
-            "confirmation_url": (data.get("confirmation") or {}).get("confirmation_url"),
+            "confirmation_url": conf.get("confirmation_url"),
+            "confirmation_data": conf.get("confirmation_data"),  # QR payload для СБП
+            "confirmation_type": conf.get("type") or confirmation["type"],
             "amount": amount_rub,
+            "payment_method": payment_method,
             "metadata": data.get("metadata") or payload["metadata"],
             "raw": data,
         }
 
     async def get_payment(self, payment_id: str) -> dict[str, Any]:
-        """Проверка платежа на стороне ЮKassa (webhook verification)."""
         self.require_configured()
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(
@@ -98,7 +117,6 @@ class YookassaService:
             return resp.json()
 
     def parse_webhook(self, body: dict[str, Any]) -> dict[str, Any]:
-        """Извлечь полезные поля из уведомления ЮKassa."""
         obj = body.get("object") or {}
         amount_raw = (obj.get("amount") or {}).get("value", 0)
         try:
@@ -111,6 +129,7 @@ class YookassaService:
             "status": obj.get("status"),
             "amount": amount,
             "metadata": obj.get("metadata") or {},
+            "payment_method": ((obj.get("payment_method") or {}).get("type")),
         }
 
 

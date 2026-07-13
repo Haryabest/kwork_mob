@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_db_user, get_current_db_user_optional, get_current_user
-from app.models import Company, CompanyInvitation, CompanyMember, Order, ShootLink, User
+from app.models import Company, CompanyInvitation, CompanyMember, Order, ShootLink, Transaction, User
 from app.services import api_keys as api_keys_svc
 from app.services import photos as photos_service
 from app.services import tariffs as tariff_svc
@@ -26,7 +26,8 @@ router = APIRouter()
 
 class InviteRequest(BaseModel):
     email: EmailStr
-    role: str = Field(default="photographer", pattern=r"^(manager|photographer|viewer)$")
+    role: str = Field(default="photographer", max_length=50)
+    role_id: int | None = None
     company_id: int | None = None
     max_concurrent_orders: int | None = Field(default=3, ge=1, le=50)
     monthly_spending_limit: int | None = Field(default=None, ge=0)
@@ -61,6 +62,46 @@ class BulkOrdersRequest(BaseModel):
     items: list[BulkOrderItem] = Field(min_length=1, max_length=100)
 
 
+@router.get("/mine")
+async def list_my_companies(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Компании пользователя: владение + членство (§3.14)."""
+    owned = (await db.scalars(select(Company).where(Company.owner_id == user.id))).all()
+    memberships = (
+        await db.scalars(select(CompanyMember).where(CompanyMember.user_id == user.id))
+    ).all()
+    member_ids = {m.company_id for m in memberships}
+    member_companies = []
+    if member_ids:
+        member_companies = (
+            await db.scalars(select(Company).where(Company.id.in_(member_ids)))
+        ).all()
+    by_id: dict[int, Company] = {c.id: c for c in [*owned, *member_companies]}
+    role_by_company = {m.company_id: m.role for m in memberships}
+    for c in owned:
+        role_by_company.setdefault(c.id, "owner")
+    from app.services.company_roles import resolve_permissions
+
+    items = []
+    for cid, c in by_id.items():
+        perms = await resolve_permissions(db, cid, user.id)
+        items.append(
+            {
+                "id": c.id,
+                "name": c.name,
+                "inn": c.inn,
+                "balance": c.balance if perms.get("can_view_finance") else None,
+                "role": role_by_company.get(cid, "member"),
+                "is_owner": c.owner_id == user.id,
+                "permissions": perms,
+            }
+        )
+    items.sort(key=lambda x: x["id"])
+    return {"items": items}
+
+
 @router.post("/invite")
 async def invite_member(
     body: InviteRequest,
@@ -68,6 +109,10 @@ async def invite_member(
     db: AsyncSession = Depends(get_db),
 ):
     """Пригласить сотрудника (email, роль, лимиты)."""
+    from app.services.access import require_company_permission
+    from app.services.company_owner_2fa import require_owner_2fa_if_needed
+
+    await require_owner_2fa_if_needed(user=user, db=db)
     company_id = body.company_id
     if company_id is None:
         owned = await db.scalar(select(Company).where(Company.owner_id == user.id).limit(1))
@@ -76,6 +121,9 @@ async def invite_member(
         else:
             # физлицо без компании — создаём personal workspace-приглашение без company
             company_id = None
+
+    if company_id is not None:
+        await require_company_permission(db, user, company_id, "can_invite_members")
 
     token = secrets.token_urlsafe(24)
     inv = CompanyInvitation(
@@ -90,6 +138,23 @@ async def invite_member(
         expires_at=datetime.now(timezone.utc) + timedelta(days=body.ttl_days),
     )
     db.add(inv)
+    await db.flush()
+    try:
+        from app.services import company_webhooks as wh
+
+        await wh.emit(
+            db,
+            company_id=company_id,
+            event="member.invited",
+            payload={
+                "invitation_id": inv.id,
+                "email": inv.email,
+                "role": inv.role,
+                "inviter_id": user.id,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass
     await db.commit()
     await db.refresh(inv)
     url = f"{settings.SELLER_PUBLIC_URL.rstrip('/')}/invite/{token}"
@@ -233,7 +298,8 @@ async def remove_member(
 
 
 class RoleBody(BaseModel):
-    role: str
+    role: str | None = None
+    role_id: int | None = None
 
 
 @router.patch("/members/{user_id}/role")
@@ -243,11 +309,86 @@ async def change_role(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.services import company_members as cm
+    from app.services import company_roles as cr
 
-    m = await cm.change_role(db, user, user_id, body.role)
+    m = await cr.assign_role_to_member(
+        db, user, user_id, role_id=body.role_id, role_slug=body.role
+    )
     await db.commit()
-    return {"user_id": m.user_id, "role": m.role}
+    return {"user_id": m.user_id, "role": m.role, "role_id": m.role_id}
+
+
+class CustomRoleCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    permissions: dict = Field(default_factory=dict)
+
+
+class CustomRoleUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    permissions: dict | None = None
+
+
+@router.get("/roles")
+async def list_company_roles(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_roles as cr
+    from app.services.access import company_for_permission
+    from app.services.permissions import PERMISSION_KEYS
+
+    await company_for_permission(db, user, "can_manage_roles")
+    items = await cr.list_roles(db, user)
+    await db.commit()
+    return {"items": items, "permission_keys": list(PERMISSION_KEYS)}
+
+
+@router.post("/roles")
+async def create_company_role(
+    body: CustomRoleCreate,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_roles as cr
+    from app.services.access import company_for_permission
+
+    await company_for_permission(db, user, "can_manage_roles")
+    row = await cr.create_custom_role(db, user, name=body.name, permissions=body.permissions)
+    await db.commit()
+    return {"id": row.id, "name": row.name, "slug": row.slug, "permissions": row.permissions}
+
+
+@router.patch("/roles/{role_id}")
+async def update_company_role(
+    role_id: int,
+    body: CustomRoleUpdate,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_roles as cr
+    from app.services.access import company_for_permission
+
+    await company_for_permission(db, user, "can_manage_roles")
+    row = await cr.update_custom_role(
+        db, user, role_id, name=body.name, permissions=body.permissions
+    )
+    await db.commit()
+    return {"id": row.id, "name": row.name, "permissions": row.permissions}
+
+
+@router.delete("/roles/{role_id}")
+async def delete_company_role(
+    role_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_roles as cr
+    from app.services.access import company_for_permission
+
+    await company_for_permission(db, user, "can_manage_roles")
+    await cr.delete_custom_role(db, user, role_id)
+    await db.commit()
+    return {"ok": True}
 
 
 class LimitsBody(BaseModel):
@@ -300,29 +441,60 @@ async def get_settings(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.services.company_members import get_owned_company
+    from app.services import company_policies as pol
 
-    company = await get_owned_company(db, user)
-    return {"company_id": company.id, "settings": company.settings or {}, "balance": company.balance}
+    return await pol.get_policies(db, user)
 
 
-class SettingsBody(BaseModel):
-    settings: dict = Field(default_factory=dict)
+class PoliciesBody(BaseModel):
+    policies: dict | None = None
+    settings: dict | None = None
+    default_max_concurrent_orders: int | None = Field(default=None, ge=1, le=20)
+    default_monthly_spending_limit: int | None = Field(default=None, ge=0)
+    default_allowed_categories: list[str] | None = None
+    allow_photographer_download: bool | None = None
+    allow_photographer_add_links: bool | None = None
+    require_2fa_for_all: bool | None = None
+    auto_block_inactive_days: int | None = Field(default=None, ge=1, le=3650)
+    low_balance_threshold: int | None = Field(default=None, ge=0)
 
 
 @router.patch("/settings")
 async def update_settings(
-    body: SettingsBody,
+    body: PoliciesBody,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.services.company_members import audit, get_owned_company
+    """Обновить глобальные политики доступа (§2.5.4) — структурированные поля."""
+    from app.services import company_policies as pol
 
-    company = await get_owned_company(db, user)
-    company.settings = {**(company.settings or {}), **body.settings}
-    await audit(db, company_id=company.id, user_id=user.id, action="company.settings", details=body.settings)
+    flat = body.model_dump(exclude_none=True)
+    result = await pol.update_policies(db, user, flat)
     await db.commit()
-    return {"company_id": company.id, "settings": company.settings}
+    return result
+
+
+@router.get("/policies")
+async def get_policies(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_policies as pol
+
+    return await pol.get_policies(db, user)
+
+
+@router.patch("/policies")
+async def patch_policies(
+    body: PoliciesBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_policies as pol
+
+    result = await pol.update_policies(db, user, body.model_dump(exclude_none=True))
+    await db.commit()
+    return result
 
 
 @router.get("/members/{member_id}/sessions")
@@ -423,8 +595,10 @@ async def company_balance(
 
 
 class TopupBody(BaseModel):
-    amount: int = Field(ge=1, le=10_000_000)
+    amount: int = Field(ge=100, le=10_000_000)
+    payment_method: str = Field(default="redirect", pattern=r"^(redirect|sbp_qr|card|sbp|manual)$")
     note: str | None = None
+    customer_name: str | None = None
 
 
 @router.post("/balance/topup")
@@ -433,11 +607,93 @@ async def company_topup(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Пополнение Company.balance через ЮKassa (карта/СБП) или manual (§8.7)."""
+    from app.core.config import settings
     from app.services import company_balance as bal
+    from app.services.company_owner_2fa import require_owner_2fa_if_needed
+    from app.services.tax import build_receipt_for_payment
+    from app.services.yookassa import yookassa_service
 
-    data = await bal.topup_manual(db, user, body.amount, body.note)
-    await db.commit()
-    return data
+    await require_owner_2fa_if_needed(user=user, db=db)
+
+    method = body.payment_method
+    if method == "manual":
+        data = await bal.topup_manual(db, user, body.amount, body.note)
+        await db.commit()
+        return {**data, "payment_method": "manual"}
+
+    if method == "card":
+        method = "redirect"
+    if method == "sbp":
+        method = "sbp_qr"
+
+    company = await bal.get_owned_company_row(db, user)
+    description = f"Пополнение баланса компании #{company.id}"
+    receipt = await build_receipt_for_payment(
+        db,
+        customer_email=user.email,
+        description=description,
+        amount_rub=body.amount,
+        customer_name=body.customer_name or user.full_name or company.name,
+    )
+    payment = await yookassa_service.create_payment(
+        body.amount,
+        description,
+        return_url=f"{settings.SELLER_PUBLIC_URL}/company/finance",
+        metadata={
+            "purpose": "company_topup",
+            "user_id": str(user.id),
+            "company_id": str(company.id),
+            "amount": str(body.amount),
+            "payment_method": method,
+        },
+        payment_method=method,  # type: ignore[arg-type]
+        receipt=receipt,
+        idempotence_key=f"company-topup-{company.id}-{body.amount}-{method}",
+    )
+    return {
+        "company_id": company.id,
+        "payment_id": payment["id"],
+        "status": payment["status"],
+        "confirmation_url": payment.get("confirmation_url"),
+        "confirmation_data": payment.get("confirmation_data"),
+        "confirmation_type": payment.get("confirmation_type"),
+        "payment_method": method,
+        "amount": body.amount,
+        "receipt": True,
+    }
+
+
+@router.get("/transactions")
+async def company_transactions(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.access import company_for_permission
+
+    company = await company_for_permission(db, user, "can_view_finance")
+    rows = (
+        await db.scalars(
+            select(Transaction)
+            .where(Transaction.company_id == company.id)
+            .order_by(Transaction.id.desc())
+            .limit(200)
+        )
+    ).all()
+    return {
+        "company_id": company.id,
+        "items": [
+            {
+                "id": t.id,
+                "user_id": t.user_id,
+                "amount": t.amount,
+                "type": t.tx_type,
+                "description": t.description,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in rows
+        ],
+    }
 
 
 class WebhookCreate(BaseModel):
@@ -483,6 +739,34 @@ async def delete_webhook(
     await db.commit()
     return {"ok": True}
 
+
+@router.get("/webhooks/deliveries")
+async def webhook_deliveries(
+    status: str | None = None,
+    webhook_id: int | None = None,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Лог доставок + DLQ (§14.5.4). status=dlq|pending|delivered."""
+    from app.services import company_webhooks as wh
+
+    items = await wh.list_deliveries(db, user, status=status, webhook_id=webhook_id)
+    return {"items": items}
+
+
+@router.post("/webhooks/deliveries/{delivery_id}/retry")
+async def webhook_delivery_retry(
+    delivery_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_webhooks as wh
+
+    result = await wh.retry_delivery(db, user, delivery_id)
+    await db.commit()
+    return result
+
+
 @router.post("/shoot_link")
 async def create_shoot_link(
     body: ShootLinkRequest | None = None,
@@ -490,14 +774,24 @@ async def create_shoot_link(
     db: AsyncSession = Depends(get_db),
 ):
     """Создать одноразовую ссылку для внешнего фотографа."""
+    from app.services.access import require_company_permission
+    from app.services.company_owner_2fa import require_owner_2fa_if_needed
+
+    await require_owner_2fa_if_needed(user=user, db=db)
     payload = body or ShootLinkRequest()
+    company_id = payload.company_id
+    if company_id is None:
+        owned = await db.scalar(select(Company).where(Company.owner_id == user.id).limit(1))
+        company_id = owned.id if owned else None
+    if company_id is not None:
+        await require_company_permission(db, user, company_id, "can_invite_members")
     task_uuid = payload.task_uuid or str(uuid.uuid4())
     token = secrets.token_urlsafe(24)
     link = ShootLink(
         token=token,
         task_uuid=task_uuid,
         user_id=user.id,
-        company_id=payload.company_id,
+        company_id=company_id,
         category=payload.category,
         tier=payload.tier,
         status="active",
@@ -662,6 +956,24 @@ async def bulk_orders(
                 )
             else:
                 order.status = "awaiting_payment"
+            try:
+                from app.services import company_webhooks as wh
+
+                await wh.emit(
+                    db,
+                    company_id=company.id,
+                    event="order.created",
+                    payload={
+                        "order_id": order.id,
+                        "task_uuid": order.task_uuid,
+                        "status": order.status,
+                        "amount": order.amount,
+                        "tier": order.tier,
+                        "category": order.category,
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                pass
             created.append(
                 {
                     "task_uuid": item.task_uuid,

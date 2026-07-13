@@ -97,7 +97,7 @@ class WorkerAgent:
         self._overheated = False
         self._task_coro: asyncio.Task | None = None
         self.config = {
-            "quality_threshold": 0.7,
+            "quality_threshold": float(os.getenv("QUALITY_THRESHOLD", "0.7")),
             "temp_threshold_high": 85,
             "temp_threshold_low": 75,
             "dwt_watermark_strength": 0.01,
@@ -384,6 +384,19 @@ class WorkerAgent:
                 ).hexdigest()
                 watermark_hmac = digest
 
+            quality_score = None
+            qpath = task_dir / "quality_report.json"
+            if qpath.exists():
+                try:
+                    quality_score = float(json.loads(qpath.read_text(encoding="utf-8")).get("quality_score"))
+                except Exception:  # noqa: BLE001
+                    quality_score = None
+            threshold = float(self.config.get("quality_threshold", 0.7))
+            if quality_score is not None and quality_score < threshold:
+                raise RuntimeError(
+                    f"quality_gate_failed score={quality_score} < {threshold}"
+                )
+
             await ws.send(
                 json.dumps(
                     {
@@ -394,6 +407,7 @@ class WorkerAgent:
                         "usdz_url": extras_urls.get("usdz_url"),
                         "video_360_url": extras_urls.get("video_360_url"),
                         "watermark_hmac": watermark_hmac,
+                        "quality_score": quality_score,
                         "upsell_options": payload.get("upsell_options") or [],
                         "elapsed_sec": round(time.monotonic() - t0, 2),
                         "e2e_budget_sec": E2E_BUDGET_SEC,

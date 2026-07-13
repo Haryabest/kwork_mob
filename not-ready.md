@@ -1,49 +1,75 @@
 # not-ready.md — что ещё осталось по ТЗ
 
-После среза cloud/pub/HA/E2E harness (2026-07-12).
+
+
+После среза B2B roles / webhooks DLQ / campaigns / HA (2026-07-13).
+
+
 
 ---
 
-## Критично для «полного 3D прода»
 
-- [ ] **Прогнать** `e2e_trellis_acceptance.py --fail-on-budget` на реальном GPU с весами TRELLIS (код готов, нужна приёмка на железе)
-- [ ] Instant Meshes / quadriflow как отдельный бинарь (сейчас Open3D/trimesh decimation)
-- [ ] Полноценный PBR bake из текстур фото (сейчас procedural maps + factors)
-- [ ] `usd_from_gltf` / Blender в образе гарантированно (есть fallback zip-USDZ)
-- [ ] video_360: гарантированный Blender в образе
-- [ ] Устойчивость DWT к JPEG/WebP 80% — формальные тесты приёмки
 
----
+## Критично (железо)
 
-## B2B / продукт
 
-- [ ] Кастомные роли (не только owner/manager/photographer/viewer)
-- [ ] ЮKassa topup напрямую на `Company.balance` (сейчас manual topup + charge)
-- [ ] Corporate webhooks retry/DLQ UI
-- [ ] 50+ фотографов нагрузочный DoD
-- [ ] Авто-логика кампаний referral / nth_free / timed_discount
+
+- [ ] Домашний GPU: `e2e_trellis_acceptance.py --fail-on-budget --preflight`
+
+- [ ] Firebase prod keys + push E2E на устройстве
+
+- [ ] Alembic `015` + `016_b2b_ops` на стенде
+
+
 
 ---
 
-## Mobile / платежи / compliance
 
-- [ ] Полный Flutter-клиент (съёмка 12 ракурсов, AR, очередь, push FCM)
-- [ ] СБП QR пополнение (ЮKassa)
-- [ ] Фискализация чеков ЮKassa (НПД/УСН/ОСНО настройки)
-- [ ] Право на забвение (анонимизация финансов 5 лет)
-- [ ] 2FA TOTP для Owner компании
-- [ ] SHA-256 целостность ZIP исходников
-- [ ] CORS + Referer на скачивание (§10.3)
-- [ ] Admin Dashboard UI на `/admin/metrics/dashboard` (API есть, страница — частично)
+
+## Сделано в этом срезе
+
+
+
+- [x] Кастомные роли B2B (`company_roles`, `/company/roles`, seller UI)
+
+- [x] Webhooks retry×10 + DLQ + UI `/team/webhooks` + Celery
+
+- [x] Авто-кампании referral / nth_free / timed_discount
+
+- [x] Redis Sentinel client (`REDIS_SENTINELS`)
+
+- [x] Patroni Dockerfile + compose profile `patroni`
+
+- [x] Grafana dashboards JSON + ClickHouse MV в `init.sql`
+
+- [x] MinIO SMART/usage `/storage/smart` + admin UI
+
+
 
 ---
 
-## Ops polish
 
-- [ ] Полный Patroni (сейчас streaming replica + scaffold YAML; bitnami/patroni образ в prod)
-- [ ] Redis Sentinel client в оркестраторе (`REDIS_SENTINELS`) — сейчас URL на master
-- [ ] MinIO SMART / health dashboard в admin Storage
-- [ ] Grafana dashboards JSON
-- [ ] ClickHouse MV подключить в init контейнера
-- [ ] PG backup retention scrubber
-- [ ] Tailscale пакет в worker image (entrypoint готов)
+
+## Осталось
+
+- [ ] Admin Logs (не placeholder)
+- [ ] HAProxy/VIP Patroni cutover
+- [ ] Grafana datasources provisioning
+- [ ] MinIO SMART node agent
+- [x] Политики компании §2.5.4 API+UI
+- [x] Load harness `scripts/load/`
+- [x] Авто-refund в mark_failed
+- [x] Mobile FAQ/support + Ollama suggest
+- [x] Device benchmark + AR→тариф
+- [ ] Soft launch checklist + burn ₽/ч
+
+---
+
+## Следующие задачи
+
+1. Admin Logs  
+2. HAProxy + Patroni runbook  
+3. Grafana datasources  
+4. MinIO SMART agent  
+5. Celery auto_block_inactive  
+6. Vault/AES ПД, E2E crypto, WB/Ozon API, воронка публикации  

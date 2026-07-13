@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,8 +20,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final l10n = AppLocalizations.of(context)!;
     final pages = [l10n.onboarding1, l10n.onboarding2, l10n.onboarding3, l10n.onboarding4];
 
-    return Scaffold(
-      body: SafeArea(
+    return FScaffold(
+      child: SafeArea(
         child: Column(
           children: [
             Expanded(
@@ -33,9 +34,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('${i + 1} / ${pages.length}', style: Theme.of(context).textTheme.labelLarge),
+                      Text('${i + 1} / ${pages.length}', style: context.theme.typography.sm),
                       const SizedBox(height: 24),
-                      Text(pages[i], textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
+                      Text(
+                        pages[i],
+                        textAlign: TextAlign.center,
+                        style: context.theme.typography.xl,
+                      ),
                     ],
                   ),
                 ),
@@ -43,10 +48,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
             Padding(
               padding: const EdgeInsets.all(24),
-              child: FilledButton(
-                onPressed: () async {
+              child: FButton(
+                onPress: () async {
                   if (_page < pages.length - 1) {
-                    _controller.nextPage(duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+                    _controller.nextPage(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOut,
+                    );
                     return;
                   }
                   final prefs = await SharedPreferences.getInstance();

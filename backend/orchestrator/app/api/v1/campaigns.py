@@ -33,6 +33,12 @@ class PushCreate(BaseModel):
     segment: dict = Field(default_factory=dict)
 
 
+class PushTestBody(BaseModel):
+    user_id: int | None = None
+    title: str = Field(default="KWork Mob test", max_length=255)
+    body: str = Field(default="Push E2E OK", min_length=1)
+
+
 @router.get("/templates")
 async def templates():
     return {"items": [{"code": k, "title": v} for k, v in camp_svc.TEMPLATES.items()]}
@@ -78,6 +84,38 @@ async def create_campaign(
     return {"id": row.id, "status": row.status, "name": row.name}
 
 
+@router.post("/push")
+async def create_push(
+    body: PushCreate,
+    admin: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    row = await camp_svc.send_push_broadcast(
+        db,
+        title=body.title,
+        body=body.body,
+        segment=body.segment,
+        created_by=admin.id,
+    )
+    await db.commit()
+    return {"id": row.id, "status": row.status, "stats": row.stats}
+
+
+@router.post("/push/test")
+async def push_e2e_test(
+    body: PushTestBody,
+    admin: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """E2E проверка FCM (§3.4.3)."""
+    from app.services import push as push_svc
+
+    uid = body.user_id or admin.id
+    result = await push_svc.send_to_user(db, uid, body.title, body.body, email_fallback=True)
+    await db.commit()
+    return result
+
+
 @router.post("/{campaign_id}/start")
 async def start_campaign(campaign_id: int, db: AsyncSession = Depends(get_db)):
     row = await camp_svc.start_campaign(db, campaign_id)
@@ -103,20 +141,3 @@ async def campaign_stats(campaign_id: int, db: AsyncSession = Depends(get_db)):
     stats = await camp_svc.campaign_stats(db, campaign_id)
     await db.commit()
     return stats
-
-
-@router.post("/push")
-async def create_push(
-    body: PushCreate,
-    admin: User = Depends(get_current_db_user),
-    db: AsyncSession = Depends(get_db),
-):
-    row = await camp_svc.send_push_broadcast(
-        db,
-        title=body.title,
-        body=body.body,
-        segment=body.segment,
-        created_by=admin.id,
-    )
-    await db.commit()
-    return {"id": row.id, "status": row.status, "stats": row.stats}

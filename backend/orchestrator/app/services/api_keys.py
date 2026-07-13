@@ -42,10 +42,10 @@ def generate_key() -> tuple[str, str, str]:
 
 
 async def require_company_owner(db: AsyncSession, user: User) -> Company:
-    company = await db.scalar(select(Company).where(Company.owner_id == user.id).limit(1))
-    if not company:
-        raise HTTPException(403, "Только Owner компании может управлять API-ключами")
-    return company
+    """Совместимость: Owner или участник с can_manage_api_keys."""
+    from app.services.access import company_for_permission
+
+    return await company_for_permission(db, user, "can_manage_api_keys")
 
 
 async def create_key(

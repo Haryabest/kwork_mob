@@ -711,14 +711,28 @@ export function LogsPage() {
 }
 
 export function StoragePage() {
-  const [health, setHealth] = useState<{ ok?: boolean; buckets?: string[]; error?: string }>({});
+  const [health, setHealth] = useState<{
+    ok?: boolean;
+    buckets?: string[];
+    error?: string;
+    total_bytes?: number;
+    used_percent?: number | null;
+    alert_disk_high?: boolean;
+    usage?: Array<{ bucket: string; objects?: number; bytes?: number; error?: string }>;
+    smart?: { status?: string; note?: string };
+  }>({});
 
   async function check() {
     try {
-      const { data } = await api.get('/storage/health');
+      const { data } = await api.get('/storage/smart');
       setHealth(data);
     } catch (e) {
-      setHealth({ ok: false, error: getApiError(e) });
+      try {
+        const { data } = await api.get('/storage/health');
+        setHealth(data);
+      } catch (e2) {
+        setHealth({ ok: false, error: getApiError(e2) });
+      }
     }
   }
 
@@ -730,7 +744,7 @@ export function StoragePage() {
     <>
       <PageHeader
         title="Кластер хранения"
-        description="Здоровье MinIO"
+        description="MinIO health + SMART/usage (§21)"
         action={
           <Group>
             <Button leftSection={<IconRefresh size={16} />} onClick={check}>
@@ -756,10 +770,29 @@ export function StoragePage() {
       <SimpleGrid cols={{ base: 1, sm: 2 }} mb="lg">
         <HealthCard name="MinIO" status={health.ok ? 'Онлайн' : 'Ошибка'} load={health.ok ? 50 : 0} />
         <Card withBorder>
+          <Text fw={600}>SMART / диск</Text>
+          <Text size="sm" mt="sm">
+            status: {health.smart?.status ?? '—'} · used: {health.used_percent != null ? `${health.used_percent}%` : '—'}
+            {health.alert_disk_high ? ' ⚠ >85%' : ''}
+          </Text>
+          <Text size="xs" c="dimmed" mt={4}>
+            {health.smart?.note}
+          </Text>
+        </Card>
+        <Card withBorder>
           <Text fw={600}>Buckets</Text>
           <Text size="sm" mt="sm">
             {(health.buckets || []).join(', ') || health.error || '—'}
           </Text>
+        </Card>
+        <Card withBorder>
+          <Text fw={600}>Usage</Text>
+          {(health.usage || []).map((u) => (
+            <Text size="sm" key={u.bucket} mt={4}>
+              {u.bucket}: {u.objects ?? 0} obj · {Math.round((u.bytes || 0) / 1024 / 1024)} MB
+              {u.error ? ` (${u.error})` : ''}
+            </Text>
+          ))}
         </Card>
       </SimpleGrid>
     </>

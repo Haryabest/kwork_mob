@@ -40,8 +40,17 @@ def sync_queue_from_postgres():
 
 @celery_app.task(name="app.tasks.celery_app.send_push_notification")
 def send_push_notification(user_ids: list[int], title: str, body: str):
-    """Массовая push-рассылка."""
-    pass
+    """Массовая push-рассылка (§3.4.3) + email fallback."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services import push as push_svc
+
+    async def _run():
+        async with async_session() as db:
+            return await push_svc.send_to_users(db, user_ids, title, body)
+
+    return asyncio.run(_run())
 
 
 @celery_app.task(name="app.tasks.celery_app.send_email")
@@ -129,4 +138,48 @@ celery_app.conf.beat_schedule["cloud-autoscaling-30s"] = {
 celery_app.conf.beat_schedule["publication-verify-every-2h"] = {
     "task": "app.tasks.celery_app.verify_publication_links",
     "schedule": crontab(minute=0, hour="*/2"),
+}
+
+
+@celery_app.task(name="app.tasks.celery_app.process_deletion_requests")
+def process_deletion_requests():
+    """Право на забвение: исполнить заявки после SLA 30 дней (§2.8.3)."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services.account_deletion import process_due_deletions
+
+    async def _run():
+        async with async_session() as db:
+            return await process_due_deletions(db)
+
+    return asyncio.run(_run())
+
+
+celery_app.conf.beat_schedule["deletion-requests-daily"] = {
+    "task": "app.tasks.celery_app.process_deletion_requests",
+    "schedule": crontab(hour=3, minute=15),
+}
+
+
+@celery_app.task(name="app.tasks.celery_app.retry_company_webhooks")
+def retry_company_webhooks():
+    """Retry/DLQ корпоративных webhooks (§14.5.4)."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services import company_webhooks as wh
+
+    async def _run():
+        async with async_session() as db:
+            result = await wh.process_retries(db)
+            await db.commit()
+            return result
+
+    return asyncio.run(_run())
+
+
+celery_app.conf.beat_schedule["webhook-retries-every-minute"] = {
+    "task": "app.tasks.celery_app.retry_company_webhooks",
+    "schedule": crontab(minute="*"),
 }

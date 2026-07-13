@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from jose import JWTError, jwt
@@ -205,6 +206,26 @@ async def worker_ws(websocket: WebSocket):
             elif msg_type == "task_completed":
                 task_id = str(data.get("task_id") or "")
                 glb_url = str(data.get("result_url") or data.get("glb_url") or "")
+                quality_score = data.get("quality_score")
+                threshold = float(os.getenv("QUALITY_THRESHOLD", "0.7"))
+                if quality_score is not None:
+                    try:
+                        qs = float(quality_score)
+                    except (TypeError, ValueError):
+                        qs = None
+                    if qs is not None and qs < threshold:
+                        async with async_session() as db:
+                            await mark_failed(
+                                db,
+                                task_id,
+                                f"quality_gate_failed score={qs} < {threshold}",
+                            )
+                        await release_task_lock(task_id)
+                        await worker_hub.set_idle(worker_id)
+                        await websocket.send_json(
+                            {"type": "ack", "of": "task_completed", "task_id": task_id, "rejected": "quality"}
+                        )
+                        continue
                 async with async_session() as db:
                     from sqlalchemy import select
 
@@ -237,8 +258,11 @@ async def worker_ws(websocket: WebSocket):
                 task_id = str(data.get("task_id") or "")
                 error = str(data.get("error") or "unknown")
                 await release_task_lock(task_id)
-                # failed_segmentation / transient — requeue с чекпоинтом
-                if "failed_segmentation" in error or data.get("checkpoint_path"):
+                # failed_segmentation / transient — requeue с чекпоинтом; quality gate — fail
+                if "quality_gate_failed" in error:
+                    async with async_session() as db:
+                        await mark_failed(db, task_id, error)
+                elif "failed_segmentation" in error or data.get("checkpoint_path"):
                     if data.get("checkpoint_path"):
                         async with async_session() as db:
                             from sqlalchemy import select

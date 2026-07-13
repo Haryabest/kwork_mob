@@ -1,16 +1,27 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:kwork_mobile/domain/catalog.dart';
 
 class ApiClient {
   ApiClient({String? baseUrl})
-      : _dio = Dio(
-          BaseOptions(
-            baseUrl: baseUrl ?? const String.fromEnvironment(
+      : _baseUrl = baseUrl ??
+            const String.fromEnvironment(
               'API_URL',
               defaultValue: 'http://10.0.2.2:8000/api/v1',
             ),
-            connectTimeout: const Duration(seconds: 15),
-            receiveTimeout: const Duration(seconds: 30),
+        _dio = Dio(
+          BaseOptions(
+            baseUrl: baseUrl ??
+                const String.fromEnvironment(
+                  'API_URL',
+                  defaultValue: 'http://10.0.2.2:8000/api/v1',
+                ),
+            connectTimeout: const Duration(seconds: 20),
+            receiveTimeout: const Duration(seconds: 60),
+            sendTimeout: const Duration(seconds: 120),
           ),
         ) {
     _dio.interceptors.add(
@@ -26,10 +37,19 @@ class ApiClient {
     );
   }
 
+  final String _baseUrl;
   final Dio _dio;
   final _storage = const FlutterSecureStorage();
 
   Dio get dio => _dio;
+
+  String get wsBaseUrl {
+    final uri = Uri.parse(_baseUrl.replaceAll('/api/v1', ''));
+    final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
+    return '$scheme://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
+  }
+
+  Future<String?> get accessToken => _storage.read(key: 'access_token');
 
   Future<void> saveTokens(String access, String refresh) async {
     await _storage.write(key: 'access_token', value: access);
@@ -60,6 +80,201 @@ class ApiClient {
 
   Future<Map<String, dynamic>> me() async {
     final res = await _dio.get('/user/me');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> myCompanies() async {
+    final res = await _dio.get('/company/mine');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> preparePhotos({String? taskUuid}) async {
+    final res = await _dio.post('/orders/photos/prepare', data: {
+      if (taskUuid != null) 'task_uuid': taskUuid,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// Presigned PUT каждого JPEG (resumable по файлу).
+  Future<void> uploadPhotoPresigned({
+    required String uploadUrl,
+    required File file,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    final bytes = await file.readAsBytes();
+    final req = http.StreamedRequest('PUT', Uri.parse(uploadUrl));
+    req.headers['Content-Type'] = 'image/jpeg';
+    req.contentLength = bytes.length;
+    var sent = 0;
+    const chunk = 64 * 1024;
+    for (var i = 0; i < bytes.length; i += chunk) {
+      final end = (i + chunk > bytes.length) ? bytes.length : i + chunk;
+      req.sink.add(bytes.sublist(i, end));
+      sent = end;
+      onProgress?.call(sent, bytes.length);
+    }
+    await req.sink.close();
+    final res = await req.send();
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw DioException(
+        requestOptions: RequestOptions(path: uploadUrl),
+        message: 'Presigned upload failed: ${res.statusCode}',
+      );
+    }
+  }
+
+  /// Fallback: multipart всех 12 файлов.
+  Future<Map<String, dynamic>> uploadPhotosMultipart({
+    required String taskUuid,
+    required List<File> files,
+    void Function(int, int)? onSendProgress,
+  }) async {
+    final form = FormData();
+    for (final f in files) {
+      form.files.add(
+        MapEntry(
+          'files',
+          await MultipartFile.fromFile(f.path, filename: f.uri.pathSegments.last),
+        ),
+      );
+    }
+    final res = await _dio.post(
+      '/orders/photos/upload',
+      queryParameters: {'task_uuid': taskUuid},
+      data: form,
+      onSendProgress: onSendProgress,
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createOrder({
+    required String taskUuid,
+    required ProductCategory category,
+    required Tier tier,
+    int? companyId,
+    String? promocode,
+    List<ForbiddenCategory> forbidden = const [],
+    String? birthDate,
+    Map<String, dynamic>? scaleCalibration,
+    List<String> upsells = const [],
+    String? photosPrefix,
+  }) async {
+    final res = await _dio.post('/orders/create', data: {
+      'task_uuid': taskUuid,
+      'category': category.api,
+      'tier': tier.api,
+      if (companyId != null) 'company_id': companyId,
+      if (promocode != null && promocode.isNotEmpty) 'promocode': promocode,
+      'forbidden_categories': forbidden.map((e) => e.api).toList(),
+      if (birthDate != null) 'birth_date': birthDate,
+      if (scaleCalibration != null) 'scale_calibration': scaleCalibration,
+      'upsell_options': upsells,
+      if (photosPrefix != null) 'photos_prefix': photosPrefix,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getOrder(int orderId) async {
+    final res = await _dio.get('/orders/$orderId');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> cancelOrder(int orderId) async {
+    final res = await _dio.post('/orders/$orderId/cancel');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listOrders() async {
+    final res = await _dio.get('/orders');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listModels() async {
+    final res = await _dio.get('/user/models');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> rateModel({
+    required String modelUuid,
+    required int rating,
+    List<String> reasons = const [],
+  }) async {
+    final res = await _dio.post('/models/$modelUuid/rate', data: {
+      'rating': rating,
+      'reasons': reasons,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createShootLink({
+    required int companyId,
+    required String category,
+    required String tier,
+    int ttlHours = 24,
+    int maxUses = 3,
+  }) async {
+    final res = await _dio.post('/company/shoot_link', data: {
+      'company_id': companyId,
+      'category': category,
+      'tier': tier,
+      'ttl_hours': ttlHours,
+      'max_uses': maxUses,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getShootByToken(String token) async {
+    final res = await _dio.get('/shoot/$token');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> completeShootByToken(String token) async {
+    final res = await _dio.post('/shoot/$token/complete');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> registerDevice({
+    required String token,
+    required String platform,
+    String? appVersion,
+  }) async {
+    await _dio.post('/user/devices', data: {
+      'token': token,
+      'platform': platform,
+      if (appVersion != null) 'app_version': appVersion,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getFaq() async {
+    final res = await _dio.get('/faq');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listSupportQuestions() async {
+    final res = await _dio.get('/support/questions');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> getSupportQuestion(int id) async {
+    final res = await _dio.get('/support/questions/$id');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> askSupport({
+    required String subject,
+    required String message,
+    String category = 'general',
+  }) async {
+    final res = await _dio.post('/support/questions', data: {
+      'subject': subject,
+      'message': message,
+      'category': category,
+    });
     return Map<String, dynamic>.from(res.data as Map);
   }
 }

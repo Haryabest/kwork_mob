@@ -1,0 +1,35 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "title": "Orders by status (ClickHouse)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "rawSql": "SELECT event_type, sum(events) AS c FROM order_events_daily WHERE day >= today() - 7 GROUP BY event_type ORDER BY c DESC",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Worker GPU hourly (CH MV)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "rawSql": "SELECT hour, worker_id, avgMerge(gpu_util) AS util FROM worker_metrics_hourly WHERE hour > now() - INTERVAL 24 HOUR GROUP BY hour, worker_id ORDER BY hour",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["kwork", "clickhouse"],
+  "time": { "from": "now-24h", "to": "now" },
+  "title": "KWork Mob — ClickHouse",
+  "uid": "kwork-ch",
+  "version": 1
+}

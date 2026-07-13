@@ -56,4 +56,37 @@
 
 Auth, orders, NSFW, queue/dispatcher, YooKassa, promo/tariffs, campaigns/tax/upsells, seller/admin UI ядро, Flutter scaffold.
 
+### P1 compliance (2026-07-13)
+
+- СБП QR + фискальные чеки ЮKassa (НПД/УСН/ОСНО)
+- Owner 2FA TOTP (`/auth/2fa/*`)
+- Право на забвение + анонимизация финансов 5 лет
+- SHA-256 ZIP + CORS/Referer на download
+- Company balance topup через ЮKassa webhook
+- Миграция `014_p1_compliance`
+
+### P2 pipeline / mobile (2026-07-13)
+
+- Instant Meshes (`/usr/local/bin/instant_meshes`) + target 100k–300k; Open3D fallback
+- Blender в образе: PBR bake high→low, USDZ, video_360
+- DWT: извлечение реальной diffuse + тесты JPEG/WebP 80% + `verify_watermark.py`
+- Flutter: AR-слой (`ArSession` / MethodChannel) + FCM google-services scaffold
+
+### P3 acceptance / AR / push / admin (2026-07-13)
+
+- GPU E2E harness: `--preflight`, отчёт `e2e_reports/`, `run_e2e_home.ps1|sh`
+- Native ARCore/ARKit plugins + gyro fallback
+- FCM send (`app/services/push.py`) + `/admin/campaigns/push/test` + `scripts/push_e2e.py`
+- Admin Dashboard на живых `/admin/metrics/dashboard` (ops/finance/b2b/quality/moderation)
+- `model_feedback` + миграция `015_model_feedback`
+
+### B2B / HA / ops (2026-07-13)
+
+- Кастомные роли + permissions checklist + seller UI
+- Webhooks DLQ/retry + Celery + Owner UI
+- Campaigns auto: referral / nth_free / timed_discount
+- Redis Sentinel client; Patroni image + compose profile
+- Grafana JSON; ClickHouse MV в init; MinIO `/storage/smart`
+- Миграция `016_b2b_ops`
+
 См. пробелы: [`not-ready.md`](./not-ready.md).

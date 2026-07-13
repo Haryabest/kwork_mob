@@ -1,7 +1,8 @@
-/// Цвета по ТЗ §19: акценты Wildberries / Ozon.
+/// Цвета §19.1 + Forui-тема.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:forui/forui.dart';
 
 abstract final class AppColors {
   static const wbPrimary = Color(0xFF6D3B6B);
@@ -11,33 +12,42 @@ abstract final class AppColors {
   static const brand = Color(0xFF0B7A73);
   static const success = Color(0xFF2E7D32);
   static const error = Color(0xFFC62828);
+  static const warning = Color(0xFFF9A825);
   static const background = Color(0xFFFFFFFF);
   static const surface = Color(0xFFF5F5F5);
   static const textPrimary = Color(0xFF1A1A1A);
   static const textSecondary = Color(0xFF666666);
 }
 
-ThemeData buildAppTheme() {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: AppColors.brand,
-    primary: AppColors.brand,
-    secondary: AppColors.ozonPrimary,
-    surface: AppColors.surface,
-    error: AppColors.error,
-  );
-  return ThemeData(
-    colorScheme: scheme,
-    useMaterial3: true,
-    scaffoldBackgroundColor: AppColors.background,
-    appBarTheme: const AppBarTheme(
-      centerTitle: false,
-      backgroundColor: AppColors.background,
-      foregroundColor: AppColors.textPrimary,
-      elevation: 0,
+FThemeData buildForuiTheme() {
+  final base = FThemes.neutral.light.touch;
+  return base.copyWith(
+    colors: base.colors.copyWith(
+      primary: AppColors.wbPrimary,
+      primaryForeground: const Color(0xFFFFFFFF),
+      secondary: AppColors.ozonPrimary,
+      secondaryForeground: const Color(0xFFFFFFFF),
+      destructive: AppColors.error,
+      background: AppColors.background,
+      foreground: AppColors.textPrimary,
+      muted: AppColors.surface,
+      mutedForeground: AppColors.textSecondary,
     ),
+  );
+}
+
+ThemeData buildMaterialTheme(FThemeData forui) {
+  return forui.toApproximateMaterialTheme().copyWith(
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: AppColors.wbPrimary,
       foregroundColor: Colors.white,
+    ),
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: AppColors.wbPrimary,
+      primary: AppColors.wbPrimary,
+      secondary: AppColors.ozonPrimary,
+      error: AppColors.error,
+      surface: AppColors.surface,
     ),
   );
 }

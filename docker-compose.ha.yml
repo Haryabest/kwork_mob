@@ -160,6 +160,33 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
 
+  # Patroni node (prod): docker compose -f docker-compose.ha.yml --profile patroni up -d
+  patroni-1:
+    profiles: ["patroni"]
+    build:
+      context: ./infra/ha/patroni
+    hostname: patroni-1
+    environment:
+      PATRONI_NAME: patroni-1
+      PATRONI_ETCD3_HOSTS: etcd:2379
+    depends_on:
+      - etcd
+    ports:
+      - "5433:5432"
+      - "8008:8008"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    ports:
+      - "3002:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./infra/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+
 volumes:
   etcd_data:
   pg_primary_data:
@@ -168,3 +195,4 @@ volumes:
   redis_replica_data:
   minio1_data:
   minio2_data:
+  grafana_data:

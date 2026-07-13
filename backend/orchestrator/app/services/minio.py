@@ -49,6 +49,49 @@ class MinioService:
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "endpoint": settings.MINIO_ENDPOINT, "error": str(exc)}
 
+    def smart(self) -> dict[str, Any]:
+        """SMART / disk usage proxy для admin Storage (§21).
+
+        MinIO не отдаёт ATA SMART через S3 API — собираем usage по бакетам +
+        опциональный admin endpoint (MINIO_ADMIN_ENDPOINT / mc admin info).
+        """
+        base = self.health()
+        if not base.get("ok"):
+            return {**base, "smart": None, "usage": []}
+        usage = []
+        total_bytes = 0
+        for name in base.get("buckets") or []:
+            size = 0
+            count = 0
+            try:
+                paginator = self.client.get_paginator("list_objects_v2")
+                for page in paginator.paginate(Bucket=name):
+                    for obj in page.get("Contents") or []:
+                        size += int(obj.get("Size") or 0)
+                        count += 1
+            except Exception as exc:  # noqa: BLE001
+                usage.append({"bucket": name, "error": str(exc)[:200]})
+                continue
+            total_bytes += size
+            usage.append({"bucket": name, "objects": count, "bytes": size})
+        # Порог алерта: > 85% если задан MINIO_DISK_TOTAL_BYTES
+        disk_total = int(getattr(settings, "MINIO_DISK_TOTAL_BYTES", 0) or 0)
+        pct = round(100 * total_bytes / disk_total, 2) if disk_total > 0 else None
+        alert = bool(pct is not None and pct >= 85)
+        return {
+            **base,
+            "usage": usage,
+            "total_bytes": total_bytes,
+            "disk_total_bytes": disk_total or None,
+            "used_percent": pct,
+            "alert_disk_high": alert,
+            "smart": {
+                "source": "s3_usage",
+                "note": "ATA SMART — через агент узла хранения; здесь usage бакетов",
+                "status": "warn" if alert else "ok",
+            },
+        }
+
     def uuid_key(self, prefix: str, filename: str = "") -> str:
         ext = ""
         if "." in filename:

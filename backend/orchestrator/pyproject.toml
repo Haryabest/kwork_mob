@@ -40,6 +40,9 @@ dev = [
 nsfw = [
     "nudenet>=3.4.0",
 ]
+fcm = [
+    "google-auth>=2.36.0",
+]
 
 [build-system]
 requires = ["setuptools>=75.0"]

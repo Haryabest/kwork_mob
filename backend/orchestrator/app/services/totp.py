@@ -1,4 +1,4 @@
-"""TOTP 2FA для staff (§11)."""
+"""TOTP 2FA: staff (§11) + Owner компании (§10)."""
 
 import io
 import base64
@@ -13,14 +13,17 @@ from app.core.config import settings
 
 CHALLENGE_TYPE_SETUP = "staff_2fa_setup"
 CHALLENGE_TYPE_VERIFY = "staff_2fa_verify"
+CHALLENGE_OWNER_SETUP = "owner_2fa_setup"
+CHALLENGE_OWNER_VERIFY = "owner_2fa_verify"
+CHALLENGE_LOGIN_2FA = "login_2fa"
 
 
 def generate_totp_secret() -> str:
     return pyotp.random_base32()
 
 
-def totp_uri(secret: str, email: str) -> str:
-    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name="KWork Staff")
+def totp_uri(secret: str, email: str, *, issuer: str = "KWork Staff") -> str:
+    return pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name=issuer)
 
 
 def verify_totp(secret: str, code: str) -> bool:

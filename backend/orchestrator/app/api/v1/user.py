@@ -1,4 +1,6 @@
-"""Пользователь: профиль, баланс, транзакции, модели."""
+"""Пользователь: профиль, баланс, транзакции, модели, device tokens."""
+
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -7,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_db_user
-from app.models import Model3D, Transaction, User
+from app.models import DeviceToken, Model3D, Transaction, User
 from app.schemas.auth import AccountTypeRequest
 from app.services import auth as auth_service
 
@@ -16,6 +18,14 @@ router = APIRouter()
 
 class TopupRequest(BaseModel):
     amount: int = Field(default=1000, ge=100, le=500_000)
+    payment_method: str = Field(default="redirect", pattern=r"^(redirect|sbp_qr|card|sbp)$")
+    customer_name: str | None = Field(default=None, max_length=255)
+
+
+class DeviceTokenRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=4096)
+    platform: str = Field(default="android", pattern=r"^(android|ios|web)$")
+    app_version: str | None = Field(default=None, max_length=32)
 
 
 def _user_payload(user: User) -> dict:
@@ -31,6 +41,7 @@ def _user_payload(user: User) -> dict:
         "role": user.staff_role or "user",
         "balance": user.balance,
         "marketing_opt_in": user.marketing_opt_in,
+        "totp_enabled": bool(user.totp_enabled),
         "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,
         "age_verified": bool(user.age_verified_at),
         "created_at": user.created_at.isoformat() if user.created_at else None,
@@ -106,22 +117,68 @@ async def topup_balance(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Пополнение баланса через ЮKassa (только production API, без mock)."""
+    """Пополнение: карта (redirect) или СБП QR + фискальный чек (§8.12 / §8.6.4)."""
     from app.core.config import settings
+    from app.services.tax import build_receipt_for_payment
     from app.services.yookassa import yookassa_service
 
     amount = body.amount
+    method = body.payment_method
+    if method == "card":
+        method = "redirect"
+    if method == "sbp":
+        method = "sbp_qr"
+
+    description = f"Пополнение баланса KWork Mob ({user.email})"
+    receipt = await build_receipt_for_payment(
+        db,
+        customer_email=user.email,
+        description=description,
+        amount_rub=amount,
+        customer_name=body.customer_name or user.full_name,
+    )
     payment = await yookassa_service.create_payment(
         amount,
-        f"Пополнение баланса KWork Mob ({user.email})",
+        description,
         return_url=f"{settings.SELLER_PUBLIC_URL}/balance",
-        metadata={"purpose": "topup", "user_id": str(user.id), "amount": str(amount)},
+        metadata={
+            "purpose": "topup",
+            "user_id": str(user.id),
+            "amount": str(amount),
+            "payment_method": method,
+        },
+        payment_method=method,  # type: ignore[arg-type]
+        receipt=receipt,
+        idempotence_key=f"topup-{user.id}-{amount}-{method}",
     )
     return {
         "id": payment["id"],
         "status": payment["status"],
-        "confirmation_url": payment["confirmation_url"],
+        "confirmation_url": payment.get("confirmation_url"),
+        "confirmation_data": payment.get("confirmation_data"),
+        "confirmation_type": payment.get("confirmation_type"),
+        "payment_method": method,
         "amount": amount,
+        "receipt": True,
+    }
+
+
+@router.post("/me/delete-request")
+async def request_account_deletion(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Право на забвение: заявка, SLA 30 дней (§2.8.3)."""
+    from app.services import account_deletion as del_svc
+
+    row = await del_svc.request_deletion(db, user)
+    await db.commit()
+    return {
+        "id": row.id,
+        "status": row.status,
+        "requested_at": row.requested_at.isoformat() if row.requested_at else None,
+        "due_at": row.due_at.isoformat() if row.due_at else None,
+        "message": "Запрос принят. Удаление ПДн в течение 30 дней; финансы анонимизируются и хранятся 5 лет.",
     }
 
 
@@ -146,3 +203,44 @@ async def list_user_models(
             for m in rows
         ]
     }
+
+
+@router.post("/devices")
+async def register_device(
+    body: DeviceTokenRequest,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Регистрация FCM/APNs токена (§3.4.3)."""
+    existing = await db.scalar(select(DeviceToken).where(DeviceToken.token == body.token))
+    if existing:
+        existing.user_id = user.id
+        existing.platform = body.platform
+        existing.app_version = body.app_version
+        existing.updated_at = datetime.now(timezone.utc)
+    else:
+        db.add(
+            DeviceToken(
+                user_id=user.id,
+                token=body.token,
+                platform=body.platform,
+                app_version=body.app_version,
+            )
+        )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/devices")
+async def unregister_device(
+    body: DeviceTokenRequest,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    row = await db.scalar(
+        select(DeviceToken).where(DeviceToken.token == body.token, DeviceToken.user_id == user.id)
+    )
+    if row:
+        await db.delete(row)
+        await db.commit()
+    return {"ok": True}

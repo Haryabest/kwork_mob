@@ -19,6 +19,7 @@ from app.services.nsfw import nsfw_service
 from app.services import promocodes as promo_svc
 from app.services import tariffs as tariff_svc
 from app.services import upsells as upsell_svc
+from app.services.access import require_company_permission, assert_order_cancel
 from app.services.company_members import enforce_member_limits
 from app.services import company_balance as company_bal
 from app.services.queue import queue_service
@@ -114,6 +115,12 @@ async def create_order(
             "Загрузите 12 ракурсов в MinIO (POST /orders/photos/prepare + upload) перед созданием заказа",
         ) from None
 
+    from app.services.company_owner_2fa import assert_owner_2fa_for_company_order
+    from app.services.integrity import compute_and_store_source_zip
+
+    await assert_owner_2fa_for_company_order(db, user, body.company_id)
+    integrity = compute_and_store_source_zip(body.task_uuid, client_sha256=body.zip_sha256)
+
     # §10.8: NSFW до списания и до очереди
     nsfw = await nsfw_service.check_task_photos(body.task_uuid)
 
@@ -137,6 +144,9 @@ async def create_order(
         upsell_options=upsell_codes,
         upsell_amount=upsell_amount,
         scale_calibration=body.scale_calibration,
+        zip_sha256=integrity["zip_sha256"],
+        customer_name=body.customer_name,
+        receipt_email=body.receipt_email or user.email,
     )
     db.add(order)
     await db.flush()
@@ -160,6 +170,7 @@ async def create_order(
     photos_prefix = body.photos_prefix or photos_service.photos_prefix(body.task_uuid)
     priority = "high" if body.tier.value == "large" else "normal"
 
+    await require_company_permission(db, user, body.company_id, "can_create_orders")
     await enforce_member_limits(
         db,
         user=user,
@@ -214,6 +225,25 @@ async def create_order(
     else:
         order.status = "awaiting_payment"
 
+    await db.flush()
+    try:
+        from app.services import company_webhooks as wh
+
+        await wh.emit(
+            db,
+            company_id=order.company_id,
+            event="order.created",
+            payload={
+                "order_id": order.id,
+                "task_uuid": order.task_uuid,
+                "status": order.status,
+                "amount": order.amount,
+                "tier": order.tier,
+                "category": order.category,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass
     await db.commit()
     await db.refresh(order)
     if order.status == "queued":
@@ -284,6 +314,16 @@ async def pay_order(
         )
         return {"id": order.id, "status": "queued", "paid_from_balance": True}
 
+    from app.services.tax import build_receipt_for_payment
+    from app.services.yookassa import yookassa_service
+
+    receipt = await build_receipt_for_payment(
+        db,
+        customer_email=order.receipt_email or user.email,
+        description=f"Генерация 3D-модели заказ #{order.id}",
+        amount_rub=order.amount,
+        customer_name=order.customer_name or user.full_name,
+    )
     payment = await yookassa_service.create_payment(
         order.amount,
         f"Оплата заказа #{order.id} KWork Mob",
@@ -293,8 +333,10 @@ async def pay_order(
             "user_id": user.id,
             "order_id": order.id,
             "amount": order.amount,
+            "payment_method": "redirect",
         },
         idempotence_key=f"order-{order.id}-{order.task_uuid}",
+        receipt=receipt,
     )
     return {
         "id": order.id,
@@ -367,14 +409,30 @@ async def cancel_order(
     db: AsyncSession = Depends(get_db),
 ):
     order = await db.get(Order, order_id)
-    if not order or order.user_id != user.id:
+    if not order:
         raise HTTPException(404, "Заказ не найден")
+    await assert_order_cancel(db, order, user)
     if order.status not in ("pending", "queued", "paid", "awaiting_payment"):
         raise HTTPException(400, "Заказ нельзя отменить")
     order.status = "cancelled"
+    try:
+        from app.services import company_webhooks as wh
+
+        await wh.emit(
+            db,
+            company_id=order.company_id,
+            event="order.cancelled",
+            payload={
+                "order_id": order.id,
+                "task_uuid": order.task_uuid,
+                "cancelled_by": user.id,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass
     await db.commit()
     await publish_order_status(
-        user_id=user.id,
+        user_id=order.user_id,
         order_id=order.id,
         task_id=order.task_uuid,
         status="cancelled",

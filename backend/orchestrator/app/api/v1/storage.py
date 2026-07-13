@@ -1,10 +1,11 @@
-"""Хранилище MinIO: buckets, presigned upload/download."""
+"""Хранилище MinIO: buckets, presigned upload/download + Referer (§10.3)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.security import get_current_db_user, require_admin
+from app.services.download_guard import assert_download_allowed
 from app.services.minio import minio_service
 
 router = APIRouter(prefix="/storage", tags=["Хранилище MinIO"])
@@ -25,6 +26,12 @@ class PresignDownloadRequest(BaseModel):
 @router.get("/health")
 async def storage_health(_: dict = Depends(require_admin)):
     return minio_service.health()
+
+
+@router.get("/smart")
+async def storage_smart(_: dict = Depends(require_admin)):
+    """MinIO usage + диск-алерт (§21 SMART dashboard)."""
+    return minio_service.smart()
 
 
 @router.post("/init")
@@ -53,7 +60,12 @@ async def presign_upload(body: PresignUploadRequest, _user=Depends(get_current_d
 
 
 @router.post("/presign-download")
-async def presign_download(body: PresignDownloadRequest, _user=Depends(get_current_db_user)):
-    """Presigned GET на 1 ч."""
+async def presign_download(
+    body: PresignDownloadRequest,
+    request: Request,
+    _user=Depends(get_current_db_user),
+):
+    """Presigned GET + CORS/Referer check (§10.3)."""
+    assert_download_allowed(request)
     url = minio_service.generate_presigned_url(body.bucket, body.key, expires=body.expires, method="get_object")
     return {"download_url": url, "expires_in": body.expires}

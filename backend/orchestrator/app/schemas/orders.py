@@ -48,3 +48,6 @@ class OrderCreateRequest(BaseModel):
         default=None,
         description="Префикс ключей фото в MinIO (photos/{task_uuid}/)",
     )
+    zip_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    customer_name: str | None = None
+    receipt_email: str | None = None

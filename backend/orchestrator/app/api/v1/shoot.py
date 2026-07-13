@@ -64,6 +64,22 @@ async def upload_by_link(
     link.used_count += 1
     if link.used_count >= link.max_uses:
         link.status = "used"
+    try:
+        from app.services import company_webhooks as wh
+
+        await wh.emit(
+            db,
+            company_id=link.company_id,
+            event="shoot_link.uploaded",
+            payload={
+                "token": token,
+                "task_uuid": link.task_uuid,
+                "used_count": link.used_count,
+                "status": link.status,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass
     await db.commit()
     return {**result, "status": link.status, "link_used": True}
 
@@ -76,6 +92,22 @@ async def complete_shoot(token: str, db: AsyncSession = Depends(get_db)):
     link.used_count += 1
     if link.used_count >= link.max_uses:
         link.status = "used"
+    try:
+        from app.services import company_webhooks as wh
+
+        await wh.emit(
+            db,
+            company_id=link.company_id,
+            event="shoot_link.uploaded",
+            payload={
+                "token": token,
+                "task_uuid": link.task_uuid,
+                "used_count": link.used_count,
+                "status": link.status,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass
     await db.commit()
     return {
         "ok": True,

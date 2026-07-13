@@ -1,4 +1,4 @@
-"""Возвраты: ЮKassa на карту + fallback на баланс (§8)."""
+"""Возвраты: ЮKassa на карту + корпоративный/личный баланс (§8 / §6.12)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Order, Transaction, User
+from app.models import Company, Order, Transaction, User
 from app.services.yookassa import yookassa_service
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 async def resolve_payment_id(db: AsyncSession, order: Order) -> str | None:
     if order.yookassa_payment_id:
         return order.yookassa_payment_id
-    # topup с external_id по заказу
     rows = (
         await db.scalars(
             select(Transaction)
@@ -37,6 +36,28 @@ async def resolve_payment_id(db: AsyncSession, order: Order) -> str | None:
     return None
 
 
+async def _was_charged_from_company(db: AsyncSession, order: Order) -> bool:
+    if not order.company_id:
+        return False
+    tx = await db.scalar(
+        select(Transaction).where(
+            Transaction.company_id == order.company_id,
+            Transaction.tx_type == "charge",
+            Transaction.external_id == f"order:{order.id}",
+        )
+    )
+    if tx:
+        return True
+    tx2 = await db.scalar(
+        select(Transaction).where(
+            Transaction.company_id == order.company_id,
+            Transaction.tx_type == "charge",
+            Transaction.description.contains(f"#{order.id}"),
+        )
+    )
+    return tx2 is not None
+
+
 async def refund_order(
     db: AsyncSession,
     order: Order,
@@ -48,8 +69,8 @@ async def refund_order(
     """
     Полный возврат суммы заказа.
     1) Если есть платёж ЮKassa — create_refund на карту.
-    2) Иначе (или дополнительно при charge с баланса) — кредит на баланс.
-    Идемпотентность: повторный refund с тем же external_id не дублируется.
+    2) Если списание с company.balance — credit_company.
+    3) Иначе — кредит на личный баланс.
     """
     if order.amount <= 0:
         return {"refunded": False, "method": "none", "reason": "zero_amount"}
@@ -58,10 +79,8 @@ async def refund_order(
     if not user:
         return {"refunded": False, "method": "none", "reason": "no_user"}
 
-    # уже был refund по заказу?
     existing = await db.scalar(
         select(Transaction).where(
-            Transaction.user_id == user.id,
             Transaction.tx_type == "refund",
             Transaction.description.contains(f"#{order.id}"),
         )
@@ -106,30 +125,52 @@ async def refund_order(
             err = str(exc)[:500]
             logger.exception("YooKassa refund failed order=%s: %s", order.id, exc)
 
-    if not card_ok:
-        # баланс (оплата была с баланса или карта недоступна)
-        user.balance += order.amount
-        db.add(
-            Transaction(
-                user_id=user.id,
-                company_id=order.company_id,
-                amount=order.amount,
-                tx_type="refund",
-                description=f"Возврат баланс заказ #{order.id}: {reason}"
-                + (f" (yk_fail: {err})" if err else ""),
-                external_id=None,
-            )
-        )
+    if card_ok:
         return {
             "refunded": True,
-            "method": "balance",
-            "yookassa_error": err,
+            "method": "yookassa",
             "payment_id": payment_id,
+            "yookassa": {
+                "id": yk_raw.get("id") if yk_raw else None,
+                "status": yk_raw.get("status") if yk_raw else None,
+            },
         }
 
+    if await _was_charged_from_company(db, order):
+        from app.services.company_balance import credit_company
+
+        company = await db.get(Company, order.company_id)
+        if company:
+            await credit_company(
+                db,
+                company=company,
+                amount=order.amount,
+                user_id=user.id,
+                description=f"Возврат баланс компании заказ #{order.id}: {reason}"
+                + (f" (yk_fail: {err})" if err else ""),
+            )
+            return {
+                "refunded": True,
+                "method": "company_balance",
+                "company_id": company.id,
+                "yookassa_error": err,
+            }
+
+    user.balance += order.amount
+    db.add(
+        Transaction(
+            user_id=user.id,
+            company_id=order.company_id,
+            amount=order.amount,
+            tx_type="refund",
+            description=f"Возврат баланс заказ #{order.id}: {reason}"
+            + (f" (yk_fail: {err})" if err else ""),
+            external_id=None,
+        )
+    )
     return {
         "refunded": True,
-        "method": "yookassa",
+        "method": "balance",
+        "yookassa_error": err,
         "payment_id": payment_id,
-        "yookassa": {"id": yk_raw.get("id") if yk_raw else None, "status": yk_raw.get("status") if yk_raw else None},
     }

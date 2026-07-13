@@ -6,13 +6,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.models import Order, Transaction, User
+from app.models import Company, Order, Transaction, User
 from app.services.events import publish_order_status
 from app.services.queue import queue_service
 from app.services.task_lifecycle import try_queue_awaiting_orders
 from app.services.yookassa import yookassa_service
 
 router = APIRouter()
+
+
+def _payment_channel_label(meta: dict, payment: dict) -> str:
+    method = str(meta.get("payment_method") or "")
+    pm = payment.get("payment_method") or {}
+    pm_type = str(pm.get("type") or "")
+    if method == "sbp_qr" or pm_type == "sbp":
+        return "СБП"
+    return "ЮKassa"
 
 
 @router.post("/yookassa")
@@ -30,7 +39,6 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
     ) != "succeeded":
         return {"ok": True, "ignored": True, "event": parsed.get("event")}
 
-    # Верификация у ЮKassa (не доверяем только телу webhook)
     payment = await yookassa_service.get_payment(payment_id)
     if payment.get("status") != "succeeded":
         return {"ok": True, "ignored": True, "status": payment.get("status")}
@@ -50,6 +58,27 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
     if not user:
         raise HTTPException(400, "user not found")
 
+    channel = _payment_channel_label(meta, payment)
+
+    if purpose == "company_topup":
+        company_id = int(meta.get("company_id") or 0)
+        company = await db.get(Company, company_id) if company_id else None
+        if not company or company.owner_id != user.id:
+            raise HTTPException(400, "company not found")
+        company.balance += amount
+        db.add(
+            Transaction(
+                user_id=user.id,
+                company_id=company.id,
+                amount=amount,
+                tx_type="topup",
+                description=f"Пополнение баланса компании через {channel}",
+                external_id=payment_id,
+            )
+        )
+        await db.commit()
+        return {"ok": True, "company_id": company.id, "credited": amount}
+
     if purpose == "order":
         order_id = int(meta.get("order_id") or 0)
         order = await db.get(Order, order_id) if order_id else None
@@ -66,7 +95,7 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 company_id=order.company_id,
                 amount=amount,
                 tx_type="topup",
-                description=f"Оплата заказа #{order.id} через ЮKassa",
+                description=f"Оплата заказа #{order.id} через {channel}",
                 external_id=payment_id,
             )
         )
@@ -74,7 +103,6 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
 
         nsfw = await nsfw_service.check_task_photos(order.task_uuid)
         if nsfw.get("is_nsfw"):
-            # деньги остаются на балансе (возврат), очередь не ставим
             await nsfw_service.block_order(
                 db, order=order, user=user, result=nsfw, refund=True, charged=False
             )
@@ -105,6 +133,7 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 "photos_bucket": settings.MINIO_BUCKET_PHOTOS,
                 "photos_prefix": f"photos/{order.task_uuid}/",
                 "models_bucket": settings.MINIO_BUCKET_MODELS,
+                "zip_sha256": order.zip_sha256,
             },
             priority="high" if order.tier == "large" else "normal",
         )
@@ -117,14 +146,14 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
         )
         return {"ok": True, "order_id": order.id, "queued": True}
 
-    # topup баланса
+    # topup личного баланса
     user.balance += amount
     db.add(
         Transaction(
             user_id=user.id,
             amount=amount,
             tx_type="topup",
-            description="Пополнение через ЮKassa",
+            description=f"Пополнение через {channel}",
             external_id=payment_id,
         )
     )

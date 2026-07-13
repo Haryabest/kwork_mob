@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_db_user, require_admin, require_staff
 from app.core.vpn import require_vpn
@@ -202,15 +203,13 @@ async def block_user(
 
 
 @router.post("/users/{user_id}/delete")
-async def delete_user(user_id: int, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
-    user = await db.get(User, user_id)
-    if not user:
-        raise HTTPException(404, "Не найден")
-    user.status = "deleted"
-    user.email = f"deleted_{user.id}@removed.local"
-    user.full_name = None
+async def delete_user(user_id: int, admin: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """Право на забвение: полное удаление ПДн, финансы анонимизируются (§11.12)."""
+    from app.services import account_deletion as del_svc
+
+    result = await del_svc.execute_deletion(db, user_id=user_id, processed_by=int(admin.get("sub") or 0) or None)
     await db.commit()
-    return {"message": "Пользователь удалён (право на забвение)"}
+    return {"message": "Пользователь удалён (право на забвение)", **result}
 
 
 @router.get("/workers")
@@ -336,6 +335,60 @@ async def admin_support_reply(
     req.status = "answered"
     await db.commit()
     return {"message": "ok"}
+
+
+@router.post("/support/questions/{question_id}/ai-suggest")
+async def admin_support_ai_suggest(
+    question_id: int,
+    _: dict = Depends(require_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """Черновик ответа через Ollama (§4.8.11 / §14.4)."""
+    from app.services.ollama import ollama_service
+
+    req = await db.get(SupportRequest, question_id)
+    if not req:
+        raise HTTPException(404, "Не найдено")
+    health = await ollama_service.health()
+    if not health.get("ok"):
+        raise HTTPException(
+            503,
+            detail={
+                "code": "ollama_unavailable",
+                "message": "ИИ-помощник временно недоступен",
+                "health": health,
+            },
+        )
+    messages = (
+        await db.scalars(
+            select(SupportMessage)
+            .where(SupportMessage.request_id == question_id)
+            .order_by(SupportMessage.id)
+        )
+    ).all()
+    ctx_lines = [f"{'staff' if m.is_staff else 'user'}: {m.body}" for m in messages[-10:]]
+    question = req.message or (messages[0].body if messages else "")
+    try:
+        text = await ollama_service.suggest_reply(question, context="\n".join(ctx_lines))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, detail={"code": "ollama_error", "message": str(exc)[:200]}) from exc
+    return {
+        "suggestion": text,
+        "model": settings.OLLAMA_MODEL,
+        "available": bool(text),
+    }
+
+
+@router.get("/support/ollama/status")
+async def ollama_status(_: dict = Depends(require_staff)):
+    from app.services.ollama import ollama_service
+
+    health = await ollama_service.health()
+    return {
+        "url": settings.OLLAMA_URL,
+        "model": settings.OLLAMA_MODEL,
+        **health,
+    }
 
 
 @router.get("/legal/consents")

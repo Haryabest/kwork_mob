@@ -28,3 +28,38 @@ CREATE TABLE IF NOT EXISTS order_events (
     details String
 ) ENGINE = MergeTree()
 ORDER BY (timestamp, order_id);
+
+-- Materialized Views (§12.2.2)
+CREATE MATERIALIZED VIEW IF NOT EXISTS worker_metrics_hourly
+ENGINE = AggregatingMergeTree()
+ORDER BY (worker_id, hour)
+AS SELECT
+    toStartOfHour(timestamp) AS hour,
+    worker_id,
+    avgState(gpu_util) AS gpu_util,
+    avgState(gpu_temp) AS gpu_temp,
+    avgState(cpu_percent) AS cpu_percent,
+    avgState(ram_percent) AS ram_percent
+FROM worker_metrics_minute
+GROUP BY hour, worker_id;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS queue_metrics_hourly
+ENGINE = AggregatingMergeTree()
+ORDER BY (queue_name, hour)
+AS SELECT
+    toStartOfHour(timestamp) AS hour,
+    queue_name,
+    avgState(length) AS length,
+    avgState(avg_wait_seconds) AS avg_wait_seconds
+FROM queue_metrics_minute
+GROUP BY hour, queue_name;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS order_events_daily
+ENGINE = SummingMergeTree()
+ORDER BY (day, event_type)
+AS SELECT
+    toDate(timestamp) AS day,
+    event_type,
+    count() AS events
+FROM order_events
+GROUP BY day, event_type;

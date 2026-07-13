@@ -64,25 +64,10 @@ async def remove_member(db: AsyncSession, actor: User, target_user_id: int) -> N
 
 
 async def change_role(db: AsyncSession, actor: User, target_user_id: int, role: str) -> CompanyMember:
-    if role not in ROLES or role == "owner":
-        raise HTTPException(400, f"role: {', '.join(r for r in ROLES if r != 'owner')}")
-    company = await get_owned_company(db, actor)
-    if target_user_id == company.owner_id:
-        raise HTTPException(400, "Роль Owner не меняется")
-    m = await get_membership(db, company.id, target_user_id)
-    if not m:
-        raise HTTPException(404, "Участник не найден")
-    old = m.role
-    m.role = role
-    await audit(
-        db,
-        company_id=company.id,
-        user_id=actor.id,
-        action="member.role",
-        details={"user_id": target_user_id, "from": old, "to": role},
-    )
-    await db.flush()
-    return m
+    """Совместимость: смена по slug через company_roles."""
+    from app.services.company_roles import assign_role_to_member
+
+    return await assign_role_to_member(db, actor, target_user_id, role_slug=role)
 
 
 async def change_limits(
@@ -209,15 +194,30 @@ async def enforce_member_limits(
 ) -> None:
     if not company_id:
         return
+    from app.services.company_policies import policies_for_company
+
     m = await get_membership(db, company_id, user.id)
     company = await db.get(Company, company_id)
     if company and company.owner_id == user.id:
         return
     if not m:
         raise HTTPException(403, "Нет членства в компании")
-    if m.allowed_categories and category not in m.allowed_categories:
+
+    policies = policies_for_company(company)
+    # индивидуальные лимиты имеют приоритет над глобальными (§2.5.4)
+    max_concurrent = m.max_concurrent_orders
+    if max_concurrent is None:
+        max_concurrent = int(policies.get("default_max_concurrent_orders") or 5)
+    monthly_limit = m.monthly_spending_limit
+    if monthly_limit is None and policies.get("default_monthly_spending_limit") is not None:
+        monthly_limit = int(policies["default_monthly_spending_limit"])
+    allowed = m.allowed_categories
+    if not allowed:
+        allowed = policies.get("default_allowed_categories") or None
+
+    if allowed and category not in allowed:
         raise HTTPException(403, f"Категория {category} запрещена политикой")
-    if m.max_concurrent_orders:
+    if max_concurrent:
         active = await db.scalar(
             select(func.count())
             .select_from(Order)
@@ -227,9 +227,9 @@ async def enforce_member_limits(
                 Order.status.in_(("queued", "processing", "awaiting_payment", "pending")),
             )
         )
-        if int(active or 0) >= m.max_concurrent_orders:
+        if int(active or 0) >= max_concurrent:
             raise HTTPException(403, "Лимит одновременных заказов")
-    if m.monthly_spending_limit is not None:
+    if monthly_limit is not None:
         start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         spent = await db.scalar(
             select(func.coalesce(func.sum(Order.amount), 0)).where(
@@ -239,5 +239,5 @@ async def enforce_member_limits(
                 Order.status.notin_(("cancelled", "failed", "pending")),
             )
         )
-        if int(spent or 0) + amount > m.monthly_spending_limit:
+        if int(spent or 0) + amount > monthly_limit:
             raise HTTPException(403, "Месячный лимит расходов исчерпан")

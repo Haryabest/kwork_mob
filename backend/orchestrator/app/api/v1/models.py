@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,8 @@ from app.core.security import get_current_db_user
 from app.models import Model3D, ModelPublicationLink, User
 from app.schemas.models import ModelRateRequest
 from app.services import publication as pub_svc
+from app.services.access import get_accessible_model, require_company_permission
+from app.services.download_guard import assert_download_allowed
 from app.services.minio import minio_service
 
 router = APIRouter()
@@ -44,19 +46,25 @@ def _parse_s3(url: str | None) -> tuple[str, str] | None:
     return None
 
 
-def _presign_glb(model: Model3D, expires: int = 3600) -> str | None:
+def _presign_glb(model: Model3D, expires: int = 3600, *, request=None) -> str | None:
     parsed = _parse_s3(model.glb_url)
     if not parsed:
         return None
     bucket, key = parsed
+    if model.file_sha256:
+        from app.services.integrity import verify_object_sha256
+
+        verify_object_sha256(bucket, key, model.file_sha256)
+    elif minio_service.object_exists(bucket, key):
+        from app.services.integrity import sha256_bytes
+
+        digest = sha256_bytes(minio_service.download_bytes(bucket, key))
+        model.file_sha256 = digest
     return minio_service.generate_presigned_url(bucket, key, expires=expires, method="get_object")
 
 
 async def _get_owned_model(db: AsyncSession, model_uuid: str, user: User) -> Model3D:
-    model = await db.scalar(select(Model3D).where(Model3D.uuid == model_uuid))
-    if not model or model.user_id != user.id:
-        raise HTTPException(404, "Модель не найдена")
-    return model
+    return await get_accessible_model(db, model_uuid, user)
 
 
 @router.get("/share/{short_hash}")
@@ -153,32 +161,49 @@ async def get_model(
 @router.get("/{model_uuid}/download")
 async def download_model(
     model_uuid: str,
+    request: Request,
     format: str = Query(default="glb", pattern=r"^(glb|usdz)$"),
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Presigned URL для скачивания .glb / .usdz из MinIO."""
+    """Presigned URL для скачивания .glb / .usdz + Referer/SHA-256 (§10.3 / §9)."""
+    assert_download_allowed(request)
     model = await _get_owned_model(db, model_uuid, user)
+    await require_company_permission(db, user, model.company_id, "can_download_models")
     raw = model.glb_url if format == "glb" else model.usdz_url
     if format == "usdz" and not raw and model.glb_url:
-        parsed = _parse_s3(model.glb_url)
-        if not parsed:
+        url = _presign_glb(model, expires=3600)
+        if not url:
             raise HTTPException(404, "Файл модели отсутствует")
-        bucket, key = parsed
-        url = minio_service.generate_presigned_url(bucket, key, expires=3600, method="get_object")
+        await db.commit()
         return {
             "download_url": url,
             "format": "glb",
             "fallback": True,
             "message": "USDZ ещё не сгенерирован — отдан GLB",
             "expires_in": 3600,
+            "file_sha256": model.file_sha256,
         }
     parsed = _parse_s3(raw)
     if not parsed:
         raise HTTPException(404, f"Файл {format} отсутствует")
     bucket, key = parsed
+    if format == "glb":
+        url = _presign_glb(model, expires=3600)
+        await db.commit()
+        if not url:
+            raise HTTPException(404, "GLB отсутствует")
+        return {
+            "download_url": url,
+            "format": format,
+            "bucket": bucket,
+            "key": key,
+            "expires_in": 3600,
+            "file_sha256": model.file_sha256,
+        }
     url = minio_service.generate_presigned_url(bucket, key, expires=3600, method="get_object")
     return {"download_url": url, "format": format, "bucket": bucket, "key": key, "expires_in": 3600}
+
 
 
 @router.get("/{model_uuid}/preview")
@@ -204,6 +229,7 @@ async def mark_published(
 ):
     """Отметка «Я опубликовал» на WB / Ozon (§7)."""
     model = await _get_owned_model(db, model_uuid, user)
+    await require_company_permission(db, user, model.company_id, "can_mark_published")
     model.publish_status = f"published_{body.marketplace}"
     await db.commit()
     return {
@@ -235,6 +261,7 @@ async def add_publication_link(
     db: AsyncSession = Depends(get_db),
 ):
     model = await _get_owned_model(db, model_uuid, user)
+    await require_company_permission(db, user, model.company_id, "can_add_publication_links")
     link = await pub_svc.add_publication_link(db, user=user, model=model, url=str(body.url))
     await db.commit()
     await db.refresh(link)
@@ -295,6 +322,27 @@ async def rate_model(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models import ModelFeedback
+
     model = await _get_owned_model(db, model_uuid, user)
-    _ = model
+    existing = await db.scalar(
+        select(ModelFeedback).where(
+            ModelFeedback.model_uuid == model_uuid,
+            ModelFeedback.user_id == user.id,
+        )
+    )
+    if existing:
+        existing.rating = body.rating
+        existing.reasons = list(body.reasons or [])
+    else:
+        db.add(
+            ModelFeedback(
+                model_uuid=model_uuid,
+                user_id=user.id,
+                company_id=model.company_id,
+                rating=body.rating,
+                reasons=list(body.reasons or []),
+            )
+        )
+    await db.commit()
     return {"ok": True, "uuid": model_uuid, "rating": body.rating, "reasons": body.reasons}

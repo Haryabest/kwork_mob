@@ -83,11 +83,22 @@ export default function TicketDetailPage() {
             <Button
               leftSection={<IconRobot size={16} />}
               variant="light"
-              onClick={() =>
-                setSuggestion(
-                  'Проверьте формат файлов и попробуйте повторить действие. Если ошибка сохранится — пришлите номер заказа.',
-                )
-              }
+              onClick={async () => {
+                try {
+                  const { data } = await api.post<{ suggestion: string }>(
+                    `/admin/support/questions/${id}/ai-suggest`,
+                  );
+                  const text = data.suggestion || '';
+                  setSuggestion(text);
+                  if (text && !reply.trim()) setReply(text);
+                  notifications.show({
+                    color: text ? 'teal' : 'yellow',
+                    message: text ? 'Черновик ИИ готов' : 'Пустой ответ ИИ',
+                  });
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                }
+              }}
             >
               Предложить ответ ИИ
             </Button>

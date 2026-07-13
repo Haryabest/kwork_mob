@@ -1,47 +1,54 @@
 'use client';
 
-import { Button, Group, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Button, Checkbox, Group, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { SellerShell } from '../../../components/SellerShell';
 import { api, apiMessage } from '../../../services/api';
 
-type Member = {
-  user_id: number;
-  email?: string;
-  role: string;
-  max_concurrent_orders?: number;
-  monthly_spending_limit?: number;
+type Role = {
+  id: number;
+  name: string;
+  slug: string;
+  permissions: Record<string, boolean>;
+  is_system: boolean;
 };
 
+const DEFAULT_PERMS: Record<string, boolean> = {};
+
 export default function RolesPage() {
-  const [items, setItems] = useState<Member[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [role, setRole] = useState<string | null>('photographer');
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [keys, setKeys] = useState<string[]>([]);
+  const [name, setName] = useState('');
+  const [perms, setPerms] = useState<Record<string, boolean>>({ ...DEFAULT_PERMS });
 
   async function load() {
-    const { data } = await api.get<{ items: Member[] }>('/company/members');
-    setItems(data.items ?? []);
+    const { data } = await api.get<{ items: Role[]; permission_keys: string[] }>('/company/roles');
+    setRoles(data.items ?? []);
+    setKeys(data.permission_keys ?? []);
+    const init: Record<string, boolean> = {};
+    for (const k of data.permission_keys ?? []) init[k] = false;
+    setPerms(init);
   }
 
   useEffect(() => {
     load().catch((e) => notifications.show({ color: 'red', message: apiMessage(e) }));
   }, []);
 
-  async function saveRole() {
-    if (!selected || !role) return;
+  async function create() {
     try {
-      await api.patch(`/company/members/${selected}/role`, { role });
-      notifications.show({ color: 'teal', message: 'Роль обновлена' });
+      await api.post('/company/roles', { name, permissions: perms });
+      notifications.show({ color: 'teal', message: 'Роль создана' });
+      setName('');
       await load();
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
     }
   }
 
-  async function remove(uid: number) {
+  async function remove(id: number) {
     try {
-      await api.delete(`/company/members/${uid}`);
+      await api.delete(`/company/roles/${id}`);
       await load();
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
@@ -51,52 +58,53 @@ export default function RolesPage() {
   return (
     <SellerShell>
       <Title order={2} mb="md">
-        Роли и участники
+        Управление ролями (§2.5.3)
       </Title>
-      <Table mb="lg">
+      <Table mb="lg" withTableBorder>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Email</Table.Th>
-            <Table.Th>Роль</Table.Th>
-            <Table.Th>Лимит заказов</Table.Th>
+            <Table.Th>Название</Table.Th>
+            <Table.Th>Slug</Table.Th>
+            <Table.Th>Тип</Table.Th>
             <Table.Th />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {items.map((m) => (
-            <Table.Tr key={m.user_id}>
-              <Table.Td>{m.email}</Table.Td>
-              <Table.Td>{m.role}</Table.Td>
-              <Table.Td>{m.max_concurrent_orders ?? '—'}</Table.Td>
+          {roles.map((r) => (
+            <Table.Tr key={r.id}>
+              <Table.Td>{r.name}</Table.Td>
+              <Table.Td>{r.slug}</Table.Td>
+              <Table.Td>{r.is_system ? 'системная' : 'кастом'}</Table.Td>
               <Table.Td>
-                <Button size="xs" color="red" variant="light" onClick={() => remove(m.user_id)}>
-                  Удалить
-                </Button>
+                {!r.is_system && (
+                  <Button size="xs" color="red" variant="light" onClick={() => remove(r.id)}>
+                    Удалить
+                  </Button>
+                )}
               </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
-      <Stack maw={420}>
-        <Select
-          label="Участник"
-          value={selected}
-          onChange={setSelected}
-          data={items.map((m) => ({ value: String(m.user_id), label: m.email || String(m.user_id) }))}
-        />
-        <Select
-          label="Новая роль"
-          value={role}
-          onChange={setRole}
-          data={[
-            { value: 'manager', label: 'Manager' },
-            { value: 'photographer', label: 'Photographer' },
-            { value: 'viewer', label: 'Viewer' },
-          ]}
-        />
-        <Button onClick={saveRole} w="fit-content">
-          Сохранить роль
-        </Button>
+
+      <Title order={4} mb="sm">
+        Создать кастомную роль
+      </Title>
+      <Stack maw={560}>
+        <TextInput label="Название" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+        {keys.map((k) => (
+          <Checkbox
+            key={k}
+            label={k}
+            checked={!!perms[k]}
+            onChange={(e) => setPerms({ ...perms, [k]: e.currentTarget.checked })}
+          />
+        ))}
+        <Group>
+          <Button onClick={create} disabled={name.length < 2}>
+            Создать роль
+          </Button>
+        </Group>
       </Stack>
     </SellerShell>
   );

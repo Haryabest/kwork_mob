@@ -1,12 +1,13 @@
-"""Prometheus + ClickHouse метрики §4.4 / §12."""
+"""Prometheus + ClickHouse метрики §4.4 / §11.2 / §12."""
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from sqlalchemy import func, select
 
 from app.core.config import settings
 
@@ -134,28 +135,220 @@ def record_order_event(
         logger.debug("CH order event: %s", exc)
 
 
+async def _pg_dashboard() -> dict:
+    """Агрегаты из PostgreSQL (§11.2) — fallback и дополнение к ClickHouse."""
+    from app.core.database import async_session
+    from app.models import Company, CompanyMember, ModelFeedback, Order, TaskQueue, Transaction
+
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    paid_like = ("paid", "queued", "processing", "completed", "done")
+
+    async with async_session() as db:
+        status_rows = (
+            await db.execute(select(Order.status, func.count()).group_by(Order.status))
+        ).all()
+        by_status = {r[0]: int(r[1]) for r in status_rows}
+
+        revenue_today = int(
+            await db.scalar(
+                select(func.coalesce(func.sum(Order.amount), 0)).where(
+                    Order.created_at >= today, Order.status.in_(paid_like)
+                )
+            )
+            or 0
+        )
+        revenue_7d = int(
+            await db.scalar(
+                select(func.coalesce(func.sum(Order.amount), 0)).where(
+                    Order.created_at >= since, Order.status.in_(paid_like)
+                )
+            )
+            or 0
+        )
+        refunds = int(
+            await db.scalar(
+                select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+                    Transaction.created_at >= since,
+                    Transaction.tx_type == "refund",
+                )
+            )
+            or 0
+        )
+
+        queued = int(
+            await db.scalar(select(func.count()).select_from(TaskQueue).where(TaskQueue.status == "queued"))
+            or 0
+        )
+        processing = int(
+            await db.scalar(
+                select(func.count()).select_from(TaskQueue).where(TaskQueue.status == "processing")
+            )
+            or 0
+        )
+
+        ewt_normal = await db.scalar(
+            select(func.avg(func.extract("epoch", func.now() - TaskQueue.created_at))).where(
+                TaskQueue.status == "queued", TaskQueue.priority == "normal"
+            )
+        )
+        ewt_high = await db.scalar(
+            select(func.avg(func.extract("epoch", func.now() - TaskQueue.created_at))).where(
+                TaskQueue.status == "queued", TaskQueue.priority == "high"
+            )
+        )
+
+        rating_rows = (
+            await db.execute(select(ModelFeedback.rating, func.count()).group_by(ModelFeedback.rating))
+        ).all()
+        rating_dist = {str(i): 0 for i in range(1, 6)}
+        total_fb = 0
+        high = 0
+        for rating, cnt in rating_rows:
+            rating_dist[str(int(rating))] = int(cnt)
+            total_fb += int(cnt)
+            if int(rating) >= 4:
+                high += int(cnt)
+
+        reason_rows = (
+            await db.execute(select(ModelFeedback.reasons).where(ModelFeedback.rating <= 3).limit(500))
+        ).scalars().all()
+        reason_hist: dict[str, int] = {}
+        for reasons in reason_rows:
+            for r in reasons or []:
+                key = str(r)
+                reason_hist[key] = reason_hist.get(key, 0) + 1
+
+        companies_active = int(
+            await db.scalar(select(func.count()).select_from(Company).where(Company.status == "active"))
+            or 0
+        )
+        photographers = int(
+            await db.scalar(
+                select(func.count()).select_from(CompanyMember).where(CompanyMember.role == "photographer")
+            )
+            or 0
+        )
+
+        top_companies = (
+            await db.execute(
+                select(Order.company_id, func.count(), func.coalesce(func.sum(Order.amount), 0))
+                .where(Order.company_id.is_not(None), Order.created_at >= since)
+                .group_by(Order.company_id)
+                .order_by(func.sum(Order.amount).desc())
+                .limit(10)
+            )
+        ).all()
+
+        nsfw_blocked = int(by_status.get("nsfw_blocked", 0) + by_status.get("blocked_nsfw", 0))
+
+        hourly = (
+            await db.execute(
+                select(func.date_trunc("hour", Order.created_at), func.count())
+                .where(Order.created_at >= datetime.now(timezone.utc) - timedelta(hours=48))
+                .group_by(func.date_trunc("hour", Order.created_at))
+                .order_by(func.date_trunc("hour", Order.created_at))
+            )
+        ).all()
+
+    return {
+        "orders_by_status": by_status,
+        "queued": queued,
+        "processing": processing,
+        "revenue_today_rub": revenue_today,
+        "revenue_7d_rub": revenue_7d,
+        "refunds_7d_rub": refunds,
+        "ewt_normal_sec": float(ewt_normal or 0),
+        "ewt_high_sec": float(ewt_high or 0),
+        "rating_distribution": rating_dist,
+        "rating_share_4_5": round(high / max(total_fb, 1), 4),
+        "rating_total": total_fb,
+        "low_rating_reasons": sorted(reason_hist.items(), key=lambda x: -x[1])[:20],
+        "companies_active": companies_active,
+        "photographers_active": photographers,
+        "top_companies": [
+            {"company_id": r[0], "orders": int(r[1]), "revenue_rub": int(r[2])} for r in top_companies
+        ],
+        "nsfw_blocked": nsfw_blocked,
+        "orders_hourly": [
+            {"hour": (r[0].isoformat() if r[0] else None), "count": int(r[1])} for r in hourly
+        ],
+    }
+
+
 async def dashboard_aggregates() -> dict:
+    """Дашборд §11.2: ClickHouse workers/queues + PostgreSQL ops/finance/quality."""
+    ch = {"source": "unavailable", "workers": [], "queues": []}
     client = _ch()
-    if not client:
-        return {"source": "unavailable", "workers": [], "queues": []}
+    if client:
+        try:
+            workers = client.query(
+                "SELECT worker_id, avg(gpu_util), avg(gpu_temp), max(timestamp) "
+                "FROM worker_metrics_minute WHERE timestamp > now() - INTERVAL 15 MINUTE "
+                "GROUP BY worker_id ORDER BY worker_id"
+            ).result_rows
+            queues = client.query(
+                "SELECT queue_name, argMax(length, timestamp), avg(avg_wait_seconds) "
+                "FROM queue_metrics_minute WHERE timestamp > now() - INTERVAL 15 MINUTE "
+                "GROUP BY queue_name"
+            ).result_rows
+            ch = {
+                "source": "clickhouse",
+                "workers": [
+                    {
+                        "worker_id": r[0],
+                        "gpu_util": float(r[1] or 0),
+                        "gpu_temp": float(r[2] or 0),
+                        "last_seen": str(r[3]),
+                    }
+                    for r in workers
+                ],
+                "queues": [
+                    {"queue": r[0], "length": int(r[1] or 0), "avg_wait": float(r[2] or 0)}
+                    for r in queues
+                ],
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("dashboard CH: %s", exc)
+            ch = {"source": "error", "error": str(exc), "workers": [], "queues": []}
+
     try:
-        workers = client.query(
-            "SELECT worker_id, avg(gpu_util), avg(gpu_temp), max(timestamp) "
-            "FROM worker_metrics_minute WHERE timestamp > now() - INTERVAL 15 MINUTE "
-            "GROUP BY worker_id ORDER BY worker_id"
-        ).result_rows
-        queues = client.query(
-            "SELECT queue_name, argMax(length, timestamp), avg(avg_wait_seconds) "
-            "FROM queue_metrics_minute WHERE timestamp > now() - INTERVAL 15 MINUTE "
-            "GROUP BY queue_name"
-        ).result_rows
-        return {
-            "source": "clickhouse",
-            "workers": [
-                {"worker_id": r[0], "gpu_util": r[1], "gpu_temp": r[2], "last_seen": str(r[3])} for r in workers
-            ],
-            "queues": [{"queue": r[0], "length": r[1], "avg_wait": r[2]} for r in queues],
-        }
+        pg = await _pg_dashboard()
     except Exception as exc:  # noqa: BLE001
-        logger.warning("dashboard aggregates: %s", exc)
-        return {"source": "error", "error": str(exc), "workers": [], "queues": []}
+        logger.warning("dashboard PG: %s", exc)
+        pg = {"error": str(exc)}
+
+    return {
+        "source": ch.get("source"),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "workers": ch.get("workers", []),
+        "queues": ch.get("queues", []),
+        "ops": {
+            "orders_by_status": pg.get("orders_by_status", {}),
+            "queued": pg.get("queued", 0),
+            "processing": pg.get("processing", 0),
+            "ewt_normal_sec": pg.get("ewt_normal_sec", 0),
+            "ewt_high_sec": pg.get("ewt_high_sec", 0),
+            "orders_hourly": pg.get("orders_hourly", []),
+        },
+        "finance": {
+            "revenue_today_rub": pg.get("revenue_today_rub", 0),
+            "revenue_7d_rub": pg.get("revenue_7d_rub", 0),
+            "refunds_7d_rub": pg.get("refunds_7d_rub", 0),
+        },
+        "b2b": {
+            "companies_active": pg.get("companies_active", 0),
+            "photographers_active": pg.get("photographers_active", 0),
+            "top_companies": pg.get("top_companies", []),
+        },
+        "quality": {
+            "rating_distribution": pg.get("rating_distribution", {}),
+            "rating_share_4_5": pg.get("rating_share_4_5", 0),
+            "rating_total": pg.get("rating_total", 0),
+            "low_rating_reasons": pg.get("low_rating_reasons", []),
+        },
+        "moderation": {
+            "nsfw_blocked": pg.get("nsfw_blocked", 0),
+        },
+        "pg_error": pg.get("error"),
+    }

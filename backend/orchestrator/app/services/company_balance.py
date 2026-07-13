@@ -6,7 +6,35 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Company, Transaction, User
+from app.services.access import company_for_permission
 from app.services.company_members import audit, get_owned_company
+
+DEFAULT_LOW_BALANCE = 5000
+
+
+async def maybe_emit_balance_low(db: AsyncSession, company: Company) -> None:
+    """Webhook balance.low при балансе ниже порога из policies (§8 / §2.5.4)."""
+    from app.services.company_policies import policies_for_company
+
+    policies = policies_for_company(company)
+    threshold = int(policies.get("low_balance_threshold", DEFAULT_LOW_BALANCE))
+    if company.balance >= threshold:
+        return
+    try:
+        from app.services import company_webhooks as wh
+
+        await wh.emit(
+            db,
+            company_id=company.id,
+            event="balance.low",
+            payload={
+                "company_id": company.id,
+                "balance": company.balance,
+                "threshold": threshold,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def charge_company(
@@ -34,6 +62,7 @@ async def charge_company(
         )
     )
     await db.flush()
+    await maybe_emit_balance_low(db, company)
 
 
 async def credit_company(
@@ -50,7 +79,9 @@ async def credit_company(
             user_id=user_id,
             company_id=company.id,
             amount=amount,
-            tx_type="refund" if "возврат" in description.lower() or "refund" in description.lower() else "topup",
+            tx_type="refund"
+            if "возврат" in description.lower() or "refund" in description.lower()
+            else "topup",
             description=description,
         )
     )
@@ -58,8 +89,12 @@ async def credit_company(
 
 
 async def get_balance(db: AsyncSession, user: User) -> dict:
-    company = await get_owned_company(db, user)
+    company = await company_for_permission(db, user, "can_view_finance")
     return {"company_id": company.id, "balance": company.balance, "currency": "RUB"}
+
+
+async def get_owned_company_row(db: AsyncSession, user: User) -> Company:
+    return await get_owned_company(db, user)
 
 
 async def topup_manual(db: AsyncSession, user: User, amount: int, note: str | None = None) -> dict:
@@ -67,6 +102,14 @@ async def topup_manual(db: AsyncSession, user: User, amount: int, note: str | No
     if amount <= 0:
         raise HTTPException(400, "amount > 0")
     company = await get_owned_company(db, user)
-    await credit_company(db, company=company, amount=amount, user_id=user.id, description=note or "Пополнение баланса компании")
-    await audit(db, company_id=company.id, user_id=user.id, action="company.topup", details={"amount": amount})
+    await credit_company(
+        db,
+        company=company,
+        amount=amount,
+        user_id=user.id,
+        description=note or "Пополнение баланса компании",
+    )
+    await audit(
+        db, company_id=company.id, user_id=user.id, action="company.topup", details={"amount": amount}
+    )
     return {"company_id": company.id, "balance": company.balance}
