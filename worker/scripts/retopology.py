@@ -168,6 +168,15 @@ def main(task_dir: str) -> None:
     dst = root / "retopo.glb"
     if not src.exists():
         raise SystemExit(f"missing {src}")
+
+    from pipeline_env import is_stub_pipeline, is_trellis2
+
+    if is_stub_pipeline() or is_trellis2():
+        shutil.copy2(src, dst)
+        tag = "stub" if is_stub_pipeline() else "trellis2"
+        print(f"[retopology] {tag} copy {src.name} → {dst.name} ({dst.stat().st_size} bytes)")
+        return
+
     target = _target_faces()
     engine = _engine()
 

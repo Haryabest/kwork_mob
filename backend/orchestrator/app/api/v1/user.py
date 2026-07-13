@@ -123,6 +123,27 @@ async def topup_balance(
     from app.services.yookassa import yookassa_service
 
     amount = body.amount
+
+    # Локальная разработка без ключей ЮKassa
+    if settings.is_development and not yookassa_service.configured:
+        user.balance += amount
+        db.add(
+            Transaction(
+                user_id=user.id,
+                amount=amount,
+                tx_type="topup",
+                description="Dev mock пополнение (без ЮKassa)",
+            )
+        )
+        await db.commit()
+        return {
+            "id": f"dev-topup-{user.id}",
+            "status": "succeeded",
+            "amount": amount,
+            "balance": user.balance,
+            "dev_mock": True,
+        }
+
     method = body.payment_method
     if method == "card":
         method = "redirect"

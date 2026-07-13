@@ -90,6 +90,11 @@ def main(task_dir: str) -> None:
     if not src.exists():
         raise SystemExit("missing mesh for compress_draco")
 
+    if os.getenv("WORKER_PIPELINE_MODE", "").lower() == "stub":
+        shutil.copy2(src, dst)
+        print(f"[compress_draco] stub copy → {dst} ({dst.stat().st_size} bytes)")
+        return
+
     current = src
     # каскад: Draco → сильнее quantize → simplify faces
     for quantize in (14, 12, 10, 8):

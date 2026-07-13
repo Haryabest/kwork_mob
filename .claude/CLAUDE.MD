@@ -8,7 +8,7 @@ B2B-платформа 3D-моделей товаров для Wildberries/Ozon.
 | Компонент | Путь | Технологии | Порт |
 |-----------|------|------------|------|
 | Orchestrator | `backend/orchestrator/` | FastAPI, SQLAlchemy, Redis, Celery | 8000 |
-| Worker | `worker/` | Python, CUDA, TRELLIS, Docker | — |
+| Worker | `worker/` | Python, CUDA, **TRELLIS.2-4B**, Docker | — |
 | Mobile | `apps/mobile/` | **Flutter / Dart** | — |
 | Staff Panel (admin + support) | `apps/web-admin/` | React, Vite, Mantine · роли admin/support_agent | **3001** |
 | Web Seller | `apps/web-seller/` | Next.js, Mantine | **3000** |
@@ -45,8 +45,9 @@ API prefix: `/api/v1`. Docs: `/api/docs`. Health: `/health`.
 
 ```
 worker_agent.py      — WebSocket-агент, Redlock, пайплайн
-scripts/             — remove_background, trellis_generate, retopology,
-                       bake_pbr, apply_watermark, compress_draco, validate_glb
+scripts/             — remove_background, trellis_generate (TRELLIS.2), retopology,
+                       bake_pbr (skip при .2), apply_watermark, compress_draco, validate_glb
+                       trellis_runtime.py — Trellis2ImageTo3DPipeline + o_voxel export
 cloud/               — Intelion/Immers: provision.py «в два клика»
 dev-tools/compute_fid.py — только dev, не в Docker
 ```

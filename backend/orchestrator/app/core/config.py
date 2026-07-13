@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET_PHOTOS: str = "photos"
     MINIO_BUCKET_MODELS: str = "models"
+    MINIO_BUCKET_BACKUPS: str = "backups"
     MINIO_DISK_TOTAL_BYTES: int = 0  # для % заполнения в /storage/smart
 
     CLICKHOUSE_HOST: str = "localhost"

@@ -3,7 +3,9 @@
 import { Badge, Center, Loader, Stack, Text, Title } from '@mantine/core';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { api, apiMessage } from '../../../services/api';
+import { ModelViewer3D } from '../../../components/ModelViewer3D';
+import { apiMessage } from '../../../services/api';
+import { loadModelPreviewBlobUrl, revokeModelPreviewUrl } from '../../../lib/modelPreview';
 
 export default function ViewerPage() {
   const params = useParams<{ uuid: string }>();
@@ -13,16 +15,19 @@ export default function ViewerPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let blobUrl: string | null = null;
     (async () => {
       try {
-        const { data } = await api.get<{ preview_url: string }>(`/models/${uuid}/preview`);
-        setUrl(data.preview_url);
+        blobUrl = await loadModelPreviewBlobUrl(uuid);
+        if (blobUrl) setUrl(blobUrl);
+        else setErr('GLB недоступен');
       } catch (e) {
         setErr(apiMessage(e));
       } finally {
         setLoading(false);
       }
     })();
+    return () => revokeModelPreviewUrl(blobUrl);
   }, [uuid]);
 
   return (
@@ -51,13 +56,7 @@ export default function ViewerPage() {
               <Loader color="teal" />
             </Center>
           ) : url ? (
-            <model-viewer
-              src={url}
-              camera-controls
-              auto-rotate
-              touch-action="pan-y"
-              style={{ width: '100%', height: 560, background: 'transparent' }}
-            />
+            <ModelViewer3D src={url} height={560} autoRotate />
           ) : (
             <Center h={560}>
               <Text c="dimmed">{err || 'GLB недоступен'}</Text>

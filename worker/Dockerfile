@@ -13,7 +13,8 @@ FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
 
 ARG INSTALL_TRELLIS=1
 ARG DOWNLOAD_WEIGHTS=1
-ARG TRELLIS_REPO=https://github.com/microsoft/TRELLIS.git
+ARG TRELLIS_VERSION=2
+ARG TRELLIS_REPO=https://github.com/microsoft/TRELLIS.2.git
 ARG INSTALL_SAM=1
 ARG INSTALL_BLENDER=1
 ARG INSTALL_INSTANT_MESHES=1
@@ -48,7 +49,12 @@ RUN if [ "$INSTALL_INSTANT_MESHES" = "1" ]; then \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+ENV PIP_DEFAULT_TIMEOUT=1200 \
+    PIP_RETRIES=15
+RUN pip3 install --upgrade pip setuptools wheel && \
+    pip3 install --no-cache-dir --timeout 1200 --retries 15 \
+      torch torchvision --index-url https://download.pytorch.org/whl/cu128 && \
+    pip3 install --no-cache-dir --timeout 1200 --retries 15 -r requirements.txt
 
 # Segment Anything (SAM) weights
 RUN mkdir -p /app/weights/sam && \
@@ -58,16 +64,21 @@ RUN mkdir -p /app/weights/sam && \
         https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth || true; \
     fi
 
-COPY worker_agent.py /usr/local/bin/worker_agent.py
+COPY worker_agent.py /app/worker_agent.py
 COPY scripts/ /app/scripts/
 COPY entrypoint.sh /usr/local/bin/worker_entrypoint.sh
-RUN chmod +x /usr/local/bin/worker_entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/worker_entrypoint.sh && \
+    chmod +x /usr/local/bin/worker_entrypoint.sh
 
-RUN mkdir -p /app/trellis /app/trellis/weights /var/log/worker /tmp/worker
+RUN mkdir -p /var/log/worker /tmp/worker
 
-# TRELLIS + веса в образ
+# TRELLIS.2 + веса в образ (см. setup.sh в репо для полной установки зависимостей)
 RUN if [ "$INSTALL_TRELLIS" = "1" ]; then \
-      git clone --depth 1 "${TRELLIS_REPO}" /app/trellis && \
+      git clone --depth 1 --recursive "${TRELLIS_REPO}" /app/trellis && \
+      mkdir -p /app/trellis/weights && \
+      if [ -f /app/trellis/setup.sh ] && [ "$TRELLIS_VERSION" = "2" ]; then \
+        echo "[TRELLIS.2] run setup.sh in CI/GPU host if docker build fails"; \
+      fi && \
       if [ -f /app/trellis/requirements.txt ]; then \
         pip3 install --no-cache-dir -r /app/trellis/requirements.txt || true; \
       fi && \
@@ -85,9 +96,16 @@ RUN if [ "$DOWNLOAD_WEIGHTS" = "1" ] && [ -f /app/trellis/scripts/download_weigh
 # Production default: trellis (не stub)
 ENV PYTHONUNBUFFERED=1 \
     WORKER_PIPELINE_MODE=trellis \
+    TRELLIS_VERSION=2 \
     TRELLIS_ROOT=/app/trellis \
-    TRELLIS_WEIGHTS=/app/trellis/weights \
+    TRELLIS_WEIGHTS=microsoft/TRELLIS.2-4B \
+    TRELLIS2_PIPELINE_TYPE=512 \
+    TRELLIS2_LOW_VRAM=1 \
+    TRELLIS2_DECIMATION=300000 \
+    TRELLIS2_TEXTURE_SIZE=2048 \
     TRELLIS_ALLOW_STUB_FALLBACK=0 \
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+    ATTN_BACKEND=xformers \
     SAM_CHECKPOINT=/app/weights/sam/sam_vit_b.pth \
     SAM_MODEL_TYPE=vit_b \
     WORKER_E2E_BUDGET_SEC=300 \
@@ -101,4 +119,4 @@ ENV PYTHONUNBUFFERED=1 \
     RETOPO_TARGET_FACES=150000
 
 ENTRYPOINT ["/usr/local/bin/worker_entrypoint.sh"]
-CMD ["python3", "/usr/local/bin/worker_agent.py"]
+CMD ["python3", "/app/worker_agent.py"]

@@ -23,6 +23,7 @@ from app.api.v1 import (
     user,
     watermark_admin,
     webhooks,
+    worker_callback,
 )
 
 api_router = APIRouter()
@@ -49,3 +50,4 @@ api_router.include_router(campaigns.router, prefix="/admin/campaigns", tags=["К
 api_router.include_router(moderation.router, prefix="/admin/nsfw", tags=["Модерация"])
 api_router.include_router(watermark_admin.router, prefix="/admin/watermark", tags=["Водяной знак"])
 api_router.include_router(shoot.router)
+api_router.include_router(worker_callback.router)

@@ -5,11 +5,14 @@
 
 ---
 
-## Worker / TRELLIS / пайплайн (§5–§6, §17)
+## Worker / TRELLIS.2 / пайплайн (§5–§6, §17)
 
-- Dockerfile: **default `WORKER_PIPELINE_MODE=trellis`**, `INSTALL_TRELLIS=1`, `DOWNLOAD_WEIGHTS=1`, SAM weights
-- E2E budget логирование ≤180с local / ≤300с cloud
-- **Приёмка:** `worker/scripts/e2e_trellis_acceptance.py` (wall-time + `--fail-on-budget`) — прогон на GPU с весами
+- **TRELLIS.2-4B** (`microsoft/TRELLIS.2-4B`): image→3D + native PBR, `trellis_runtime.py`
+- Dockerfile default: `TRELLIS_VERSION=2`, `TRELLIS2_PIPELINE_TYPE=512`, `TRELLIS2_LOW_VRAM=1`
+- RTX 5070: `ATTN_BACKEND=xformers`, resolution **512** (не 1024+)
+- retopo/bake: copy при TRELLIS.2 (PBR уже в GLB); compress_draco — реальный
+- Stub — только dev smoke, не production
+- **Приёмка:** `e2e_trellis_acceptance.py --preflight --fail-on-budget`
 - `remove_background`: rembg → DeepLab → **SAM** → GrabCut
 - `retopology` / `bake_pbr` / `compress_draco` / `export_usdz_tryon` / `render_video_360` / `apply_hole_filling`
 - Tailscale entrypoint + WS fallback

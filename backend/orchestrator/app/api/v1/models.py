@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -218,6 +219,28 @@ async def preview_model(
     if not url:
         raise HTTPException(404, "GLB отсутствует")
     return {"preview_url": url, "format": "glb", "expires_in": 1800}
+
+
+@router.get("/{model_uuid}/preview/stream")
+async def preview_model_stream(
+    model_uuid: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """GLB через API (Bearer) — обход CORS MinIO для model-viewer."""
+    model = await _get_owned_model(db, model_uuid, user)
+    parsed = _parse_s3(model.glb_url)
+    if not parsed:
+        raise HTTPException(404, "GLB отсутствует")
+    bucket, key = parsed
+    if not minio_service.object_exists(bucket, key):
+        raise HTTPException(404, "GLB отсутствует")
+    data = minio_service.download_bytes(bucket, key)
+    return Response(
+        content=data,
+        media_type="model/gltf-binary",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
 
 
 @router.post("/{model_uuid}/publish/mark")

@@ -40,7 +40,29 @@ class MinioService:
             if name not in existing:
                 self.client.create_bucket(Bucket=name)
                 created.append(name)
+        self._ensure_cors()
         return created
+
+    def _ensure_cors(self) -> None:
+        origins = list(settings.CORS_ORIGINS)
+        if settings.is_development and "*" not in origins:
+            origins.append("*")
+        cors = {
+            "CORSRules": [
+                {
+                    "AllowedOrigins": origins or ["*"],
+                    "AllowedMethods": ["GET", "HEAD", "PUT", "POST"],
+                    "AllowedHeaders": ["*"],
+                    "ExposeHeaders": ["ETag", "Content-Length"],
+                    "MaxAgeSeconds": 3600,
+                }
+            ]
+        }
+        for name in self.buckets:
+            try:
+                self.client.put_bucket_cors(Bucket=name, CORSConfiguration=cors)
+            except Exception:  # noqa: BLE001
+                pass
 
     def health(self) -> dict[str, Any]:
         try:

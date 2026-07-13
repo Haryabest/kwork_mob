@@ -328,6 +328,15 @@ async def worker_ws(websocket: WebSocket):
         if worker_id:
             removed = await worker_hub.unregister(worker_id, websocket)
             if removed and removed.current_task_id:
-                await requeue_task(removed.current_task_id)
+                async with async_session() as db:
+                    from sqlalchemy import select
+
+                    from app.models import TaskQueue
+
+                    row = await db.scalar(
+                        select(TaskQueue).where(TaskQueue.task_id == removed.current_task_id)
+                    )
+                    if row and row.status in ("queued", "processing"):
+                        await requeue_task(removed.current_task_id)
             async with async_session() as db:
                 await upsert_worker_heartbeat(db, worker_id, status="offline")

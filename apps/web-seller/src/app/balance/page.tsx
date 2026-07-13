@@ -67,11 +67,23 @@ export default function BalancePage() {
     }
     setPaying(true);
     try {
-      const { data } = await api.post<{ confirmation_url?: string }>('/user/balance/topup', {
+      const { data } = await api.post<{
+        confirmation_url?: string;
+        status?: string;
+        dev_mock?: boolean;
+        balance?: number;
+      }>('/user/balance/topup', {
         amount: value,
       });
       if (data.confirmation_url) {
         window.location.href = data.confirmation_url;
+        return;
+      }
+      if (data.dev_mock || data.status === 'succeeded') {
+        if (typeof data.balance === 'number') setBalance(data.balance);
+        notifications.show({ color: 'green', message: 'Баланс пополнен (локальный режим)' });
+        close();
+        await load();
         return;
       }
       notifications.show({ color: 'yellow', message: 'Нет confirmation_url от ЮKassa' });

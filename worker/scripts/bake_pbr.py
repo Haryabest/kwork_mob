@@ -186,6 +186,17 @@ def main(task_dir: str) -> None:
     dst = root / "pbr.glb"
     maps_dir = root / "pbr_maps"
     category = _load_category(root)
+
+    from pipeline_env import is_stub_pipeline, is_trellis2
+
+    if is_stub_pipeline() or is_trellis2():
+        import shutil
+
+        shutil.copy2(low, dst)
+        tag = "stub" if is_stub_pipeline() else "trellis2"
+        print(f"[bake_pbr] {tag} copy (native PBR) → {dst} ({dst.stat().st_size} bytes)")
+        return
+
     roughness, metallic = CATEGORY_PBR.get(category, CATEGORY_PBR["other"])
 
     baked = _blender_bake(root, high, low, maps_dir, category)

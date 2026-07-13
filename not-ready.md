@@ -14,7 +14,7 @@
 
 
 
-- [ ] Домашний GPU: `e2e_trellis_acceptance.py --fail-on-budget --preflight`
+- [ ] RTX 5070: `e2e_trellis_acceptance.py --preflight --fail-on-budget` с `TRELLIS2_PIPELINE_TYPE=512`
 
 - [ ] Firebase prod keys + push E2E на устройстве
 

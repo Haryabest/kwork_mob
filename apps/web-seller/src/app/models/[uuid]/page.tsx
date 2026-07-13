@@ -20,8 +20,10 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { SellerShell } from '../../../components/SellerShell';
+import { ModelViewer3D } from '../../../components/ModelViewer3D';
 import { PageHeader, Surface } from '../../../components/ui';
 import { api, apiMessage } from '../../../services/api';
+import { loadModelPreviewBlobUrl, revokeModelPreviewUrl } from '../../../lib/modelPreview';
 
 type PubLink = {
   id: number;
@@ -55,6 +57,7 @@ export default function ModelDetailPage() {
   const uuid = params.uuid;
   const [model, setModel] = useState<Model | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [publishOpen, { open: openPublish, close: closePublish }] = useDisclosure(false);
@@ -65,24 +68,34 @@ export default function ModelDetailPage() {
   const [rating, setRating] = useState<string | null>('5');
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setPreviewLoading(true);
     try {
       const { data } = await api.get<Model>(`/models/${uuid}`);
       setModel(data);
-      try {
-        const prev = await api.get<{ preview_url: string }>(`/models/${uuid}/preview`);
-        setPreviewUrl(prev.data.preview_url);
-      } catch {
-        setPreviewUrl(null);
-      }
+      setPreviewUrl((prev) => {
+        revokeModelPreviewUrl(prev);
+        return null;
+      });
+      const blobUrl = await loadModelPreviewBlobUrl(uuid);
+      setPreviewUrl(blobUrl);
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
+      setPreviewUrl(null);
     } finally {
       setLoading(false);
+      setPreviewLoading(false);
     }
   }, [uuid]);
 
   useEffect(() => {
     void load();
+    return () => {
+      setPreviewUrl((prev) => {
+        revokeModelPreviewUrl(prev);
+        return null;
+      });
+    };
   }, [load]);
 
   async function download(format: 'glb' | 'usdz') {
@@ -198,20 +211,18 @@ export default function ModelDetailPage() {
           <Title order={4} mb="md">
             Предпросмотр GLB
           </Title>
-          {previewUrl ? (
-            <model-viewer
-              src={previewUrl}
-              camera-controls
-              touch-action="pan-y"
-              style={{ width: '100%', height: 320, background: 'rgba(0,87,184,0.04)', borderRadius: 12 }}
-            >
-              <Text c="#6d6c77" ta="center" pt={120}>
-                Загрузка 3D…
+          {previewLoading ? (
+            <Center py={100}>
+              <Loader color="brand" size="sm" />
+              <Text ml="sm" c="#6d6c77">
+                Загрузка GLB…
               </Text>
-            </model-viewer>
+            </Center>
+          ) : previewUrl ? (
+            <ModelViewer3D src={previewUrl} height={320} />
           ) : (
             <Text c="#6d6c77" ta="center" py={100}>
-              GLB ещё недоступен — дождитесь завершения генерации
+              GLB недоступен — перелогиньтесь или обновите страницу
             </Text>
           )}
           <Text size="xs" c="#6d6c77" mt="sm">

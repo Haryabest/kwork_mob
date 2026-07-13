@@ -1,4 +1,4 @@
-"""Генерация 3D через TRELLIS (12 multi-view фото) или stub GLB."""
+"""Генерация 3D: TRELLIS.2 (production) или stub GLB (dev smoke)."""
 
 from __future__ import annotations
 
@@ -20,17 +20,17 @@ def main(task_dir: str) -> None:
             from trellis_runtime import run_trellis
 
             run_trellis(root, output)
-            print(f"[trellis_generate] TRELLIS → {output} ({output.stat().st_size} bytes)")
+            print(f"[trellis_generate] TRELLIS.2 → {output} ({output.stat().st_size} bytes)")
             return
         except Exception as exc:
             # В production trellis-режиме не молча подменяем stub — падаем
             if os.getenv("TRELLIS_ALLOW_STUB_FALLBACK", "0") == "1":
                 print(f"[trellis_generate] fallback stub ({exc})")
-                write_minimal_glb(output)
+                write_minimal_glb(output, root)
                 return
             raise SystemExit(f"TRELLIS failed: {exc}") from exc
 
-    write_minimal_glb(output)
+    write_minimal_glb(output, root)
     print(f"[trellis_generate] stub GLB → {output} ({output.stat().st_size} bytes)")
 
 

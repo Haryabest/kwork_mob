@@ -37,13 +37,27 @@ MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 TEMP_DIR = Path(os.getenv("TEMP_DIR", "/tmp/worker"))
 PIPELINE_MODE = os.getenv("WORKER_PIPELINE_MODE", "trellis")  # trellis | stub
 WATERMARK_SECRET = os.getenv("WATERMARK_HMAC_SECRET", "change-me-watermark")
-SCRIPTS_DIR = Path(__file__).resolve().parent / "scripts"
+
+
+def _resolve_scripts_dir() -> Path:
+    """Путь к scripts/: рядом с агентом или /app/scripts в Docker."""
+    if env := os.getenv("WORKER_SCRIPTS_DIR"):
+        return Path(env)
+    here = Path(__file__).resolve().parent
+    for candidate in (here / "scripts", Path("/app/scripts")):
+        if candidate.is_dir():
+            return candidate
+    return here / "scripts"
+
+
+SCRIPTS_DIR = _resolve_scripts_dir()
 PYTHON = sys.executable
 CHECKPOINTS_BUCKET = os.getenv("MINIO_BUCKET_CHECKPOINTS", "backups")
 E2E_BUDGET_SEC = int(os.getenv("WORKER_E2E_BUDGET_SEC", "300"))  # облако ≤5 мин
 E2E_BUDGET_LOCAL_SEC = int(os.getenv("WORKER_E2E_BUDGET_LOCAL_SEC", "180"))  # ПК ≤3 мин
 WS_FALLBACK_URL = os.getenv("ORCHESTRATOR_WS_FALLBACK_URL", "")
 WS_CONNECT_TIMEOUT = float(os.getenv("WORKER_WS_CONNECT_TIMEOUT", "10"))
+TASK_DRAIN_TIMEOUT_SEC = int(os.getenv("WORKER_TASK_DRAIN_TIMEOUT_SEC", "3600"))
 
 PIPELINE_STEPS = [
     "remove_background.py",
@@ -62,6 +76,16 @@ UPSELL_AFTER_VALIDATE = {
     "video_360": "render_video_360.py",
     "virtual_tryon": "export_usdz_tryon.py",
 }
+
+
+def _orchestrator_http_base() -> str:
+    if u := os.getenv("ORCHESTRATOR_HTTP_URL", "").strip():
+        return u.rstrip("/")
+    base = ORCHESTRATOR_URL.replace("wss://", "https://").replace("ws://", "http://")
+    for sep in ("/ws/worker", "/ws/"):
+        if sep in base:
+            return base.split(sep)[0].rstrip("/")
+    return base.rstrip("/")
 
 
 def build_pipeline(upsell_options: list | None) -> list[str]:
@@ -96,6 +120,7 @@ class WorkerAgent:
         self._stop_task = False
         self._overheated = False
         self._task_coro: asyncio.Task | None = None
+        self._ws = None
         self.config = {
             "quality_threshold": float(os.getenv("QUALITY_THRESHOLD", "0.7")),
             "temp_threshold_high": 85,
@@ -164,6 +189,10 @@ class WorkerAgent:
                 if key.endswith("/"):
                     continue
                 name = Path(key).name
+                if not name.lower().startswith("view_"):
+                    continue
+                if Path(name).suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                    continue
                 local = dest / name
                 self.minio.download_file(bucket, key, str(local))
                 count += 1
@@ -244,6 +273,9 @@ class WorkerAgent:
         env = os.environ.copy()
         env["WORKER_PIPELINE_MODE"] = PIPELINE_MODE
         env["WATERMARK_HMAC_SECRET"] = WATERMARK_SECRET
+        env["PYTHONPATH"] = os.pathsep.join(
+            p for p in (str(SCRIPTS_DIR), env.get("PYTHONPATH", "")) if p
+        )
         # для E2E без GPU: реальное удаление фона даже в stub, если включено
         if name == "remove_background.py" and os.getenv("WORKER_REAL_NOBG", "1") in ("1", "true", "yes"):
             env["WORKER_FORCE_REAL_NOBG"] = "1"
@@ -269,21 +301,42 @@ class WorkerAgent:
             err = (result.stderr or result.stdout or "script failed")[-1000:]
             raise RuntimeError(f"{name} failed ({result.returncode}): {err}")
 
+    async def _notify_event(self, payload: dict) -> None:
+        payload = {**payload, "worker_id": self.worker_id}
+        ws = self._ws
+        if ws is not None:
+            try:
+                await ws.send(json.dumps(payload))
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("WS notify failed (%s), HTTP fallback", exc)
+        import httpx
+
+        url = f"{_orchestrator_http_base()}/api/v1/worker/event"
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(
+                url,
+                json=payload,
+                headers={"Authorization": f"Bearer {WORKER_TOKEN}"},
+            )
+            if r.status_code >= 400:
+                logger.error("HTTP notify failed %s: %s", r.status_code, r.text[:500])
+                r.raise_for_status()
+        logger.info("HTTP notify ok: %s task=%s", payload.get("type"), payload.get("task_id"))
+
     async def start_task(self, task_id: str, payload: dict, ws) -> None:
         if self._overheated:
-            await ws.send(
-                json.dumps(
-                    {
-                        "type": "task_conflict",
-                        "task_id": task_id,
-                        "reason": "overheated",
-                    }
-                )
+            await self._notify_event(
+                {
+                    "type": "task_conflict",
+                    "task_id": task_id,
+                    "reason": "overheated",
+                }
             )
             return
 
         if not self.acquire_lock(task_id):
-            await ws.send(json.dumps({"type": "task_conflict", "task_id": task_id}))
+            await self._notify_event({"type": "task_conflict", "task_id": task_id})
             return
 
         self.current_task = task_id
@@ -300,7 +353,7 @@ class WorkerAgent:
 
         completed: list[str] = []
         try:
-            await ws.send(json.dumps({"type": "task_started", "task_id": task_id}))
+            await self._notify_event({"type": "task_started", "task_id": task_id})
             self.renew_lock(task_id)
 
             if resume:
@@ -326,6 +379,8 @@ class WorkerAgent:
                 "category": payload.get("category"),
                 "upsell_options": payload.get("upsell_options") or [],
                 "scale_calibration": payload.get("scale_calibration"),
+                "trellis_version": os.getenv("TRELLIS_VERSION", "2"),
+                "trellis2_pipeline_type": os.getenv("TRELLIS2_PIPELINE_TYPE", "512"),
             }
             (task_dir / "task_meta.json").write_text(
                 json.dumps(meta, ensure_ascii=False), encoding="utf-8"
@@ -338,16 +393,14 @@ class WorkerAgent:
             for step in pipeline:
                 if self._stop_task or self._overheated:
                     cp = await asyncio.to_thread(self.save_checkpoint, task_dir, task_id, completed)
-                    await ws.send(
-                        json.dumps(
-                            {
-                                "type": "task_paused",
-                                "task_id": task_id,
-                                "checkpoint_path": cp,
-                                "reason": "overheat" if self._overheated else "stop",
-                                "completed_steps": completed,
-                            }
-                        )
+                    await self._notify_event(
+                        {
+                            "type": "task_paused",
+                            "task_id": task_id,
+                            "checkpoint_path": cp,
+                            "reason": "overheat" if self._overheated else "stop",
+                            "completed_steps": completed,
+                        }
                     )
                     return
                 if step in completed:
@@ -397,22 +450,20 @@ class WorkerAgent:
                     f"quality_gate_failed score={quality_score} < {threshold}"
                 )
 
-            await ws.send(
-                json.dumps(
-                    {
-                        "type": "task_completed",
-                        "task_id": task_id,
-                        "result_url": result_url,
-                        "glb_url": result_url,
-                        "usdz_url": extras_urls.get("usdz_url"),
-                        "video_360_url": extras_urls.get("video_360_url"),
-                        "watermark_hmac": watermark_hmac,
-                        "quality_score": quality_score,
-                        "upsell_options": payload.get("upsell_options") or [],
-                        "elapsed_sec": round(time.monotonic() - t0, 2),
-                        "e2e_budget_sec": E2E_BUDGET_SEC,
-                    }
-                )
+            await self._notify_event(
+                {
+                    "type": "task_completed",
+                    "task_id": task_id,
+                    "result_url": result_url,
+                    "glb_url": result_url,
+                    "usdz_url": extras_urls.get("usdz_url"),
+                    "video_360_url": extras_urls.get("video_360_url"),
+                    "watermark_hmac": watermark_hmac,
+                    "quality_score": quality_score,
+                    "upsell_options": payload.get("upsell_options") or [],
+                    "elapsed_sec": round(time.monotonic() - t0, 2),
+                    "e2e_budget_sec": E2E_BUDGET_SEC,
+                }
             )
             elapsed = time.monotonic() - t0
             budget = E2E_BUDGET_LOCAL_SEC if os.getenv("WORKER_DEPLOY", "cloud") == "local" else E2E_BUDGET_SEC
@@ -426,15 +477,13 @@ class WorkerAgent:
                 cp = await asyncio.to_thread(self.save_checkpoint, task_dir, task_id, completed)
             except Exception:  # noqa: BLE001
                 cp = None
-            await ws.send(
-                json.dumps(
-                    {
-                        "type": "task_failed",
-                        "task_id": task_id,
-                        "error": str(exc),
-                        "checkpoint_path": cp,
-                    }
-                )
+            await self._notify_event(
+                {
+                    "type": "task_failed",
+                    "task_id": task_id,
+                    "error": str(exc),
+                    "checkpoint_path": cp,
+                }
             )
         finally:
             self.release_lock(task_id)
@@ -447,8 +496,16 @@ class WorkerAgent:
         msg_type = data.get("type")
 
         if msg_type == "task":
+            task_id = data["task_id"]
+            if (
+                self.current_task == task_id
+                and self._task_coro is not None
+                and not self._task_coro.done()
+            ):
+                logger.info("Already processing task %s, skip duplicate assign", task_id)
+                return
             self._task_coro = asyncio.create_task(
-                self.start_task(data["task_id"], data.get("payload") or {}, ws)
+                self.start_task(task_id, data.get("payload") or {}, ws)
             )
         elif msg_type == "stop":
             self._stop_task = True
@@ -540,6 +597,8 @@ class WorkerAgent:
             "usdz",
             "video_360",
         ]
+        if os.getenv("TRELLIS_VERSION", "2").strip().lower() in ("2", "trellis2", "trellis.2"):
+            caps.append("trellis2")
         if PIPELINE_MODE == "stub":
             caps.append("stub")
         return caps
@@ -569,6 +628,7 @@ class WorkerAgent:
                 try:
                     logger.info("Connecting to %s as %s (Tailscale/primary or WSS fallback)", url, self.worker_id)
                     async with self._ws_connect_cm(url, headers) as ws:
+                        self._ws = ws
                         await ws.send(
                             json.dumps(
                                 {
@@ -588,8 +648,15 @@ class WorkerAgent:
                             async for message in ws:
                                 await self.handle_message(message, ws)
                         finally:
+                            self._ws = None
                             hb.cancel()
                             mx.cancel()
+                            if self._task_coro and not self._task_coro.done():
+                                logger.info("WS closed, waiting for background task…")
+                                try:
+                                    await asyncio.wait_for(self._task_coro, timeout=TASK_DRAIN_TIMEOUT_SEC)
+                                except asyncio.TimeoutError:
+                                    logger.warning("Background task did not finish after WS close")
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("WS %s failed: %s", url, exc)
                     continue

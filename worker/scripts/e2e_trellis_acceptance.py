@@ -81,9 +81,10 @@ def _preflight(*, require_gpu: bool) -> list[str]:
     if require_gpu:
         if not trellis_root.exists():
             errors.append(f"TRELLIS_ROOT отсутствует: {trellis_root}")
-        # веса: каталог непустой или хотя бы один .pth/.safetensors
-        has_w = weights.exists() and any(weights.rglob("*"))
-        if not has_w:
+        ver = os.getenv("TRELLIS_VERSION", "2").lower()
+        if ver in ("2", "trellis2", "trellis.2"):
+            print(f"[preflight] TRELLIS.2 weights={weights}", flush=True)
+        elif not (weights.exists() and any(weights.rglob("*"))):
             errors.append(f"TRELLIS_WEIGHTS пуст/нет: {weights}")
 
     blender = os.getenv("BLENDER_BIN") or shutil.which("blender")
@@ -128,8 +129,17 @@ def _prepare_photos(src: Path, dest: Path) -> int:
 def _run_step(name: str, task_dir: Path) -> dict:
     env = os.environ.copy()
     env.setdefault("WORKER_PIPELINE_MODE", "trellis")
+    env.setdefault("TRELLIS_VERSION", "2")
+    env.setdefault("TRELLIS_WEIGHTS", "microsoft/TRELLIS.2-4B")
+    env.setdefault("TRELLIS2_PIPELINE_TYPE", "512")
+    env.setdefault("TRELLIS2_LOW_VRAM", "1")
+    env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+    env.setdefault("ATTN_BACKEND", "xformers")
     env.setdefault("WORKER_FORCE_REAL_NOBG", "1")
     env.setdefault("TRELLIS_ALLOW_STUB_FALLBACK", "0")
+    env["PYTHONPATH"] = os.pathsep.join(
+        p for p in (str(SCRIPTS), env.get("PYTHONPATH", "")) if p
+    )
     script = SCRIPTS / name
     t0 = time.monotonic()
     r = subprocess.run(

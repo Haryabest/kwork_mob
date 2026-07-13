@@ -228,6 +228,28 @@ def process_one(
     return {"method": "copy_rgba", "ratio": 1.0, "confidence": 0.0, "ok": False}
 
 
+_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _photo_files(photos: Path) -> list[Path]:
+    """Только ракурсы view_XX.*; игнорируем metadata.json, source.zip и пр."""
+    all_images = sorted(
+        p for p in photos.iterdir() if p.is_file() and p.suffix.lower() in _IMAGE_SUFFIXES
+    )
+    views = [p for p in all_images if p.name.lower().startswith("view_")]
+    return views if views else all_images
+
+
+def _stub_copy_nobg(files: list[Path], out: Path) -> list[dict]:
+    """Stub / WORKER_REAL_NOBG=0: копируем JPEG → PNG без ML."""
+    stats: list[dict] = []
+    for f in files:
+        dst = out / (f.stem + ".png")
+        Image.open(f).convert("RGBA").save(dst)
+        stats.append({"method": "stub_copy", "ratio": 1.0, "confidence": 1.0, "ok": True})
+    return stats
+
+
 def main(task_dir: str) -> None:
     root = Path(task_dir)
     photos = root / "photos"
@@ -235,10 +257,26 @@ def main(task_dir: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     photos.mkdir(parents=True, exist_ok=True)
 
-    files = sorted(photos.glob("*.*"))
+    files = _photo_files(photos)
     if not files:
         print(f"[remove_background] нет фото в {photos}")
         raise SystemExit(2)
+
+    skip_nobg = os.getenv("WORKER_REAL_NOBG", "1") not in ("1", "true", "yes")
+    if skip_nobg or os.getenv("WORKER_PIPELINE_MODE", "").lower() == "stub":
+        stats = _stub_copy_nobg(files, out)
+        print(f"[remove_background] stub copy {len(files)} frames (skip ML)")
+        meta_path = root / "task_meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+        meta["segmentation"] = {
+            "frames": stats,
+            "avg_confidence": 1.0,
+            "threshold": 0.0,
+            "weak_frames": 0,
+            "stub": True,
+        }
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        return
 
     conf = float(os.getenv("NOBG_CONFIDENCE", "0.85"))
     min_r = float(os.getenv("NOBG_MIN_RATIO", "0.10"))
