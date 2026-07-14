@@ -29,6 +29,11 @@ import {
   IconStack2,
   IconUsers,
   IconUserPlus,
+  IconRocket,
+  IconTool,
+  IconWebhook,
+  IconUpload,
+  IconHistory,
 } from '@tabler/icons-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -42,9 +47,15 @@ const NAV: {
 }[] = [
   { path: '/', label: 'Дашборд', roles: ['admin'], icon: IconChartBar },
   { path: '/workers', label: 'Воркеры', roles: ['admin'], icon: IconServer },
+  { path: '/soft-launch', label: 'Soft launch', roles: ['admin'], icon: IconRocket },
+  { path: '/maintenance', label: 'Обслуживание', roles: ['admin'], icon: IconTool },
+  { path: '/webhooks', label: 'B2B Webhooks', roles: ['admin'], icon: IconWebhook },
   { path: '/users', label: 'Пользователи', roles: ['admin'], icon: IconUsers },
   { path: '/companies', label: 'B2B', roles: ['admin'], icon: IconBuilding },
   { path: '/invitations', label: 'Приглашения', roles: ['admin'], icon: IconUserPlus },
+  { path: '/marketplace', label: 'Marketplace API', roles: ['admin'], icon: IconUpload },
+  { path: '/access-log', label: 'Access log', roles: ['admin'], icon: IconHistory },
+  { path: '/task-conflicts', label: 'Task conflicts', roles: ['admin'], icon: IconShield },
   { path: '/promocodes', label: 'Промокоды', roles: ['admin'], icon: IconDiscount2 },
   { path: '/campaigns', label: 'Кампании', roles: ['admin'], icon: IconStack2 },
   { path: '/push', label: 'Push', roles: ['admin'], icon: IconBell },
@@ -53,6 +64,7 @@ const NAV: {
   { path: '/legal', label: 'Юр. документы', roles: ['admin'], icon: IconScale },
   { path: '/settings', label: 'Настройки', roles: ['admin'], icon: IconSettings },
   { path: '/logs', label: 'Логи', roles: ['admin'], icon: IconFileText },
+  { path: '/alert-log', label: 'Alert log', roles: ['admin'], icon: IconBell },
   { path: '/storage', label: 'Хранилище', roles: ['admin'], icon: IconServer },
   { path: '/support/tickets', label: 'Обращения', roles: ['admin', 'support_agent'], icon: IconMessages },
   { path: '/support/faq', label: 'FAQ', roles: ['admin', 'support_agent'], icon: IconHelp },

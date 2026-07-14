@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Order, OwnerTaxSettings, Transaction, User
+from app.services import pii as pii_svc
 
 MODES = ("self_employed", "ip", "ooo")
 
@@ -46,7 +47,7 @@ async def update_settings(db: AsyncSession, data: dict[str, Any]) -> OwnerTaxSet
         "bank_account",
     ):
         if field in data:
-            setattr(row, field, data[field])
+            pii_svc.encrypt_tax_fields(row, {field: data[field]})
     if "vat_rate" in data:
         vat = int(data["vat_rate"] or 0)
         if vat not in (0, 20):
@@ -55,18 +56,19 @@ async def update_settings(db: AsyncSession, data: dict[str, Any]) -> OwnerTaxSet
             vat = 0
         row.vat_rate = vat
     row.updated_at = datetime.now(timezone.utc)
-    # валидация по режиму
-    if mode == "self_employed" and not row.inn:
+    plain = pii_svc.tax_row_plain(row)
+    if mode == "self_employed" and not plain["inn"]:
         raise HTTPException(400, "Для самозанятого укажите ИНН")
-    if mode == "ip" and not (row.inn and row.ogrnip):
+    if mode == "ip" and not (plain["inn"] and plain["ogrnip"]):
         raise HTTPException(400, "Для ИП нужны ИНН и ОГРНИП")
-    if mode == "ooo" and not (row.inn and row.kpp and row.ogrn and row.org_name):
+    if mode == "ooo" and not (plain["inn"] and plain["kpp"] and plain["ogrn"] and plain["org_name"]):
         raise HTTPException(400, "Для ООО нужны ИНН, КПП, ОГРН, наименование")
     await db.flush()
     return row
 
 
 def settings_public(row: OwnerTaxSettings) -> dict:
+    plain = pii_svc.tax_row_plain(row)
     # УСН = ИП/ООО без НДС; ОСНО = с НДС 20% (§8.6)
     tax_system = "npd"
     if row.mode == "self_employed":
@@ -78,17 +80,7 @@ def settings_public(row: OwnerTaxSettings) -> dict:
     return {
         "mode": row.mode,
         "tax_system": tax_system,
-        "full_name": row.full_name,
-        "inn": row.inn,
-        "phone": row.phone,
-        "ogrnip": row.ogrnip,
-        "ogrn": row.ogrn,
-        "kpp": row.kpp,
-        "org_name": row.org_name,
-        "legal_address": row.legal_address,
-        "bank_name": row.bank_name,
-        "bank_bik": row.bank_bik,
-        "bank_account": row.bank_account,
+        **plain,
         "vat_rate": row.vat_rate,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
@@ -149,11 +141,25 @@ async def build_receipt_for_payment(
 
 
 def _seller_line(tax: OwnerTaxSettings) -> str:
+    plain = pii_svc.tax_row_plain(tax)
     if tax.mode == "ooo":
-        return f"{tax.org_name or 'ООО'}, ИНН {tax.inn}, КПП {tax.kpp}, ОГРН {tax.ogrn}"
+        return (
+            f"{plain['org_name'] or 'ООО'}, ИНН {plain['inn']}, "
+            f"КПП {plain['kpp']}, ОГРН {plain['ogrn']}"
+        )
     if tax.mode == "ip":
-        return f"ИП {tax.full_name or ''}, ИНН {tax.inn}, ОГРНИП {tax.ogrnip}"
-    return f"Самозанятый {tax.full_name or ''}, ИНН {tax.inn} (НПД)"
+        return f"ИП {plain['full_name'] or ''}, ИНН {plain['inn']}, ОГРНИП {plain['ogrnip']}"
+    return f"Самозанятый {plain['full_name'] or ''}, ИНН {plain['inn']} (НПД)"
+
+
+def _draw_wrapped(c: canvas.Canvas, text: str, x: float, y: float, max_chars: int = 95) -> float:
+    """Рисует строку с переносом; возвращает новый y."""
+    t = text or ""
+    while t:
+        chunk, t = t[:max_chars], t[max_chars:]
+        c.drawString(x, y, chunk)
+        y -= 14
+    return y
 
 
 def build_invoice_pdf(
@@ -162,57 +168,166 @@ def build_invoice_pdf(
     order: Order,
     buyer_email: str,
     doc_type: str = "invoice",
+    buyer_name: str | None = None,
+    buyer_inn: str | None = None,
 ) -> bytes:
+    """Счёт/акт PDF §8.6 — шапка, реквизиты, таблица услуг, НДС, подписи."""
+    from reportlab.lib.units import mm
+
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     w, h = A4
-    y = h - 50
+    left, right = 20 * mm, w - 20 * mm
+    y = h - 18 * mm
+
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColorRGB(0.0, 0.34, 0.72)
+    c.drawString(left, y, "3dvektor")
+    c.setFillColorRGB(0, 0, 0)
+    c.setFont("Helvetica", 8)
+    c.drawRightString(right, y, "Документ сформирован автоматически")
+    y -= 8
+    c.setStrokeColorRGB(0.0, 0.34, 0.72)
+    c.setLineWidth(1.2)
+    c.line(left, y, right, y)
+    y -= 22
+
     title = "СЧЁТ НА ОПЛАТУ" if doc_type == "invoice" else "АКТ ВЫПОЛНЕННЫХ УСЛУГ"
     c.setFont("Helvetica-Bold", 14)
-    c.drawString(50, y, title)
-    y -= 30
+    c.drawString(left, y, title)
+    y -= 18
+    doc_date = order.created_at.strftime("%d.%m.%Y") if order.created_at else "—"
     c.setFont("Helvetica", 10)
-    c.drawString(50, y, f"№ {order.id} от {order.created_at.strftime('%d.%m.%Y') if order.created_at else '—'}")
-    y -= 20
-    c.drawString(50, y, f"Исполнитель: {_seller_line(tax)}")
-    y -= 16
-    if tax.legal_address:
-        c.drawString(50, y, f"Адрес: {tax.legal_address[:90]}")
-        y -= 16
-    if tax.bank_account:
-        c.drawString(50, y, f"Р/с {tax.bank_account} БИК {tax.bank_bik or ''} {tax.bank_name or ''}")
-        y -= 16
-    c.drawString(50, y, f"Заказчик: {buyer_email}")
-    y -= 24
-    base = order.amount_original or order.amount
-    upsell = order.upsell_amount or 0
-    discount = order.discount_amount or 0
-    net = order.amount
+    c.drawString(left, y, f"№ {order.id} от {doc_date}")
+    y -= 8
+    c.setStrokeColorRGB(0.85, 0.85, 0.88)
+    c.setLineWidth(0.5)
+    c.line(left, y, right, y)
+    y -= 18
+
+    plain = pii_svc.tax_row_plain(tax)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(left, y, "Исполнитель")
+    y -= 14
+    c.setFont("Helvetica", 9)
+    y = _draw_wrapped(c, _seller_line(tax), left, y, 100)
+    if plain.get("legal_address"):
+        y = _draw_wrapped(c, f"Адрес: {plain['legal_address']}", left, y, 100)
+    if plain.get("bank_account"):
+        bank = (
+            f"р/с {plain['bank_account']}, БИК {plain.get('bank_bik') or '—'}, "
+            f"{plain.get('bank_name') or ''}"
+        ).strip()
+        y = _draw_wrapped(c, bank, left, y, 100)
+    y -= 6
+
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(left, y, "Заказчик")
+    y -= 14
+    c.setFont("Helvetica", 9)
+    buyer_line = buyer_name or buyer_email or "—"
+    if buyer_inn:
+        buyer_line = f"{buyer_line}, ИНН {buyer_inn}"
+    y = _draw_wrapped(c, buyer_line, left, y, 100)
+    if buyer_email and buyer_name:
+        y = _draw_wrapped(c, f"Email: {buyer_email}", left, y, 100)
+    y -= 10
+
+    base = int(order.amount_original or order.amount or 0)
+    upsell = int(order.upsell_amount or 0)
+    discount = int(order.discount_amount or 0)
+    net = int(order.amount or 0)
     vat = 0
     if tax.mode != "self_employed" and tax.vat_rate:
-        # сумма в заказе без НДС по ТЗ; НДС сверху для счёта
         vat = int(round(net * tax.vat_rate / 100))
     total = net + vat
-    lines = [
-        f"Услуга: генерация 3D-модели (тариф {order.tier})",
-        f"База: {base} руб.",
-        f"Апсейлы: {upsell} руб.",
-        f"Скидка: {discount} руб.",
-        f"К оплате без НДС: {net} руб.",
+
+    # таблица услуг (§8 — перечисление опций)
+    col_n, col_name, col_qty, col_price, col_sum = left, left + 22, right - 120, right - 70, right
+    row_h = 16
+    c.setFillColorRGB(0.94, 0.95, 0.98)
+    c.rect(left, y - 4, right - left, row_h + 2, fill=1, stroke=0)
+    c.setFillColorRGB(0, 0, 0)
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(col_n, y, "№")
+    c.drawString(col_name, y, "Наименование")
+    c.drawRightString(col_qty, y, "Кол-во")
+    c.drawRightString(col_price, y, "Цена, руб")
+    c.drawRightString(col_sum, y, "Сумма")
+    y -= row_h
+
+    items: list[tuple[str, int]] = [
+        (f"Генерация 3D-модели, тариф {order.tier}", base),
     ]
+    upsell_opts = order.upsell_options or []
+    if isinstance(upsell_opts, list) and upsell_opts and upsell:
+        share = upsell // max(len(upsell_opts), 1)
+        rem = upsell - share * len(upsell_opts)
+        for i, code in enumerate(upsell_opts):
+            amt = share + (rem if i == 0 else 0)
+            items.append((f"Опция: {code}", amt))
+    elif upsell:
+        items.append(("Апсейл-опции", upsell))
+    if discount:
+        items.append(("Скидка / промокод", -discount))
+
+    c.setFont("Helvetica", 8)
+    for idx, (name, amount) in enumerate(items, start=1):
+        if y < 60 * mm:
+            c.showPage()
+            y = h - 20 * mm
+        c.drawString(col_n, y, str(idx))
+        c.drawString(col_name, y, name[:55])
+        c.drawRightString(col_qty, y, "1")
+        c.drawRightString(col_price, y, f"{amount:,}".replace(",", " "))
+        c.drawRightString(col_sum, y, f"{amount:,}".replace(",", " "))
+        y -= row_h
+
+    y -= 6
+    c.setStrokeColorRGB(0.75, 0.75, 0.78)
+    c.line(left, y + 10, right, y + 10)
+    c.setFont("Helvetica", 9)
+    c.drawRightString(col_price, y, "Без НДС:")
+    c.drawRightString(col_sum, y, f"{net:,} руб.".replace(",", " "))
+    y -= 14
     if vat:
-        lines.append(f"НДС {tax.vat_rate}%: {vat} руб.")
-        lines.append(f"Итого с НДС: {total} руб.")
+        c.drawRightString(col_price, y, f"НДС {tax.vat_rate}%:")
+        c.drawRightString(col_sum, y, f"{vat:,} руб.".replace(",", " "))
+        y -= 14
+        c.setFont("Helvetica-Bold", 10)
+        c.drawRightString(col_price, y, "Итого с НДС:")
+        c.drawRightString(col_sum, y, f"{total:,} руб.".replace(",", " "))
     else:
-        lines.append(f"НДС не облагается (режим {tax.mode}). Итого: {total} руб.")
-    for line in lines:
-        c.drawString(50, y, line)
-        y -= 16
+        c.setFont("Helvetica", 8)
+        c.drawString(left, y, f"НДС не облагается (режим {tax.mode})")
+        y -= 14
+        c.setFont("Helvetica-Bold", 10)
+        c.drawRightString(col_price, y, "Итого:")
+        c.drawRightString(col_sum, y, f"{total:,} руб.".replace(",", " "))
+    y -= 24
+
     if doc_type == "act":
-        y -= 10
-        c.drawString(50, y, "Услуги оказаны полностью. Претензий по объёму и качеству нет.")
-        y -= 30
-        c.drawString(50, y, "Исполнитель _____________    Заказчик _____________")
+        c.setFont("Helvetica", 9)
+        y = _draw_wrapped(
+            c,
+            "Услуги оказаны полностью. Претензий по объёму, срокам и качеству нет.",
+            left,
+            y,
+            95,
+        )
+        y -= 16
+        c.drawString(left, y, "Исполнитель _________________ / ___________ /")
+        y -= 18
+        c.drawString(left, y, "Заказчик _________________ / ___________ /")
+        y -= 20
+
+    c.setFont("Helvetica", 7)
+    c.setFillColorRGB(0.4, 0.4, 0.45)
+    c.drawString(
+        left,
+        12 * mm,
+        f"order_id={order.id} task={order.task_uuid} generated={datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+    )
     c.showPage()
     c.save()
     return buf.getvalue()
@@ -255,6 +370,8 @@ async def export_transactions_xlsx(
 
 
 async def invoice_for_order(db: AsyncSession, order_id: int, user: User, doc_type: str) -> bytes:
+    from app.models import Company
+
     order = await db.get(Order, order_id)
     if not order or order.user_id != user.id:
         # admin/owner сервиса тоже может — упрощённо: владелец заказа или staff
@@ -264,9 +381,18 @@ async def invoice_for_order(db: AsyncSession, order_id: int, user: User, doc_typ
             raise HTTPException(403, "Нет доступа")
     tax = await get_settings(db)
     buyer = await db.get(User, order.user_id)
+    buyer_name = None
+    buyer_inn = None
+    if order.company_id:
+        company = await db.get(Company, order.company_id)
+        if company:
+            buyer_name = company.name
+            buyer_inn = company.inn
     return build_invoice_pdf(
         tax=tax,
         order=order,
         buyer_email=buyer.email if buyer else str(order.user_id),
         doc_type=doc_type,
+        buyer_name=buyer_name or (order.customer_name if order.customer_name else None),
+        buyer_inn=buyer_inn,
     )

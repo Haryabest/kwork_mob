@@ -59,8 +59,24 @@ async def remove_member(db: AsyncSession, actor: User, target_user_id: int) -> N
     m = await get_membership(db, company.id, target_user_id)
     if not m:
         raise HTTPException(404, "Участник не найден")
+    removed_role = m.role
     await db.delete(m)
-    await audit(db, company_id=company.id, user_id=actor.id, action="member.remove", details={"user_id": target_user_id})
+    await audit(
+        db,
+        company_id=company.id,
+        user_id=actor.id,
+        action="company_member_removed",
+        details={"user_id": target_user_id, "role": removed_role},
+    )
+    if removed_role == "photographer":
+        try:
+            from app.services import corporate_alerts as ca
+
+            await ca.alert_no_photographer(
+                db, company_id=company.id, removed_user_id=target_user_id
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
 
 async def change_role(db: AsyncSession, actor: User, target_user_id: int, role: str) -> CompanyMember:

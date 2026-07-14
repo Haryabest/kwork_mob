@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from app.core.security import get_current_db_user
 from app.models import DeviceToken, Model3D, Transaction, User
 from app.schemas.auth import AccountTypeRequest
 from app.services import auth as auth_service
+from app.services import pii as pii_svc
 
 router = APIRouter()
 
@@ -29,11 +30,12 @@ class DeviceTokenRequest(BaseModel):
 
 
 def _user_payload(user: User) -> dict:
+    pii = pii_svc.user_public(user)
     return {
         "id": user.id,
         "email": user.email,
-        "full_name": user.full_name,
-        "phone": user.phone,
+        "full_name": pii["full_name"],
+        "phone": pii["phone"],
         "account_type": user.account_type,
         "status": user.status,
         "email_verified": user.email_verified,
@@ -41,6 +43,7 @@ def _user_payload(user: User) -> dict:
         "role": user.staff_role or "user",
         "balance": user.balance,
         "marketing_opt_in": user.marketing_opt_in,
+        "notification_prefs": dict(user.notification_prefs or {}),
         "totp_enabled": bool(user.totp_enabled),
         "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,
         "age_verified": bool(user.age_verified_at),
@@ -57,16 +60,45 @@ async def get_me(user: User = Depends(get_current_db_user)):
 @router.patch("/me")
 async def update_me(
     payload: dict,
+    request: Request,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Обновление профиля (ФИО, телефон, маркетинг)."""
-    if "full_name" in payload:
-        user.full_name = payload["full_name"]
-    if "phone" in payload:
-        user.phone = payload["phone"]
+    changed: list[str] = []
+    if "full_name" in payload or "phone" in payload:
+        changed = pii_svc.encrypt_user_fields(
+            user,
+            {k: payload[k] for k in ("full_name", "phone") if k in payload},
+        )
     if "marketing_opt_in" in payload:
         user.marketing_opt_in = bool(payload["marketing_opt_in"])
+    if "notification_prefs" in payload and isinstance(payload["notification_prefs"], dict):
+        allowed = {
+            "generation_done",
+            "refund",
+            "source_expire",
+            "cleanup",
+            "publish_reminder",
+            "push_enabled",
+            "email_enabled",
+            "email_orders",
+            "email_balance",
+        }
+        cur = dict(user.notification_prefs or {})
+        for k, v in payload["notification_prefs"].items():
+            if k in allowed:
+                cur[k] = bool(v)
+        user.notification_prefs = cur
+    if changed:
+        ip = request.client.host if request.client else None
+        await pii_svc.audit_pii_change(
+            db,
+            user_id=user.id,
+            action="user.profile_update",
+            fields=changed,
+            ip=ip,
+        )
     await db.commit()
     await db.refresh(user)
     return _user_payload(user)
@@ -156,7 +188,7 @@ async def topup_balance(
         customer_email=user.email,
         description=description,
         amount_rub=amount,
-        customer_name=body.customer_name or user.full_name,
+        customer_name=body.customer_name or pii_svc.user_public(user).get("full_name"),
     )
     payment = await yookassa_service.create_payment(
         amount,
@@ -209,8 +241,15 @@ async def list_user_models(
     db: AsyncSession = Depends(get_db),
 ):
     rows = (
-        await db.scalars(select(Model3D).where(Model3D.user_id == user.id).order_by(Model3D.id.desc()).limit(100))
+        await db.scalars(
+            select(Model3D)
+            .where(Model3D.user_id == user.id, Model3D.trashed_at.is_(None))
+            .order_by(Model3D.id.desc())
+            .limit(100)
+        )
     ).all()
+    from app.services import model_storage as ms
+
     return {
         "items": [
             {
@@ -220,6 +259,7 @@ async def list_user_models(
                 "usdz_url": m.usdz_url,
                 "publish_status": m.publish_status,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
+                "storage": ms.storage_meta(m),
             }
             for m in rows
         ]

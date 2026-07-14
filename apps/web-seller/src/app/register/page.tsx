@@ -18,7 +18,7 @@ import { Suspense, type FormEvent, useState } from 'react';
 import { AuthPage } from '../../components/AuthPage';
 import { api, apiMessage } from '../../services/api';
 
-const CONSENT_SLUGS = ['terms', 'privacy', 'rights', 'nsfw_rules'] as const;
+const CONSENT_SLUGS = ['terms', 'privacy', 'offer', 'rights', 'nsfw_rules'] as const;
 
 function RegisterForm() {
   const router = useRouter();
@@ -27,6 +27,7 @@ function RegisterForm() {
   const [consents, setConsents] = useState<Record<string, boolean>>({
     terms: false,
     privacy: false,
+    offer: false,
     rights: false,
     nsfw_rules: false,
   });
@@ -115,6 +116,18 @@ function RegisterForm() {
                     Согласие на{' '}
                     <Anchor component={Link} href="/legal/privacy" target="_blank">
                       обработку персональных данных
+                    </Anchor>
+                  </>
+                }
+              />
+              <Checkbox
+                checked={consents.offer}
+                onChange={(e) => setConsents({ ...consents, offer: e.currentTarget.checked })}
+                label={
+                  <>
+                    Принимаю{' '}
+                    <Anchor component={Link} href="/legal/offer" target="_blank">
+                      оферту
                     </Anchor>
                   </>
                 }

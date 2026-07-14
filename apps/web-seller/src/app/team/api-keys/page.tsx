@@ -24,6 +24,7 @@ type KeyRow = {
   key_prefix: string;
   scopes: string[];
   rate_limit_per_min: number;
+  daily_limit?: number;
   is_active: boolean;
   created_at?: string;
 };
@@ -42,6 +43,7 @@ export default function ApiKeysPage() {
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState<string[]>(['order:create', 'order:read']);
   const [rate, setRate] = useState<number | string>(1000);
+  const [daily, setDaily] = useState<number | string>(100000);
   const [plain, setPlain] = useState<string | null>(null);
 
   async function load() {
@@ -59,6 +61,7 @@ export default function ApiKeysPage() {
         name,
         scopes,
         rate_limit_per_min: Number(rate) || 1000,
+        daily_limit: Number(daily) || 100000,
       });
       setPlain(data.key);
       notifications.show({ color: 'teal', message: 'Скопируйте ключ — он больше не покажется' });
@@ -102,13 +105,14 @@ export default function ApiKeysPage() {
             <Table.Th>Префикс</Table.Th>
             <Table.Th>Scopes</Table.Th>
             <Table.Th>Лимит/мин</Table.Th>
+            <Table.Th>Лимит/сутки</Table.Th>
             <Table.Th />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
           {items.length === 0 ? (
             <Table.Tr>
-              <Table.Td colSpan={5}>
+              <Table.Td colSpan={6}>
                 <Text ta="center" c="dimmed" py="xl">
                   API-ключей пока нет
                 </Text>
@@ -123,6 +127,7 @@ export default function ApiKeysPage() {
                 </Table.Td>
                 <Table.Td>{(k.scopes || []).join(', ')}</Table.Td>
                 <Table.Td>{k.rate_limit_per_min}</Table.Td>
+                <Table.Td>{k.daily_limit ?? '—'}</Table.Td>
                 <Table.Td>
                   {k.is_active && (
                     <Button size="xs" color="red" variant="light" onClick={() => revoke(k.id)}>
@@ -140,6 +145,13 @@ export default function ApiKeysPage() {
           <TextInput label="Название" value={name} onChange={(e) => setName(e.currentTarget.value)} />
           <MultiSelect label="Scopes" data={SCOPE_OPTIONS} value={scopes} onChange={setScopes} />
           <NumberInput label="Rate limit / мин" value={rate} onChange={setRate} min={10} max={10000} />
+          <NumberInput
+            label="Daily limit (запросов/сутки)"
+            value={daily}
+            onChange={setDaily}
+            min={100}
+            max={10000000}
+          />
           {plain && (
             <Text size="sm" c="teal">
               Ключ: <code>{plain}</code>

@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.services.minio import minio_service
+from app.services import photo_encryption as photo_enc
 
 VIEW_COUNT = 12
 VIEW_NAMES = [f"view_{i:02d}.jpg" for i in range(VIEW_COUNT)]
@@ -37,7 +39,12 @@ def view_key(task_uuid: str, index: int) -> str:
     return f"{photos_prefix(task_uuid)}{VIEW_NAMES[index]}"
 
 
-def prepare_presigned_uploads(task_uuid: str, expires: int = 1800) -> dict[str, Any]:
+def prepare_presigned_uploads(
+    task_uuid: str,
+    *,
+    expires: int = 1800,
+    encryption_required: bool = False,
+) -> dict[str, Any]:
     try:
         minio_service.ensure_buckets()
     except Exception as exc:  # noqa: BLE001
@@ -55,7 +62,9 @@ def prepare_presigned_uploads(task_uuid: str, expires: int = 1800) -> dict[str, 
                 "label": ANGLE_LABELS[i],
                 "key": key,
                 "upload_url": url,
-                "content_type": "image/jpeg",
+                "content_type": (
+                    "application/octet-stream" if encryption_required else "image/jpeg"
+                ),
             }
         )
     return {
@@ -65,7 +74,20 @@ def prepare_presigned_uploads(task_uuid: str, expires: int = 1800) -> dict[str, 
         "expires_in": expires,
         "uploads": uploads,
         "angles": ANGLE_LABELS,
+        "encryption_required": encryption_required,
+        "encryption_algorithm": photo_enc.ALGORITHM if encryption_required else None,
     }
+
+
+async def prepare_for_user(
+    db: AsyncSession,
+    task_uuid: str,
+    *,
+    company_id: int | None,
+    expires: int = 1800,
+) -> dict[str, Any]:
+    enc = await photo_enc.encryption_enabled_for_company(db, company_id)
+    return prepare_presigned_uploads(task_uuid, expires=expires, encryption_required=enc)
 
 
 def count_uploaded(task_uuid: str) -> int:
@@ -87,6 +109,14 @@ def require_all_photos(task_uuid: str) -> None:
             missing.append(name)
     if missing:
         raise HTTPException(400, f"Не хватает фото: {', '.join(missing)}")
+
+
+def delete_task_photos(task_uuid: str) -> dict[str, Any]:
+    """Удалить photos/{task_uuid}/ из MinIO (§3.15.4 TTL)."""
+    bucket = settings.MINIO_BUCKET_PHOTOS
+    prefix = photos_prefix(task_uuid)
+    n = minio_service.delete_prefix(bucket, prefix)
+    return {"task_uuid": task_uuid, "bucket": bucket, "prefix": prefix, "deleted": n}
 
 
 async def upload_files_to_prefix(task_uuid: str, files: list[UploadFile]) -> dict[str, Any]:

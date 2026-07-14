@@ -8,9 +8,11 @@ import 'package:kwork_mobile/features/company/shoot_link_screen.dart';
 import 'package:kwork_mobile/features/home/home_shell.dart';
 import 'package:kwork_mobile/features/models/model_viewer_screen.dart';
 import 'package:kwork_mobile/features/onboarding/onboarding_screen.dart';
+import 'package:kwork_mobile/features/legal/consent_gate_screen.dart';
 import 'package:kwork_mobile/features/queue/queue_screen.dart';
 import 'package:kwork_mobile/features/shoot/category_screen.dart';
 import 'package:kwork_mobile/features/shoot/guided_dome_screen.dart';
+import 'package:kwork_mobile/features/shoot/guest_shoot_screen.dart';
 import 'package:kwork_mobile/features/shoot/quality_review_screen.dart';
 import 'package:kwork_mobile/features/shoot/upload_checkout_screen.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
@@ -38,8 +40,62 @@ GoRouter createRouter({
         builder: (context, state) => AuthScreen(api: api, session: session, push: push),
       ),
       GoRoute(
+        path: '/legal/consent',
+        builder: (context, state) => LegalConsentGateScreen(api: api),
+      ),
+      // §3.15 Deep link: https://…/shoot/{token} или kworkmob://open/shoot/{token}
+      GoRoute(
+        path: '/shoot/:token',
+        builder: (context, state) => GuestShootGateScreen(
+          api: api,
+          token: state.pathParameters['token']!,
+        ),
+        routes: [
+          GoRoute(
+            path: 'dome',
+            builder: (context, state) {
+              final token = state.pathParameters['token']!;
+              final base = '/shoot/$token';
+              final extra = state.extra;
+              if (extra is Map) {
+                return GuidedDomeScreen(
+                  modelUuid: extra['uuid'] as String,
+                  reshootIndex: extra['reshoot'] as int?,
+                  flowBase: base,
+                );
+              }
+              return GuidedDomeScreen(
+                modelUuid: extra as String,
+                flowBase: base,
+              );
+            },
+          ),
+          GoRoute(
+            path: 'review',
+            builder: (context, state) {
+              final token = state.pathParameters['token']!;
+              return QualityReviewScreen(
+                modelUuid: state.extra as String,
+                flowBase: '/shoot/$token',
+              );
+            },
+          ),
+          GoRoute(
+            path: 'upload',
+            builder: (context, state) {
+              final token = state.pathParameters['token']!;
+              return GuestShootUploadScreen(
+                api: api,
+                token: token,
+                modelUuid: state.extra as String,
+              );
+            },
+          ),
+        ],
+      ),
+      GoRoute(
         path: '/home',
-        builder: (context, state) => HomeShell(api: api, session: session),
+        builder: (context, state) => HomeShell(api: api, session: session, push: push),
         routes: [
           GoRoute(
             path: 'shoot',
@@ -156,6 +212,16 @@ class _SplashScreenState extends State<_SplashScreen> {
     } else if (!loggedIn) {
       context.go('/auth');
     } else {
+      // §2.8.2: блок до принятия новых версий
+      try {
+        final pending = await widget.api.legalPending();
+        if (!mounted) return;
+        if (pending.isNotEmpty) {
+          context.go('/legal/consent');
+          return;
+        }
+      } catch (_) {}
+      if (!mounted) return;
       context.go('/home');
     }
   }

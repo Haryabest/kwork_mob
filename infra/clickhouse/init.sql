@@ -63,3 +63,17 @@ AS SELECT
     count() AS events
 FROM order_events
 GROUP BY day, event_type;
+
+-- Централизованные логи (§11.5 / §9.3)
+CREATE TABLE IF NOT EXISTS service_logs (
+    timestamp DateTime,
+    source String,
+    level String,
+    message String,
+    worker_id String,
+    user_id Nullable(UInt64),
+    company_id Nullable(UInt64),
+    task_id String,
+    details String
+) ENGINE = MergeTree()
+ORDER BY (timestamp, source);

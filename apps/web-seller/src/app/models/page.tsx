@@ -56,6 +56,9 @@ export default function ModelsPage() {
             <Badge variant="light" color="brand">
               {items.length} моделей
             </Badge>
+            <Button component={Link} href="/models/trash" variant="light" visibleFrom="xs">
+              Корзина
+            </Button>
             <Button component={Link} href="/orders/new" leftSection={<IconPlus size={16} />} visibleFrom="xs">
               Новая
             </Button>

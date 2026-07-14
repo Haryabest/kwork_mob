@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Center, Group, Loader, Progress, Table, Text, Title } from '@mantine/core';
+import { Badge, Button, Center, Group, Loader, Progress, Table, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import {
   IconAlertTriangle,
@@ -44,10 +44,31 @@ type Dashboard = {
   pg_error?: string;
 };
 
+type Funnel = {
+  generated: number;
+  downloaded: number;
+  links_added: number;
+  verified: number;
+  manual_marked: number;
+  conversion: Record<string, number>;
+  by_marketplace?: {
+    verified: Record<string, number>;
+    manual_marked: Record<string, number>;
+  };
+};
+
+type PublicationFunnel = {
+  period: { from: string | null; to: string | null };
+  funnel: Funnel;
+  by_segment: { personal: Funnel; company: Funnel };
+  by_category: Record<string, number>;
+};
+
 const TABS = [
   { id: 'ops', label: 'Операции' },
   { id: 'finance', label: 'Финансы' },
   { id: 'b2b', label: 'B2B' },
+  { id: 'publications', label: 'Публикации' },
   { id: 'quality', label: 'Качество' },
   { id: 'moderation', label: 'Модерация' },
 ] as const;
@@ -63,21 +84,87 @@ function fmtRub(n: number) {
   return `${(n || 0).toLocaleString('ru-RU')} ₽`;
 }
 
+function pct(n: number, d: number) {
+  if (!d) return '—';
+  return `${Math.round((n / d) * 100)}%`;
+}
+
+function FunnelSteps({ f }: { f: Funnel | undefined }) {
+  if (!f) return null;
+  const steps = [
+    { key: 'generated', label: 'Генерации', n: f.generated },
+    { key: 'downloaded', label: 'Скачивания', n: f.downloaded },
+    { key: 'links_added', label: 'Ссылки', n: f.links_added },
+    { key: 'verified', label: 'Верификации', n: f.verified },
+    { key: 'manual_marked', label: 'Ручные отметки', n: f.manual_marked },
+  ];
+  const base = f.generated || 1;
+  return (
+    <div>
+      {steps.map((s) => (
+        <div key={s.key} style={{ marginTop: 12 }}>
+          <Group justify="space-between">
+            <Text size="sm">{s.label}</Text>
+            <Text size="sm" fw={600}>
+              {s.n} ({pct(s.n, f.generated)})
+            </Text>
+          </Group>
+          <Progress value={Math.min(100, (s.n / base) * 100)} mt={4} color="brand" />
+        </div>
+      ))}
+      <Text size="xs" c="dimmed" mt="md">
+        gen→verify: {Math.round((f.conversion?.generated_to_verified ?? 0) * 100)}% · цель KPI ≥60%
+      </Text>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('ops');
   const [data, setData] = useState<Dashboard | null>(null);
+  const [pubFunnel, setPubFunnel] = useState<PublicationFunnel | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const funnelParams = useCallback(() => {
+    return {
+      date_from: dateFrom ? `${dateFrom}T00:00:00Z` : undefined,
+      date_to: dateTo ? `${dateTo}T23:59:59Z` : undefined,
+    };
+  }, [dateFrom, dateTo]);
+
+  const exportCsv = useCallback(async () => {
+    try {
+      const { data: blob } = await api.get<Blob>('/admin/metrics/publication-funnel/export', {
+        responseType: 'blob',
+        params: funnelParams(),
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'publication-funnel.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }, [funnelParams]);
 
   const load = useCallback(async () => {
     try {
-      const { data: d } = await api.get<Dashboard>('/admin/metrics/dashboard');
-      setData(d);
+      const [dash, pub] = await Promise.all([
+        api.get<Dashboard>('/admin/metrics/dashboard'),
+        api.get<PublicationFunnel>('/admin/metrics/publication-funnel', { params: funnelParams() }),
+      ]);
+      setData(dash.data);
+      setPubFunnel(pub.data);
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [funnelParams]);
 
   useEffect(() => {
     load();
@@ -302,6 +389,70 @@ export default function DashboardPage() {
                 ))}
               </Table.Tbody>
             </Table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'publications' && (
+        <div className="vz-grid vz-grid-2-lg">
+          <div className="vz-surface" style={{ gridColumn: '1 / -1' }}>
+            <Group align="flex-end" wrap="wrap">
+              <TextInput
+                type="date"
+                label="С"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.currentTarget.value)}
+              />
+              <TextInput
+                type="date"
+                label="По"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.currentTarget.value)}
+              />
+              <Button variant="light" onClick={() => void load()}>
+                Применить период
+              </Button>
+              <Button variant="light" size="xs" onClick={() => void exportCsv()}>
+                CSV
+              </Button>
+              {pubFunnel?.period && (
+                <Text size="xs" c="dimmed">
+                  {pubFunnel.period.from ?? '…'} → {pubFunnel.period.to ?? '…'}
+                </Text>
+              )}
+            </Group>
+          </div>
+          <div className="vz-surface">
+            <Group justify="space-between">
+              <Text fw={600}>Воронка публикации §7.9</Text>
+            </Group>
+            <FunnelSteps f={pubFunnel?.funnel} />
+          </div>
+          <div className="vz-surface">
+            <Text fw={600}>Сегменты</Text>
+            <Text mt="sm" size="sm" c="dimmed">
+              B2C (личные)
+            </Text>
+            <FunnelSteps f={pubFunnel?.by_segment.personal} />
+            <Text mt="lg" size="sm" c="dimmed">
+              B2B (компании)
+            </Text>
+            <FunnelSteps f={pubFunnel?.by_segment.company} />
+            <Text fw={600} mt="lg">
+              WB / Ozon (verified)
+            </Text>
+            <Text size="sm">
+              WB: {pubFunnel?.funnel.by_marketplace?.verified?.wb ?? 0} · Ozon:{' '}
+              {pubFunnel?.funnel.by_marketplace?.verified?.ozon ?? 0}
+            </Text>
+            <Text fw={600} mt="md">
+              По категориям
+            </Text>
+            {Object.entries(pubFunnel?.by_category ?? {}).map(([k, v]) => (
+              <Text key={k} size="sm">
+                {k}: {v}
+              </Text>
+            ))}
           </div>
         </div>
       )}

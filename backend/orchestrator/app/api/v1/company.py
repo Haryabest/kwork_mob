@@ -6,7 +6,7 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +47,7 @@ class ApiKeyCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     scopes: list[str] = Field(default_factory=lambda: ["order:create", "order:read"])
     rate_limit_per_min: int = Field(default=1000, ge=10, le=10000)
+    daily_limit: int | None = Field(default=None, ge=100, le=10_000_000)
 
 
 class BulkOrderItem(BaseModel):
@@ -83,10 +84,12 @@ async def list_my_companies(
     for c in owned:
         role_by_company.setdefault(c.id, "owner")
     from app.services.company_roles import resolve_permissions
+    from app.services.company_policies import extract_policies
 
     items = []
     for cid, c in by_id.items():
         perms = await resolve_permissions(db, cid, user.id)
+        policies = extract_policies(c.settings)
         items.append(
             {
                 "id": c.id,
@@ -96,6 +99,7 @@ async def list_my_companies(
                 "role": role_by_company.get(cid, "member"),
                 "is_owner": c.owner_id == user.id,
                 "permissions": perms,
+                "e2e_photo_encryption": bool(policies.get("e2e_photo_encryption")),
             }
         )
     items.sort(key=lambda x: x["id"])
@@ -139,6 +143,23 @@ async def invite_member(
     )
     db.add(inv)
     await db.flush()
+    from app.models import AuditLog
+
+    db.add(
+        AuditLog(
+            company_id=company_id,
+            user_id=user.id,
+            action="company_invite_sent",
+            details={
+                "invited_email": inv.email,
+                "role": inv.role,
+                "max_concurrent_orders": inv.max_concurrent_orders,
+                "monthly_spending_limit": inv.monthly_spending_limit,
+                "invitation_id": inv.id,
+                "invited_by_user_id": user.id,
+            },
+        )
+    )
     try:
         from app.services import company_webhooks as wh
 
@@ -250,6 +271,20 @@ async def accept_invitation(
                     role=inv.role,
                     max_concurrent_orders=inv.max_concurrent_orders,
                     monthly_spending_limit=inv.monthly_spending_limit,
+                )
+            )
+            from app.models import AuditLog
+
+            db.add(
+                AuditLog(
+                    company_id=inv.company_id,
+                    user_id=user.id,
+                    action="company_member_joined",
+                    details={
+                        "invitation_id": inv.id,
+                        "role": inv.role,
+                        "email": user.email,
+                    },
                 )
             )
     inv.status = "accepted"
@@ -436,6 +471,37 @@ async def member_tasks(
     return {"items": items}
 
 
+@router.get("/publication-funnel")
+async def company_publication_funnel(
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    export: bool = Query(False),
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Воронка публикации по сотрудникам §7.9.2 (Owner)."""
+    from app.services import publication_funnel as funnel_svc
+    from app.services.company_members import get_owned_company
+    from fastapi.responses import Response
+
+    company = await get_owned_company(db, user)
+    data = await funnel_svc.team_funnel(
+        db,
+        company_id=company.id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    await db.commit()
+    if export:
+        body = funnel_svc.team_funnel_to_csv(data)
+        return Response(
+            content=body,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="team-publication-funnel.csv"'},
+        )
+    return data
+
+
 @router.get("/settings")
 async def get_settings(
     user: User = Depends(get_current_db_user),
@@ -449,6 +515,7 @@ async def get_settings(
 class PoliciesBody(BaseModel):
     policies: dict | None = None
     settings: dict | None = None
+    notification_routing: dict[str, str] | None = None
     default_max_concurrent_orders: int | None = Field(default=None, ge=1, le=20)
     default_monthly_spending_limit: int | None = Field(default=None, ge=0)
     default_allowed_categories: list[str] | None = None
@@ -549,6 +616,30 @@ async def audit_log(
             for r in rows
         ]
     }
+
+
+@router.get("/access-log")
+async def company_access_log(
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    model_uuid: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отчёт Owner по скачиваниям моделей компании §10.7.2."""
+    from app.services import access_log as access_svc
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    return await access_svc.list_access_logs(
+        db,
+        company_id=company.id,
+        model_uuid=model_uuid,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+    )
 
 
 @router.get("/audit/export")
@@ -754,6 +845,32 @@ async def webhook_deliveries(
     return {"items": items}
 
 
+@router.get("/webhooks/deliveries/dashboard")
+async def webhook_deliveries_dashboard(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сводка retries / DLQ для Owner (§14.5.4)."""
+    from app.services import company_webhooks as wh
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    return await wh.delivery_dashboard(db, company_id=company.id)
+
+
+@router.post("/webhooks/deliveries/replay-dlq")
+async def webhook_replay_dlq(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Массовый replay DLQ (§14.5.4)."""
+    from app.services import company_webhooks as wh
+
+    result = await wh.replay_dlq(db, user)
+    await db.commit()
+    return result
+
+
 @router.post("/webhooks/deliveries/{delivery_id}/retry")
 async def webhook_delivery_retry(
     delivery_id: int,
@@ -765,6 +882,17 @@ async def webhook_delivery_retry(
     result = await wh.retry_delivery(db, user, delivery_id)
     await db.commit()
     return result
+
+
+@router.get("/webhooks/deliveries/{delivery_id}")
+async def webhook_delivery_detail(
+    delivery_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_webhooks as wh
+
+    return await wh.get_delivery(db, user, delivery_id)
 
 
 @router.post("/shoot_link")
@@ -785,6 +913,9 @@ async def create_shoot_link(
         company_id = owned.id if owned else None
     if company_id is not None:
         await require_company_permission(db, user, company_id, "can_invite_members")
+    from app.services import shoot_link_limits as sll
+
+    await sll.assert_can_create(db, company_id=company_id)
     task_uuid = payload.task_uuid or str(uuid.uuid4())
     token = secrets.token_urlsafe(24)
     link = ShootLink(
@@ -810,6 +941,28 @@ async def create_shoot_link(
     }
 
 
+@router.get("/shoot_links/stats")
+async def shoot_links_stats(
+    company_id: int | None = None,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Статистика съёмки по ссылке для Owner/Manager (§3.15.4)."""
+    from app.services import shoot_links as shoot_svc
+    from app.services.access import require_company_permission
+
+    cid = company_id
+    if cid is None:
+        owned = await db.scalar(select(Company).where(Company.owner_id == user.id).limit(1))
+        cid = owned.id if owned else None
+    if cid is None:
+        raise HTTPException(400, "Укажите company_id")
+    await require_company_permission(db, user, cid, "can_invite_members")
+    data = await shoot_svc.company_stats(db, cid)
+    await db.commit()
+    return data
+
+
 @router.post("/api_keys")
 async def create_api_key(
     body: ApiKeyCreate,
@@ -822,6 +975,7 @@ async def create_api_key(
         name=body.name,
         scopes=body.scopes,
         rate_limit_per_min=body.rate_limit_per_min,
+        daily_limit=body.daily_limit,
     )
     await db.commit()
     return {
@@ -831,6 +985,7 @@ async def create_api_key(
         "key_prefix": row.key_prefix,
         "scopes": row.scopes,
         "rate_limit_per_min": row.rate_limit_per_min,
+        "daily_limit": row.daily_limit,
         "warning": "Ключ показывается один раз",
     }
 

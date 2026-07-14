@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,7 @@ from app.models import (
 )
 from app.schemas.support import SupportQuestionRequest
 from app.services.queue import queue_service
+from app.services import pii as pii_svc
 
 
 def _vpn_guard(request: Request) -> None:
@@ -84,7 +85,7 @@ async def get_company(company_id: int, _: dict = Depends(require_admin), db: Asy
         "inn": company.inn,
         "balance": company.balance,
         "status": company.status,
-        "settings": company.settings or {},
+        "settings": pii_svc.decrypt_company_settings(company.settings or {}),
         "members": [
             {"user_id": m.user_id, "role": m.role, "max_concurrent_orders": m.max_concurrent_orders}
             for m in members
@@ -95,14 +96,51 @@ async def get_company(company_id: int, _: dict = Depends(require_admin), db: Asy
 
 @router.get("/companies/{company_id}/stats")
 async def company_stats(company_id: int, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    from app.services import shoot_links as shoot_svc
+
     orders = await db.scalar(select(func.count()).select_from(Order).where(Order.company_id == company_id))
     revenue = await db.scalar(
         select(func.coalesce(func.sum(Order.amount), 0)).where(
             Order.company_id == company_id, Order.status.in_(("completed", "paid", "queued", "processing"))
         )
     )
-    return {"company_id": company_id, "orders": int(orders or 0), "revenue": int(revenue or 0)}
+    shoot = await shoot_svc.company_stats(db, company_id)
+    await db.commit()
+    return {
+        "company_id": company_id,
+        "orders": int(orders or 0),
+        "revenue": int(revenue or 0),
+        "shoot_links": {
+            "created": shoot["created"],
+            "expired": shoot["expired"],
+            "success": shoot["success"],
+            "active": shoot["active"],
+            "conversion_rate": shoot["conversion_rate"],
+        },
+    }
 
+
+@router.get("/companies/{company_id}/shoot-links")
+async def company_shoot_links(company_id: int, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """Статистика shoot-link по B2B-клиенту (§3.15.4)."""
+    from app.services import shoot_links as shoot_svc
+
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(404, "Компания не найдена")
+    data = await shoot_svc.company_stats(db, company_id)
+    await db.commit()
+    return data
+
+
+@router.get("/shoot-links/stats")
+async def shoot_links_overview(_: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """Сводка shoot-links по всем компаниям (§3.15.4)."""
+    from app.services import shoot_links as shoot_svc
+
+    data = await shoot_svc.admin_overview(db)
+    await db.commit()
+    return data
 
 @router.get("/companies/{company_id}/logs")
 async def company_logs(company_id: int, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
@@ -417,9 +455,497 @@ async def queue_stats(_: dict = Depends(require_admin), db: AsyncSession = Depen
     return {"pg_queued": int(queued or 0), "redis": lengths}
 
 
+@router.get("/metrics/publication-funnel")
+async def publication_funnel(
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    company_id: int | None = Query(None),
+    category: str | None = Query(None),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Воронка публикации §7.9.1."""
+    from app.services import publication_funnel as funnel_svc
+
+    data = await funnel_svc.global_funnel(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        company_id=company_id,
+        category=category,
+    )
+    await db.commit()
+    return data
+
+
+@router.get("/metrics/publication-funnel/export")
+async def publication_funnel_export(
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    company_id: int | None = Query(None),
+    category: str | None = Query(None),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import publication_funnel as funnel_svc
+    from fastapi.responses import Response
+
+    data = await funnel_svc.global_funnel(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        company_id=company_id,
+        category=category,
+    )
+    await db.commit()
+    body = funnel_svc.funnel_to_csv(data)
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="publication-funnel.csv"'},
+    )
+
+
 @router.get("/metrics/dashboard")
 async def metrics_dashboard(_: dict = Depends(require_admin)):
     """Агрегаты ClickHouse для admin dashboard (§12)."""
     from app.services.metrics import dashboard_aggregates
 
     return await dashboard_aggregates()
+
+
+@router.get("/access-log")
+async def admin_access_log(
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    company_id: int | None = Query(None),
+    user_id: int | None = Query(None),
+    model_uuid: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Глобальный аудит скачиваний моделей §10.7.2."""
+    from app.services import access_log as access_svc
+
+    return await access_svc.list_access_logs(
+        db,
+        company_id=company_id,
+        user_id=user_id,
+        model_uuid=model_uuid,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/access-log/export")
+async def admin_access_log_export(
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    company_id: int | None = Query(None),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from fastapi.responses import Response
+
+    from app.services import access_log as access_svc
+
+    data = await access_svc.list_access_logs(
+        db,
+        company_id=company_id,
+        date_from=date_from,
+        date_to=date_to,
+        limit=5000,
+    )
+    return Response(
+        content=access_svc.to_csv(data["items"]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="access-log.csv"'},
+    )
+
+
+@router.post("/audit-export/run")
+async def run_audit_export(
+    year: int | None = Query(None),
+    month: int | None = Query(None),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручной запуск экспорта в MinIO audit-logs §10.7.7."""
+    from app.services import audit_export as ae
+
+    return await ae.export_month(db, year=year, month=month)
+
+
+@router.post("/storage-alerts/check")
+async def run_storage_alerts_check(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручная проверка SMART/disk → Telegram."""
+    from app.services import storage_alerts as sa
+
+    return await sa.check_and_alert(db)
+
+
+@router.post("/ops-alerts/check")
+async def run_ops_alerts_check(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручная проверка queue / all-busy / worker offline §12.4.1."""
+    from app.services import ops_alerts as oa
+
+    return await oa.check_and_alert(db)
+
+
+@router.get("/age-verifications")
+async def admin_age_verifications(
+    success: bool | None = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Просмотр проверок возраста 18+ (§10.8.3 / §11 модерация)."""
+    from app.services import age_admin as aa
+
+    return await aa.list_age_verifications(db, limit=limit, success=success)
+
+
+@router.get("/age-verifications/export")
+async def admin_age_verifications_export(
+    success: bool | None = Query(None),
+    limit: int = Query(5000, ge=1, le=10000),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """CSV экспорт проверок возраста (§11)."""
+    from fastapi.responses import Response
+
+    from app.services import age_admin as aa
+
+    data = await aa.list_age_verifications(db, limit=limit, success=success)
+    return Response(
+        content=aa.to_csv(data["events"]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="age-verifications.csv"'},
+    )
+
+
+@router.post("/corporate-alerts/check")
+async def run_corporate_alerts_check(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручной scan low-balance (§12.4.1)."""
+    from app.services import corporate_alerts as ca
+
+    return await ca.scan_low_balances(db)
+
+
+@router.get("/yookassa/error-streak")
+async def yookassa_error_streak(_: dict = Depends(require_admin)):
+    from app.services import yookassa_alerts as yk
+
+    return {"streak": await yk.current_streak(), "threshold": yk._threshold()}
+
+
+@router.get("/soft-launch/kpi")
+async def soft_launch_kpi(
+    days: int = Query(7, ge=1, le=90),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Live soft-launch KPI: воронка, заказы, конверсия ≥60%."""
+    from app.services import soft_launch as sl
+
+    return await sl.soft_launch_kpi(db, days=days)
+
+
+@router.get("/soft-launch/kpi/export")
+async def soft_launch_kpi_export(
+    days: int = Query(7, ge=1, le=90),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """CSV export soft-launch KPI."""
+    from fastapi.responses import Response
+
+    from app.services import soft_launch as sl
+
+    data = await sl.soft_launch_kpi(db, days=days)
+    return Response(
+        content=sl.kpi_to_csv(data),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="soft-launch-kpi-{days}d.csv"'},
+    )
+
+
+@router.get("/write-activity")
+async def write_activity_status(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Write Activity Heartbeat snapshot §11.16 / §23.4."""
+    from app.services import write_activity as wa
+
+    return await wa.snapshot_write_activity(db)
+
+
+@router.post("/write-activity/check")
+async def write_activity_check(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручная проверка stale write → alert."""
+    from app.services import write_activity as wa
+
+    return await wa.check_and_alert(db)
+
+
+@router.post("/storage/force-resync-minio")
+async def force_resync_minio(
+    staff: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Force Resync MinIO §11.16.4."""
+    from app.services import storage_ops as so
+
+    uid = int(staff["sub"]) if staff.get("sub") else None
+    return await so.force_resync_minio(db, user_id=uid)
+
+
+@router.post("/storage/restart-patroni-replication")
+async def restart_patroni_replication(
+    staff: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Restart Patroni Replication §11.16.4."""
+    from app.services import storage_ops as so
+
+    uid = int(staff["sub"]) if staff.get("sub") else None
+    return await so.restart_patroni_replication(db, user_id=uid)
+
+
+@router.post("/storage/fio-test")
+async def fio_disk_test(
+    staff: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    node: str | None = Query(None, description="Узел A/B опционально"),
+):
+    """Запустить FIO-тест диска (~10 сек) §11.16.4."""
+    from app.services import storage_ops as so
+
+    uid = int(staff["sub"]) if staff.get("sub") else None
+    return await so.run_fio_disk_test(db, user_id=uid, node=node)
+
+
+@router.get("/storage/docker-logs")
+async def storage_docker_logs(
+    container: str = Query(..., description="Имя контейнера"),
+    limit: int = Query(200, ge=1, le=2000),
+    minutes: int = Query(60, ge=1, le=1440),
+    _: dict = Depends(require_admin),
+):
+    """Посмотреть docker logs через Loki / proxy §11.16.4."""
+    from app.services import loki_logs as ll
+
+    return await ll.fetch_container_logs(container=container, limit=limit, minutes=minutes)
+
+
+@router.get("/storage/docker-logs/containers")
+async def storage_docker_log_containers(_: dict = Depends(require_admin)):
+    from app.services import loki_logs as ll
+
+    return {"containers": ll.configured_containers()}
+
+
+@router.get("/soft-launch/checklist")
+async def soft_launch_checklist_get(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Чек-лист soft launch (backend, не localStorage)."""
+    from app.services import soft_launch as sl
+
+    return await sl.get_checklist(db)
+
+
+@router.put("/soft-launch/checklist")
+async def soft_launch_checklist_put(
+    body: dict,
+    staff: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сохранить чек-лист soft launch."""
+    from app.services import soft_launch as sl
+
+    checks = body.get("checks") if isinstance(body.get("checks"), dict) else body
+    if not isinstance(checks, dict):
+        from fastapi import HTTPException
+
+        raise HTTPException(400, "checks object required")
+    uid = int(staff["sub"]) if staff.get("sub") else None
+    result = await sl.put_checklist(db, checks=checks, user_id=uid)
+    await db.commit()
+    return result
+
+
+@router.get("/maintenance/checklist")
+async def maintenance_checklist_get(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Чек-лист планового обслуживания §23.7."""
+    from app.services import maintenance as mt
+
+    return await mt.get_checklist(db)
+
+
+@router.put("/maintenance/checklist")
+async def maintenance_checklist_put(
+    body: dict,
+    staff: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import maintenance as mt
+
+    checks = body.get("checks") if isinstance(body.get("checks"), dict) else body
+    if not isinstance(checks, dict):
+        raise HTTPException(400, "checks object required")
+    uid = int(staff["sub"]) if staff.get("sub") else None
+    result = await mt.put_checklist(db, checks=checks, user_id=uid)
+    await db.commit()
+    return result
+
+
+@router.post("/maintenance/cleanup-logs")
+async def maintenance_cleanup_logs(
+    staff: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    older_than_days: int | None = Query(None, ge=1, le=365),
+):
+    """Очистка старых service logs §23.7."""
+    from app.services import maintenance as mt
+
+    uid = int(staff["sub"]) if staff.get("sub") else None
+    return await mt.cleanup_service_logs(db, user_id=uid, older_than_days=older_than_days)
+
+
+@router.post("/maintenance/backup-restore-test")
+async def maintenance_backup_restore_test(
+    staff: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Тест восстановления из бэкапа §23.7."""
+    from app.services import maintenance as mt
+
+    uid = int(staff["sub"]) if staff.get("sub") else None
+    return await mt.backup_restore_test(db, user_id=uid)
+
+
+@router.post("/source-expire/notify")
+async def source_expire_notify_now(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручной прогон уведомлений об истечении исходников §9.1.2."""
+    from app.services import source_expire as se
+
+    return await se.notify_expiring_sources(db)
+
+
+@router.get("/storage/node-timeline")
+async def storage_node_timeline(
+    days: int = Query(7, ge=1, le=90),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """История доступности узлов §11.16.3."""
+    from app.services import node_timeline as nt
+
+    return await nt.node_timeline(db, days=days)
+
+
+@router.post("/storage/node-timeline/sample")
+async def storage_node_timeline_sample(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import node_timeline as nt
+
+    return await nt.record_node_heartbeats(db)
+
+
+@router.get("/storage/disk-forecast")
+async def storage_disk_forecast(
+    days: int = Query(14, ge=1, le=90),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Прогноз заполнения диска + wearout §23.7."""
+    from app.services import disk_forecast as df
+
+    return await df.disk_forecast(db, days_lookback=days)
+
+
+@router.post("/storage/disk-forecast/sample")
+async def storage_disk_forecast_sample(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import disk_forecast as df
+
+    return await df.sample_disk_usage(db)
+
+
+@router.get("/webhooks/deliveries/dashboard")
+async def admin_webhook_deliveries_dashboard(
+    company_id: int | None = Query(None),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """B2B webhook retries / DLQ dashboard §14.5.4."""
+    from app.services import company_webhooks as wh
+
+    return await wh.delivery_dashboard(db, company_id=company_id)
+
+
+@router.post("/shoot-links/cleanup-photos")
+async def run_shoot_photo_cleanup(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручной TTL cleanup фото shoot-link §3.15.4."""
+    from app.services import shoot_cleanup as sc
+
+    return await sc.cleanup_stale_photos(db)
+
+
+@router.post("/quality-alerts/check")
+async def run_quality_alerts_check(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручная проверка publication conversion / fallback segmentation §12.4.1."""
+    from app.services import quality_alerts as qa
+
+    return await qa.check_and_alert(db)
+
+
+@router.get("/well-known/apple-app-site-association")
+async def apple_app_site_association(_: dict = Depends(require_admin)):
+    """Превью AASA с env TEAMID (prod host = SELLER_PUBLIC_URL)."""
+    from app.services import applinks as al
+
+    return al.apple_app_site_association()
+
+
+@router.get("/well-known/assetlinks")
+async def android_assetlinks(_: dict = Depends(require_admin)):
+    from app.services import applinks as al
+
+    return al.android_assetlinks()

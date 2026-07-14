@@ -14,6 +14,7 @@ import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/services/gyro_guide.dart';
 import 'package:kwork_mobile/services/quality_analyzer.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
+import 'package:kwork_mobile/services/thermal_monitor.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:vibration/vibration.dart';
 
@@ -23,10 +24,13 @@ class GuidedDomeScreen extends StatefulWidget {
     super.key,
     required this.modelUuid,
     this.reshootIndex,
+    this.flowBase = '/home/shoot',
   });
 
   final String modelUuid;
   final int? reshootIndex;
+  /// Префикс маршрута: `/home/shoot` или `/shoot/{token}`.
+  final String flowBase;
 
   @override
   State<GuidedDomeScreen> createState() => _GuidedDomeScreenState();
@@ -37,6 +41,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   ArSession? _ar;
   GyroGuide? _gyro;
   ArBackend _arBackend = ArBackend.gyroFallback;
+  final _thermal = ThermalMonitor();
   int _index = 0;
   bool _busy = false;
   bool _ready = false;
@@ -45,6 +50,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   bool _crosshairOk = true;
   bool _gyroOk = true;
   bool _arTariffApplied = false;
+  bool _criticalDialogOpen = false;
 
   @override
   void initState() {
@@ -75,6 +81,8 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
       await ctrl.initialize();
       if (!mounted) return;
       _cam = ctrl;
+      await _thermal.start();
+      _thermal.addListener(_onThermal);
       _ar = await ArSessionFactory.create(preferNative: true);
       _arBackend = _ar!.backend;
       await _ar!.start();
@@ -90,6 +98,61 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
       setState(() {});
     } catch (e) {
       setState(() => _error = e.toString());
+    }
+  }
+
+  void _onThermal() {
+    if (!mounted) return;
+    _applyThermalCamera();
+    setState(() {});
+    if (_thermal.needsCriticalPrompt && !_criticalDialogOpen) {
+      _showCriticalThermalDialog();
+    }
+  }
+
+  Future<void> _applyThermalCamera() async {
+    final cam = _cam;
+    if (cam == null || !cam.value.isInitialized) return;
+    try {
+      // §3.8.2: ≥40°C → FPS 15
+      await cam.setExposureMode(ExposureMode.auto);
+      if (_thermal.powerSave) {
+        await cam.lockCaptureOrientation();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _showCriticalThermalDialog() async {
+    _criticalDialogOpen = true;
+    final temp = _thermal.celsius?.toStringAsFixed(0) ?? '45+';
+    final cont = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Перегрев телефона'),
+        content: Text(
+          'Температура батареи ≈ $temp°C (>45°C). '
+          'Рекомендуем прервать съёмку до охлаждения. '
+          'При продолжении включится энергосбережение (FPS 15).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Прервать'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Продолжить'),
+          ),
+        ],
+      ),
+    );
+    _criticalDialogOpen = false;
+    if (!mounted) return;
+    if (cont == true) {
+      _thermal.acknowledgeCriticalContinue();
+    } else {
+      context.pop();
     }
   }
 
@@ -155,7 +218,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
       if (_index >= kGuidedDomeCount - 1) {
         if (mounted) {
           context.pushReplacement(
-            '/home/shoot/review',
+            '${widget.flowBase}/review',
             extra: widget.modelUuid,
           );
         }
@@ -179,6 +242,8 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
 
   @override
   void dispose() {
+    _thermal.removeListener(_onThermal);
+    _thermal.dispose();
     _ar?.removeListener(_onGyro);
     _ar?.dispose();
     _gyro?.removeListener(_onGyro);
@@ -216,8 +281,9 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
               Center(child: CameraPreview(_cam!))
             else
               const Center(child: CircularProgressIndicator()),
-            // Ghost Mesh — полупрозрачный овал (§3.11)
-            IgnorePointer(
+            // Ghost Mesh — полупрозрачный овал (§3.11); отключается при thermal power-save
+            if (!_thermal.effectsReduced)
+              IgnorePointer(
               child: Center(
                 child: Container(
                   width: MediaQuery.sizeOf(context).width * 0.55,
@@ -251,7 +317,9 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
               child: Column(
                 children: [
                   Text(
-                    'Ракурс ${_index + 1}/$kGuidedDomeCount · ${angle.label} · $backendLabel',
+                    'Ракурс ${_index + 1}/$kGuidedDomeCount · ${angle.label} · $backendLabel'
+                    '${_thermal.powerSave ? ' · FPS ${_thermal.targetFps} (тепло)' : ''}'
+                    '${_thermal.celsius != null ? ' · ${_thermal.celsius!.toStringAsFixed(0)}°C' : ''}',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),

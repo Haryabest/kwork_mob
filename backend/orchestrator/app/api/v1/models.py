@@ -34,6 +34,11 @@ class ShareBody(BaseModel):
     ttl_days: int = Field(default=7, ge=1, le=90)
 
 
+class MarketplaceUploadBody(BaseModel):
+    marketplace: str = Field(pattern=r"^(wb|ozon|wildberries)$")
+    sku: str = Field(min_length=1, max_length=64)
+
+
 def _parse_s3(url: str | None) -> tuple[str, str] | None:
     if not url:
         return None
@@ -139,12 +144,25 @@ async def import_model(
     return {"uuid": row.uuid, "glb_url": row.glb_url, "order_id": order.id, "status": "imported"}
 
 
+@router.get("/trash")
+async def list_trash_models(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Корзина моделей §3.3.1 (30 дней)."""
+    from app.services import model_storage as ms
+
+    return {"items": await ms.list_trash(db, user)}
+
+
 @router.get("/{model_uuid}")
 async def get_model(
     model_uuid: str,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.services import model_storage as ms
+
     model = await _get_owned_model(db, model_uuid, user)
     links = await pub_svc.list_links(db, model.uuid)
     return {
@@ -156,6 +174,7 @@ async def get_model(
         "watermark_hmac": model.watermark_hmac,
         "publication_links": links,
         "created_at": model.created_at.isoformat() if model.created_at else None,
+        "storage": ms.storage_meta(model),
     }
 
 
@@ -164,13 +183,24 @@ async def download_model(
     model_uuid: str,
     request: Request,
     format: str = Query(default="glb", pattern=r"^(glb|usdz)$"),
+    marketplace: str | None = Query(default=None, pattern=r"^(wb|ozon|wildberries|both)?$"),
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Presigned URL для скачивания .glb / .usdz + Referer/SHA-256 (§10.3 / §9)."""
+    from app.services import publication_funnel as funnel_svc
+
     assert_download_allowed(request)
     model = await _get_owned_model(db, model_uuid, user)
     await require_company_permission(db, user, model.company_id, "can_download_models")
+    await funnel_svc.log_download(
+        db,
+        model=model,
+        user=user,
+        request=request,
+        file_format=format,
+        marketplace=marketplace,
+    )
     raw = model.glb_url if format == "glb" else model.usdz_url
     if format == "usdz" and not raw and model.glb_url:
         url = _presign_glb(model, expires=3600)
@@ -203,6 +233,7 @@ async def download_model(
             "file_sha256": model.file_sha256,
         }
     url = minio_service.generate_presigned_url(bucket, key, expires=3600, method="get_object")
+    await db.commit()
     return {"download_url": url, "format": format, "bucket": bucket, "key": key, "expires_in": 3600}
 
 
@@ -210,14 +241,21 @@ async def download_model(
 @router.get("/{model_uuid}/preview")
 async def preview_model(
     model_uuid: str,
+    request: Request,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Короткий presigned URL для встроенного просмотрщика."""
+    """Короткий presigned URL для встроенного просмотрщика + access_log (§10.7.2)."""
+    from app.services import access_log as access_svc
+
     model = await _get_owned_model(db, model_uuid, user)
     url = _presign_glb(model, expires=1800)
     if not url:
         raise HTTPException(404, "GLB отсутствует")
+    await access_svc.log_model_access(
+        db, model=model, user=user, request=request, action="presign_get", file_format="glb"
+    )
+    await db.commit()
     return {"preview_url": url, "format": "glb", "expires_in": 1800}
 
 
@@ -318,6 +356,94 @@ async def verify_publication_link(
         "error_message": link.error_message,
         "verified_at": link.verified_at.isoformat() if link.verified_at else None,
     }
+
+
+@router.post("/{model_uuid}/restore-sources")
+async def restore_model_sources(
+    model_uuid: str,
+    request: Request,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Восстановить исходники из облака — presigned ZIP (§9.1.3 / §10.7.7)."""
+    from app.services import restore_sources as restore_svc
+
+    model = await _get_owned_model(db, model_uuid, user)
+    if model.trashed_at:
+        raise HTTPException(400, "Модель в корзине")
+    await require_company_permission(db, user, model.company_id, "can_download_models")
+    result = await restore_svc.restore_sources(db, model=model, user=user, request=request)
+    await db.commit()
+    return result
+
+
+@router.post("/{model_uuid}/extend-storage")
+async def extend_model_storage(
+    model_uuid: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Продлить хранение исходников ещё на TTL (лимит 3×) §9.1.2."""
+    from app.services import model_storage as ms
+
+    model = await _get_owned_model(db, model_uuid, user)
+    result = await ms.extend_storage(db, model=model, user=user)
+    await db.commit()
+    return result
+
+
+@router.post("/{model_uuid}/trash")
+async def trash_model(
+    model_uuid: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Переместить модель в корзину на 30 дней."""
+    from app.services import model_storage as ms
+
+    model = await _get_owned_model(db, model_uuid, user)
+    result = await ms.trash_model(db, model=model, user=user)
+    await db.commit()
+    return result
+
+
+@router.post("/{model_uuid}/restore-from-trash")
+async def restore_model_from_trash(
+    model_uuid: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Восстановить из корзины (без оплаты)."""
+    from app.services import model_storage as ms
+
+    model = await _get_owned_model(db, model_uuid, user)
+    result = await ms.restore_from_trash(db, model=model, user=user)
+    await db.commit()
+    return result
+
+
+@router.post("/{model_uuid}/marketplace-upload")
+async def marketplace_upload(
+    model_uuid: str,
+    body: MarketplaceUploadBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """API-публикация на WB/Ozon (§7.6 / §14.6)."""
+    from app.services import marketplace_upload as mp_svc
+
+    model = await _get_owned_model(db, model_uuid, user)
+    if not model.glb_url:
+        raise HTTPException(400, "GLB ещё не готов")
+    result = await mp_svc.upload_model_to_marketplace(
+        db,
+        model=model,
+        marketplace=body.marketplace,
+        sku=body.sku,
+        initiated_by_user_id=user.id,
+    )
+    await db.commit()
+    return result
 
 
 @router.post("/{model_uuid}/share")

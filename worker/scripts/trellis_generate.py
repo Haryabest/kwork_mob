@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from glb_stub import write_minimal_glb
+from pipeline_env import allow_stub_fallback, is_production_trellis
 
 
 def main(task_dir: str) -> None:
@@ -17,14 +18,15 @@ def main(task_dir: str) -> None:
 
     if mode == "trellis":
         try:
-            from trellis_runtime import run_trellis
+            from trellis_runtime import preflight_cuda, run_trellis
 
+            if is_production_trellis():
+                preflight_cuda()
             run_trellis(root, output)
             print(f"[trellis_generate] TRELLIS.2 → {output} ({output.stat().st_size} bytes)")
             return
         except Exception as exc:
-            # В production trellis-режиме не молча подменяем stub — падаем
-            if os.getenv("TRELLIS_ALLOW_STUB_FALLBACK", "0") == "1":
+            if allow_stub_fallback():
                 print(f"[trellis_generate] fallback stub ({exc})")
                 write_minimal_glb(output, root)
                 return

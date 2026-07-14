@@ -13,7 +13,7 @@ import {
   Loader,
   Center,
 } from '@mantine/core';
-import { IconDownload, IconLink, IconShare2, IconStar } from '@tabler/icons-react';
+import { IconDownload, IconLink, IconShare2, IconStar, IconTrash, IconClock } from '@tabler/icons-react';
 import { useDisclosure } from '@mantine/hooks';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -41,6 +41,14 @@ type Model = {
   publish_status?: string;
   publication_links?: PubLink[];
   created_at?: string;
+  storage?: {
+    source_expires_at?: string;
+    days_left?: number;
+    source_extend_count?: number;
+    extends_remaining?: number;
+    max_extends?: number;
+    in_trash?: boolean;
+  };
 };
 
 const PUBLISH_LABEL: Record<string, string> = {
@@ -62,7 +70,10 @@ export default function ModelDetailPage() {
   const [busy, setBusy] = useState(false);
   const [publishOpen, { open: openPublish, close: closePublish }] = useDisclosure(false);
   const [linkOpen, { open: openLink, close: closeLink }] = useDisclosure(false);
+  const [apiUploadOpen, { open: openApiUpload, close: closeApiUpload }] = useDisclosure(false);
   const [marketplace, setMarketplace] = useState<string | null>('ozon');
+  const [apiMarketplace, setApiMarketplace] = useState<string | null>('wb');
+  const [sku, setSku] = useState('');
   const [productUrl, setProductUrl] = useState('');
   const [rateOpen, { open: openRate, close: closeRate }] = useDisclosure(false);
   const [rating, setRating] = useState<string | null>('5');
@@ -107,6 +118,84 @@ export default function ModelDetailPage() {
       );
       if (data.message) notifications.show({ color: 'yellow', message: data.message });
       window.open(data.download_url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restoreSources() {
+    setBusy(true);
+    try {
+      const { data } = await api.post<{ download_url: string; message?: string }>(
+        `/models/${uuid}/restore-sources`,
+      );
+      notifications.show({
+        color: 'teal',
+        message: data.message || 'Presigned URL исходников готов',
+      });
+      window.open(data.download_url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function extendStorage() {
+    setBusy(true);
+    try {
+      const { data } = await api.post<{ message?: string; extends_remaining?: number }>(
+        `/models/${uuid}/extend-storage`,
+      );
+      notifications.show({ color: 'teal', message: data.message || 'Хранение продлено' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function moveToTrash() {
+    if (!window.confirm('Исходные фото и модель будут перемещены в корзину на 30 дней. Продолжить?')) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data } = await api.post<{ message?: string }>(`/models/${uuid}/trash`);
+      notifications.show({ color: 'orange', message: data.message || 'В корзине' });
+      window.location.href = '/models/trash';
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function apiUpload() {
+    if (!apiMarketplace || sku.trim().length < 1) {
+      return notifications.show({ color: 'red', message: 'Укажите маркетплейс и SKU' });
+    }
+    setBusy(true);
+    try {
+      const { data } = await api.post<{
+        ok: boolean;
+        publish_status?: string;
+        external_ref?: string;
+        attempts?: Array<{ attempt: number; status: string; error?: string | null }>;
+      }>(`/models/${uuid}/marketplace-upload`, {
+        marketplace: apiMarketplace,
+        sku: sku.trim(),
+      });
+      notifications.show({
+        color: 'teal',
+        message: `API upload: ${data.publish_status || 'ok'}${data.external_ref ? ` · ${data.external_ref}` : ''}`,
+      });
+      closeApiUpload();
+      setSku('');
+      await load();
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
     } finally {
@@ -246,8 +335,41 @@ export default function ModelDetailPage() {
             >
               Скачать USDZ (Wildberries)
             </Button>
+            <Button variant="light" leftSection={<IconDownload size={16} />} loading={busy} onClick={() => void restoreSources()}>
+              Восстановить исходники из облака
+            </Button>
+            <Text size="xs" c="#6d6c77">
+              Облачная копия:{' '}
+              {model.storage?.days_left != null ? `${model.storage.days_left} дн.` : '—'} · продлений осталось{' '}
+              {model.storage?.extends_remaining ?? '—'}/{model.storage?.max_extends ?? 3}
+            </Text>
+            <Button
+              variant="light"
+              leftSection={<IconClock size={16} />}
+              loading={busy}
+              disabled={(model.storage?.extends_remaining ?? 0) <= 0}
+              onClick={() => void extendStorage()}
+            >
+              Продлить хранение (+30 дней)
+            </Button>
+            <Button
+              variant="light"
+              color="red"
+              leftSection={<IconTrash size={16} />}
+              loading={busy}
+              onClick={() => void moveToTrash()}
+            >
+              Удалить (в корзину)
+            </Button>
             <Button variant="light" leftSection={<IconLink size={16} />} onClick={openLink}>
               Добавить ссылку на карточку WB/Ozon
+            </Button>
+            <Button
+              variant="light"
+              leftSection={<IconShare2 size={16} />}
+              onClick={openApiUpload}
+            >
+              Загрузить через API WB/Ozon
             </Button>
             <Button variant="light" leftSection={<IconShare2 size={16} />} onClick={openPublish}>
               Я опубликовал на маркетплейсе
@@ -305,6 +427,32 @@ export default function ModelDetailPage() {
           />
           <Button loading={busy} onClick={() => void addLink()} disabled={productUrl.length < 12}>
             Проверить и сохранить
+          </Button>
+        </Stack>
+      </Modal>
+
+      <Modal opened={apiUploadOpen} onClose={closeApiUpload} title="Загрузка через API (§7.6)" centered radius="lg">
+        <Stack>
+          <Text size="sm" c="#6d6c77">
+            Требуются credentials в admin и флаг MARKETPLACE_UPLOAD_ENABLED. При ошибке — ручная публикация.
+          </Text>
+          <Select
+            label="Маркетплейс"
+            data={[
+              { value: 'wb', label: 'Wildberries' },
+              { value: 'ozon', label: 'Ozon' },
+            ]}
+            value={apiMarketplace}
+            onChange={setApiMarketplace}
+          />
+          <TextInput
+            label="SKU / артикул карточки"
+            placeholder="12345678"
+            value={sku}
+            onChange={(e) => setSku(e.currentTarget.value)}
+          />
+          <Button loading={busy} onClick={() => void apiUpload()} disabled={sku.trim().length < 1}>
+            Отправить 3D-модель
           </Button>
         </Stack>
       </Modal>

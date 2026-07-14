@@ -162,7 +162,15 @@ async def _activate_referral(db: AsyncSession, row: Campaign, users: list[User])
             await email_svc.send_marketing_email(
                 u.email,
                 cfg.get("title") or row.name,
-                (cfg.get("body") or f"Ваш реферальный код: {code}. За каждого друга — бонус."),
+                inject_tracked_cta(
+                    cfg.get("body") or f"Ваш реферальный код: {code}. За каждого друга — бонус.",
+                    campaign_id=row.id,
+                    user_id=u.id,
+                    variant=None,
+                    cta_url=cfg.get("cta_url")
+                    or f"{settings_fallback_url().rstrip('/')}/register?ref={code}",
+                    cta_label="Пригласить друга",
+                ),
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("referral email %s: %s", u.email, exc)
@@ -186,7 +194,14 @@ async def _activate_nth_free(db: AsyncSession, row: Campaign, users: list[User])
             await email_svc.send_marketing_email(
                 u.email,
                 cfg.get("title") or row.name,
-                cfg.get("body") or f"Каждая {n}-я генерация — бесплатно!",
+                inject_tracked_cta(
+                    cfg.get("body") or f"Каждая {n}-я генерация — бесплатно!",
+                    campaign_id=row.id,
+                    user_id=u.id,
+                    variant=None,
+                    cta_url=cfg.get("cta_url") or settings_fallback_url(),
+                    cta_label="Открыть приложение",
+                ),
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("nth_free email: %s", exc)
@@ -225,10 +240,17 @@ async def _activate_timed_discount(db: AsyncSession, row: Campaign, users: list[
                 )
             )
             try:
+                body = cfg.get("body") or f"Скидка {percent}% по коду {plain} до {expires.isoformat()}"
                 await email_svc.send_marketing_email(
                     u.email,
                     cfg.get("title") or row.name,
-                    (cfg.get("body") or f"Скидка {percent}% по коду {plain} до {expires.isoformat()}"),
+                    inject_tracked_cta(
+                        body,
+                        campaign_id=row.id,
+                        user_id=u.id,
+                        variant=None,
+                        cta_url=cfg.get("cta_url"),
+                    ),
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("timed email: %s", exc)
@@ -255,10 +277,17 @@ async def _activate_timed_discount(db: AsyncSession, row: Campaign, users: list[
                 )
             )
             try:
+                body = cfg.get("body") or f"Персональная скидка {percent}%: {plain}"
                 await email_svc.send_marketing_email(
                     u.email,
                     cfg.get("title") or row.name,
-                    cfg.get("body") or f"Персональная скидка {percent}%: {plain}",
+                    inject_tracked_cta(
+                        body,
+                        campaign_id=row.id,
+                        user_id=u.id,
+                        variant=None,
+                        cta_url=cfg.get("cta_url"),
+                    ),
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("timed email: %s", exc)
@@ -288,33 +317,78 @@ async def start_campaign(db: AsyncSession, campaign_id: int) -> Campaign:
         auto_stats = await _activate_timed_discount(db, row, users)
     else:
         sent = 0
-        for u in users:
+        ab_enabled = bool((row.config or {}).get("ab_enabled"))
+        variants = (row.config or {}).get("variants") or ["A", "B"]
+        if not isinstance(variants, list) or len(variants) < 2:
+            variants = ["A", "B"]
+        for idx, u in enumerate(users):
             ok = False
             err = None
+            variant = variants[idx % len(variants)] if ab_enabled else None
+            send_title = title
+            send_body = body
+            if ab_enabled and isinstance((row.config or {}).get("variant_copy"), dict):
+                copy = (row.config or {})["variant_copy"].get(variant) or {}
+                send_title = copy.get("title") or title
+                send_body = copy.get("body") or body
             try:
                 if channel in ("email", "both"):
-                    await email_svc.send_marketing_email(u.email, title, body)
+                    cta = (row.config or {}).get("cta_url")
+                    mail_body = inject_tracked_cta(
+                        send_body,
+                        campaign_id=row.id,
+                        user_id=u.id,
+                        variant=variant,
+                        cta_url=cta,
+                        cta_label=(row.config or {}).get("cta_label") or "Открыть",
+                    )
+                    await email_svc.send_marketing_email(u.email, send_title, mail_body)
                     ok = True
                 if channel in ("push", "both"):
                     from app.services import push as push_svc
 
-                    await push_svc.send_to_user(db, u.id, title, body, email_fallback=False)
+                    # deep-link в data: tracked click URL
+                    tracked = click_track_url(
+                        row.id,
+                        target_url=(row.config or {}).get("cta_url") or settings_fallback_url(),
+                        user_id=u.id,
+                        variant=variant,
+                    )
+                    await push_svc.send_to_user(
+                        db,
+                        u.id,
+                        send_title,
+                        send_body,
+                        email_fallback=False,
+                        data={"click_url": tracked, "campaign_id": str(row.id)},
+                    )
                     ok = True
             except Exception as exc:  # noqa: BLE001
                 err = str(exc)[:300]
                 logger.warning("campaign send to %s failed: %s", u.email, exc)
+            meta: dict = {}
+            if err:
+                meta["error"] = err
+            if variant:
+                meta["variant"] = variant
+            meta["click_url"] = click_track_url(
+                row.id,
+                target_url=(row.config or {}).get("cta_url") or settings_fallback_url(),
+                user_id=u.id,
+                variant=variant,
+            )
             db.add(
                 CampaignSend(
                     campaign_id=row.id,
                     user_id=u.id,
                     channel=channel,
                     status="sent" if ok else "failed",
-                    meta={"error": err} if err else {},
+                    meta=meta,
                 )
             )
             if ok:
                 sent += 1
-        auto_stats = {"sent": sent}
+        auto_stats = {"sent": sent, "ab_enabled": ab_enabled}
 
     row.status = "running"
     row.started_at = datetime.now(timezone.utc)
@@ -397,6 +471,8 @@ async def apply_referral_signup(db: AsyncSession, *, new_user_id: int, referral_
 
 
 async def campaign_stats(db: AsyncSession, campaign_id: int) -> dict:
+    from app.models import CampaignClick
+
     row = await db.get(Campaign, campaign_id)
     if not row:
         raise HTTPException(404, "Кампания не найдена")
@@ -405,6 +481,30 @@ async def campaign_stats(db: AsyncSession, campaign_id: int) -> dict:
     ).all()
     sent = sum(1 for s in sends if s.status == "sent")
     failed = sum(1 for s in sends if s.status == "failed")
+    clicks = int(
+        await db.scalar(
+            select(func.count()).select_from(CampaignClick).where(CampaignClick.campaign_id == campaign_id)
+        )
+        or 0
+    )
+    by_variant: dict[str, dict] = {}
+    for s in sends:
+        v = (s.meta or {}).get("variant")
+        if not v:
+            continue
+        bucket = by_variant.setdefault(v, {"sent": 0, "failed": 0, "clicks": 0})
+        if s.status == "sent":
+            bucket["sent"] += 1
+        elif s.status == "failed":
+            bucket["failed"] += 1
+    click_rows = (
+        await db.scalars(select(CampaignClick).where(CampaignClick.campaign_id == campaign_id))
+    ).all()
+    for c in click_rows:
+        v = c.variant or "?"
+        bucket = by_variant.setdefault(v, {"sent": 0, "failed": 0, "clicks": 0})
+        bucket["clicks"] += 1
+
     ents = int(
         await db.scalar(
             select(func.count()).select_from(CampaignEntitlement).where(
@@ -429,21 +529,113 @@ async def campaign_stats(db: AsyncSession, campaign_id: int) -> dict:
         stats["roi"] = round((revenue - cost) / cost, 4) if cost else None
         row.stats = stats
         await db.flush()
+    reach = stats.get("reach", len(sends)) or 1
     return {
         "id": row.id,
         "name": row.name,
         "status": row.status,
         "template": row.template,
+        "ab_enabled": bool((row.config or {}).get("ab_enabled")),
         "reach": stats.get("reach", len(sends)),
         "sent": sent or ents,
         "failed": failed,
+        "clicked": clicks,
+        "ctr": round(clicks / max(sent or ents or 1, 1), 4),
         "entitlements": ents,
         "revenue_rub": stats.get("revenue_rub", 0),
         "cost_rub": stats.get("cost_rub", 0),
         "roi": stats.get("roi"),
         "auto": stats.get("auto"),
-        "conversion_rate": round((sent or ents) / max(stats.get("reach") or 1, 1), 4),
+        "conversion_rate": round((sent or ents) / max(reach, 1), 4),
+        "by_variant": by_variant,
+        "funnel": {
+            "reach": stats.get("reach", len(sends)),
+            "sent": sent or ents,
+            "clicked": clicks,
+            "converted": int(stats.get("converted") or 0),
+        },
     }
+
+
+async def track_click(
+    db: AsyncSession,
+    *,
+    campaign_id: int,
+    user_id: int | None,
+    variant: str | None,
+    target_url: str | None,
+    ip: str | None,
+) -> dict:
+    from app.models import CampaignClick
+
+    row = await db.get(Campaign, campaign_id)
+    if not row:
+        raise HTTPException(404, "Кампания не найдена")
+    db.add(
+        CampaignClick(
+            campaign_id=campaign_id,
+            user_id=user_id,
+            variant=(variant or "")[:8] or None,
+            target_url=(target_url or "")[:2000] or None,
+            ip_address=ip,
+        )
+    )
+    stats = dict(row.stats or {})
+    stats["clicked"] = int(stats.get("clicked") or 0) + 1
+    row.stats = stats
+    await db.flush()
+    return {"ok": True, "redirect": target_url or settings_fallback_url()}
+
+
+def settings_fallback_url() -> str:
+    from app.core.config import settings
+
+    return settings.SELLER_PUBLIC_URL.rstrip("/") + "/dashboard"
+
+
+def click_track_url(
+    campaign_id: int,
+    *,
+    target_url: str | None = None,
+    user_id: int | None = None,
+    variant: str | None = None,
+) -> str:
+    """Публичный URL трекинга клика → редирект (§11.7 A/B)."""
+    from urllib.parse import urlencode
+
+    from app.core.config import settings
+
+    base = settings.API_BASE_URL.rstrip("/") + f"/api/v1/campaigns/{campaign_id}/click"
+    params: dict[str, str] = {}
+    dest = target_url or settings_fallback_url()
+    params["u"] = dest
+    if user_id is not None:
+        params["uid"] = str(user_id)
+    if variant:
+        params["v"] = str(variant)[:8]
+    return f"{base}?{urlencode(params)}"
+
+
+def inject_tracked_cta(
+    body: str,
+    *,
+    campaign_id: int,
+    user_id: int | None,
+    variant: str | None,
+    cta_url: str | None,
+    cta_label: str = "Открыть",
+) -> str:
+    """Добавить в письмо CTA через click tracker."""
+    tracked = click_track_url(
+        campaign_id,
+        target_url=cta_url or settings_fallback_url(),
+        user_id=user_id,
+        variant=variant,
+    )
+    text = body or ""
+    if tracked in text:
+        return text
+    return f"{text.rstrip()}\n\n{cta_label}: {tracked}\n"
 
 
 async def send_push_broadcast(

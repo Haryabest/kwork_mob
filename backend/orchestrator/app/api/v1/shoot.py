@@ -64,6 +64,9 @@ async def upload_by_link(
     link.used_count += 1
     if link.used_count >= link.max_uses:
         link.status = "used"
+    from app.services.shoot_cleanup import _mark_uploaded
+
+    _mark_uploaded(link)
     try:
         from app.services import company_webhooks as wh
 
@@ -80,6 +83,19 @@ async def upload_by_link(
         )
     except Exception:  # noqa: BLE001
         pass
+    try:
+        from app.services import company_notify as cn
+
+        await cn.notify_company_event(
+            db,
+            company_id=link.company_id,
+            event="photographer_uploaded",
+            title="Фотограф загрузил фото",
+            body=f"Ссылка {token[:8]}…: фото загружены (task {link.task_uuid[:8]}…).",
+            data={"token": token, "task_uuid": link.task_uuid},
+        )
+    except Exception:  # noqa: BLE001
+        pass
     await db.commit()
     return {**result, "status": link.status, "link_used": True}
 
@@ -92,6 +108,9 @@ async def complete_shoot(token: str, db: AsyncSession = Depends(get_db)):
     link.used_count += 1
     if link.used_count >= link.max_uses:
         link.status = "used"
+    from app.services.shoot_cleanup import _mark_uploaded
+
+    _mark_uploaded(link)
     try:
         from app.services import company_webhooks as wh
 
@@ -105,6 +124,19 @@ async def complete_shoot(token: str, db: AsyncSession = Depends(get_db)):
                 "used_count": link.used_count,
                 "status": link.status,
             },
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from app.services import company_notify as cn
+
+        await cn.notify_company_event(
+            db,
+            company_id=link.company_id,
+            event="photographer_uploaded",
+            title="Фотограф загрузил фото",
+            body=f"Ссылка {token[:8]}…: фото загружены (task {link.task_uuid[:8]}…).",
+            data={"token": token, "task_uuid": link.task_uuid},
         )
     except Exception:  # noqa: BLE001
         pass

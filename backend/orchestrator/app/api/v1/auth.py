@@ -209,3 +209,25 @@ async def password_reset(body: PasswordResetRequest, db: AsyncSession = Depends(
 async def password_confirm(body: PasswordConfirmRequest, db: AsyncSession = Depends(get_db)):
     await auth_service.confirm_password_reset(db, body.token, body.new_password)  # type: ignore[arg-type]
     return {"message": "Пароль обновлён"}
+
+
+class PasswordChangeBody(BaseModel):
+    old_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8)
+
+
+@router.post("/password/change")
+async def password_change(
+    body: PasswordChangeBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Смена пароля в настройках (§20.8.2)."""
+    if not verify_password(body.old_password, user.password_hash):
+        raise HTTPException(400, "Неверный текущий пароль")
+    auth_service.validate_password_strength(body.new_password)
+    from app.core.security import hash_password
+
+    user.password_hash = hash_password(body.new_password)
+    await db.commit()
+    return {"ok": True}

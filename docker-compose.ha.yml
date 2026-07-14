@@ -175,6 +175,20 @@ services:
       - "5433:5432"
       - "8008:8008"
 
+  # VIP :5432 → Patroni primary (§22.3). Оркестратор: POSTGRES_HOST=haproxy
+  haproxy:
+    image: haproxy:2.9-alpine
+    hostname: haproxy
+    volumes:
+      - ./infra/ha/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5432:5432"
+      - "8404:8404"
+    depends_on:
+      - postgres-primary
+      - postgres-replica
+    profiles: ["patroni"]
+
   grafana:
     image: grafana/grafana:11.2.0
     ports:
@@ -182,9 +196,11 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
     volumes:
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - ./infra/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./infra/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - grafana_data:/var/lib/grafana
 
 volumes:

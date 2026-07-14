@@ -13,8 +13,9 @@ DEFAULT_LOW_BALANCE = 5000
 
 
 async def maybe_emit_balance_low(db: AsyncSession, company: Company) -> None:
-    """Webhook balance.low при балансе ниже порога из policies (§8 / §2.5.4)."""
+    """Webhook balance.low + email владельцу сервиса (§8 / §12.4.1)."""
     from app.services.company_policies import policies_for_company
+    from app.services import corporate_alerts as ca
 
     policies = policies_for_company(company)
     threshold = int(policies.get("low_balance_threshold", DEFAULT_LOW_BALANCE))
@@ -33,6 +34,10 @@ async def maybe_emit_balance_low(db: AsyncSession, company: Company) -> None:
                 "threshold": threshold,
             },
         )
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        await ca.alert_low_balance(db, company, threshold=threshold)
     except Exception:  # noqa: BLE001
         pass
 

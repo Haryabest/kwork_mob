@@ -32,6 +32,7 @@ class KworkApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final foruiTheme = buildForuiTheme();
     final router = createRouter(api: api, session: session, push: push);
+    push.bindRouter(router);
 
     return MaterialApp.router(
       title: 'KWork Mob',

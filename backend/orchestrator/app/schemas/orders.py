@@ -51,3 +51,6 @@ class OrderCreateRequest(BaseModel):
     zip_sha256: str | None = Field(default=None, min_length=64, max_length=64)
     customer_name: str | None = None
     receipt_email: str | None = None
+    # §11.2.5 / §12.4.1 — для алертов сегментации по устройству
+    device_model: str | None = Field(default=None, max_length=64)
+    os_version: str | None = Field(default=None, max_length=64)

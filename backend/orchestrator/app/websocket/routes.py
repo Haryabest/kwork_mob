@@ -19,6 +19,7 @@ from app.services.queue import queue_service
 from app.services.task_lifecycle import (
     mark_completed,
     mark_failed,
+    mark_processing,
     requeue_task,
     upsert_worker_heartbeat,
 )
@@ -26,6 +27,32 @@ from app.services.worker_hub import WorkerConnection, worker_hub
 
 logger = logging.getLogger(__name__)
 ws_router = APIRouter()
+
+
+async def _worker_log(
+    *,
+    level: str,
+    message: str,
+    worker_id: str | None = None,
+    task_id: str | None = None,
+    details: dict | None = None,
+) -> None:
+    from app.services.log_writer import emit_log
+
+    try:
+        async with async_session() as db:
+            await emit_log(
+                db,
+                source="worker",
+                level=level,
+                message=message,
+                worker_id=worker_id,
+                task_id=task_id,
+                details=details,
+            )
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("worker log emit failed: %s", exc)
 
 
 def _extract_bearer(websocket: WebSocket) -> str | None:
@@ -138,6 +165,7 @@ async def worker_ws(websocket: WebSocket):
                     async with async_session() as db:
                         await upsert_worker_heartbeat(db, worker_id, status="idle")
                     await websocket.send_json({"type": "registered", "worker_id": worker_id})
+                    await _worker_log(level="info", message="ready (reconnect)", worker_id=worker_id)
                     continue
                 conn = WorkerConnection(
                     worker_id=worker_id,
@@ -156,6 +184,12 @@ async def worker_ws(websocket: WebSocket):
                         meta={"version": conn.version, "capabilities": conn.capabilities},
                     )
                 await websocket.send_json({"type": "registered", "worker_id": worker_id})
+                await _worker_log(
+                    level="info",
+                    message=f"ready version={conn.version}",
+                    worker_id=worker_id,
+                    details={"capabilities": conn.capabilities},
+                )
                 continue
 
             if not worker_id or not conn:
@@ -195,6 +229,18 @@ async def worker_ws(websocket: WebSocket):
                     )
                 except Exception:  # noqa: BLE001
                     pass
+                # §12.4.1 / §13.4: GPU >85°C → Telegram + email
+                try:
+                    from app.services import gpu_thermal as thermal_svc
+
+                    await thermal_svc.maybe_alert_from_metrics(
+                        worker_id,
+                        gpu if isinstance(gpu, dict) else {},
+                        task_id=str(data.get("task_id") or getattr(conn, "current_task_id", None) or "")
+                        or None,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
 
             elif msg_type == "task_started":
                 task_id = str(data.get("task_id") or "")
@@ -202,6 +248,12 @@ async def worker_ws(websocket: WebSocket):
                     await worker_hub.set_busy(worker_id, task_id)
                     async with async_session() as db:
                         await mark_processing(db, task_id, worker_id)
+                    await _worker_log(
+                        level="info",
+                        message="task_started",
+                        worker_id=worker_id,
+                        task_id=task_id,
+                    )
 
             elif msg_type == "task_completed":
                 task_id = str(data.get("task_id") or "")
@@ -230,18 +282,21 @@ async def worker_ws(websocket: WebSocket):
                     from sqlalchemy import select
 
                     from app.models import TaskConflict, TaskQueue
+                    from app.services import quality_alerts as qa
 
                     existing = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))
                     if existing and existing.status == "done":
-                        db.add(
-                            TaskConflict(
+                        try:
+                            from app.services import redlock_alerts as rl
+
+                            await rl.notify_redlock_conflict(
                                 task_id=task_id,
                                 worker_id=worker_id,
                                 reason="duplicate_completion",
                                 details={"glb_url": glb_url},
                             )
-                        )
-                        await db.commit()
+                        except Exception:  # noqa: BLE001
+                            pass
                     else:
                         await mark_completed(
                             db,
@@ -250,9 +305,31 @@ async def worker_ws(websocket: WebSocket):
                             usdz_url=data.get("usdz_url"),
                             watermark_hmac=data.get("watermark_hmac"),
                         )
+                        try:
+                            await qa.ingest_from_worker_event(db, task_id=task_id, data=data, failed=False)
+                            await db.commit()
+                        except Exception:  # noqa: BLE001
+                            pass
                 await release_task_lock(task_id)
                 await worker_hub.set_idle(worker_id)
                 await websocket.send_json({"type": "ack", "of": "task_completed", "task_id": task_id})
+                await _worker_log(
+                    level="info",
+                    message="task_completed",
+                    worker_id=worker_id,
+                    task_id=task_id,
+                    details={"glb_url": glb_url, "quality_score": quality_score},
+                )
+
+            elif msg_type == "segmentation_stats":
+                task_id = str(data.get("task_id") or "")
+                if task_id:
+                    async with async_session() as db:
+                        from app.services import quality_alerts as qa
+
+                        await qa.ingest_from_worker_event(db, task_id=task_id, data=data)
+                        await db.commit()
+                await websocket.send_json({"type": "ack", "of": "segmentation_stats", "task_id": task_id})
 
             elif msg_type == "task_failed":
                 task_id = str(data.get("task_id") or "")
@@ -263,6 +340,16 @@ async def worker_ws(websocket: WebSocket):
                     async with async_session() as db:
                         await mark_failed(db, task_id, error)
                 elif "failed_segmentation" in error or data.get("checkpoint_path"):
+                    async with async_session() as db:
+                        from app.services import quality_alerts as qa
+
+                        try:
+                            await qa.ingest_from_worker_event(
+                                db, task_id=task_id, data=data, failed=True
+                            )
+                            await db.commit()
+                        except Exception:  # noqa: BLE001
+                            pass
                     if data.get("checkpoint_path"):
                         async with async_session() as db:
                             from sqlalchemy import select
@@ -281,6 +368,12 @@ async def worker_ws(websocket: WebSocket):
                         await mark_failed(db, task_id, error)
                 await worker_hub.set_idle(worker_id)
                 await websocket.send_json({"type": "ack", "of": "task_failed", "task_id": task_id})
+                await _worker_log(
+                    level="error",
+                    message=f"task_failed: {error[:500]}",
+                    worker_id=worker_id,
+                    task_id=task_id,
+                )
 
             elif msg_type == "task_paused":
                 task_id = str(data.get("task_id") or "")
@@ -302,6 +395,13 @@ async def worker_ws(websocket: WebSocket):
                     await requeue_task(task_id)
                 await worker_hub.set_idle(worker_id)
                 await websocket.send_json({"type": "ack", "of": "task_paused", "task_id": task_id})
+                await _worker_log(
+                    level="warning",
+                    message=f"task_paused: {data.get('reason') or 'stop'}",
+                    worker_id=worker_id,
+                    task_id=task_id,
+                    details={"checkpoint_path": cp},
+                )
 
             elif msg_type == "overheating":
                 temp = data.get("temp")
@@ -311,13 +411,48 @@ async def worker_ws(websocket: WebSocket):
                         db, worker_id, status="overheated", meta={"temp": temp}
                     )
                 await websocket.send_json({"type": "ack", "of": "overheating", "temp": temp})
+                await _worker_log(
+                    level="warning",
+                    message=f"GPU overheating {temp}°C",
+                    worker_id=worker_id,
+                    task_id=str(data.get("task_id") or "") or None,
+                    details={"temp": temp},
+                )
+                try:
+                    from app.services import gpu_thermal as thermal_svc
+
+                    await thermal_svc.maybe_alert_from_metrics(
+                        worker_id,
+                        {"gpu_temp": temp},
+                        task_id=str(data.get("task_id") or "") or None,
+                        force=True,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
 
             elif msg_type == "task_conflict":
                 task_id = str(data.get("task_id") or "")
                 await worker_hub.set_idle(worker_id)
                 if task_id:
                     await requeue_task(task_id)
+                    try:
+                        from app.services import redlock_alerts as rl
+
+                        await rl.notify_redlock_conflict(
+                            task_id=task_id,
+                            worker_id=worker_id,
+                            reason=str(data.get("reason") or "lock_not_acquired"),
+                            conflict_with=str(data.get("conflict_with") or "") or None,
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
                 await websocket.send_json({"type": "ack", "of": "task_conflict"})
+                await _worker_log(
+                    level="warning",
+                    message=f"task_conflict: {data.get('reason') or 'duplicate'}",
+                    worker_id=worker_id,
+                    task_id=task_id or None,
+                )
 
             else:
                 await websocket.send_json({"type": "ack", "of": msg_type})

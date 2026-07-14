@@ -38,12 +38,38 @@ type Invite = {
   expires_at?: string;
 };
 
+type TeamFunnelRow = {
+  user_id: number;
+  email?: string | null;
+  full_name?: string | null;
+  funnel: {
+    generated: number;
+    downloaded: number;
+    links_added: number;
+    verified: number;
+    manual_marked: number;
+  };
+  avg_days_to_verification?: number | null;
+};
+
+type AccessRow = {
+  id: number;
+  user_id: number;
+  model_uuid: string;
+  file_format?: string | null;
+  ip_address?: string | null;
+  timestamp?: string | null;
+};
+
 /** §20.5 Команда + shoot_link Owner */
 export default function TeamPage() {
   const [inviteOpen, inviteHandlers] = useDisclosure(false);
   const [shootOpen, shootHandlers] = useDisclosure(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [funnelRows, setFunnelRows] = useState<TeamFunnelRow[]>([]);
+  const [funnelFrom, setFunnelFrom] = useState('');
+  const [funnelTo, setFunnelTo] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<string | null>('photographer');
   const [limitOrders, setLimitOrders] = useState<number | string>(3);
@@ -53,19 +79,48 @@ export default function TeamPage() {
   const [shootUrl, setShootUrl] = useState<string | null>(null);
   const [shootCategory, setShootCategory] = useState<string | null>('other');
   const [shootTier, setShootTier] = useState<string | null>('small');
+  const [accessRows, setAccessRows] = useState<AccessRow[]>([]);
+  const [shootStats, setShootStats] = useState<{
+    created: number;
+    expired: number;
+    success: number;
+    active: number;
+    conversion_rate: number;
+  } | null>(null);
+
+  const funnelParams = useCallback(() => {
+    return {
+      date_from: funnelFrom ? `${funnelFrom}T00:00:00Z` : undefined,
+      date_to: funnelTo ? `${funnelTo}T23:59:59Z` : undefined,
+    };
+  }, [funnelFrom, funnelTo]);
 
   const load = useCallback(async () => {
     try {
-      const [m, i] = await Promise.all([
+      const [m, i, f, a, ss] = await Promise.all([
         api.get<{ items: Member[] }>('/company/members'),
         api.get<{ items: Invite[] }>('/company/invitations'),
+        api.get<{ items: TeamFunnelRow[] }>('/company/publication-funnel', { params: funnelParams() }),
+        api.get<{ items: AccessRow[] }>('/company/access-log').catch(() => ({ data: { items: [] as AccessRow[] } })),
+        api
+          .get<{
+            created: number;
+            expired: number;
+            success: number;
+            active: number;
+            conversion_rate: number;
+          }>('/company/shoot_links/stats')
+          .catch(() => ({ data: null })),
       ]);
       setMembers(m.data.items ?? []);
       setInvites(i.data.items ?? []);
+      setFunnelRows(f.data.items ?? []);
+      setAccessRows(a.data.items ?? []);
+      if (ss.data) setShootStats(ss.data);
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
     }
-  }, []);
+  }, [funnelParams]);
 
   useEffect(() => {
     void load();
@@ -109,6 +164,7 @@ export default function TeamPage() {
       });
       setShootUrl(data.url);
       notifications.show({ color: 'teal', message: 'Ссылка для фотографа создана' });
+      await load();
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
     } finally {
@@ -143,6 +199,129 @@ export default function TeamPage() {
           { href: '/team/api-keys', label: 'API-ключи' },
         ]}
       />
+
+      <Surface mb="md">
+        <Group justify="space-between" mb="sm" wrap="wrap">
+          <Text fw={600}>Воронка публикации §7.9</Text>
+          <Group align="flex-end" wrap="wrap">
+            <TextInput
+              type="date"
+              label="С"
+              size="xs"
+              value={funnelFrom}
+              onChange={(e) => setFunnelFrom(e.currentTarget.value)}
+            />
+            <TextInput
+              type="date"
+              label="По"
+              size="xs"
+              value={funnelTo}
+              onChange={(e) => setFunnelTo(e.currentTarget.value)}
+            />
+            <Button variant="light" size="xs" onClick={() => void load()}>
+              Период
+            </Button>
+            <Button
+              variant="light"
+              size="xs"
+              onClick={async () => {
+                try {
+                  const { data } = await api.get<Blob>('/company/publication-funnel', {
+                    params: { export: true, ...funnelParams() },
+                    responseType: 'blob',
+                  });
+                  const url = URL.createObjectURL(data);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'team-publication-funnel.csv';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch (e) {
+                  notifications.show({ color: 'red', message: apiMessage(e) });
+                }
+              }}
+            >
+              CSV
+            </Button>
+          </Group>
+        </Group>
+        <ScrollTable>
+          <Table miw={640} verticalSpacing="sm">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Сотрудник</Table.Th>
+                <Table.Th>Gen</Table.Th>
+                <Table.Th>DL</Table.Th>
+                <Table.Th>Links</Table.Th>
+                <Table.Th>OK</Table.Th>
+                <Table.Th>Дней→verify</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {funnelRows.length === 0 ? (
+                <Table.Tr>
+                  <Table.Td colSpan={6}>
+                    <Text c="dimmed" size="sm">
+                      Нет данных (нужны завершённые генерации)
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              ) : (
+                funnelRows.map((r) => (
+                  <Table.Tr key={r.user_id}>
+                    <Table.Td>{r.full_name || r.email || r.user_id}</Table.Td>
+                    <Table.Td>{r.funnel.generated}</Table.Td>
+                    <Table.Td>{r.funnel.downloaded}</Table.Td>
+                    <Table.Td>{r.funnel.links_added}</Table.Td>
+                    <Table.Td>{r.funnel.verified}</Table.Td>
+                    <Table.Td>{r.avg_days_to_verification ?? '—'}</Table.Td>
+                  </Table.Tr>
+                ))
+              )}
+            </Table.Tbody>
+          </Table>
+        </ScrollTable>
+      </Surface>
+
+      <Surface mb="md">
+        <Text fw={600} mb="sm">
+          Access log §10.7.2 (скачивания моделей)
+        </Text>
+        <ScrollTable>
+          <Table miw={560} verticalSpacing="sm">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Время</Table.Th>
+                <Table.Th>User</Table.Th>
+                <Table.Th>Model</Table.Th>
+                <Table.Th>Format</Table.Th>
+                <Table.Th>IP</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {accessRows.length === 0 ? (
+                <Table.Tr>
+                  <Table.Td colSpan={5}>
+                    <Text c="dimmed" size="sm">
+                      Пока нет скачиваний
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              ) : (
+                accessRows.slice(0, 50).map((r) => (
+                  <Table.Tr key={r.id}>
+                    <Table.Td>{r.timestamp ? new Date(r.timestamp).toLocaleString('ru-RU') : '—'}</Table.Td>
+                    <Table.Td>{r.user_id}</Table.Td>
+                    <Table.Td>{r.model_uuid.slice(0, 8)}…</Table.Td>
+                    <Table.Td>{r.file_format ?? '—'}</Table.Td>
+                    <Table.Td>{r.ip_address ?? '—'}</Table.Td>
+                  </Table.Tr>
+                ))
+              )}
+            </Table.Tbody>
+          </Table>
+        </ScrollTable>
+      </Surface>
 
       <Surface>
         <FilterRow>
@@ -266,6 +445,13 @@ export default function TeamPage() {
           <Text size="sm" c="#6d6c77">
             Внештатный фотограф загрузит 12 ракурсов без регистрации (§3 / §20).
           </Text>
+          {shootStats && (
+            <Text size="sm">
+              Статистика: создано {shootStats.created} · активны {shootStats.active} · истекли{' '}
+              {shootStats.expired} · успешные {shootStats.success} (
+              {(shootStats.conversion_rate * 100).toFixed(0)}%)
+            </Text>
+          )}
           <Select
             label="Категория"
             value={shootCategory}

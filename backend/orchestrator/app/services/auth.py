@@ -19,8 +19,9 @@ from app.core.security import (
     verify_password,
 )
 from app.models import Company, CompanyMember, RefreshToken, User
-from app.services.email import send_password_reset_email, send_verification_email
 from app.schemas.auth import AccountTypeRequest
+from app.services import pii as pii_svc
+from app.services.email import send_password_reset_email, send_verification_email
 
 EMAIL_CODE_PREFIX = "email_verify:"
 PASSWORD_RESET_PREFIX = "password_reset:"
@@ -128,6 +129,7 @@ async def login_user(
     if user.status == "blocked":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Аккаунт заблокирован")
 
+    user.last_login_at = datetime.now(timezone.utc)
     return await issue_tokens_for_user(db, user, remember_me=remember_me)
 
 
@@ -146,6 +148,7 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str) -> tuple[str, str
     if not user or user.status == "blocked":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Пользователь недоступен")
 
+    user.last_login_at = datetime.now(timezone.utc)
     token_row.revoked = True
     access_token = create_access_token(user.id, role=user.staff_role or "user")
     new_refresh, new_jti, expires_at = create_refresh_token(user.id)
@@ -168,7 +171,7 @@ async def set_account_type(db: AsyncSession, user: User, body: AccountTypeReques
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Сначала подтвердите email")
 
     if body.full_name:
-        user.full_name = body.full_name.strip()
+        pii_svc.encrypt_user_fields(user, {"full_name": body.full_name.strip()})
 
     if account_type == "individual":
         user.account_type = "individual"
@@ -201,19 +204,21 @@ async def set_account_type(db: AsyncSession, user: User, body: AccountTypeReques
         inn=body.inn.strip(),
         owner_id=user.id,
         status="active",
-        settings={
-            "kpp": body.kpp,
-            "ogrn": ogrn,
-            "legal_address": body.legal_address,
-            "actual_address": body.actual_address or body.legal_address,
-            "bank_name": body.bank_name,
-            "bik": body.bik,
-            "checking_account": checking,
-            "corr_account": body.corr_account,
-            "director_name": body.director_name,
-            "docs_email": body.docs_email or user.email,
-            "verification": "manual_confirmed",
-        },
+        settings=pii_svc.encrypt_company_settings(
+            {
+                "kpp": body.kpp,
+                "ogrn": ogrn,
+                "legal_address": body.legal_address,
+                "actual_address": body.actual_address or body.legal_address,
+                "bank_name": body.bank_name,
+                "bik": body.bik,
+                "checking_account": checking,
+                "corr_account": body.corr_account,
+                "director_name": body.director_name,
+                "docs_email": body.docs_email or user.email,
+                "verification": "manual_confirmed",
+            }
+        ),
     )
     db.add(company)
     await db.flush()
@@ -221,7 +226,7 @@ async def set_account_type(db: AsyncSession, user: User, body: AccountTypeReques
     user.account_type = "legal"
     user.status = "active_legal"
     if body.director_name and not user.full_name:
-        user.full_name = body.director_name.strip()
+        pii_svc.encrypt_user_fields(user, {"full_name": body.director_name.strip()})
     await db.commit()
     await db.refresh(user)
     return user

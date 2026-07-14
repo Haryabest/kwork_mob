@@ -12,7 +12,8 @@
 - RTX 5070: `ATTN_BACKEND=xformers`, resolution **512** (не 1024+)
 - retopo/bake: copy при TRELLIS.2 (PBR уже в GLB); compress_draco — реальный
 - Stub — только dev smoke, не production
-- **Приёмка:** `e2e_trellis_acceptance.py --preflight --fail-on-budget`
+- **Приёмка:** `e2e_trellis_acceptance.py --preflight --fail-on-budget`, runbook [`docs/deployment/GPU_E2E_RTX5070.md`](docs/deployment/GPU_E2E_RTX5070.md)
+- TRELLIS.2 **single-image** (`view_00`), legacy multi-view — deprecated (`TRELLIS_VERSION=1`)
 - `remove_background`: rembg → DeepLab → **SAM** → GrabCut
 - `retopology` / `bake_pbr` / `compress_draco` / `export_usdz_tryon` / `render_video_360` / `apply_hole_filling`
 - Tailscale entrypoint + WS fallback
@@ -37,6 +38,7 @@
 - Бонус: промокод / free_generation (`publication_bonus_settings`)
 - Share `/share/{hash}` + seller viewer с model-viewer
 - Seller UI: ссылка на карточку, статусы, share
+- Воронка публикации §7.9: admin dashboard + team funnel + CSV
 
 ---
 
@@ -92,4 +94,29 @@ Auth, orders, NSFW, queue/dispatcher, YooKassa, promo/tariffs, campaigns/tax/ups
 - Grafana JSON; ClickHouse MV в init; MinIO `/storage/smart`
 - Миграция `016_b2b_ops`
 
-См. пробелы: [`not-ready.md`](./not-ready.md).
+### Compliance / security (2026-07-14)
+
+- E2E шифрование фото §10.6.2: policy `e2e_photo_encryption`, mobile AES-GCM, worker decrypt in temp
+- Vault/AES ПД §2.7, WB/Ozon upload scaffold §14.6
+
+### Seller 2FA / NSFW SLA / shoot deep link / campaign A/B (2026-07-14)
+
+- Seller `/settings`: профиль, пароль, TOTP 2FA, notification prefs; AuthCard 2FA challenge
+- NSFW SLA escalate: Celery + `POST /admin/nsfw/escalate` + ModerationPage
+- Mobile `/shoot/{token}` guest AR flow + Android deep link + web «Открыть в приложении»
+- Campaigns A/B: `ab_enabled`, stats funnel/by_variant/CTR, `GET /campaigns/{id}/click`
+- Миграция `023_prefs_campaign_clicks`
+
+### Access log / audit / alerts / NSFW preview (2026-07-14)
+
+- Presigned put/get → `access_log` (models, photos/prepare, storage)
+- Audit: `api_key_created|revoked`, `tariff_price_changed`
+- Disk/SMART + GPU thermal dual-channel Telegram+email (`GPU_TEMP_ALERT_C=85`)
+- NSFW photo previews + `moderation_blacklist` CRUD; миграция `024`
+
+### Shoot stats / UL / click / restore / cancel (2026-07-14)
+
+- Shoot-link stats §3.15.4 admin+company UI
+- iOS Universal Links + AASA/assetlinks + kworkmob scheme
+- Campaign CTA click tracker в email/push
+- Restore sources API + audit/access_log; cancel → `order_cancelled`

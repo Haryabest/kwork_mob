@@ -25,10 +25,10 @@ class RegisterRequest(BaseModel):
     def passwords_match(self):
         if self.password != self.password_confirm:
             raise ValueError("Пароли не совпадают")
-        required = {"terms", "privacy", "rights", "nsfw_rules"}
+        required = {"terms", "privacy", "offer", "rights", "nsfw_rules"}
         if not required.issubset(set(self.consents)):
             raise ValueError(
-                "Необходимо принять пользовательское соглашение, политику ПДн, "
+                "Необходимо принять соглашение, политику ПДн, оферту, "
                 "подтверждение прав и правила запрещённого контента"
             )
         return self

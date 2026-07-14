@@ -1530,22 +1530,28 @@ python add_watermark_dwt.py \
 
 - **FID не используется в production.** Скрипт `compute_fid.py` отсутствует в Docker-образе, не вызывается, нет соответствующего конфигурационного параметра. Для исследовательских целей (локальное тестирование) может использоваться отдельный репозиторий, не входящий в состав воркера.
 
-### 5.5 Генерация (TRELLIS) с дополнительными параметрами
+### 5.5 Генерация (TRELLIS.2) — production
 
-**Скрипт `trellis_generate.py`** (пример интерфейса):
+> **Production (2026):** `TRELLIS_VERSION=2`, модель `microsoft/TRELLIS.2-4B`, **single-image** input (`photos_nobg/view_00`), native PBR в GLB.  
+> **Legacy (deprecated):** TRELLIS v1 multi-view 12 кадров — только `TRELLIS_VERSION=1`, не используется на RTX 5070.
+
+**Скрипт `trellis_generate.py`** → `trellis_runtime.run_trellis2()`:
 
 ```python
-def generate_3d_model(photos_dir, output_dir, category, upsell_options):
-    # 1. Загружает 12 фото в порядке ракурсов (уже без фона, RGBA)
-    # 2. Запускает multi-view reconstruction через TRELLIS
-    # 3. Сохраняет сырой mesh (GLTF) в output_dir/raw_mesh.glb
-    # 4. Выполняет ретопологию (если нужно) и генерацию PBR
-    # 5. Сохраняет финальный model.glb (ещё без водяных знаков и сжатия)
+def generate_3d_model(task_dir, output_dir, category, upsell_options):
+    # 1. remove_background → photos_nobg/view_00 (RGBA)
+    # 2. TRELLIS.2 image→3D (pipeline_type=512, low_vram=1 для 12 GB)
+    # 3. raw_mesh.glb с PBR; retopo/bake — copy/skip при TRELLIS.2
     pass
 ```
 
-- **Интеграция с TRELLIS:** использует официальный API: `from trellis import TrellisPipeline`. Загружает веса при первом вызове (кэширует в памяти для следующих задач).
-- **Оптимизация VRAM:** при получении задачи воркер освобождает память (вызов `torch.cuda.empty_cache()`) перед запуском.
+- **RTX 5070 (sm_120):** PyTorch **cu128**, `TRELLIS2_PIPELINE_TYPE=512`, `TRELLIS2_LOW_VRAM=1`
+- **Приёмка KPI:** `e2e_trellis_acceptance.py --preflight --fail-on-budget`, ≤180 с local
+- **Интеграция:** `Trellis2ImageTo3DPipeline.from_pretrained`, o-voxel export GLB
+
+<!-- legacy 5.5 multi-view:
+- **Интеграция с TRELLIS v1:** multi-view reconstruction (12 изображений) — deprecated
+-->
 
 ### 5.6 Graceful shutdown и перегрев
 
@@ -1692,15 +1698,15 @@ docker run --gpus all \
 **Обработка ошибок:**
 - Если и SAM не даёт приемлемой маски (уверенность < 0.7), задача помечается как `failed_segmentation`, возвращается в очередь (с чекпоинтом) и отправляется алерт владельцу сервиса. Пользователь получает уведомление: «Не удалось выделить товар на фоне. Убедитесь, что товар контрастирует с фоном и занимает ~70% кадра».
 
-### 6.2 Этап 1: Генерация базовой геометрии и текстуры (TRELLIS)
+### 6.2 Этап 1: Генерация (TRELLIS.2 — production)
 
-- Воркер вызывает TRELLIS в режиме multi-view reconstruction (12 изображений, уже без фона – RGBA).
-- **Параметры TRELLIS:**
-  - Разрешение сетки: 512³ (высокое) или 256³ (если VRAM <16 ГБ). Для корпоративных премиум-заказов – 512³ всегда.
-  - Уровень детализации: по умолчанию `high`.
-  - Использовать 3D Gaussians или сразу mesh – выбран mesh (для совместимости с GLB).
-- **Выход TRELLIS:** сырой mesh (формат GLTF/OBJ) с высоким количеством полигонов (1–3 млн треугольников) и текстурная карта (diffuse).
-- **Промежуточное сохранение:** raw_mesh.glb и raw_texture.png сохраняются во временной папке (часть чекпоинта).
+- **Production:** TRELLIS.2 **single-image** (`photos_nobg/view_00`), native PBR в выходном GLB.
+- **Параметры:** `TRELLIS2_PIPELINE_TYPE=512` (12 GB VRAM / RTX 5070), `TRELLIS2_LOW_VRAM=1`, decimation/texture через o-voxel.
+- **Legacy (deprecated):** TRELLIS v1 multi-view 12 RGBA — только при `TRELLIS_VERSION=1`.
+
+<!-- legacy 6.2:
+- Воркер вызывает TRELLIS в режиме multi-view reconstruction (12 изображений)
+-->
 
 ### 6.3 Этап 2: Ретопология (снижение полигонов и упорядочивание сетки)
 

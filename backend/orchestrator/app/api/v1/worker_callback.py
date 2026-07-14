@@ -17,6 +17,8 @@ router = APIRouter(prefix="/worker", tags=["Worker callback"])
 
 
 class WorkerEvent(BaseModel):
+    model_config = {"extra": "allow"}
+
     type: str
     task_id: str = Field(min_length=8)
     worker_id: str | None = None
@@ -28,6 +30,9 @@ class WorkerEvent(BaseModel):
     quality_score: float | None = None
     error: str | None = None
     checkpoint_path: str | None = None
+    device_model: str | None = None
+    os_version: str | None = None
+    segmentation: dict | None = None
 
 
 def _verify_worker_token(authorization: str | None = Header(default=None)) -> None:
@@ -58,19 +63,18 @@ async def worker_event(body: WorkerEvent, _: None = Depends(_verify_worker_token
         async with async_session() as db:
             from sqlalchemy import select
 
-            from app.models import TaskConflict, TaskQueue
+            from app.models import TaskQueue
 
             existing = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))
             if existing and existing.status == "done":
-                db.add(
-                    TaskConflict(
-                        task_id=task_id,
-                        worker_id=worker_id,
-                        reason="duplicate_completion",
-                        details={"glb_url": glb_url, "via": "http"},
-                    )
+                from app.services import redlock_alerts as rl
+
+                await rl.notify_redlock_conflict(
+                    task_id=task_id,
+                    worker_id=worker_id,
+                    reason="duplicate_completion",
+                    details={"glb_url": glb_url, "via": "http"},
                 )
-                await db.commit()
             else:
                 await mark_completed(
                     db,
@@ -79,9 +83,38 @@ async def worker_event(body: WorkerEvent, _: None = Depends(_verify_worker_token
                     usdz_url=body.usdz_url,
                     watermark_hmac=body.watermark_hmac,
                 )
+                from app.services import quality_alerts as qa
+
+                await qa.ingest_from_worker_event(
+                    db,
+                    task_id=task_id,
+                    data=body.model_dump(),
+                    failed=False,
+                )
         await release_task_lock(task_id)
         await worker_hub.set_idle(worker_id)
+        from app.services.log_writer import emit_log
+
+        async with async_session() as db:
+            await emit_log(
+                db,
+                source="worker",
+                level="info",
+                message="task_completed (http)",
+                worker_id=worker_id,
+                task_id=task_id,
+                details={"glb_url": glb_url, "via": "http"},
+            )
+            await db.commit()
         return {"ok": True, "status": "completed", "task_id": task_id}
+
+    if body.type == "segmentation_stats":
+        from app.services import quality_alerts as qa
+
+        async with async_session() as db:
+            await qa.ingest_from_worker_event(db, task_id=task_id, data=body.model_dump())
+            await db.commit()
+        return {"ok": True, "status": "segmentation_recorded", "task_id": task_id}
 
     if body.type == "task_failed":
         error = str(body.error or "unknown")
@@ -90,6 +123,13 @@ async def worker_event(body: WorkerEvent, _: None = Depends(_verify_worker_token
             async with async_session() as db:
                 await mark_failed(db, task_id, error)
         elif "failed_segmentation" in error or body.checkpoint_path:
+            async with async_session() as db:
+                from app.services import quality_alerts as qa
+
+                await qa.ingest_from_worker_event(
+                    db, task_id=task_id, data=body.model_dump(), failed=True
+                )
+                await db.commit()
             if body.checkpoint_path:
                 async with async_session() as db:
                     from sqlalchemy import select
@@ -107,6 +147,19 @@ async def worker_event(body: WorkerEvent, _: None = Depends(_verify_worker_token
             async with async_session() as db:
                 await mark_failed(db, task_id, error)
         await worker_hub.set_idle(worker_id)
+        from app.services.log_writer import emit_log
+
+        async with async_session() as db:
+            await emit_log(
+                db,
+                source="worker",
+                level="error",
+                message=f"task_failed (http): {error[:500]}",
+                worker_id=worker_id,
+                task_id=task_id,
+                details={"via": "http"},
+            )
+            await db.commit()
         return {"ok": True, "status": "failed", "task_id": task_id}
 
     raise HTTPException(400, f"Unsupported event type: {body.type}")

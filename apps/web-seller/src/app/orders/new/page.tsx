@@ -2,11 +2,13 @@
 
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Checkbox,
   FileButton,
   Group,
+  Modal,
   NumberInput,
   Progress,
   Select,
@@ -47,12 +49,30 @@ type Prep = {
 
 type Upsell = { code: string; title: string; amount_rub: number };
 
+type Me = {
+  age_verified?: boolean;
+  date_of_birth?: string | null;
+};
+
+function ageFromIso(iso: string): number | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date();
+  let years = today.getFullYear() - d.getFullYear();
+  const m = today.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) years -= 1;
+  return years;
+}
+
 export default function NewOrderPage() {
   const router = useRouter();
   const [files, setFiles] = useState<(File | null)[]>(Array(12).fill(null));
   const [category, setCategory] = useState<string | null>('other');
   const [tier, setTier] = useState<string | null>('small');
   const [birthDate, setBirthDate] = useState('');
+  const [ageVerified, setAgeVerified] = useState(false);
+  const [ageModal, setAgeModal] = useState(false);
+  const [modalBirth, setModalBirth] = useState('');
   const [promocode, setPromocode] = useState('');
   const [upsells, setUpsells] = useState<Upsell[]>([]);
   const [selectedUpsells, setSelectedUpsells] = useState<string[]>([]);
@@ -63,18 +83,56 @@ export default function NewOrderPage() {
   const [progress, setProgress] = useState(0);
 
   const ready = files.every(Boolean);
-  const needsAge = category === 'adult';
+  const needsAge = category === 'adult' && !ageVerified;
 
   useEffect(() => {
     api
       .get<{ items: Upsell[] }>('/orders/upsells')
       .then(({ data }) => setUpsells(data.items ?? []))
       .catch(() => undefined);
+    api
+      .get<Me>('/user/me')
+      .then(({ data }) => {
+        if (data.age_verified) {
+          setAgeVerified(true);
+          if (data.date_of_birth) setBirthDate(data.date_of_birth);
+        }
+      })
+      .catch(() => undefined);
   }, []);
+
+  function onCategoryChange(v: string | null) {
+    setCategory(v);
+    if (v === 'adult' && !ageVerified) {
+      setModalBirth(birthDate);
+      setAgeModal(true);
+    }
+  }
+
+  function confirmAgeModal() {
+    if (!modalBirth) {
+      notifications.show({ color: 'red', message: 'Введите дату рождения' });
+      return;
+    }
+    const years = ageFromIso(modalBirth);
+    if (years == null) {
+      notifications.show({ color: 'red', message: 'Некорректная дата' });
+      return;
+    }
+    if (years < 18) {
+      notifications.show({ color: 'red', message: 'Создание модели доступно только с 18 лет' });
+      setCategory('other');
+      setAgeModal(false);
+      return;
+    }
+    setBirthDate(modalBirth);
+    setAgeModal(false);
+  }
 
   async function submit() {
     if (!ready || !category || !tier) return;
     if (needsAge && !birthDate) {
+      setAgeModal(true);
       notifications.show({ color: 'red', message: 'Для 18+ укажите дату рождения' });
       return;
     }
@@ -108,8 +166,23 @@ export default function NewOrderPage() {
         scale_calibration: selectedUpsells.includes('real_scale')
           ? { width: Number(scaleW), height: Number(scaleH), depth: Number(scaleD) }
           : undefined,
-        birth_date: needsAge ? birthDate : undefined,
+        birth_date: needsAge || (category === 'adult' && birthDate) ? birthDate || undefined : undefined,
         promocode: promocode.trim() || undefined,
+        device_model: (() => {
+          const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+          const low = ua.toLowerCase();
+          if (/iphone|ipad/.test(low)) return 'iOS Web';
+          if (/android/.test(low)) return 'Android Web';
+          if (/windows/.test(low)) return 'Windows';
+          if (/mac os|macintosh/.test(low)) return 'macOS';
+          if (/linux/.test(low)) return 'Linux';
+          return 'web';
+        })(),
+        os_version: (() => {
+          const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+          const m = ua.match(/\(([^)]+)\)/);
+          return (m?.[1] || ua).slice(0, 64);
+        })(),
       });
       setProgress(100);
       if (order.status === 'awaiting_payment') {
@@ -137,7 +210,7 @@ export default function NewOrderPage() {
             <Select
               label="Категория"
               value={category}
-              onChange={setCategory}
+              onChange={onCategoryChange}
               data={[
                 { value: 'clothing', label: 'Одежда' },
                 { value: 'shoes', label: 'Обувь' },
@@ -159,19 +232,31 @@ export default function NewOrderPage() {
               ]}
             />
           </Group>
-          {needsAge && (
+          {category === 'adult' && (
             <>
-              <Alert color="grape" title="Подтверждение возраста">
-                Подтвердите, что вам 18 лет. Введите дату рождения.
-              </Alert>
-              <TextInput
-                type="date"
-                label="Дата рождения"
-                value={birthDate}
-                onChange={(e) => setBirthDate(e.currentTarget.value)}
-                required
-                maw={280}
-              />
+              {ageVerified ? (
+                <Alert color="teal" title="Возраст подтверждён">
+                  <Group gap="xs">
+                    <Badge color="teal">18+</Badge>
+                    <Text size="sm">Повторный ввод даты рождения не требуется.</Text>
+                  </Group>
+                </Alert>
+              ) : (
+                <>
+                  <Alert color="grape" title="Подтверждение возраста (§10.8.3)">
+                    Подтвердите, что вам 18 лет. Введите дату рождения.
+                  </Alert>
+                  <TextInput
+                    type="date"
+                    label="Дата рождения"
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.currentTarget.value)}
+                    required
+                    maw={280}
+                    description="Сохраняется в профиле после успешной проверки"
+                  />
+                </>
+              )}
             </>
           )}
           <TextInput
@@ -269,6 +354,39 @@ export default function NewOrderPage() {
           </Button>
         </Stack>
       </Surface>
+
+      <Modal
+        opened={ageModal}
+        onClose={() => {
+          setAgeModal(false);
+          if (!birthDate && !ageVerified) setCategory('other');
+        }}
+        title="Подтвердите, что вам 18 лет"
+        centered
+      >
+        <Stack>
+          <Text size="sm">Введите дату рождения. При возрасте &lt;18 создание модели блокируется.</Text>
+          <TextInput
+            type="date"
+            label="Дата рождения"
+            value={modalBirth}
+            onChange={(e) => setModalBirth(e.currentTarget.value)}
+            required
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setAgeModal(false);
+                setCategory('other');
+              }}
+            >
+              Отмена
+            </Button>
+            <Button onClick={confirmAgeModal}>Подтвердить</Button>
+          </Group>
+        </Stack>
+      </Modal>
     </SellerShell>
   );
 }

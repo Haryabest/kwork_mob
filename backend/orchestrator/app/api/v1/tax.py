@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from app.core.security import get_current_db_user, require_admin
 from app.core.vpn import require_vpn
 from app.models import User
 from app.services import tax as tax_svc
+from app.services import pii as pii_svc
 
 router = APIRouter()
 
@@ -51,8 +52,22 @@ async def get_tax_settings(db: AsyncSession = Depends(get_db)):
 
 
 @admin_router.put("/settings")
-async def put_tax_settings(body: TaxSettingsBody, db: AsyncSession = Depends(get_db)):
-    row = await tax_svc.update_settings(db, body.model_dump(exclude_unset=True))
+async def put_tax_settings(
+    body: TaxSettingsBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    staff: dict = Depends(require_admin),
+):
+    payload = body.model_dump(exclude_unset=True)
+    row = await tax_svc.update_settings(db, payload)
+    ip = request.client.host if request.client else None
+    await pii_svc.audit_pii_change(
+        db,
+        user_id=int(staff["sub"]),
+        action="admin.tax_settings_update",
+        fields=[k for k in payload if k not in ("mode", "vat_rate")],
+        ip=ip,
+    )
     await db.commit()
     return tax_svc.settings_public(row)
 

@@ -2,15 +2,16 @@
 
 import {
   Accordion,
+  Badge,
   Button,
+  FileButton,
+  Group,
   Select,
   Stack,
   Table,
   Text,
   TextInput,
   Textarea,
-  Badge,
-  Group,
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -27,15 +28,26 @@ type Ticket = {
   category?: string | null;
   message: string;
   status: string;
+  attachments?: string[];
   created_at?: string | null;
 };
 
 const STATUS_LABEL: Record<string, string> = {
   new: 'Новое',
+  in_progress: 'В работе',
   answered: 'Отвечено',
   waiting_user: 'Ожидает вас',
   closed: 'Закрыто',
   resolved: 'Решено',
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  new: 'blue',
+  in_progress: 'yellow',
+  answered: 'teal',
+  waiting_user: 'orange',
+  closed: 'gray',
+  resolved: 'gray',
 };
 
 /** §20.7 Поддержка и FAQ */
@@ -45,7 +57,9 @@ export default function SupportPage() {
   const [subject, setSubject] = useState('');
   const [category, setCategory] = useState<string | null>('Заказ');
   const [message, setMessage] = useState('');
+  const [attachments, setAttachments] = useState<{ key: string; url: string; filename?: string }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
 
   async function load() {
@@ -72,24 +86,58 @@ export default function SupportPage() {
     );
   }, [faq, search]);
 
+  async function onFiles(files: File[] | null) {
+    if (!files?.length) return;
+    if (attachments.length + files.length > 5) {
+      return notifications.show({ color: 'red', message: 'Не больше 5 файлов' });
+    }
+    setUploading(true);
+    try {
+      const uploaded: { key: string; url: string; filename?: string }[] = [];
+      for (const file of files) {
+        if (file.size > 5 * 1024 * 1024) {
+          notifications.show({ color: 'red', message: `${file.name}: больше 5 МБ` });
+          continue;
+        }
+        const form = new FormData();
+        form.append('file', file);
+        const { data } = await api.post<{ key: string; url: string; filename?: string }>(
+          '/support/attachments',
+          form,
+        );
+        uploaded.push(data);
+      }
+      setAttachments((prev) => [...prev, ...uploaded]);
+    } catch (error) {
+      notifications.show({ color: 'red', message: apiMessage(error) });
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function submitTicket() {
     if (message.trim().length < 10) {
       return notifications.show({ color: 'red', message: 'Сообщение не короче 10 символов' });
     }
     setLoading(true);
     try {
-      await api.post('/support/questions', {
+      const { data } = await api.post<{ id: number }>('/support/questions', {
         subject: subject || 'Обращение',
         category,
         message,
+        attachments: attachments.map((a) => a.url),
       });
       notifications.show({
         color: 'teal',
-        message: 'Вопрос отправлен. Ответ придёт в кабинет и на email.',
+        message: 'Ваш вопрос отправлен. Ответ придёт в кабинет и на email.',
       });
       setSubject('');
       setMessage('');
+      setAttachments([]);
       await load();
+      if (data?.id) {
+        window.location.href = `/support/tickets/${data.id}`;
+      }
     } catch (error) {
       notifications.show({ color: 'red', message: apiMessage(error) });
     } finally {
@@ -99,7 +147,7 @@ export default function SupportPage() {
 
   return (
     <SellerShell>
-      <PageHeader title="Поддержка и FAQ" description="База знаний и обращения в службу поддержки" />
+      <PageHeader title="Поддержка и FAQ" description="База знаний, обращения и диалоги со службой поддержки" />
 
       <div
         style={{
@@ -135,6 +183,17 @@ export default function SupportPage() {
                     <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
                       {item.answer}
                     </Text>
+                    <Button
+                      mt="sm"
+                      variant="light"
+                      size="xs"
+                      onClick={() => {
+                        setSubject(item.question.slice(0, 200));
+                        setCategory(item.category || 'Другое');
+                      }}
+                    >
+                      Задать вопрос по теме
+                    </Button>
                   </Accordion.Panel>
                 </Accordion.Item>
               ))}
@@ -163,6 +222,27 @@ export default function SupportPage() {
               onChange={(e) => setMessage(e.currentTarget.value)}
               size="md"
             />
+            <Group>
+              <FileButton onChange={onFiles} accept="image/jpeg,image/png,application/pdf" multiple>
+                {(props) => (
+                  <Button {...props} variant="light" loading={uploading}>
+                    Скриншоты / PDF
+                  </Button>
+                )}
+              </FileButton>
+              <Text size="xs" c="dimmed">
+                до 5 файлов, ≤5 МБ
+              </Text>
+            </Group>
+            {attachments.length > 0 && (
+              <Stack gap={4}>
+                {attachments.map((a) => (
+                  <Text key={a.key} size="sm">
+                    {a.filename || a.key}
+                  </Text>
+                ))}
+              </Stack>
+            )}
             <Button w={{ base: '100%', sm: 'fit-content' }} loading={loading} onClick={() => void submitTicket()}>
               Отправить
             </Button>
@@ -195,7 +275,7 @@ export default function SupportPage() {
                       </Table.Td>
                       <Table.Td>{t.created_at ? new Date(t.created_at).toLocaleString('ru-RU') : '—'}</Table.Td>
                       <Table.Td>
-                        <Badge variant="light" color="brand">
+                        <Badge variant="light" color={STATUS_COLOR[t.status] ?? 'brand'}>
                           {STATUS_LABEL[t.status] ?? t.status}
                         </Badge>
                       </Table.Td>

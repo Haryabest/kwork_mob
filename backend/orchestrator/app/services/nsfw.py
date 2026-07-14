@@ -32,17 +32,32 @@ DEFAULT_BLACKLIST = {
 
 
 class NsfwService:
-    def check_blacklist(self, text: str) -> bool:
+    def check_blacklist(self, text: str, extra_words: set[str] | None = None) -> bool:
         lowered = (text or "").lower()
-        return any(w in lowered for w in DEFAULT_BLACKLIST)
+        words = set(DEFAULT_BLACKLIST)
+        if extra_words:
+            words |= {w.lower() for w in extra_words}
+        return any(w in lowered for w in words)
 
-    def _download_photo_bytes(self, task_uuid: str) -> list[tuple[str, bytes]]:
+    async def check_blacklist_db(self, db: AsyncSession, text: str) -> bool:
+        """Чёрный список из БД + defaults (§10.8)."""
+        from app.services import blacklist as bl
+
+        words = await bl.active_word_set(db)
+        return self.check_blacklist(text, extra_words=words)
+
+    def _download_photo_bytes(
+        self, task_uuid: str, *, decryption_key: str | None = None
+    ) -> list[tuple[str, bytes]]:
+        from app.services import photo_encryption as photo_enc
+
         bucket = settings.MINIO_BUCKET_PHOTOS
         prefix = photos_service.photos_prefix(task_uuid)
         out: list[tuple[str, bytes]] = []
         for name in photos_service.VIEW_NAMES:
             key = f"{prefix}{name}"
             data = minio_service.download_bytes(bucket, key)
+            data = photo_enc.maybe_decrypt(data, decryption_key)
             out.append((name, data))
         return out
 
@@ -151,12 +166,16 @@ class NsfwService:
                 frames.append((p, f.read()))
         return self._aggregate([self._analyze_image(n, d) for n, d in frames])
 
-    async def check_task_photos(self, task_uuid: str) -> dict[str, Any]:
+    async def check_task_photos(
+        self, task_uuid: str, *, decryption_key: str | None = None
+    ) -> dict[str, Any]:
         """Проверка 12 ракурсов из MinIO перед очередью."""
         if settings.NSFW_MODE.lower() == "off":
             return {"is_nsfw": False, "confidence": 0.0, "method": "off", "frames": []}
 
-        photos = await asyncio.to_thread(self._download_photo_bytes, task_uuid)
+        photos = await asyncio.to_thread(
+            self._download_photo_bytes, task_uuid, decryption_key=decryption_key
+        )
         frames = await asyncio.to_thread(
             lambda: [self._analyze_image(n, d) for n, d in photos]
         )

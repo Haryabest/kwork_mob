@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func, text
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,6 +25,8 @@ class User(Base):
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     balance: Mapped[int] = mapped_column(Integer, default=0)
     marketing_opt_in: Mapped[bool] = mapped_column(Boolean, default=True)
+    notification_prefs: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     age_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -105,6 +107,8 @@ class Order(Base):
     zip_sha256: Mapped[str | None] = mapped_column(String(64))
     customer_name: Mapped[str | None] = mapped_column(String(255))
     receipt_email: Mapped[str | None] = mapped_column(String(255))
+    device_model: Mapped[str | None] = mapped_column(String(64))
+    os_version: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -121,6 +125,9 @@ class Model3D(Base):
     watermark_hmac: Mapped[str | None] = mapped_column(String(128))
     file_sha256: Mapped[str | None] = mapped_column(String(64))
     publish_status: Mapped[str] = mapped_column(String(30), default="not_published")
+    source_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    source_extend_count: Mapped[int] = mapped_column(Integer, default=0)
+    trashed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -208,6 +215,7 @@ class AlertSettings(Base):
     telegram_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     email_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     email_to: Mapped[str | None] = mapped_column(String(255))
+    thresholds: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -252,6 +260,20 @@ class CampaignSend(Base):
     channel: Mapped[str] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(String(20), default="queued")
     meta: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CampaignClick(Base):
+    """Клики по ссылкам кампании (A/B / ROI §11.7)."""
+
+    __tablename__ = "campaign_clicks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    variant: Mapped[str | None] = mapped_column(String(8))
+    target_url: Mapped[str | None] = mapped_column(String(2000))
+    ip_address: Mapped[str | None] = mapped_column(String(45))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -313,6 +335,7 @@ class CompanyApiKey(Base):
     key_hash: Mapped[str] = mapped_column(String(128))
     scopes: Mapped[list] = mapped_column(ARRAY(Text))
     rate_limit_per_min: Mapped[int] = mapped_column(Integer, default=1000)
+    daily_limit: Mapped[int | None] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
@@ -328,6 +351,7 @@ class SupportRequest(Base):
     subject: Mapped[str | None] = mapped_column(String(255))
     category: Mapped[str | None] = mapped_column(String(50))
     message: Mapped[str] = mapped_column(Text)
+    attachments: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     status: Mapped[str] = mapped_column(String(20), default="new")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -381,6 +405,23 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(50))
     details: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ServiceLogEvent(Base):
+    """Централизованные логи сервисов (§11.5) — fallback при недоступности ClickHouse."""
+
+    __tablename__ = "service_log_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(32), index=True)
+    level: Mapped[str] = mapped_column(String(16), index=True)
+    message: Mapped[str] = mapped_column(Text)
+    worker_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"))
+    task_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    details: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class FaqItem(Base):
@@ -706,3 +747,150 @@ class DeletionRequest(Base):
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     processed_by: Mapped[int | None] = mapped_column(Integer)
     meta: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+
+
+class MarketplaceCredential(Base):
+    """API-ключи WB/Ozon (§7.6 / §14.6). company_id=NULL — глобальные ключи сервиса."""
+
+    __tablename__ = "marketplace_credentials"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    marketplace: Mapped[str] = mapped_column(String(10))  # wb | ozon
+    api_key_encrypted: Mapped[str] = mapped_column(Text)
+    client_id: Mapped[str | None] = mapped_column(String(64))  # Ozon Client-Id
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class MarketplaceUploadLog(Base):
+    """Лог попыток API-публикации (§14.6.4)."""
+
+    __tablename__ = "marketplace_upload_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    model_uuid: Mapped[str] = mapped_column(String(36), index=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"), index=True)
+    marketplace: Mapped[str] = mapped_column(String(10))
+    sku: Mapped[str] = mapped_column(String(64))
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|success|failed
+    http_status: Mapped[int | None] = mapped_column(Integer)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    external_ref: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ModelDownloadEvent(Base):
+    """Скачивание GLB/USDZ для воронки публикации (§7.9)."""
+
+    __tablename__ = "model_download_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    model_uuid: Mapped[str] = mapped_column(String(36), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"), index=True)
+    file_format: Mapped[str] = mapped_column(String(10), default="glb")
+    marketplace: Mapped[str | None] = mapped_column(String(20))  # wb | ozon | None
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AccessLog(Base):
+    """Аудит доступа к моделям §10.7.2 (presigned download)."""
+
+    __tablename__ = "access_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"), index=True)
+    model_uuid: Mapped[str] = mapped_column(String(36), index=True)
+    action: Mapped[str] = mapped_column(String(32), default="download")
+    file_format: Mapped[str | None] = mapped_column(String(10))
+    ip_address: Mapped[str | None] = mapped_column(String(45))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class ModerationBlacklist(Base):
+    """Чёрный список слов/брендов (§10.8 / §11 модерация)."""
+
+    __tablename__ = "moderation_blacklist"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    word: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    category: Mapped[str] = mapped_column(String(32), default="general")  # general|brand|product|nsfw
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SegmentationEvent(Base):
+    """Исходы серверной сегментации по устройству (§11.2.5 / §12.4.1)."""
+
+    __tablename__ = "segmentation_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(36), index=True)
+    device_model: Mapped[str] = mapped_column(String(64), default="unknown", index=True)
+    os_version: Mapped[str] = mapped_column(String(64), default="unknown", index=True)
+    fallback_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    failed: Mapped[bool] = mapped_column(Boolean, default=False)
+    avg_confidence: Mapped[float | None] = mapped_column(Float)
+    method: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class SoftLaunchChecklist(Base):
+    """Чек-лист soft launch — singleton id=1 (не только localStorage)."""
+
+    __tablename__ = "soft_launch_checklist"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    checks: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class MaintenanceChecklist(Base):
+    """Чек-лист планового обслуживания §23.7 — singleton id=1."""
+
+    __tablename__ = "maintenance_checklist"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    checks: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class StorageNodeEvent(Base):
+    """История online/offline узлов хранения §11.16.3."""
+
+    __tablename__ = "storage_node_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    node_id: Mapped[str] = mapped_column(String(64), index=True)
+    node_name: Mapped[str | None] = mapped_column(String(128))
+    status: Mapped[str] = mapped_column(String(20))  # online|offline
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duration_sec: Mapped[int | None] = mapped_column(Integer)
+    meta: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+
+
+class DiskUsageSample(Base):
+    """Сэмплы заполнения диска для прогноза §23.7."""
+
+    __tablename__ = "disk_usage_samples"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    used_percent: Mapped[float | None] = mapped_column(Float)
+    free_percent: Mapped[float | None] = mapped_column(Float)
+    total_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    sampled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

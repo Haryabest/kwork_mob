@@ -24,7 +24,14 @@ import TaxPage from './pages/TaxPage';
 import LegalPage from './pages/LegalPage';
 import SettingsPage from './pages/SettingsPage';
 import LogsPage from './pages/LogsPage';
+import AlertLogPage from './pages/AlertLogPage';
 import StoragePage from './pages/StoragePage';
+import SoftLaunchPage from './pages/SoftLaunchPage';
+import MaintenancePage from './pages/MaintenancePage';
+import WebhooksDashboardPage from './pages/WebhooksDashboardPage';
+import MarketplacePage from './pages/MarketplacePage';
+import AccessLogPage from './pages/AccessLogPage';
+import TaskConflictsPage from './pages/TaskConflictsPage';
 import TicketsPage from './pages/support/TicketsPage';
 import TicketDetailPage from './pages/support/TicketDetailPage';
 import FaqEditorPage from './pages/support/FaqEditorPage';
@@ -51,6 +58,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route element={<AppLayout />}>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/workers" element={<WorkersPage />} />
+                <Route path="/soft-launch" element={<SoftLaunchPage />} />
+                <Route path="/maintenance" element={<MaintenancePage />} />
+                <Route path="/webhooks" element={<WebhooksDashboardPage />} />
+                <Route path="/marketplace" element={<MarketplacePage />} />
+                <Route path="/access-log" element={<AccessLogPage />} />
+                <Route path="/task-conflicts" element={<TaskConflictsPage />} />
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="/users/:id" element={<UserDetailPage />} />
                 <Route path="/companies" element={<CompaniesPage />} />
@@ -64,6 +77,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 <Route path="/legal" element={<LegalPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/logs" element={<LogsPage />} />
+                <Route path="/alert-log" element={<AlertLogPage />} />
                 <Route path="/storage" element={<StoragePage />} />
                 <Route path="/support/tickets" element={<TicketsPage />} />
                 <Route path="/support/tickets/:id" element={<TicketDetailPage />} />

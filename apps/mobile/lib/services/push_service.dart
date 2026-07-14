@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/firebase_options.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,13 +14,19 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('FCM background: ${message.messageId}');
 }
 
-/// Push FCM + prefs типов уведомлений (§3.4.3). Fallback email — на бэке.
+/// Push FCM + prefs типов уведомлений (§3.4.3). Deep link на заказ/модель.
 class PushService {
   PushService(this._api);
 
   final ApiClient _api;
   bool available = false;
   String? token;
+  GlobalKey<NavigatorState>? navigatorKey;
+  GoRouter? router;
+
+  void bindRouter(GoRouter router) {
+    this.router = router;
+  }
 
   Future<void> init() async {
     try {
@@ -26,7 +34,6 @@ class PushService {
       if (opts != null) {
         await Firebase.initializeApp(options: opts);
       } else {
-        // native google-services.json / GoogleService-Info.plist
         await Firebase.initializeApp();
       }
       available = true;
@@ -47,7 +54,38 @@ class PushService {
 
     FirebaseMessaging.onMessage.listen((msg) {
       debugPrint('FCM foreground: ${msg.notification?.title}');
+      _handleData(msg.data, fromForeground: true);
     });
+    FirebaseMessaging.onMessageOpenedApp.listen((msg) {
+      _handleData(msg.data);
+    });
+    final initial = await messaging.getInitialMessage();
+    if (initial != null) {
+      _handleData(initial.data);
+    }
+  }
+
+  void _handleData(Map<String, dynamic> data, {bool fromForeground = false}) {
+    final orderId = data['order_id']?.toString();
+    final modelUuid = data['model_uuid']?.toString();
+    final type = data['type']?.toString() ?? data['event']?.toString();
+
+    if (router == null) return;
+    if (orderId != null && orderId.isNotEmpty) {
+      router!.go('/home/queue/$orderId');
+      return;
+    }
+    if (modelUuid != null && modelUuid.isNotEmpty) {
+      router!.go('/home/models/$modelUuid');
+      return;
+    }
+    if (type == 'support' || type == 'support_reply') {
+      // seller web has /support; mobile FAQ
+      router!.go('/home');
+    }
+    if (fromForeground) {
+      debugPrint('FCM data: $data');
+    }
   }
 
   Future<void> _register(String t) async {

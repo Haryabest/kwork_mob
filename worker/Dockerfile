@@ -72,25 +72,19 @@ RUN sed -i 's/\r$//' /usr/local/bin/worker_entrypoint.sh && \
 
 RUN mkdir -p /var/log/worker /tmp/worker
 
-# TRELLIS.2 + веса в образ (см. setup.sh в репо для полной установки зависимостей)
+# TRELLIS.2: setup.sh + o-voxel/xformers + pip install -e + веса (§5.1)
+COPY scripts/install_trellis2.sh /tmp/install_trellis2.sh
 RUN if [ "$INSTALL_TRELLIS" = "1" ]; then \
       git clone --depth 1 --recursive "${TRELLIS_REPO}" /app/trellis && \
-      mkdir -p /app/trellis/weights && \
-      if [ -f /app/trellis/setup.sh ] && [ "$TRELLIS_VERSION" = "2" ]; then \
-        echo "[TRELLIS.2] run setup.sh in CI/GPU host if docker build fails"; \
+      chmod +x /tmp/install_trellis2.sh && \
+      if [ "$TRELLIS_VERSION" = "2" ]; then \
+        DOWNLOAD_WEIGHTS="${DOWNLOAD_WEIGHTS}" TRELLIS_WEIGHTS=microsoft/TRELLIS.2-4B \
+          bash /tmp/install_trellis2.sh /app/trellis; \
+      else \
+        pip3 install --no-cache-dir -r /app/trellis/requirements.txt && \
+        pip3 install --no-cache-dir -e /app/trellis; \
       fi && \
-      if [ -f /app/trellis/requirements.txt ]; then \
-        pip3 install --no-cache-dir -r /app/trellis/requirements.txt || true; \
-      fi && \
-      if [ -f /app/trellis/setup.py ] || [ -f /app/trellis/pyproject.toml ]; then \
-        pip3 install --no-cache-dir -e /app/trellis || true; \
-      fi; \
-    fi
-
-RUN if [ "$DOWNLOAD_WEIGHTS" = "1" ] && [ -f /app/trellis/scripts/download_weights.sh ]; then \
-      bash /app/trellis/scripts/download_weights.sh /app/trellis/weights || true; \
-    elif [ "$DOWNLOAD_WEIGHTS" = "1" ] && [ -f /app/trellis/download_weights.py ]; then \
-      python3 /app/trellis/download_weights.py --out /app/trellis/weights || true; \
+      rm -f /tmp/install_trellis2.sh; \
     fi
 
 # Production default: trellis (не stub)
@@ -110,6 +104,8 @@ ENV PYTHONUNBUFFERED=1 \
     SAM_MODEL_TYPE=vit_b \
     WORKER_E2E_BUDGET_SEC=300 \
     WORKER_E2E_BUDGET_LOCAL_SEC=180 \
+    WORKER_SUBPROCESS_STREAM=1 \
+    WORKER_TASK_DRAIN_TIMEOUT_SEC=3600 \
     PYTHONPATH=/app/scripts:/app/trellis \
     ORCHESTRATOR_WS_URL=ws://orchestrator:8000/ws/worker \
     ORCHESTRATOR_WS_FALLBACK_URL= \

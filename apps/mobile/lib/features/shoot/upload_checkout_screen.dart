@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
@@ -5,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/services/photo_encryption.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 
 /// ZIP/SHA-256 + prepare + presigned upload + create order (§3.4 / §3.6.3).
@@ -64,23 +68,52 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
       });
 
       setState(() => _status = 'Получение presigned URL…');
-      final prepared = await widget.api.preparePhotos(taskUuid: draft.modelUuid);
+      final prepared = await widget.api.preparePhotos(
+        taskUuid: draft.modelUuid,
+        companyId: widget.session.companyId,
+      );
       final taskUuid = prepared['task_uuid'] as String;
+      final encryptionRequired = prepared['encryption_required'] == true ||
+          widget.session.e2ePhotoEncryption;
       final uploads = (prepared['uploads'] as List)
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
       final photos = await ShootStorage.instance.listPhotos(draft.modelUuid);
 
+      String? encKeyB64;
+      if (encryptionRequired) {
+        encKeyB64 = await PhotoEncryptionService.instance.generateKeyB64();
+        await widget.api.registerPhotoEncryptionKey(
+          taskUuid: taskUuid,
+          keyB64: encKeyB64,
+        );
+        setState(() => _status = 'E2E шифрование фото…');
+      }
+
       for (var i = 0; i < uploads.length; i++) {
         final file = photos[i];
         if (file == null) throw StateError('Нет файла ракурса $i');
         setState(() {
-          _status = 'Загрузка ${i + 1}/12…';
+          _status = encryptionRequired
+              ? 'Шифрование и загрузка ${i + 1}/12…'
+              : 'Загрузка ${i + 1}/12…';
           _progress = 0.1 + (i / 12) * 0.7;
         });
+        Uint8List? payload;
+        var contentType = uploads[i]['content_type'] as String? ?? 'image/jpeg';
+        if (encryptionRequired && encKeyB64 != null) {
+          final raw = await file.readAsBytes();
+          payload = await PhotoEncryptionService.instance.encryptJpeg(
+            raw,
+            encKeyB64,
+          );
+          contentType = 'application/octet-stream';
+        }
         await widget.api.uploadPhotoPresigned(
           uploadUrl: uploads[i]['upload_url'] as String,
           file: file,
+          contentType: contentType,
+          bytesOverride: payload,
         );
       }
 
@@ -98,8 +131,13 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         companyId: widget.session.companyId,
         promocode: _promo.text.trim().isEmpty ? null : _promo.text.trim(),
         forbidden: draft.forbidden,
+        birthDate: draft.birthDate,
         scaleCalibration: draft.scaleCalibration,
         photosPrefix: prepared['photos_prefix'] as String?,
+        deviceModel: Platform.isIOS
+            ? 'iOS'
+            : (Platform.isAndroid ? 'Android' : Platform.operatingSystem),
+        osVersion: Platform.operatingSystemVersion,
       );
 
       await ShootStorage.instance.clearActiveDraft();

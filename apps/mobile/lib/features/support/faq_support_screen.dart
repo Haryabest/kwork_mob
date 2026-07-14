@@ -218,44 +218,149 @@ class _TicketsTab extends StatelessWidget {
           title: Text(t['subject']?.toString() ?? 'Обращение #${t['id']}'),
           subtitle: Text('${t['status']} · ${t['created_at'] ?? ''}'),
           onTap: () async {
-            try {
-              final detail = await api.getSupportQuestion(t['id'] as int);
-              if (!ctx.mounted) return;
-              await showModalBottomSheet<void>(
-                context: ctx,
-                isScrollControlled: true,
-                builder: (c) => DraggableScrollableSheet(
-                  expand: false,
-                  initialChildSize: 0.6,
-                  builder: (_, scroll) {
-                    final msgs = (detail['messages'] as List?) ?? [];
-                    return ListView(
-                      controller: scroll,
-                      padding: const EdgeInsets.all(16),
+            await showModalBottomSheet<void>(
+              context: ctx,
+              isScrollControlled: true,
+              builder: (c) => _TicketThreadSheet(
+                api: api,
+                ticketId: t['id'] as int,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _TicketThreadSheet extends StatefulWidget {
+  const _TicketThreadSheet({required this.api, required this.ticketId});
+
+  final ApiClient api;
+  final int ticketId;
+
+  @override
+  State<_TicketThreadSheet> createState() => _TicketThreadSheetState();
+}
+
+class _TicketThreadSheetState extends State<_TicketThreadSheet> {
+  Map<String, dynamic>? _detail;
+  final _reply = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _reply.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final detail = await widget.api.getSupportQuestion(widget.ticketId);
+    if (mounted) setState(() => _detail = detail);
+  }
+
+  bool get _closed {
+    final s = _detail?['status']?.toString();
+    return s == 'closed' || s == 'resolved';
+  }
+
+  Future<void> _send() async {
+    if (_reply.text.trim().isEmpty || _closed) return;
+    setState(() => _busy = true);
+    try {
+      await widget.api.replySupport(widget.ticketId, _reply.text.trim());
+      _reply.clear();
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final msgs = (_detail?['messages'] as List?) ?? [];
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+      ),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.65,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Статус: ${_detail?['status'] ?? '…'}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _detail == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView(
                       children: [
-                        Text('Статус: ${detail['status']}'),
-                        const SizedBox(height: 12),
                         ...msgs.map(
-                          (m) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
+                          (m) => Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: m['is_staff'] == true
+                                  ? AppColors.surface
+                                  : AppColors.wbPrimary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                             child: Text(
                               '${m['is_staff'] == true ? 'Поддержка' : 'Вы'}: ${m['body']}',
                             ),
                           ),
                         ),
                       ],
-                    );
-                  },
-                ),
-              );
-            } catch (e) {
-              if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('$e')));
-              }
-            }
-          },
-        );
-      },
+                    ),
+            ),
+            if (!_closed) ...[
+              TextField(
+                controller: _reply,
+                decoration: const InputDecoration(hintText: 'Уточняющий вопрос…'),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: FButton(
+                      onPress: _busy ? null : _send,
+                      child: const Text('Ответить'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FButton(
+                    variant: .outline,
+                    onPress: _busy
+                        ? null
+                        : () async {
+                            await widget.api.closeSupport(widget.ticketId);
+                            await _load();
+                          },
+                    child: const Text('Закрыть'),
+                  ),
+                ],
+              ),
+            ] else
+              const Text('Обращение закрыто'),
+          ],
+        ),
+      ),
     );
   }
 }

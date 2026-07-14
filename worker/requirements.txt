@@ -1,4 +1,4 @@
-# torch/torchvision — в Dockerfile (cu124), не здесь
+# torch/torchvision — в Dockerfile (cu128), не здесь
 opencv-python
 numpy
 pillow

@@ -39,6 +39,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     limit = int(cached)
             except Exception:  # noqa: BLE001
                 pass
+            # суточный лимит §12.4.1
+            try:
+                from app.services import api_key_limits as akl
+
+                daily = await akl.check_and_incr_daily(prefix)
+                if daily.get("exceeded"):
+                    return JSONResponse(
+                        {"detail": "Daily API key limit exceeded"},
+                        status_code=429,
+                        headers={"Retry-After": "3600"},
+                    )
+            except Exception:  # noqa: BLE001
+                pass
             bucket = f"rl:apikey:{prefix}:{now // window}"
         elif auth.lower().startswith("bearer "):
             token = auth.split(" ", 1)[1][:24]

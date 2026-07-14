@@ -96,6 +96,8 @@ async def mark_completed(
         if watermark_hmac:
             existing.watermark_hmac = watermark_hmac
     else:
+        from app.services.model_storage import default_expires_at
+
         db.add(
             Model3D(
                 uuid=str(uuid.uuid4()),
@@ -106,6 +108,7 @@ async def mark_completed(
                 usdz_url=usdz_url,
                 watermark_hmac=watermark_hmac,
                 publish_status="not_published",
+                source_expires_at=default_expires_at(),
             )
         )
     await db.flush()
@@ -137,6 +140,19 @@ async def mark_completed(
         await camp_svc.on_order_completed(db, user_id=order.user_id, order_id=order.id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("campaign nth_free hook: %s", exc)
+    try:
+        from app.services import company_notify as cn
+
+        await cn.notify_company_event(
+            db,
+            company_id=order.company_id,
+            event="generation_done",
+            title="Генерация завершена",
+            body=f"Заказ #{order.id} готов. Модель доступна для скачивания.",
+            data={"order_id": str(order.id), "task_id": task_id},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("company notify generation_done: %s", exc)
     await db.commit()
     await publish_order_status(
         user_id=order.user_id,
@@ -251,12 +267,16 @@ async def try_queue_awaiting_orders(db: AsyncSession, user_id: int) -> list[int]
         )
     ).all()
     queued_ids: list[int] = []
+    from app.services import photo_encryption as photo_enc
     from app.services.nsfw import nsfw_service
 
     for order in orders:
         if user.balance < order.amount:
             break
-        nsfw = await nsfw_service.check_task_photos(order.task_uuid)
+        enc_key = await photo_enc.get_key(order.task_uuid)
+        nsfw = await nsfw_service.check_task_photos(
+            order.task_uuid, decryption_key=enc_key
+        )
         if nsfw.get("is_nsfw"):
             await nsfw_service.block_order(
                 db, order=order, user=user, result=nsfw, refund=True, charged=False
@@ -281,6 +301,9 @@ async def try_queue_awaiting_orders(db: AsyncSession, user_id: int) -> list[int]
             "photos_prefix": f"photos/{order.task_uuid}/",
             "models_bucket": settings.MINIO_BUCKET_MODELS,
         }
+        if enc_key:
+            payload["photo_encryption_key"] = enc_key
+            payload["photo_encryption_alg"] = photo_enc.ALGORITHM
         await queue_service.enqueue(
             db,
             task_id=order.task_uuid,

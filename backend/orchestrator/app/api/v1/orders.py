@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,11 +30,26 @@ router = APIRouter()
 
 class PhotosPrepareRequest(BaseModel):
     task_uuid: str | None = None
+    company_id: int | None = None
 
 
-def _task_payload(order: Order, user_id: int, photos_prefix: str | None = None) -> dict:
+class PhotoEncryptionKeyBody(BaseModel):
+    task_uuid: str
+    key_b64: str
+    algorithm: str = "aes-256-gcm"
+
+
+async def _task_payload(
+    db: AsyncSession,
+    order: Order,
+    user_id: int,
+    photos_prefix: str | None = None,
+    *,
+    device_model: str | None = None,
+    os_version: str | None = None,
+) -> dict:
     prefix = photos_prefix or f"photos/{order.task_uuid}/"
-    return {
+    payload = {
         "category": order.category,
         "tier": order.tier,
         "user_id": user_id,
@@ -45,7 +60,16 @@ def _task_payload(order: Order, user_id: int, photos_prefix: str | None = None) 
         "models_bucket": settings.MINIO_BUCKET_MODELS,
         "upsell_options": order.upsell_options or [],
         "scale_calibration": order.scale_calibration,
+        "device_model": device_model or order.device_model or "unknown",
+        "os_version": os_version or order.os_version or "unknown",
     }
+    from app.services import photo_encryption as photo_enc
+
+    key = await photo_enc.get_key(order.task_uuid)
+    if key:
+        payload["photo_encryption_key"] = key
+        payload["photo_encryption_alg"] = photo_enc.ALGORITHM
+    return payload
 
 
 @router.get("/upsells")
@@ -66,12 +90,51 @@ def _nsfw_http_detail(block_id: int, result: dict) -> dict:
 @router.post("/photos/prepare")
 async def prepare_photos_upload(
     body: PhotosPrepareRequest,
+    request: Request,
     user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Presigned PUT на photos/{task_uuid}/view_00…11.jpg."""
-    _ = user
+    """Presigned PUT на photos/{task_uuid}/view_00…11.jpg + access_log (§10.7.7)."""
+    from app.services import access_log as access_svc
+
     task_uuid = body.task_uuid or str(uuid.uuid4())
-    return photos_service.prepare_presigned_uploads(task_uuid)
+    prepared = await photos_service.prepare_for_user(
+        db, task_uuid, company_id=body.company_id
+    )
+    await access_svc.log_access(
+        db,
+        user_id=user.id,
+        company_id=body.company_id,
+        model_uuid=task_uuid,
+        action="presign_put",
+        request=request,
+        file_format="jpg",
+    )
+    await db.commit()
+    return prepared
+
+
+@router.post("/photos/encryption-key")
+async def register_photo_encryption_key(
+    body: PhotoEncryptionKeyBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """§10.6.2: ключ E2E шифрования фото (отдельно от ciphertext в MinIO)."""
+    from app.services import photo_encryption as photo_enc
+
+    _ = user
+    if body.algorithm != photo_enc.ALGORITHM:
+        raise HTTPException(400, f"algorithm: {photo_enc.ALGORITHM}")
+    try:
+        await photo_enc.store_key(body.task_uuid, body.key_b64)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {
+        "ok": True,
+        "task_uuid": body.task_uuid,
+        "ttl_sec": photo_enc.KEY_TTL_SEC,
+    }
 
 
 @router.post("/photos/upload")
@@ -88,6 +151,7 @@ async def upload_order_photos(
 @router.post("/create")
 async def create_order(
     body: OrderCreateRequest,
+    request: Request,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -96,12 +160,21 @@ async def create_order(
             400,
             "Вы выбрали запрещённую категорию. Заказ будет отклонён без возврата средств.",
         )
-    if nsfw_service.check_blacklist(body.category.value):
+    if await nsfw_service.check_blacklist_db(db, body.category.value):
         raise HTTPException(400, "Категория в чёрном списке")
 
     await ensure_age_gate(
         db, user, category=body.category.value, birth_date=body.birth_date
     )
+
+    from app.services.device_hint import device_hint_from_ua
+
+    device_model = body.device_model
+    os_version = body.os_version
+    if not device_model or not os_version:
+        ua_dev, ua_os = device_hint_from_ua(request.headers.get("user-agent"))
+        device_model = device_model or ua_dev
+        os_version = os_version or ua_os
 
     existing = await db.scalar(select(Order).where(Order.task_uuid == body.task_uuid))
     if existing:
@@ -119,10 +192,22 @@ async def create_order(
     from app.services.integrity import compute_and_store_source_zip
 
     await assert_owner_2fa_for_company_order(db, user, body.company_id)
-    integrity = compute_and_store_source_zip(body.task_uuid, client_sha256=body.zip_sha256)
+    from app.services import photo_encryption as photo_enc
+
+    enc_key = await photo_enc.get_key(body.task_uuid)
+    if body.company_id and await photo_enc.encryption_enabled_for_company(db, body.company_id):
+        if not enc_key:
+            raise HTTPException(
+                400,
+                "E2E шифрование: сначала POST /orders/photos/encryption-key",
+            )
+
+    integrity = compute_and_store_source_zip(
+        body.task_uuid, client_sha256=body.zip_sha256, decryption_key=enc_key
+    )
 
     # §10.8: NSFW до списания и до очереди
-    nsfw = await nsfw_service.check_task_photos(body.task_uuid)
+    nsfw = await nsfw_service.check_task_photos(body.task_uuid, decryption_key=enc_key)
 
     base_amount = await tariff_svc.get_amount(db, body.tier.value)
     upsell_codes, upsell_amount = await upsell_svc.calc_upsell_amount(
@@ -147,6 +232,8 @@ async def create_order(
         zip_sha256=integrity["zip_sha256"],
         customer_name=body.customer_name,
         receipt_email=body.receipt_email or user.email,
+        device_model=device_model,
+        os_version=os_version,
     )
     db.add(order)
     await db.flush()
@@ -219,13 +306,27 @@ async def create_order(
             task_id=body.task_uuid,
             order_id=order.id,
             company_id=body.company_id,
-            payload=_task_payload(order, user.id, photos_prefix),
+            payload=await _task_payload(
+                db,
+                order,
+                user.id,
+                photos_prefix,
+                device_model=device_model,
+                os_version=os_version,
+            ),
             priority=priority,
         )
     else:
         order.status = "awaiting_payment"
 
     await db.flush()
+    if body.company_id:
+        try:
+            from app.services import corporate_alerts as ca
+
+            await ca.check_suspicious_orders(db, company_id=body.company_id)
+        except Exception:  # noqa: BLE001
+            pass
     try:
         from app.services import company_webhooks as wh
 
@@ -277,7 +378,12 @@ async def pay_order(
     if order.status not in ("awaiting_payment", "pending"):
         raise HTTPException(400, f"Заказ в статусе {order.status}, оплата не нужна")
 
-    nsfw = await nsfw_service.check_task_photos(order.task_uuid)
+    from app.services import photo_encryption as photo_enc
+
+    enc_key = await photo_enc.get_key(order.task_uuid)
+    nsfw = await nsfw_service.check_task_photos(
+        order.task_uuid, decryption_key=enc_key
+    )
     if nsfw.get("is_nsfw"):
         block = await nsfw_service.block_order(
             db, order=order, user=user, result=nsfw, refund=True, charged=False
@@ -302,7 +408,7 @@ async def pay_order(
             task_id=order.task_uuid,
             order_id=order.id,
             company_id=order.company_id,
-            payload=_task_payload(order, user.id),
+            payload=await _task_payload(db, order, user.id),
             priority="high" if order.tier == "large" else "normal",
         )
         await db.commit()
@@ -408,13 +514,31 @@ async def cancel_order(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models import AuditLog
+
     order = await db.get(Order, order_id)
     if not order:
         raise HTTPException(404, "Заказ не найден")
     await assert_order_cancel(db, order, user)
     if order.status not in ("pending", "queued", "paid", "awaiting_payment"):
         raise HTTPException(400, "Заказ нельзя отменить")
+    prev = order.status
     order.status = "cancelled"
+    db.add(
+        AuditLog(
+            company_id=order.company_id,
+            user_id=user.id,
+            action="order_cancelled",
+            details={
+                "order_id": order.id,
+                "task_uuid": order.task_uuid,
+                "previous_status": prev,
+                "stage": "queue" if prev in ("queued", "paid", "pending") else prev,
+                "cancelled_by": user.id,
+                "amount": order.amount,
+            },
+        )
+    )
     try:
         from app.services import company_webhooks as wh
 

@@ -23,7 +23,9 @@ POLICY_KEYS = (
     "allow_photographer_add_links",
     "require_2fa_for_all",
     "auto_block_inactive_days",
+    "auto_block_exempt_user_ids",
     "low_balance_threshold",
+    "e2e_photo_encryption",
 )
 
 DEFAULT_POLICIES: dict[str, Any] = {
@@ -34,7 +36,9 @@ DEFAULT_POLICIES: dict[str, Any] = {
     "allow_photographer_add_links": True,
     "require_2fa_for_all": False,
     "auto_block_inactive_days": 90,
+    "auto_block_exempt_user_ids": [],
     "low_balance_threshold": 5000,
+    "e2e_photo_encryption": False,
 }
 
 
@@ -46,7 +50,9 @@ class CompanyPolicies(BaseModel):
     allow_photographer_add_links: bool = True
     require_2fa_for_all: bool = False
     auto_block_inactive_days: int = Field(default=90, ge=1, le=3650)
+    auto_block_exempt_user_ids: list[int] = Field(default_factory=list)
     low_balance_threshold: int = Field(default=5000, ge=0)
+    e2e_photo_encryption: bool = False
 
     @field_validator("default_allowed_categories")
     @classmethod
@@ -80,11 +86,17 @@ def extract_policies(settings: dict | None) -> dict[str, Any]:
 
 
 async def get_policies(db: AsyncSession, user: User) -> dict:
+    from app.services import company_notify as cn
+
     company = await get_owned_company(db, user)
     policies = extract_policies(company.settings)
+    routing = cn.routing_from_company(company)
     return {
         "company_id": company.id,
         "policies": policies,
+        "notification_routing": routing,
+        "notification_events": list(cn.EVENT_DEFAULTS.keys()),
+        "notification_audiences": list(cn.AUDIENCES),
         "available_categories": list(ALL_CATEGORIES),
         "balance": company.balance,
         # совместимость со старым клиентом
@@ -93,6 +105,8 @@ async def get_policies(db: AsyncSession, user: User) -> dict:
 
 
 async def update_policies(db: AsyncSession, user: User, body: dict) -> dict:
+    from app.services import company_notify as cn
+
     company = await get_owned_company(db, user)
     current = extract_policies(company.settings)
     payload: dict[str, Any] = {}
@@ -110,18 +124,24 @@ async def update_policies(db: AsyncSession, user: User, body: dict) -> dict:
         raise HTTPException(400, f"Некорректные политики: {exc}") from exc
 
     rest = {k: v for k, v in (company.settings or {}).items() if k not in POLICY_KEYS}
+    routing_patch = body.get("notification_routing")
+    if routing_patch is None and isinstance(body.get("settings"), dict):
+        routing_patch = body["settings"].get(cn.SETTINGS_KEY)
+    if routing_patch is not None:
+        rest = cn.merge_routing_into_settings(rest, routing_patch)
     company.settings = {**rest, **policies}
     await audit(
         db,
         company_id=company.id,
         user_id=user.id,
         action="company.policies",
-        details=policies,
+        details={**policies, "notification_routing": cn.routing_from_company(company)},
     )
     await db.flush()
     return {
         "company_id": company.id,
         "policies": policies,
+        "notification_routing": cn.routing_from_company(company),
         "settings": company.settings,
         "available_categories": list(ALL_CATEGORIES),
         "balance": company.balance,

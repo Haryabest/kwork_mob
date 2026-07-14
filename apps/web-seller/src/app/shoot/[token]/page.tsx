@@ -1,19 +1,21 @@
 'use client';
 
 import {
+  Anchor,
   Button,
   Card,
   Center,
   FileInput,
+  Group,
   Loader,
+  Progress,
   SimpleGrid,
   Stack,
   Text,
   ThemeIcon,
   Title,
-  Progress,
 } from '@mantine/core';
-import { IconCamera, IconCheck, IconUpload } from '@tabler/icons-react';
+import { IconCamera, IconCheck, IconDeviceMobile, IconUpload } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { use, useEffect, useState } from 'react';
 import axios from 'axios';
@@ -26,6 +28,7 @@ type ShootData = {
   uploads: { index: number; upload_url: string; label: string }[];
 };
 
+/** §3.15 — браузер: open app deep link или галерея 12 фото */
 export default function ShootLinkPage({
   params,
 }: {
@@ -45,12 +48,25 @@ export default function ShootLinkPage({
       .catch((e) => notifications.show({ color: 'red', message: apiMessage(e, 'Ссылка недействительна') }));
   }, [token]);
 
+  function openInApp() {
+    // Universal Link (iOS/Android) + custom scheme fallback §3.15
+    const httpsLink = `${window.location.origin}/shoot/${token}`;
+    const custom = `kworkmob://open/shoot/${token}`;
+    window.location.href = custom;
+    window.setTimeout(() => {
+      // если схема не сработала — остаёмся на странице галереи
+    }, 800);
+    notifications.show({
+      color: 'blue',
+      message: `Открываем приложение… (${httpsLink}). Если не установлено — загрузите 12 фото ниже.`,
+    });
+  }
+
   async function submit() {
     if (!meta || files.length !== 12) return;
     setBusy(true);
     setProgress(0);
     try {
-      // multipart через API (сервер → MinIO)
       const form = new FormData();
       files.forEach((f) => form.append('files', f));
       await axios.post(`${API_URL}/shoot/${token}/upload`, form, {
@@ -95,12 +111,32 @@ export default function ShootLinkPage({
               WebkitTextFillColor: 'transparent',
             }}
           >
-            Загрузите 12 ракурсов
+            Съёмка по ссылке
           </Title>
           <Text c="#6d6c77">
             task {meta.task_uuid.slice(0, 8)}… · ссылка {token.slice(0, 8)}…
           </Text>
         </div>
+
+        {!done && (
+          <Card withBorder bg="#fff" p="lg">
+            <Stack gap="sm">
+              <Text fw={600}>Есть приложение?</Text>
+              <Text size="sm" c="#6d6c77">
+                Откройте AR-съёмку в приложении (Deep Link §3.15). Иначе загрузите 12 готовых фото из галереи.
+              </Text>
+              <Group>
+                <Button leftSection={<IconDeviceMobile size={16} />} onClick={openInApp}>
+                  Открыть в приложении
+                </Button>
+                <Anchor href="https://play.google.com/store" target="_blank" size="sm">
+                  Google Play
+                </Anchor>
+              </Group>
+            </Stack>
+          </Card>
+        )}
+
         {done ? (
           <Card withBorder bg="#fff" p="xl">
             <Stack align="center">
@@ -115,7 +151,7 @@ export default function ShootLinkPage({
             <FileInput
               multiple
               accept="image/*"
-              label="Фотографии"
+              label="Альтернатива без приложения — 12 фото из галереи"
               placeholder="Выберите ровно 12 файлов"
               value={files}
               onChange={(value) => setFiles((value ?? []).slice(0, 12))}

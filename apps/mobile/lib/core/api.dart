@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -71,11 +72,66 @@ class ApiClient {
       'remember_me': true,
     });
     final data = Map<String, dynamic>.from(res.data as Map);
+    if (data['requires_2fa'] == true) {
+      return data;
+    }
     await saveTokens(
       data['access_token'] as String,
       data['refresh_token'] as String,
     );
     return data;
+  }
+
+  Future<Map<String, dynamic>> verifyLogin2fa({
+    required String challengeToken,
+    required String code,
+  }) async {
+    final res = await _dio.post('/auth/2fa/verify-login', data: {
+      'challenge_token': challengeToken,
+      'code': code,
+    });
+    final data = Map<String, dynamic>.from(res.data as Map);
+    await saveTokens(
+      data['access_token'] as String,
+      data['refresh_token'] as String,
+    );
+    return data;
+  }
+
+  Future<Map<String, dynamic>> twoFaStatus() async {
+    final res = await _dio.get('/auth/2fa/status');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> twoFaSetup() async {
+    final res = await _dio.post('/auth/2fa/setup');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> twoFaConfirm({
+    required String code,
+    String? challengeToken,
+  }) async {
+    final res = await _dio.post('/auth/2fa/confirm', data: {
+      'code': code,
+      if (challengeToken != null) 'challenge_token': challengeToken,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> legalPending() async {
+    final res = await _dio.get('/legal/pending');
+    final items = (res.data as Map)['pending'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> legalDocument(String slug) async {
+    final res = await _dio.get('/legal/$slug');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> legalAccept(List<String> slugs) async {
+    await _dio.post('/legal/accept', data: {'slugs': slugs});
   }
 
   Future<Map<String, dynamic>> me() async {
@@ -89,22 +145,39 @@ class ApiClient {
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
-  Future<Map<String, dynamic>> preparePhotos({String? taskUuid}) async {
+  Future<Map<String, dynamic>> preparePhotos({
+    String? taskUuid,
+    int? companyId,
+  }) async {
     final res = await _dio.post('/orders/photos/prepare', data: {
       if (taskUuid != null) 'task_uuid': taskUuid,
+      if (companyId != null) 'company_id': companyId,
     });
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> registerPhotoEncryptionKey({
+    required String taskUuid,
+    required String keyB64,
+  }) async {
+    await _dio.post('/orders/photos/encryption-key', data: {
+      'task_uuid': taskUuid,
+      'key_b64': keyB64,
+      'algorithm': 'aes-256-gcm',
+    });
   }
 
   /// Presigned PUT каждого JPEG (resumable по файлу).
   Future<void> uploadPhotoPresigned({
     required String uploadUrl,
     required File file,
+    String contentType = 'image/jpeg',
+    Uint8List? bytesOverride,
     void Function(int sent, int total)? onProgress,
   }) async {
-    final bytes = await file.readAsBytes();
+    final bytes = bytesOverride ?? await file.readAsBytes();
     final req = http.StreamedRequest('PUT', Uri.parse(uploadUrl));
-    req.headers['Content-Type'] = 'image/jpeg';
+    req.headers['Content-Type'] = contentType;
     req.contentLength = bytes.length;
     var sent = 0;
     const chunk = 64 * 1024;
@@ -159,6 +232,8 @@ class ApiClient {
     Map<String, dynamic>? scaleCalibration,
     List<String> upsells = const [],
     String? photosPrefix,
+    String? deviceModel,
+    String? osVersion,
   }) async {
     final res = await _dio.post('/orders/create', data: {
       'task_uuid': taskUuid,
@@ -171,6 +246,8 @@ class ApiClient {
       if (scaleCalibration != null) 'scale_calibration': scaleCalibration,
       'upsell_options': upsells,
       if (photosPrefix != null) 'photos_prefix': photosPrefix,
+      if (deviceModel != null) 'device_model': deviceModel,
+      if (osVersion != null) 'os_version': osVersion,
     });
     return Map<String, dynamic>.from(res.data as Map);
   }
@@ -207,6 +284,75 @@ class ApiClient {
       'reasons': reasons,
     });
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> downloadModel({
+    required String modelUuid,
+    String format = 'glb',
+    String? marketplace,
+  }) async {
+    final res = await _dio.get('/models/$modelUuid/download', queryParameters: {
+      'format': format,
+      if (marketplace != null) 'marketplace': marketplace,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getModel(String modelUuid) async {
+    final res = await _dio.get('/models/$modelUuid');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> restoreSources({required String modelUuid}) async {
+    final res = await _dio.post('/models/$modelUuid/restore-sources');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> extendStorage({required String modelUuid}) async {
+    final res = await _dio.post('/models/$modelUuid/extend-storage');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> trashModel({required String modelUuid}) async {
+    final res = await _dio.post('/models/$modelUuid/trash');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> markPublished({
+    required String modelUuid,
+    required String marketplace,
+  }) async {
+    final res = await _dio.post('/models/$modelUuid/publish/mark', data: {
+      'marketplace': marketplace,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> addPublicationLink({
+    required String modelUuid,
+    required String url,
+  }) async {
+    final res = await _dio.post('/models/$modelUuid/publication/links', data: {
+      'url': url,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> marketplaceUpload({
+    required String modelUuid,
+    required String marketplace,
+    required String sku,
+  }) async {
+    final res = await _dio.post('/models/$modelUuid/marketplace-upload', data: {
+      'marketplace': marketplace,
+      'sku': sku,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<String?> previewUrl(String modelUuid) async {
+    final res = await _dio.get('/models/$modelUuid/preview');
+    return (res.data as Map)['preview_url']?.toString();
   }
 
   Future<Map<String, dynamic>> createShootLink({
@@ -276,5 +422,13 @@ class ApiClient {
       'category': category,
     });
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> replySupport(int id, String message) async {
+    await _dio.post('/support/questions/$id/messages', data: {'message': message});
+  }
+
+  Future<void> closeSupport(int id) async {
+    await _dio.post('/support/questions/$id/close');
   }
 }

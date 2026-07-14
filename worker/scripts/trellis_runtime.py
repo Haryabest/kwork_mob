@@ -51,6 +51,35 @@ def _pick_front_image(photos_dir: Path) -> Path:
     return images[0]
 
 
+def preflight_cuda() -> None:
+    """RTX Blackwell sm_120 требует PyTorch cu128 (§5.1 / production GPU)."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return
+    major, minor = torch.cuda.get_device_capability(0)
+    cuda_ver = getattr(torch.version, "cuda", None) or ""
+    device = torch.cuda.get_device_name(0)
+    logger.info("CUDA preflight: %s sm_%s%s torch.cuda=%s", device, major, minor, cuda_ver)
+    if major >= 12 and "12.8" not in cuda_ver:
+        raise RuntimeError(
+            f"GPU {device} (sm_{major}{minor}) требует PyTorch cu128, "
+            f"сейчас torch.cuda={cuda_ver!r}. "
+            "Пересоберите образ: pip install torch --index-url "
+            "https://download.pytorch.org/whl/cu128"
+        )
+
+
+def _require_nobg_dir(task_dir: Path) -> Path:
+    """TRELLIS.2: один вход view_00 из photos_nobg после remove_background (§6.2)."""
+    photos_nobg = task_dir / "photos_nobg"
+    if not photos_nobg.is_dir() or not any(photos_nobg.iterdir()):
+        raise RuntimeError(
+            "TRELLIS.2 требует photos_nobg/view_00 — сначала выполните remove_background.py"
+        )
+    return photos_nobg
+
+
 def get_pipeline():
     global _pipeline, _pipeline_kind
     if _pipeline is not None:
@@ -174,20 +203,15 @@ def _export_result(result, output: Path) -> None:
 
 
 def run_trellis2(task_dir: Path, output: Path) -> Path:
-    """TRELLIS.2: image→3D с native PBR (один лучший ракурс из 12)."""
+    """TRELLIS.2: image→3D с native PBR (view_00 из photos_nobg)."""
     import torch
     from PIL import Image
 
-    photos_dir = task_dir / "photos_nobg"
-    if not photos_dir.exists() or not any(photos_dir.iterdir()):
-        photos_dir = task_dir / "photos"
-
+    preflight_cuda()
+    photos_dir = _require_nobg_dir(task_dir)
     front = _pick_front_image(photos_dir)
     image = Image.open(front).convert("RGBA")
-    logger.info(
-        "TRELLIS.2 input=%s (из 12 ракурсов — фронт; multi-view в .2 пока single-image)",
-        front.name,
-    )
+    logger.info("TRELLIS.2 input=%s (single-image, photos_nobg/view_00)", front.name)
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -252,5 +276,6 @@ def run_trellis_v1(task_dir: Path, output: Path) -> Path:
 
 def run_trellis(task_dir: Path, output: Path) -> Path:
     if trellis_version() in ("2", "trellis2", "trellis.2"):
+        preflight_cuda()
         return run_trellis2(task_dir, output)
     return run_trellis_v1(task_dir, output)

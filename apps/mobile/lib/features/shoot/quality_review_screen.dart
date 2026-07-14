@@ -10,9 +10,15 @@ import 'package:kwork_mobile/services/shoot_storage.dart';
 
 /// Проверка качества 12 кадров (§3.9).
 class QualityReviewScreen extends StatefulWidget {
-  const QualityReviewScreen({super.key, required this.modelUuid});
+  const QualityReviewScreen({
+    super.key,
+    required this.modelUuid,
+    this.flowBase = '/home/shoot',
+  });
 
   final String modelUuid;
+  /// Префикс маршрута: `/home/shoot` или `/shoot/{token}`.
+  final String flowBase;
 
   @override
   State<QualityReviewScreen> createState() => _QualityReviewScreenState();
@@ -67,7 +73,7 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
       return;
     }
     final ok = await context.push<bool>(
-      '/home/shoot/dome',
+      '${widget.flowBase}/dome',
       extra: {'uuid': widget.modelUuid, 'reshoot': index},
     );
     if (ok == true) {
@@ -114,7 +120,7 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
     }
 
     if (!mounted) return;
-    context.push('/home/shoot/upload', extra: widget.modelUuid);
+    context.push('${widget.flowBase}/upload', extra: widget.modelUuid);
   }
 
   @override
@@ -225,7 +231,7 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
                       FButton(
                         variant: .ghost,
                         onPress: () => context.pushReplacement(
-                          '/home/shoot/dome',
+                          '${widget.flowBase}/dome',
                           extra: widget.modelUuid,
                         ),
                         child: const Text('Начать съёмку с начала'),

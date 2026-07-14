@@ -3,8 +3,10 @@
 import {
   Button,
   Checkbox,
+  Divider,
   MultiSelect,
   NumberInput,
+  Select,
   Stack,
   Switch,
   Text,
@@ -26,6 +28,8 @@ type Policies = {
   low_balance_threshold: number;
 };
 
+type Routing = Record<string, string>;
+
 const EMPTY: Policies = {
   default_max_concurrent_orders: 5,
   default_monthly_spending_limit: null,
@@ -37,8 +41,29 @@ const EMPTY: Policies = {
   low_balance_threshold: 5000,
 };
 
+const ROUTING_DEFAULT: Routing = {
+  generation_done: 'owner_manager',
+  photographer_uploaded: 'owner_manager',
+  source_expire: 'all',
+  low_balance: 'owner_only',
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  generation_done: 'Генерация завершена',
+  photographer_uploaded: 'Фотограф загрузил фото',
+  source_expire: 'Истекает облачная копия',
+  low_balance: 'Низкий баланс компании',
+};
+
+const AUDIENCE_OPTIONS = [
+  { value: 'owner_only', label: 'Только Owner' },
+  { value: 'owner_manager', label: 'Owner + Manager' },
+  { value: 'all', label: 'Всем сотрудникам' },
+];
+
 export default function PoliciesPage() {
   const [policies, setPolicies] = useState<Policies>(EMPTY);
+  const [routing, setRouting] = useState<Routing>(ROUTING_DEFAULT);
   const [categories, setCategories] = useState<string[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [noMonthlyLimit, setNoMonthlyLimit] = useState(true);
@@ -48,12 +73,14 @@ export default function PoliciesPage() {
     api
       .get<{
         policies: Policies;
+        notification_routing?: Routing;
         available_categories: string[];
         balance: number;
       }>('/company/settings')
       .then(({ data }) => {
         const p = { ...EMPTY, ...(data.policies || {}) };
         setPolicies(p);
+        setRouting({ ...ROUTING_DEFAULT, ...(data.notification_routing || {}) });
         setNoMonthlyLimit(p.default_monthly_spending_limit == null);
         setCategories(data.available_categories || []);
         setBalance(data.balance);
@@ -71,9 +98,14 @@ export default function PoliciesPage() {
             ? null
             : policies.default_monthly_spending_limit,
         },
+        notification_routing: routing,
       };
-      const { data } = await api.patch<{ policies: Policies }>('/company/settings', payload);
+      const { data } = await api.patch<{
+        policies: Policies;
+        notification_routing?: Routing;
+      }>('/company/settings', payload);
       setPolicies({ ...EMPTY, ...(data.policies || {}) });
+      setRouting({ ...ROUTING_DEFAULT, ...(data.notification_routing || {}) });
       notifications.show({ color: 'teal', message: 'Политики сохранены' });
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
@@ -180,6 +212,25 @@ export default function PoliciesPage() {
             }))
           }
         />
+        <Divider label="Уведомления Owner (§3.19)" labelPosition="left" />
+        <Text size="sm" c="dimmed">
+          Кому слать push/email по событиям компании
+        </Text>
+        {Object.keys(ROUTING_DEFAULT).map((event) => (
+          <Select
+            key={event}
+            label={EVENT_LABELS[event] || event}
+            data={AUDIENCE_OPTIONS}
+            value={routing[event] || ROUTING_DEFAULT[event]}
+            allowDeselect={false}
+            onChange={(v) =>
+              setRouting((r) => ({
+                ...r,
+                [event]: v || ROUTING_DEFAULT[event],
+              }))
+            }
+          />
+        ))}
         <Button w="fit-content" loading={saving} onClick={save}>
           Сохранить
         </Button>

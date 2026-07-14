@@ -71,9 +71,15 @@ class YookassaService:
                 headers={"Idempotence-Key": key},
             )
             if resp.status_code >= 400:
+                from app.services import yookassa_alerts as yk_alerts
+
+                await yk_alerts.record_error(resp.text[:300])
                 raise HTTPException(502, f"ЮKassa error: {resp.text[:500]}")
             data = resp.json()
 
+        from app.services import yookassa_alerts as yk_alerts
+
+        await yk_alerts.record_success()
         conf = data.get("confirmation") or {}
         return {
             "id": data["id"],
@@ -95,8 +101,15 @@ class YookassaService:
                 auth=(self.shop_id, self.secret_key),
             )
             if resp.status_code >= 400:
+                from app.services import yookassa_alerts as yk_alerts
+
+                await yk_alerts.record_error(resp.text[:300])
                 raise HTTPException(502, f"ЮKassa get payment error: {resp.text[:500]}")
-            return resp.json()
+            data = resp.json()
+        from app.services import yookassa_alerts as yk_alerts
+
+        await yk_alerts.record_success()
+        return data
 
     async def create_refund(self, payment_id: str, amount_rub: int, reason: str) -> dict[str, Any]:
         self.require_configured()
@@ -113,8 +126,33 @@ class YookassaService:
                 headers={"Idempotence-Key": str(uuid.uuid4())},
             )
             if resp.status_code >= 400:
+                from app.services import yookassa_alerts as yk_alerts
+
+                await yk_alerts.record_error(resp.text[:300])
                 raise HTTPException(502, f"ЮKassa refund error: {resp.text[:500]}")
-            return resp.json()
+            data = resp.json()
+        from app.services import yookassa_alerts as yk_alerts
+
+        await yk_alerts.record_success()
+        return data
+
+    async def get_refund(self, refund_id: str) -> dict[str, Any]:
+        self.require_configured()
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                f"{self.API}/refunds/{refund_id}",
+                auth=(self.shop_id, self.secret_key),
+            )
+            if resp.status_code >= 400:
+                from app.services import yookassa_alerts as yk_alerts
+
+                await yk_alerts.record_error(resp.text[:300])
+                raise HTTPException(502, f"ЮKassa get refund error: {resp.text[:500]}")
+            data = resp.json()
+        from app.services import yookassa_alerts as yk_alerts
+
+        await yk_alerts.record_success()
+        return data
 
     def parse_webhook(self, body: dict[str, Any]) -> dict[str, Any]:
         obj = body.get("object") or {}
@@ -123,13 +161,22 @@ class YookassaService:
             amount = int(float(amount_raw))
         except (TypeError, ValueError):
             amount = 0
+        event = body.get("event")
+        # payment.* → object.id = payment_id; refund.* → object.id = refund_id
+        payment_id = obj.get("id")
+        refund_id = None
+        if event and str(event).startswith("refund."):
+            refund_id = obj.get("id")
+            payment_id = obj.get("payment_id")
         return {
-            "event": body.get("event"),
-            "payment_id": obj.get("id"),
+            "event": event,
+            "payment_id": payment_id,
+            "refund_id": refund_id,
             "status": obj.get("status"),
             "amount": amount,
             "metadata": obj.get("metadata") or {},
             "payment_method": ((obj.get("payment_method") or {}).get("type")),
+            "object": obj,
         }
 
 

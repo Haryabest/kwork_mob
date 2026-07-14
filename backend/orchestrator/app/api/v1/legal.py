@@ -12,7 +12,7 @@ from app.models import LegalDocument, User, UserConsent
 
 router = APIRouter(prefix="/legal", tags=["Юридические документы"])
 
-REQUIRED_SLUGS = ("terms", "privacy", "rights", "nsfw_rules")
+REQUIRED_SLUGS = ("terms", "privacy", "offer", "rights", "nsfw_rules")
 
 
 class AcceptConsentsRequest(BaseModel):

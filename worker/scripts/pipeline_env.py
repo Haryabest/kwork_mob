@@ -23,3 +23,11 @@ def is_trellis2() -> bool:
 
 def is_production_trellis() -> bool:
     return pipeline_mode() == "trellis" and not is_stub_pipeline()
+
+
+def allow_stub_fallback() -> bool:
+    return os.getenv("TRELLIS_ALLOW_STUB_FALLBACK", "0").strip() in ("1", "true", "yes")
+
+
+def subprocess_stream_enabled() -> bool:
+    return os.getenv("WORKER_SUBPROCESS_STREAM", "1").strip().lower() in ("1", "true", "yes")

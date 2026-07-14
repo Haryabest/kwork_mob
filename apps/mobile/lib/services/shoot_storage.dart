@@ -20,6 +20,7 @@ class ShootDraft {
     this.forbidden = const [],
     this.scaleCalibration,
     this.reshootCounts = const {},
+    this.birthDate,
   });
 
   final String modelUuid;
@@ -30,6 +31,7 @@ class ShootDraft {
   Map<String, dynamic>? scaleCalibration;
   DateTime createdAt;
   Map<int, int> reshootCounts;
+  String? birthDate;
 
   Map<String, dynamic> toJson() => {
         'model_uuid': modelUuid,
@@ -40,6 +42,7 @@ class ShootDraft {
         'scale_calibration': scaleCalibration,
         'created_at': createdAt.toIso8601String(),
         'reshoot_counts': reshootCounts.map((k, v) => MapEntry('$k', v)),
+        if (birthDate != null) 'birth_date': birthDate,
       };
 
   static ShootDraft fromJson(Map<String, dynamic> j) {
@@ -68,6 +71,7 @@ class ShootDraft {
         for (final e in ((j['reshoot_counts'] as Map?) ?? {}).entries)
           int.parse(e.key.toString()): e.value as int,
       },
+      birthDate: j['birth_date']?.toString(),
     );
   }
 }

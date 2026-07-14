@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
@@ -27,14 +28,33 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _totp = TextEditingController();
   bool _loading = false;
   String? _error;
+  String? _challengeToken;
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _totp.dispose();
     super.dispose();
+  }
+
+  Future<void> _finishLogin() async {
+    final me = await widget.api.me();
+    widget.session.applyMe(me);
+    await widget.session.setCompanies(await widget.api.myCompanies());
+    await widget.push.init();
+    try {
+      final pending = await widget.api.legalPending();
+      if (!mounted) return;
+      if (pending.isNotEmpty) {
+        context.go('/legal/consent');
+        return;
+      }
+    } catch (_) {}
+    if (mounted) context.go('/home');
   }
 
   Future<void> _submit() async {
@@ -43,12 +63,23 @@ class _AuthScreenState extends State<AuthScreen> {
       _error = null;
     });
     try {
-      await widget.api.login(_email.text.trim(), _password.text);
-      final me = await widget.api.me();
-      widget.session.applyMe(me);
-      await widget.session.setCompanies(await widget.api.myCompanies());
-      await widget.push.init();
-      if (mounted) context.go('/home');
+      if (_challengeToken != null) {
+        await widget.api.verifyLogin2fa(
+          challengeToken: _challengeToken!,
+          code: _totp.text.trim(),
+        );
+        await _finishLogin();
+        return;
+      }
+      final data = await widget.api.login(_email.text.trim(), _password.text);
+      if (data['requires_2fa'] == true) {
+        setState(() {
+          _challengeToken = data['challenge_token']?.toString();
+          _loading = false;
+        });
+        return;
+      }
+      await _finishLogin();
     } on DioException catch (e) {
       setState(() => _error = e.response?.data?['detail']?.toString() ?? e.message);
     } catch (e) {
@@ -61,6 +92,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final need2fa = _challengeToken != null;
     return FScaffold(
       child: SafeArea(
         child: Center(
@@ -78,25 +110,42 @@ class _AuthScreenState extends State<AuthScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
-                  Text(l10n.authTitle, textAlign: TextAlign.center, style: TextStyle(color: AppColors.textSecondary)),
+                  Text(
+                    need2fa ? 'Введите код 2FA' : l10n.authTitle,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
                   const SizedBox(height: 32),
-                  TextField(
-                    controller: _email,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      labelText: l10n.email,
-                      border: const OutlineInputBorder(),
+                  if (!need2fa) ...[
+                    TextField(
+                      controller: _email,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: l10n.email,
+                        border: const OutlineInputBorder(),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _password,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: l10n.password,
-                      border: const OutlineInputBorder(),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _password,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: l10n.password,
+                        border: const OutlineInputBorder(),
+                      ),
                     ),
-                  ),
+                  ] else
+                    TextField(
+                      controller: _totp,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      maxLength: 6,
+                      decoration: const InputDecoration(
+                        labelText: 'Код из Authenticator',
+                        border: OutlineInputBorder(),
+                        counterText: '',
+                      ),
+                    ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
                     Text(_error!, style: const TextStyle(color: AppColors.error)),
@@ -104,14 +153,17 @@ class _AuthScreenState extends State<AuthScreen> {
                   const SizedBox(height: 20),
                   FButton(
                     onPress: _loading ? null : _submit,
-                    child: _loading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(l10n.login),
+                    child: Text(_loading ? '…' : (need2fa ? 'Подтвердить' : l10n.continueBtn)),
                   ),
+                  if (need2fa)
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _challengeToken = null;
+                        _totp.clear();
+                        _error = null;
+                      }),
+                      child: const Text('Назад'),
+                    ),
                 ],
               ),
             ),

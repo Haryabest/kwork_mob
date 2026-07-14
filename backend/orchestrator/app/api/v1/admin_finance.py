@@ -33,10 +33,13 @@ class AlertSettingsBody(BaseModel):
     telegram_enabled: bool = False
     email_enabled: bool = False
     email_to: str | None = None
+    email_recipients: list[str] | None = None  # до 5 §12.4.2
+    thresholds: dict | None = None
 
 
 class TestAlertBody(BaseModel):
     message: str = "Тестовый алерт KWork"
+    channel: str = "dual"  # telegram | email | dual
 
 
 @router.get("/tariffs")
@@ -65,7 +68,12 @@ async def tariffs_history(code: str | None = None, db: AsyncSession = Depends(ge
 
 @router.get("/alerts/settings")
 async def get_alert_settings(db: AsyncSession = Depends(get_db)):
+    from app.services import alert_thresholds as ath
+    from app.services.alerts import _email_recipients
+
     cfg = await alerts_svc.get_settings(db)
+    thresholds = await ath.load_thresholds(db)
+    recipients = _email_recipients(cfg)
     await db.commit()
     return {
         "telegram_enabled": cfg.telegram_enabled,
@@ -73,11 +81,18 @@ async def get_alert_settings(db: AsyncSession = Depends(get_db)):
         "telegram_bot_token_set": bool(cfg.telegram_bot_token),
         "email_enabled": cfg.email_enabled,
         "email_to": cfg.email_to,
+        "email_recipients": recipients,
+        "email_recipients_max": 5,
+        "thresholds": thresholds,
+        "threshold_keys": list(ath.THRESHOLD_KEYS.keys()),
     }
 
 
 @router.put("/alerts/settings")
 async def put_alert_settings(body: AlertSettingsBody, db: AsyncSession = Depends(get_db)):
+    from app.services import alert_thresholds as ath
+    from app.services.alerts import normalize_email_recipients
+
     cfg = await alerts_svc.get_settings(db)
     if body.telegram_bot_token is not None:
         cfg.telegram_bot_token = body.telegram_bot_token or None
@@ -85,22 +100,120 @@ async def put_alert_settings(body: AlertSettingsBody, db: AsyncSession = Depends
         cfg.telegram_chat_id = body.telegram_chat_id or None
     cfg.telegram_enabled = body.telegram_enabled
     cfg.email_enabled = body.email_enabled
-    cfg.email_to = body.email_to
+    csv, recipients = normalize_email_recipients(body.email_recipients, body.email_to)
+    cfg.email_to = csv
+    # дублируем список в thresholds для явного UI round-trip
+    thr_map = dict(cfg.thresholds or {})
+    thr_map["email_recipients"] = recipients
+    cfg.thresholds = thr_map
     cfg.updated_at = datetime.now(timezone.utc)
+    thresholds = None
+    if body.thresholds is not None:
+        # не затирать email_recipients из thresholds patch
+        patch = dict(body.thresholds)
+        patch.pop("email_recipients", None)
+        thresholds = await ath.save_thresholds(db, patch)
+        cfg.thresholds = {**(cfg.thresholds or {}), "email_recipients": recipients}
+    else:
+        thresholds = await ath.load_thresholds(db)
     await db.commit()
-    return {"ok": True}
+    return {"ok": True, "thresholds": thresholds, "email_recipients": recipients}
 
 
 @router.post("/alerts/test")
 async def test_alert(body: TestAlertBody, db: AsyncSession = Depends(get_db)):
-    ok = await alerts_svc.send_telegram(db, body.message, event_type="test", payload={})
+    channel = (body.channel or "dual").lower()
+    result = {"telegram": False, "email": False}
+    if channel in ("telegram", "dual"):
+        result["telegram"] = await alerts_svc.send_telegram(
+            db, body.message, event_type="test", payload={}
+        )
+    if channel in ("email", "dual"):
+        result["email"] = await alerts_svc.send_email_alert(
+            db, body.message, event_type="test", subject="[3dvektor] Test alert", payload={}
+        )
     await db.commit()
-    return {"ok": ok}
+    return {"ok": result["telegram"] or result["email"], **result}
+
+
+@router.get("/task-conflicts")
+async def list_task_conflicts(
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+):
+    """Журнал Redlock / duplicate completion (§12.4.1 / §13.3.5)."""
+    from app.models import TaskConflict
+
+    rows = (
+        await db.scalars(
+            select(TaskConflict).order_by(TaskConflict.id.desc()).limit(min(limit, 500))
+        )
+    ).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "task_id": r.task_id,
+                "worker_id": r.worker_id,
+                "reason": r.reason,
+                "details": r.details or {},
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
 
 
 @router.get("/alerts/log")
-async def alert_log(db: AsyncSession = Depends(get_db)):
-    return {"items": await alerts_svc.list_alert_log(db)}
+async def alert_log(
+    event_type: str | None = None,
+    channel: str | None = None,
+    ok: bool | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    limit: int = 200,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+):
+    """История alert_log §12.4.3."""
+    return await alerts_svc.list_alert_log(
+        db,
+        limit=limit,
+        offset=offset,
+        event_type=event_type,
+        channel=channel,
+        ok=ok,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@router.get("/alerts/log/export")
+async def alert_log_export(
+    event_type: str | None = None,
+    channel: str | None = None,
+    ok: bool | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    from fastapi.responses import Response
+
+    data = await alerts_svc.list_alert_log(
+        db,
+        limit=5000,
+        offset=0,
+        event_type=event_type,
+        channel=channel,
+        ok=ok,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    return Response(
+        content=alerts_svc.alert_log_to_csv(data["items"]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="alert-log.csv"'},
+    )
 
 
 @router.get("/escalations")

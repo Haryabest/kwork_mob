@@ -5,12 +5,14 @@ from fastapi import APIRouter
 from app.api.v1 import (
     admin,
     admin_finance,
+    admin_logs,
     auth,
     campaigns,
     cloud_admin,
     company,
     faq,
     legal,
+    marketplace_admin,
     models,
     moderation,
     orders,
@@ -44,9 +46,12 @@ api_router.include_router(tax.router, prefix="/company", tags=["Налоги"])
 api_router.include_router(tax.admin_router)
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Администрирование"])
+api_router.include_router(admin_logs.router, prefix="/admin", tags=["Логи"])
 api_router.include_router(admin_finance.router, prefix="/admin", tags=["Тарифы и алерты"])
 api_router.include_router(cloud_admin.router, prefix="/admin", tags=["Облако GPU"])
+api_router.include_router(marketplace_admin.router)
 api_router.include_router(campaigns.router, prefix="/admin/campaigns", tags=["Кампании"])
+api_router.include_router(campaigns.public_router, prefix="/campaigns", tags=["Campaign track"])
 api_router.include_router(moderation.router, prefix="/admin/nsfw", tags=["Модерация"])
 api_router.include_router(watermark_admin.router, prefix="/admin/watermark", tags=["Водяной знак"])
 api_router.include_router(shoot.router)

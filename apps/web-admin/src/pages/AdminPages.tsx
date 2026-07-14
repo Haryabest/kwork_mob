@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Card, Center, Group, Loader, Modal, NumberInput, Select, SimpleGrid, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
+import { ActionIcon, Button, Card, Center, Code, Group, Loader, Modal, NumberInput, ScrollArea, Select, SimpleGrid, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
 import { IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
@@ -431,12 +431,34 @@ export function CompanyDetailPage() {
     status: string;
     members: Array<{ user_id: number; role: string }>;
   } | null>(null);
-  const [stats, setStats] = useState({ orders: 0, revenue: 0 });
+  const [stats, setStats] = useState({
+    orders: 0,
+    revenue: 0,
+    shoot_links: { created: 0, expired: 0, success: 0, active: 0, conversion_rate: 0 },
+  });
+  const [shootRecent, setShootRecent] = useState<
+    Array<{ id: number; token: string; status: string; used_count: number; created_at?: string }>
+  >([]);
 
   async function load() {
-    const [c, s] = await Promise.all([api.get(`/admin/companies/${id}`), api.get(`/admin/companies/${id}/stats`)]);
+    const [c, s, sl] = await Promise.all([
+      api.get(`/admin/companies/${id}`),
+      api.get(`/admin/companies/${id}/stats`),
+      api.get(`/admin/companies/${id}/shoot-links`),
+    ]);
     setCompany(c.data);
-    setStats(s.data);
+    setStats({
+      orders: s.data.orders ?? 0,
+      revenue: s.data.revenue ?? 0,
+      shoot_links: s.data.shoot_links ?? {
+        created: 0,
+        expired: 0,
+        success: 0,
+        active: 0,
+        conversion_rate: 0,
+      },
+    });
+    setShootRecent(sl.data.recent ?? []);
   }
 
   useEffect(() => {
@@ -445,10 +467,12 @@ export function CompanyDetailPage() {
 
   if (!company) return <Center py="xl"><Loader color="brand" /></Center>;
 
+  const sl = stats.shoot_links;
+
   return (
     <>
       <PageHeader title={company.name} description={`ИНН ${company.inn} · статус ${company.status}`} />
-      <SimpleGrid cols={{ base: 1, md: 2 }}>
+      <SimpleGrid cols={{ base: 1, md: 2 }} mb="md">
         <Card withBorder>
           <Stack>
             <Text fw={600}>Реквизиты</Text>
@@ -473,6 +497,33 @@ export function CompanyDetailPage() {
           <ShellTable headers={['User ID', 'Роль']} rows={company.members.map((m) => [String(m.user_id), m.role])} />
         </Card>
       </SimpleGrid>
+      <PageHeader title="Shoot-links (§3.15.4)" description="Созданные / истёкшие / успешные съёмки" />
+      <MetricGrid
+        items={[
+          { label: 'Создано', value: String(sl.created ?? 0) },
+          { label: 'Активны', value: String(sl.active ?? 0) },
+          { label: 'Истекли', value: String(sl.expired ?? 0) },
+          { label: 'Успешные', value: String(sl.success ?? 0), color: 'teal' },
+          {
+            label: 'Conversion',
+            value: `${((sl.conversion_rate ?? 0) * 100).toFixed(1)}%`,
+          },
+        ]}
+      />
+      <ShellTable
+        headers={['ID', 'Token', 'Статус', 'Uses', 'Создана']}
+        rows={
+          shootRecent.length
+            ? shootRecent.map((r) => [
+                String(r.id),
+                r.token,
+                <StateBadge key={`s${r.id}`} value={r.status} />,
+                String(r.used_count),
+                r.created_at?.slice(0, 19) ?? '—',
+              ])
+            : [['—', 'Нет ссылок', '—', '—', '—']]
+        }
+      />
     </>
   );
 }
@@ -698,18 +749,6 @@ export function SettingsPage() {
   );
 }
 
-export function LogsPage() {
-  return (
-    <>
-      <PageHeader title="Логи" description="События сервисов" />
-      <ShellTable
-        headers={['Время', 'Уровень', 'Источник', 'Сообщение']}
-        rows={[['—', <StateBadge key="i" value="INFO" color="blue" />, 'api', 'Подключите централизованный сбор логов']]}
-      />
-    </>
-  );
-}
-
 export function StoragePage() {
   const [health, setHealth] = useState<{
     ok?: boolean;
@@ -717,22 +756,133 @@ export function StoragePage() {
     error?: string;
     total_bytes?: number;
     used_percent?: number | null;
+    free_percent?: number | null;
     alert_disk_high?: boolean;
+    alert_disk_critical?: boolean;
+    alert_replication_failed?: boolean;
     usage?: Array<{ bucket: string; objects?: number; bytes?: number; error?: string }>;
-    smart?: { status?: string; note?: string };
+    smart?: { status?: string; note?: string; source?: string };
+    smart_disks?: Array<{
+      device?: string;
+      model?: string;
+      health?: string;
+      temp_c?: number;
+      used_percent?: number;
+      reallocated_sectors?: number;
+      wear_percent?: number;
+      remaining_life_percent?: number;
+      error?: string;
+    }>;
+    cluster_ha?: {
+      minio_replication?: Array<{
+        bucket?: string;
+        status?: string;
+        pending?: number;
+        pending_objects?: number;
+        failed_minutes?: number;
+        failed_since?: string;
+      }>;
+      postgres?: {
+        role?: string;
+        lag_bytes?: number;
+        wal_state?: string;
+        state?: string;
+      };
+      nodes?: Array<{ id?: string; name?: string; last_seen?: string; last_seen_age_sec?: number }>;
+      source?: string | null;
+    };
+    encryption?: {
+      mode?: string;
+      kms_key_configured?: boolean;
+      kms_key_id_masked?: string | null;
+    };
   }>({});
+  const [enc, setEnc] = useState<{
+    mode?: string;
+    kms_key_configured?: boolean;
+    kms_key_id_masked?: string | null;
+  }>({});
+  const [lastCheck, setLastCheck] = useState<string>('');
+  const [writeAct, setWriteAct] = useState<{
+    under_load?: boolean;
+    freeze_indicator?: boolean;
+    stale_seconds?: number | null;
+    last_write_at?: string | null;
+    queued_tasks?: number;
+    processing_tasks?: number;
+    pg_tx_1h?: number;
+  } | null>(null);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [logContainers, setLogContainers] = useState<string[]>([]);
+  const [logContainer, setLogContainer] = useState<string | null>('postgres');
+  const [logLines, setLogLines] = useState<
+    Array<{ timestamp?: string; message?: string; level?: string }>
+  >([]);
+  const [logBackend, setLogBackend] = useState('');
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [fioBusy, setFioBusy] = useState(false);
+  const [timeline, setTimeline] = useState<{
+    days?: number;
+    nodes?: Array<{
+      node_id: string;
+      node_name?: string;
+      uptime_percent?: number;
+      offline_sec?: number;
+      segments?: Array<{ status: string; started_at: string; ended_at?: string | null; duration_sec: number }>;
+    }>;
+  } | null>(null);
+  const [forecast, setForecast] = useState<{
+    current_used_percent?: number | null;
+    growth_percent_per_day?: number | null;
+    days_until_full?: number | null;
+    forecast_alert?: boolean;
+    wearout?: Array<{
+      device?: string;
+      wear_percent?: number;
+      needs_replace?: boolean;
+      bad_sectors?: boolean;
+      reallocated_sectors?: number;
+    }>;
+    wearout_alert?: boolean;
+  } | null>(null);
 
   async function check() {
     try {
       const { data } = await api.get('/storage/smart');
       setHealth(data);
+      setEnc(data.encryption || {});
     } catch (e) {
       try {
         const { data } = await api.get('/storage/health');
         setHealth(data);
+        setEnc(data.encryption || {});
       } catch (e2) {
         setHealth({ ok: false, error: getApiError(e2) });
       }
+    }
+    try {
+      const { data } = await api.get('/storage/encryption');
+      setEnc(data);
+    } catch {
+      /* optional */
+    }
+    try {
+      const { data } = await api.get('/admin/write-activity');
+      setWriteAct(data);
+    } catch {
+      /* optional */
+    }
+    try {
+      const { data } = await api.get('/admin/storage/node-timeline', { params: { days: 7 } });
+      setTimeline(data);
+    } catch {
+      /* optional */
+    }
+    try {
+      const { data } = await api.get('/admin/storage/disk-forecast', { params: { days: 14 } });
+      setForecast(data);
+    } catch {
+      /* optional */
     }
   }
 
@@ -740,11 +890,15 @@ export function StoragePage() {
     check();
   }, []);
 
+  const repl = health.cluster_ha?.minio_replication || [];
+  const pg = health.cluster_ha?.postgres || {};
+  const nodes = health.cluster_ha?.nodes || [];
+
   return (
     <>
       <PageHeader
         title="Кластер хранения"
-        description="MinIO health + SMART/usage (§21)"
+        description="MinIO SMART / disk / replication / PG lag §11.16 / §12.4.1"
         action={
           <Group>
             <Button leftSection={<IconRefresh size={16} />} onClick={check}>
@@ -764,20 +918,383 @@ export function StoragePage() {
             >
               Init buckets
             </Button>
+            <Button
+              variant="light"
+              onClick={async () => {
+                try {
+                  const { data } = await api.post('/storage/encryption/apply');
+                  notifications.show({
+                    color: 'teal',
+                    message: `SSE: ${data.encryption?.mode ?? 'ok'}`,
+                  });
+                  await check();
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                }
+              }}
+            >
+              Apply SSE
+            </Button>
+            <Button
+              variant="light"
+              onClick={async () => {
+                try {
+                  const { data } = await api.post<{
+                    alerts_sent?: string[];
+                    status?: string;
+                    used_percent?: number;
+                    free_percent?: number;
+                    thresholds?: Record<string, number>;
+                  }>('/admin/storage-alerts/check');
+                  setLastCheck(
+                    `sent=${(data.alerts_sent || []).join(',') || 'none'} · free ${data.free_percent ?? '—'}%`,
+                  );
+                  notifications.show({
+                    color: 'teal',
+                    message: `Cluster alerts: ${data.status} · used ${data.used_percent ?? '—'}% · ${(data.alerts_sent || []).join(',') || 'none'}`,
+                  });
+                  await check();
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                }
+              }}
+            >
+              Check disk/SMART/repl→alerts
+            </Button>
+            <Button
+              variant="light"
+              color="orange"
+              onClick={async () => {
+                try {
+                  const { data } = await api.post<{ mode?: string; result?: { ok?: boolean; error?: string } }>(
+                    '/admin/storage/force-resync-minio',
+                  );
+                  notifications.show({
+                    color: data.result?.ok !== false ? 'teal' : 'orange',
+                    message: `Force Resync MinIO: ${data.mode} · ${data.result?.error || 'ok'}`,
+                  });
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                }
+              }}
+            >
+              Force Resync MinIO
+            </Button>
+            <Button
+              variant="light"
+              color="orange"
+              onClick={async () => {
+                try {
+                  const { data } = await api.post<{ mode?: string; result?: { ok?: boolean; error?: string } }>(
+                    '/admin/storage/restart-patroni-replication',
+                  );
+                  notifications.show({
+                    color: data.result?.ok !== false ? 'teal' : 'orange',
+                    message: `Restart Patroni: ${data.mode} · ${data.result?.error || 'ok'}`,
+                  });
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                }
+              }}
+            >
+              Restart Patroni Replication
+            </Button>
+            <Button
+              variant="light"
+              color="violet"
+              loading={fioBusy}
+              onClick={async () => {
+                setFioBusy(true);
+                try {
+                  const { data } = await api.post<{
+                    mode?: string;
+                    duration_sec?: number;
+                    result?: { ok?: boolean; error?: string; body?: unknown };
+                  }>('/admin/storage/fio-test');
+                  notifications.show({
+                    color: data.result?.ok !== false ? 'teal' : 'orange',
+                    message: `FIO ${data.duration_sec || 10}s: ${data.mode} · ${data.result?.error || 'ok'}`,
+                  });
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                } finally {
+                  setFioBusy(false);
+                }
+              }}
+            >
+              Запустить FIO-тест
+            </Button>
+            <Button
+              variant="light"
+              onClick={async () => {
+                setLogsOpen(true);
+                try {
+                  const { data } = await api.get<{ containers: string[] }>(
+                    '/admin/storage/docker-logs/containers',
+                  );
+                  setLogContainers(data.containers || []);
+                  if (!logContainer && data.containers?.[0]) setLogContainer(data.containers[0]);
+                } catch {
+                  setLogContainers(['postgres', 'minio', 'patroni', 'redis']);
+                }
+              }}
+            >
+              Посмотреть логи
+            </Button>
           </Group>
         }
       />
+      <Modal
+        opened={logsOpen}
+        onClose={() => setLogsOpen(false)}
+        title="Docker / Loki logs §11.16.4"
+        size="xl"
+      >
+        <Stack>
+          <Group>
+            <Select
+              label="Контейнер"
+              data={(logContainers.length ? logContainers : ['postgres', 'minio', 'patroni', 'redis']).map(
+                (c) => ({ value: c, label: c }),
+              )}
+              value={logContainer}
+              onChange={setLogContainer}
+              w={220}
+              allowDeselect={false}
+            />
+            <Button
+              mt={22}
+              loading={logsLoading}
+              onClick={async () => {
+                if (!logContainer) return;
+                setLogsLoading(true);
+                try {
+                  const { data } = await api.get<{
+                    items?: Array<{ timestamp?: string; message?: string; level?: string }>;
+                    backend?: string;
+                    error?: string;
+                    ok?: boolean;
+                  }>('/admin/storage/docker-logs', {
+                    params: { container: logContainer, limit: 200, minutes: 60 },
+                  });
+                  setLogLines(data.items || []);
+                  setLogBackend(data.backend || '');
+                  if (data.error) {
+                    notifications.show({ color: 'orange', message: data.error });
+                  }
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                } finally {
+                  setLogsLoading(false);
+                }
+              }}
+            >
+              Загрузить
+            </Button>
+            {logBackend ? (
+              <Text size="xs" c="dimmed" mt={28}>
+                backend: {logBackend}
+              </Text>
+            ) : null}
+          </Group>
+          <ScrollArea h={420} offsetScrollbars>
+            <Code block style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>
+              {(logLines.length
+                ? logLines.map((l) => `${l.timestamp || ''} [${l.level || 'INFO'}] ${l.message || ''}`).join('\n')
+                : 'Выберите контейнер и нажмите «Загрузить»')}
+            </Code>
+          </ScrollArea>
+        </Stack>
+      </Modal>
+      {lastCheck ? (
+        <Text size="sm" c="dimmed" mb="sm">
+          Last alert check: {lastCheck}
+        </Text>
+      ) : null}
       <SimpleGrid cols={{ base: 1, sm: 2 }} mb="lg">
         <HealthCard name="MinIO" status={health.ok ? 'Онлайн' : 'Ошибка'} load={health.ok ? 50 : 0} />
         <Card withBorder>
-          <Text fw={600}>SMART / диск</Text>
+          <Text fw={600}>Шифрование SSE §10.6.3</Text>
           <Text size="sm" mt="sm">
-            status: {health.smart?.status ?? '—'} · used: {health.used_percent != null ? `${health.used_percent}%` : '—'}
-            {health.alert_disk_high ? ' ⚠ >85%' : ''}
+            Режим: <b>{enc.mode || health.encryption?.mode || '—'}</b>
+          </Text>
+          <Text size="xs" c="dimmed" mt={4}>
+            KMS key:{' '}
+            {enc.kms_key_configured || health.encryption?.kms_key_configured
+              ? enc.kms_key_id_masked || health.encryption?.kms_key_id_masked || 'yes'
+              : 'не задан (fallback SSE-S3 при режиме sse-kms)'}
+          </Text>
+        </Card>
+        <Card withBorder>
+          <Text fw={600}>SMART / диск §11.16.5</Text>
+          <Text size="sm" mt="sm">
+            status: {health.smart?.status ?? '—'} · used:{' '}
+            {health.used_percent != null ? `${health.used_percent}%` : '—'} · free:{' '}
+            {health.free_percent != null ? `${health.free_percent}%` : '—'}
+            {health.alert_disk_critical ? ' 🚨 critical' : health.alert_disk_high ? ' ⚠ >85%' : ''}
           </Text>
           <Text size="xs" c="dimmed" mt={4}>
             {health.smart?.note}
           </Text>
+          {(health.smart_disks || []).length > 0 && (
+            <ShellTable
+              headers={['Device', 'Health', 'Temp', 'Realloc', 'Wear %']}
+              rows={(health.smart_disks || []).map((d) => [
+                d.device || d.model || '—',
+                d.health || '—',
+                d.temp_c != null ? `${d.temp_c}°C` : '—',
+                d.reallocated_sectors != null ? String(d.reallocated_sectors) : '—',
+                d.wear_percent != null || d.remaining_life_percent != null
+                  ? String(d.wear_percent ?? d.remaining_life_percent)
+                  : '—',
+              ])}
+            />
+          )}
+        </Card>
+        <Card withBorder>
+          <Text fw={600}>Репликация §11.16.2</Text>
+          <Text size="sm" mt="sm">
+            MinIO:{' '}
+            {health.alert_replication_failed ? '⚠ Failed' : repl.length ? 'OK' : 'нет данных (MINIO_HA_JSON)'}
+          </Text>
+          {repl.length > 0 && (
+            <ShellTable
+              headers={['Bucket', 'Status', 'Pending', 'Failed min']}
+              rows={repl.map((r) => [
+                r.bucket || '—',
+                r.status || '—',
+                String(r.pending ?? r.pending_objects ?? '—'),
+                r.failed_minutes != null ? String(r.failed_minutes) : r.failed_since || '—',
+              ])}
+            />
+          )}
+          <Text size="sm" mt="md">
+            PostgreSQL: role={pg.role || '—'} · lag=
+            {pg.lag_bytes != null ? `${Math.round(Number(pg.lag_bytes) / (1024 * 1024))} MB` : '—'} · wal=
+            {pg.wal_state || pg.state || '—'}
+          </Text>
+          {nodes.length > 0 && (
+            <ShellTable
+              headers={['Node', 'Age sec', 'Last seen']}
+              rows={nodes.map((n) => [
+                n.id || n.name || '—',
+                n.last_seen_age_sec != null ? String(n.last_seen_age_sec) : '—',
+                n.last_seen || '—',
+              ])}
+            />
+          )}
+        </Card>
+        <Card withBorder>
+          <Text fw={600}>Write Activity Heartbeat §11.16 / §23.4</Text>
+          <Text size="sm" mt="sm">
+            load: {writeAct?.under_load ? 'да' : 'нет'} · queued={writeAct?.queued_tasks ?? '—'} ·
+            processing={writeAct?.processing_tasks ?? '—'}
+          </Text>
+          <Text size="sm" mt={4}>
+            last write: {writeAct?.last_write_at ?? '—'} · stale:{' '}
+            {writeAct?.stale_seconds != null ? `${Math.round(writeAct.stale_seconds)}s` : '—'}
+            {writeAct?.freeze_indicator ? ' 🔴 freeze' : ''}
+          </Text>
+          <Text size="xs" c="dimmed" mt={4}>
+            PG tx/1h: {writeAct?.pg_tx_1h ?? '—'} · порог алерта 10 мин при нагрузке
+          </Text>
+          <Button
+            mt="sm"
+            size="xs"
+            variant="light"
+            onClick={async () => {
+              try {
+                const { data } = await api.post<{
+                  freeze_indicator?: boolean;
+                  critical?: boolean;
+                  alert_sent?: boolean;
+                  stale_seconds?: number;
+                }>('/admin/write-activity/check');
+                setWriteAct((prev) => ({ ...(prev || {}), ...data }));
+                notifications.show({
+                  color: data.critical ? 'red' : data.freeze_indicator ? 'orange' : 'teal',
+                  message: `Write check: stale=${data.stale_seconds ?? '—'}s · critical=${String(data.critical)} · sent=${String(data.alert_sent)}`,
+                });
+              } catch (e) {
+                notifications.show({ color: 'red', message: getApiError(e) });
+              }
+            }}
+          >
+            Check write→alerts
+          </Button>
+        </Card>
+        <Card withBorder>
+          <Text fw={600}>Node availability timeline §11.16.3</Text>
+          <Text size="xs" c="dimmed" mt={4} mb="sm">
+            Heartbeat Tailscale · {timeline?.days || 7}д
+          </Text>
+          {(timeline?.nodes || []).length === 0 && (
+            <Text size="sm" c="dimmed">
+              Нет событий — Celery sample или MINIO_HA_JSON nodes
+            </Text>
+          )}
+          {(timeline?.nodes || []).map((n) => (
+            <div key={n.node_id} style={{ marginBottom: 12 }}>
+              <Group justify="space-between" mb={4}>
+                <Text size="sm" fw={600}>
+                  {n.node_name || n.node_id}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  uptime {n.uptime_percent ?? '—'}% · offline {n.offline_sec ?? 0}s
+                </Text>
+              </Group>
+              <div
+                style={{
+                  display: 'flex',
+                  height: 14,
+                  borderRadius: 4,
+                  overflow: 'hidden',
+                  background: 'rgba(0,0,0,0.06)',
+                }}
+              >
+                {(n.segments || []).slice(-40).map((s, i) => (
+                  <div
+                    key={`${n.node_id}-${i}`}
+                    title={`${s.status} ${s.duration_sec}s`}
+                    style={{
+                      flex: Math.max(s.duration_sec, 1),
+                      background: s.status === 'offline' ? '#c62828' : '#2e7d32',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </Card>
+        <Card withBorder>
+          <Text fw={600}>Disk fill forecast / wearout §23.7</Text>
+          <Text size="sm" mt="sm">
+            used: {forecast?.current_used_percent ?? '—'}% · рост:{' '}
+            {forecast?.growth_percent_per_day != null ? `${forecast.growth_percent_per_day}%/день` : '—'}
+          </Text>
+          <Text size="sm" mt={4}>
+            дней до 100%:{' '}
+            <b style={{ color: forecast?.forecast_alert ? '#c62828' : undefined }}>
+              {forecast?.days_until_full ?? '—'}
+            </b>
+            {forecast?.forecast_alert ? ' ⚠ ≤30д' : ''}
+          </Text>
+          {(forecast?.wearout || []).length > 0 && (
+            <ShellTable
+              headers={['Device', 'Wear %', 'Realloc', 'Replace?']}
+              rows={(forecast?.wearout || []).map((w) => [
+                w.device || '—',
+                w.wear_percent != null ? String(w.wear_percent) : '—',
+                w.reallocated_sectors != null ? String(w.reallocated_sectors) : '—',
+                w.needs_replace || w.bad_sectors ? '⚠ да' : 'нет',
+              ])}
+            />
+          )}
+          {forecast?.wearout_alert ? (
+            <Text size="xs" c="red" mt="xs">
+              Wearout &lt;15% или битые сектора — планировать замену
+            </Text>
+          ) : null}
         </Card>
         <Card withBorder>
           <Text fw={600}>Buckets</Text>

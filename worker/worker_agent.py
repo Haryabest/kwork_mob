@@ -58,6 +58,7 @@ E2E_BUDGET_LOCAL_SEC = int(os.getenv("WORKER_E2E_BUDGET_LOCAL_SEC", "180"))  # �
 WS_FALLBACK_URL = os.getenv("ORCHESTRATOR_WS_FALLBACK_URL", "")
 WS_CONNECT_TIMEOUT = float(os.getenv("WORKER_WS_CONNECT_TIMEOUT", "10"))
 TASK_DRAIN_TIMEOUT_SEC = int(os.getenv("WORKER_TASK_DRAIN_TIMEOUT_SEC", "3600"))
+SUBPROCESS_STREAM = os.getenv("WORKER_SUBPROCESS_STREAM", "1").lower() in ("1", "true", "yes")
 
 PIPELINE_STEPS = [
     "remove_background.py",
@@ -268,6 +269,24 @@ class WorkerAgent:
         except Exception:  # noqa: BLE001
             return False
 
+    def _run_script_stream(self, name: str, script: Path, task_dir: Path, env: dict) -> None:
+        process = subprocess.Popen(
+            [PYTHON, str(script), str(task_dir)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
+        )
+        assert process.stdout is not None
+        for line in process.stdout:
+            line = line.rstrip("\n\r")
+            if line:
+                logger.info("[%s] %s", name, line)
+        rc = process.wait()
+        if rc != 0:
+            raise RuntimeError(f"{name} failed ({rc})")
+
     def run_script(self, name: str, task_dir: Path) -> None:
         script = SCRIPTS_DIR / name
         env = os.environ.copy()
@@ -288,18 +307,24 @@ class WorkerAgent:
                 env["TASK_COMPANY_ID"] = str(meta.get("company_id") or 0)
             except Exception:  # noqa: BLE001
                 pass
-        result = subprocess.run(
-            [PYTHON, str(script), str(task_dir)],
-            check=False,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        if result.stdout:
-            logger.info("[%s] %s", name, result.stdout.strip()[-500:])
-        if result.returncode != 0:
-            err = (result.stderr or result.stdout or "script failed")[-1000:]
-            raise RuntimeError(f"{name} failed ({result.returncode}): {err}")
+        t0 = time.monotonic()
+        logger.info("Starting step %s", name)
+        if SUBPROCESS_STREAM:
+            self._run_script_stream(name, script, task_dir, env)
+        else:
+            result = subprocess.run(
+                [PYTHON, str(script), str(task_dir)],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            if result.stdout:
+                logger.info("[%s] %s", name, result.stdout.strip()[-500:])
+            if result.returncode != 0:
+                err = (result.stderr or result.stdout or "script failed")[-1000:]
+                raise RuntimeError(f"{name} failed ({result.returncode}): {err}")
+        logger.info("Finished step %s in %.1fs", name, time.monotonic() - t0)
 
     async def _notify_event(self, payload: dict) -> None:
         payload = {**payload, "worker_id": self.worker_id}
@@ -370,6 +395,14 @@ class WorkerAgent:
                     raise RuntimeError(
                         f"Нет фото в s3://{bucket}/{prefix} — загрузите 12 ракурсов (view_00…view_11.jpg)"
                     )
+                enc_key = payload.get("photo_encryption_key")
+                if enc_key:
+                    scripts = Path(__file__).resolve().parent / "scripts"
+                    sys.path.insert(0, str(scripts))
+                    from photo_decrypt import decrypt_photos_dir
+
+                    dec = await asyncio.to_thread(decrypt_photos_dir, photos_dir, enc_key)
+                    logger.info("Decrypted %s encrypted photos in RAM/temp (§10.6.2)", dec)
 
             meta = {
                 "task_id": task_id,
@@ -409,6 +442,29 @@ class WorkerAgent:
                 await asyncio.to_thread(self.run_script, step, task_dir)
                 completed.append(step)
                 await asyncio.to_thread(self.save_checkpoint, task_dir, task_id, completed)
+                if step == "remove_background.py":
+                    seg = {}
+                    meta_path = task_dir / "task_meta.json"
+                    if meta_path.exists():
+                        try:
+                            seg = json.loads(meta_path.read_text(encoding="utf-8")).get("segmentation") or {}
+                        except Exception:  # noqa: BLE001
+                            seg = {}
+                    frames = seg.get("frames") or []
+                    methods = [str(f.get("method") or "") for f in frames if isinstance(f, dict)]
+                    await self._notify_event(
+                        {
+                            "type": "segmentation_stats",
+                            "task_id": task_id,
+                            "device_model": payload.get("device_model"),
+                            "os_version": payload.get("os_version"),
+                            "segmentation": {
+                                **seg,
+                                "fallback_used": any(m == "sam" for m in methods),
+                                "failed": False,
+                            },
+                        }
+                    )
 
             model_path = task_dir / "model.glb"
             if not model_path.exists():
@@ -450,6 +506,14 @@ class WorkerAgent:
                     f"quality_gate_failed score={quality_score} < {threshold}"
                 )
 
+            seg_payload = {}
+            meta_path = task_dir / "task_meta.json"
+            if meta_path.exists():
+                try:
+                    seg_payload = json.loads(meta_path.read_text(encoding="utf-8")).get("segmentation") or {}
+                except Exception:  # noqa: BLE001
+                    seg_payload = {}
+
             await self._notify_event(
                 {
                     "type": "task_completed",
@@ -463,6 +527,9 @@ class WorkerAgent:
                     "upsell_options": payload.get("upsell_options") or [],
                     "elapsed_sec": round(time.monotonic() - t0, 2),
                     "e2e_budget_sec": E2E_BUDGET_SEC,
+                    "device_model": payload.get("device_model"),
+                    "os_version": payload.get("os_version"),
+                    "segmentation": seg_payload,
                 }
             )
             elapsed = time.monotonic() - t0
@@ -483,6 +550,15 @@ class WorkerAgent:
                     "task_id": task_id,
                     "error": str(exc),
                     "checkpoint_path": cp,
+                    "device_model": payload.get("device_model"),
+                    "os_version": payload.get("os_version"),
+                    "segmentation": (
+                        json.loads((task_dir / "task_meta.json").read_text(encoding="utf-8")).get(
+                            "segmentation"
+                        )
+                        if (task_dir / "task_meta.json").exists()
+                        else None
+                    ),
                 }
             )
         finally:
@@ -652,7 +728,10 @@ class WorkerAgent:
                             hb.cancel()
                             mx.cancel()
                             if self._task_coro and not self._task_coro.done():
-                                logger.info("WS closed, waiting for background task…")
+                                logger.info(
+                                    "WS closed, waiting for background task (до %ss)…",
+                                    TASK_DRAIN_TIMEOUT_SEC,
+                                )
                                 try:
                                     await asyncio.wait_for(self._task_coro, timeout=TASK_DRAIN_TIMEOUT_SEC)
                                 except asyncio.TimeoutError:

@@ -7,16 +7,19 @@ import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/features/models/model_viewer_screen.dart';
 import 'package:kwork_mobile/features/support/faq_support_screen.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/push_service.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
     super.key,
     required this.api,
     required this.session,
+    required this.push,
   });
 
   final ApiClient api;
   final AppSession session;
+  final PushService push;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -120,6 +123,8 @@ class _HomeShellState extends State<HomeShell> {
       _OrdersTab(api: widget.api),
       FaqSupportScreen(api: widget.api),
       _ProfileTab(
+        api: widget.api,
+        push: widget.push,
         session: session,
         onSwitchMode: _switchMode,
         onLogout: () async {
@@ -273,16 +278,113 @@ class _OrdersTabState extends State<_OrdersTab> {
   }
 }
 
-class _ProfileTab extends StatelessWidget {
+class _ProfileTab extends StatefulWidget {
   const _ProfileTab({
+    required this.api,
+    required this.push,
     required this.session,
     required this.onSwitchMode,
     required this.onLogout,
   });
 
+  final ApiClient api;
+  final PushService push;
   final AppSession session;
   final VoidCallback onSwitchMode;
   final VoidCallback onLogout;
+
+  @override
+  State<_ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<_ProfileTab> {
+  Map<String, bool> _prefs = {};
+  bool _totpEnabled = false;
+  bool _ownerRequired = false;
+  bool _loading2fa = false;
+  String? _setupSecret;
+  String? _setupChallenge;
+  final _code = TextEditingController();
+
+  static const _prefLabels = {
+    'generation_done': 'Генерация готова',
+    'refund': 'Возврат средств',
+    'source_expire': 'Истечение исходников',
+    'cleanup': 'Очистка хранилища',
+    'publish_reminder': 'Напоминание опубликовать',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _boot();
+  }
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _boot() async {
+    final prefs = await widget.push.loadPrefs();
+    try {
+      final st = await widget.api.twoFaStatus();
+      _totpEnabled = st['totp_enabled'] == true;
+      _ownerRequired = st['owner_2fa_required'] == true;
+    } catch (_) {}
+    if (mounted) setState(() => _prefs = prefs);
+  }
+
+  Future<void> _togglePref(String key, bool value) async {
+    await widget.push.setPref(key, value);
+    setState(() => _prefs[key] = value);
+  }
+
+  Future<void> _start2fa() async {
+    setState(() => _loading2fa = true);
+    try {
+      final data = await widget.api.twoFaSetup();
+      setState(() {
+        _setupSecret = data['secret']?.toString();
+        _setupChallenge = data['challenge_token']?.toString();
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _loading2fa = false);
+    }
+  }
+
+  Future<void> _confirm2fa() async {
+    setState(() => _loading2fa = true);
+    try {
+      await widget.api.twoFaConfirm(
+        code: _code.text.trim(),
+        challengeToken: _setupChallenge,
+      );
+      _code.clear();
+      setState(() {
+        _totpEnabled = true;
+        _setupSecret = null;
+        _setupChallenge = null;
+        _ownerRequired = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('2FA включена')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _loading2fa = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -292,16 +394,66 @@ class _ProfileTab extends StatelessWidget {
       children: [
         Text(l10n.profile, style: context.theme.typography.xl),
         const SizedBox(height: 12),
-        ListTile(title: Text(session.email ?? '—'), subtitle: const Text('Аккаунт')),
+        ListTile(title: Text(widget.session.email ?? '—'), subtitle: const Text('Аккаунт')),
         ListTile(
           title: const Text('Режим Личный / Компания'),
           leading: const Icon(Icons.swap_horiz),
-          onTap: onSwitchMode,
+          onTap: widget.onSwitchMode,
         ),
+        const Divider(),
+        Text('Уведомления (push) §3.4.3', style: context.theme.typography.sm),
+        const SizedBox(height: 4),
+        ..._prefLabels.entries.map(
+          (e) => SwitchListTile(
+            title: Text(e.value),
+            value: _prefs[e.key] ?? true,
+            onChanged: (v) => _togglePref(e.key, v),
+          ),
+        ),
+        const Divider(),
+        Text('Двухфакторная аутентификация', style: context.theme.typography.sm),
+        if (_ownerRequired)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Для Owner 2FA обязательна (§10.7.5)',
+              style: TextStyle(color: AppColors.warning),
+            ),
+          ),
+        ListTile(
+          title: Text(_totpEnabled ? '2FA включена' : '2FA выключена'),
+          subtitle: Text(_totpEnabled ? 'TOTP активен' : 'Google Authenticator / аналог'),
+          trailing: _totpEnabled
+              ? const Icon(Icons.verified_user, color: AppColors.success)
+              : FButton(
+                  onPress: _loading2fa ? null : _start2fa,
+                  child: Text(_loading2fa ? '…' : 'Включить'),
+                ),
+        ),
+        if (_setupSecret != null) ...[
+          SelectableText('Секрет: $_setupSecret', style: const TextStyle(fontSize: 12)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _code,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            decoration: const InputDecoration(
+              labelText: 'Код подтверждения',
+              border: OutlineInputBorder(),
+              counterText: '',
+            ),
+          ),
+          const SizedBox(height: 8),
+          FButton(
+            onPress: _loading2fa ? null : _confirm2fa,
+            child: const Text('Подтвердить 2FA'),
+          ),
+        ],
+        const Divider(),
         ListTile(
           title: const Text('Выйти'),
           leading: const Icon(Icons.logout),
-          onTap: onLogout,
+          onTap: widget.onLogout,
         ),
       ],
     );

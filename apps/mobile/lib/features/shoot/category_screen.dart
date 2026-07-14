@@ -7,7 +7,7 @@ import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 
-/// Выбор категории + чек-лист запрещённых (§3.5.4).
+/// Выбор категории + чек-лист запрещённых (§3.5.4) + age-gate 18+ (§10.8.3).
 class CategoryScreen extends StatefulWidget {
   const CategoryScreen({
     super.key,
@@ -32,12 +32,95 @@ class _CategoryScreenState extends State<CategoryScreen> {
   final _birth = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.session.dateOfBirth != null) {
+      _birth.text = widget.session.dateOfBirth!;
+    }
+  }
+
+  @override
   void dispose() {
     _scaleW.dispose();
     _scaleH.dispose();
     _scaleD.dispose();
     _birth.dispose();
     super.dispose();
+  }
+
+  int? _ageYears(String raw) {
+    final parts = raw.trim().split('-');
+    if (parts.length != 3) return null;
+    final y = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    final d = int.tryParse(parts[2]);
+    if (y == null || m == null || d == null) return null;
+    final dob = DateTime(y, m, d);
+    final now = DateTime.now();
+    var years = now.year - dob.year;
+    if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+      years -= 1;
+    }
+    return years;
+  }
+
+  Future<bool> _confirmAgeGate() async {
+    if (widget.session.ageVerified) return true;
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final ctrl = TextEditingController(text: _birth.text);
+        return AlertDialog(
+          title: const Text('Подтвердите, что вам 18 лет'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Введите дату рождения (YYYY-MM-DD).'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                decoration: const InputDecoration(
+                  labelText: 'Дата рождения',
+                  hintText: '1990-01-15',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.datetime,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () {
+                final years = _ageYears(ctrl.text);
+                if (years == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Некорректная дата (YYYY-MM-DD)')),
+                  );
+                  return;
+                }
+                if (years < 18) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Создание модели доступно только с 18 лет')),
+                  );
+                  Navigator.pop(ctx, false);
+                  return;
+                }
+                _birth.text = ctrl.text.trim();
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Подтвердить'),
+            ),
+          ],
+        );
+      },
+    );
+    return ok == true;
   }
 
   Future<void> _next() async {
@@ -65,11 +148,18 @@ class _CategoryScreenState extends State<CategoryScreen> {
       return;
     }
 
-    if (_category!.requiresAgeGate && _birth.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Укажите дату рождения (YYYY-MM-DD) для 18+')),
-      );
-      return;
+    if (_category!.requiresAgeGate) {
+      if (!widget.session.ageVerified) {
+        final confirmed = await _confirmAgeGate();
+        if (!confirmed) return;
+        if (_birth.text.trim().isEmpty) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Укажите дату рождения для 18+')),
+          );
+          return;
+        }
+      }
     }
 
     Map<String, dynamic>? scale;
@@ -87,6 +177,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
 
     final uuid = ShootStorage.instance.newUuid();
+    final birth = _category!.requiresAgeGate
+        ? (widget.session.ageVerified
+            ? widget.session.dateOfBirth
+            : (_birth.text.trim().isEmpty ? null : _birth.text.trim()))
+        : null;
     final draft = ShootDraft(
       modelUuid: uuid,
       category: _category!,
@@ -94,6 +189,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
       companyId: widget.session.companyId,
       forbidden: _forbidden.toList(),
       scaleCalibration: scale,
+      birthDate: birth,
       createdAt: DateTime.now(),
     );
     await ShootStorage.instance.writeMetadata(draft);
@@ -105,6 +201,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   @override
   Widget build(BuildContext context) {
     final hidePrices = widget.session.hidePrices;
+    final ageOk = widget.session.ageVerified;
     return FScaffold(
       header: FHeader.nested(
         title: const Text('Категория товара'),
@@ -124,7 +221,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 label: Text(c.label),
                 selected: selected,
                 selectedColor: AppColors.wbPrimary.withValues(alpha: 0.2),
-                onSelected: (_) => setState(() => _category = c),
+                onSelected: (_) async {
+                  setState(() => _category = c);
+                  if (c.requiresAgeGate && !widget.session.ageVerified) {
+                    await _confirmAgeGate();
+                    setState(() {});
+                  }
+                },
               );
             }).toList(),
           ),
@@ -150,13 +253,21 @@ class _CategoryScreenState extends State<CategoryScreen> {
           ),
           if (_category?.requiresAgeGate == true) ...[
             const SizedBox(height: 8),
-            TextField(
-              controller: _birth,
-              decoration: const InputDecoration(
-                labelText: 'Дата рождения (YYYY-MM-DD)',
-                border: OutlineInputBorder(),
+            if (ageOk)
+              const ListTile(
+                leading: Icon(Icons.verified_user, color: Colors.teal),
+                title: Text('Возраст подтверждён'),
+                subtitle: Text('Повторный ввод даты не требуется'),
+              )
+            else
+              TextField(
+                controller: _birth,
+                decoration: const InputDecoration(
+                  labelText: 'Дата рождения (YYYY-MM-DD)',
+                  border: OutlineInputBorder(),
+                  helperText: 'Сохраняется в профиле после успешной проверки',
+                ),
               ),
-            ),
           ],
           if (_category?.requiresScaleCalibration == true) ...[
             const SizedBox(height: 12),

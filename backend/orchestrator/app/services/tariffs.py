@@ -59,6 +59,8 @@ async def set_amount(
     row = await db.get(Tariff, code)
     if not row:
         raise HTTPException(404, "Тариф не найден")
+    from app.models import AuditLog
+
     old = row.amount_rub
     if old == amount_rub:
         return row
@@ -71,6 +73,20 @@ async def set_amount(
             new_amount=amount_rub,
             changed_by_user_id=changed_by,
             note=note,
+        )
+    )
+    # §10.7.7 / §21.4.1 — критическое событие: изменение цен
+    db.add(
+        AuditLog(
+            company_id=None,
+            user_id=changed_by,
+            action="tariff_price_changed",
+            details={
+                "tariff_code": code,
+                "old_amount": old,
+                "new_amount": amount_rub,
+                "note": note,
+            },
         )
     )
     await db.flush()

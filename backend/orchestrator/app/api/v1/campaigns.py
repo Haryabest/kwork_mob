@@ -141,3 +141,32 @@ async def campaign_stats(campaign_id: int, db: AsyncSession = Depends(get_db)):
     stats = await camp_svc.campaign_stats(db, campaign_id)
     await db.commit()
     return stats
+
+
+# Публичный трекинг кликов (без VPN) §11.7
+public_router = APIRouter(tags=["Campaign track"])
+
+
+@public_router.get("/{campaign_id}/click")
+async def campaign_click(
+    campaign_id: int,
+    request: Request,
+    u: str | None = None,
+    v: str | None = None,
+    uid: int | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Редирект с учётом клика (A/B)."""
+    from fastapi.responses import RedirectResponse
+
+    ip = request.client.host if request.client else None
+    result = await camp_svc.track_click(
+        db,
+        campaign_id=campaign_id,
+        user_id=uid,
+        variant=v,
+        target_url=u,
+        ip=ip,
+    )
+    await db.commit()
+    return RedirectResponse(url=result["redirect"], status_code=302)

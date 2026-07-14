@@ -8,7 +8,7 @@ docker run --env-file ../../.env.worker -e WORKER_PIPELINE_MODE=stub kwork-worke
 
 ## TRELLIS.2 (production GPU — требование клиента)
 ```bash
-docker build --build-arg INSTALL_TRELLIS=1 --build-arg TRELLIS_VERSION=2 -t kwork-worker:trellis2 .
+docker build --build-arg INSTALL_TRELLIS=1 --build-arg DOWNLOAD_WEIGHTS=1 --build-arg TRELLIS_VERSION=2 -t kwork-worker:trellis2 .
 
 docker run --gpus all \
   -e WORKER_PIPELINE_MODE=trellis \
@@ -23,7 +23,7 @@ docker run --gpus all \
 - Repo: [microsoft/TRELLIS.2](https://github.com/microsoft/TRELLIS.2)
 - Weights: [microsoft/TRELLIS.2-4B](https://huggingface.co/microsoft/TRELLIS.2-4B)
 - **VRAM:** официально ≥24 GB (A100/H100). RTX 5070 — пробовать `512` + `TRELLIS2_LOW_VRAM=1`, иначе облако.
-- TRELLIS.2: **single-image** + native PBR; 12 ракурсов → берём `view_00` (фронт), nobg уже с нашего пайплайна.
+- TRELLIS.2: **single-image** `photos_nobg/view_00` после `remove_background`; native PBR
 
 ## TRELLIS v1 (legacy, multi-view)
 ```bash

@@ -16,6 +16,9 @@ class AppSession extends ChangeNotifier {
   String? _companyRole;
   Map<String, bool> _permissions = {};
   List<Map<String, dynamic>> _companies = [];
+  bool _e2ePhotoEncryption = false;
+  bool _ageVerified = false;
+  String? _dateOfBirth;
 
   int? get userId => _userId;
   String? get email => _email;
@@ -26,6 +29,8 @@ class AppSession extends ChangeNotifier {
   String? get companyRole => _companyRole;
   Map<String, bool> get permissions => Map.unmodifiable(_permissions);
   List<Map<String, dynamic>> get companies => _companies;
+  bool get ageVerified => _ageVerified;
+  String? get dateOfBirth => _dateOfBirth;
 
   bool hasPermission(String key) {
     if (!_corporate) return true;
@@ -41,6 +46,9 @@ class AppSession extends ChangeNotifier {
 
   /// Цены/баланс скрываем без can_view_finance (§2.5.3 photographer).
   bool get hidePrices => _corporate && !canViewFinance;
+
+  /// §10.6.2 E2E шифрование фото (политика компании).
+  bool get e2ePhotoEncryption => _corporate && _e2ePhotoEncryption;
 
   @Deprecated('Use permissions / canCreateOrders')
   bool get isPhotographer =>
@@ -77,6 +85,8 @@ class AppSession extends ChangeNotifier {
     _email = me['email']?.toString();
     final b = me['balance'];
     _balance = b is num ? b.toDouble() : null;
+    _ageVerified = me['age_verified'] == true;
+    _dateOfBirth = me['date_of_birth']?.toString();
     notifyListeners();
   }
 
@@ -100,6 +110,7 @@ class AppSession extends ChangeNotifier {
     _companyName = company['name']?.toString();
     _companyRole = company['role']?.toString();
     _permissions = _parsePermissions(company['permissions']);
+    _e2ePhotoEncryption = company['e2e_photo_encryption'] == true;
     if (persist) {
       final prefs = await SharedPreferences.getInstance();
       if (_companyName != null) {
@@ -121,6 +132,7 @@ class AppSession extends ChangeNotifier {
     _companyName = null;
     _companyRole = null;
     _permissions = {};
+    _e2ePhotoEncryption = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('mode_corporate', false);
     await prefs.remove('mode_company_id');

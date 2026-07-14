@@ -10,6 +10,10 @@
     python worker/scripts/e2e_trellis_acceptance.py --photos ./samples/dome12 \\
     --fail-on-budget --preflight
 
+  # или фото из MinIO:
+  E2E_MINIO_PREFIX=photos/<task_id>/ python worker/scripts/e2e_trellis_acceptance.py \\
+    --from-minio --preflight --fail-on-budget
+
 Exit codes:
   0 — успех и уложились в бюджет (или --fail-on-budget не задан)
   1 — пайплайн / preflight упал
@@ -49,6 +53,24 @@ OPTIONAL_UPSELL = [
 ]
 
 
+def _cuda_info() -> dict:
+    try:
+        import torch
+
+        info: dict = {
+            "available": bool(torch.cuda.is_available()),
+            "torch_cuda": getattr(torch.version, "cuda", None),
+            "torch_version": torch.__version__,
+        }
+        if torch.cuda.is_available():
+            cap = torch.cuda.get_device_capability(0)
+            info["device"] = torch.cuda.get_device_name(0)
+            info["compute_capability"] = f"sm_{cap[0]}{cap[1]}"
+        return info
+    except Exception as exc:  # noqa: BLE001
+        return {"available": False, "error": str(exc)[:200]}
+
+
 def _budget() -> int:
     deploy = os.getenv("WORKER_DEPLOY", "cloud").lower()
     if deploy == "local":
@@ -56,18 +78,44 @@ def _budget() -> int:
     return int(os.getenv("WORKER_E2E_BUDGET_SEC", "300"))
 
 
+def _gpu_profile(cuda: dict) -> str:
+    """Профиль GPU для отчёта приёмки (RTX 5070 = sm_120)."""
+    cc = cuda.get("compute_capability") or ""
+    device = (cuda.get("device") or "").lower()
+    if cc == "sm_120" or "5070" in device:
+        return "rtx_5070_blackwell"
+    if cc in ("sm_89", "sm_90"):
+        return "ada_hopper"
+    if cuda.get("available"):
+        return "cuda_generic"
+    return "cpu"
+
+
 def _preflight(*, require_gpu: bool) -> list[str]:
     """Проверки железа/зависимостей до пайплайна. Возвращает список ошибок."""
     errors: list[str] = []
 
-    # CUDA
+    # CUDA + TRELLIS.2 preflight
     try:
         import torch
 
         if require_gpu and not torch.cuda.is_available():
             errors.append("CUDA недоступна (torch.cuda.is_available()=False)")
         elif torch.cuda.is_available():
-            print(f"[preflight] GPU: {torch.cuda.get_device_name(0)}", flush=True)
+            cuda = _cuda_info()
+            print(
+                f"[preflight] GPU: {cuda.get('device')} {cuda.get('compute_capability')} "
+                f"torch.cuda={cuda.get('torch_cuda')}",
+                flush=True,
+            )
+            if os.getenv("TRELLIS_VERSION", "2").lower() in ("2", "trellis2", "trellis.2"):
+                sys.path.insert(0, str(SCRIPTS))
+                from trellis_runtime import preflight_cuda
+
+                try:
+                    preflight_cuda()
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(str(exc))
     except Exception as exc:  # noqa: BLE001
         if require_gpu:
             errors.append(f"torch: {exc}")
@@ -126,6 +174,54 @@ def _prepare_photos(src: Path, dest: Path) -> int:
     return len(list(dest.glob("view_*")))
 
 
+def _download_photos_minio(dest: Path) -> int:
+    """Скачать view_* из MinIO (§5.4 — photos_url / prefix)."""
+    import boto3
+    from botocore.client import Config
+
+    bucket = os.getenv("E2E_MINIO_BUCKET", os.getenv("MINIO_BUCKET_PHOTOS", "photos"))
+    prefix = os.getenv("E2E_MINIO_PREFIX", "").strip()
+    if not prefix:
+        raise SystemExit("--from-minio требует E2E_MINIO_PREFIX (например photos/order-uuid/)")
+
+    client = boto3.client(
+        "s3",
+        endpoint_url=os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
+        aws_access_key_id=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
+        aws_secret_access_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
+        config=Config(signature_version="s3v4"),
+        region_name="us-east-1",
+    )
+    dest.mkdir(parents=True, exist_ok=True)
+    count = 0
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents") or []:
+            key = obj["Key"]
+            if key.endswith("/"):
+                continue
+            name = Path(key).name
+            if not name.lower().startswith("view_"):
+                continue
+            if Path(name).suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                continue
+            client.download_file(bucket, key, str(dest / name))
+            count += 1
+            print(f"[e2e] minio s3://{bucket}/{key}", flush=True)
+    if count == 0:
+        raise SystemExit(f"Нет view_* в s3://{bucket}/{prefix}")
+    return count
+
+
+def _persist_report(task_report_path: Path, report: dict) -> None:
+    payload = json.dumps(report, ensure_ascii=False, indent=2)
+    task_report_path.write_text(payload, encoding="utf-8")
+    out_dir = Path(os.getenv("E2E_REPORT_DIR", str(ROOT / "e2e_reports")))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    (out_dir / f"acceptance_{stamp}.json").write_text(payload, encoding="utf-8")
+
+
 def _run_step(name: str, task_dir: Path) -> dict:
     env = os.environ.copy()
     env.setdefault("WORKER_PIPELINE_MODE", "trellis")
@@ -160,7 +256,16 @@ def _run_step(name: str, task_dir: Path) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="TRELLIS E2E acceptance ≤3/5 min")
-    parser.add_argument("--photos", required=True, help="Директория с 12 ракурсами или одно фото")
+    parser.add_argument(
+        "--photos",
+        default="",
+        help="Директория с 12 ракурсами или одно фото (не нужно с --from-minio)",
+    )
+    parser.add_argument(
+        "--from-minio",
+        action="store_true",
+        help="Скачать view_* из MinIO (E2E_MINIO_BUCKET, E2E_MINIO_PREFIX)",
+    )
     parser.add_argument("--workdir", default="", help="Каталог задачи (по умолчанию tempfile)")
     parser.add_argument("--fail-on-budget", action="store_true", help="Exit 2 если > бюджета")
     parser.add_argument(
@@ -180,6 +285,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if not args.from_minio and not args.photos:
+        parser.error("укажите --photos <dir> или --from-minio")
+
     if args.preflight or not args.allow_no_gpu:
         # preflight по умолчанию при --fail-on-budget
         do_pf = args.preflight or args.fail_on_budget
@@ -192,7 +300,7 @@ def main() -> int:
             print("[preflight] OK", flush=True)
 
     budget = _budget()
-    photos_src = Path(args.photos)
+    photos_src = Path(args.photos) if args.photos else None
     if args.workdir:
         task_dir = Path(args.workdir)
         task_dir.mkdir(parents=True, exist_ok=True)
@@ -212,7 +320,10 @@ def main() -> int:
     (task_dir / "task_meta.json").write_text(json.dumps(meta), encoding="utf-8")
 
     photos_dir = task_dir / "photos"
-    n = _prepare_photos(photos_src, photos_dir)
+    if args.from_minio:
+        n = _download_photos_minio(photos_dir)
+    else:
+        n = _prepare_photos(photos_src, photos_dir)
     print(
         f"[e2e] photos={n} task_dir={task_dir} mode={os.getenv('WORKER_PIPELINE_MODE', 'trellis')} "
         f"deploy={os.getenv('WORKER_DEPLOY', 'cloud')} budget={budget}s",
@@ -262,20 +373,16 @@ def main() -> int:
             "size_mb": round(size_mb, 3),
             "deploy": os.getenv("WORKER_DEPLOY", "cloud"),
             "pipeline_mode": os.getenv("WORKER_PIPELINE_MODE", "trellis"),
+            "trellis_version": os.getenv("TRELLIS_VERSION", "2"),
+            "trellis2_pipeline_type": os.getenv("TRELLIS2_PIPELINE_TYPE", "512"),
+            "cuda": _cuda_info(),
+            "gpu_profile": _gpu_profile(_cuda_info()),
             "steps": steps,
+            "step_timings": {s["step"]: s["sec"] for s in steps},
             "upsells": upsell_info,
             "meta": meta,
         }
-        (task_dir / "e2e_acceptance.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        # копия отчёта рядом со скриптом для CI
-        out_dir = Path(os.getenv("E2E_REPORT_DIR", str(ROOT / "e2e_reports")))
-        out_dir.mkdir(parents=True, exist_ok=True)
-        stamp = time.strftime("%Y%m%d_%H%M%S")
-        (out_dir / f"acceptance_{stamp}.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        _persist_report(task_dir / "e2e_acceptance.json", report)
 
         if args.fail_on_budget and not ok_budget:
             print(f"[e2e] FAIL budget: {elapsed:.1f}s > {budget}s", file=sys.stderr)
@@ -289,12 +396,13 @@ def main() -> int:
             "budget_sec": budget,
             "ok_budget": False,
             "error": str(exc)[:2000],
+            "trellis_version": os.getenv("TRELLIS_VERSION", "2"),
+            "cuda": _cuda_info(),
             "steps": steps,
+            "step_timings": {s["step"]: s["sec"] for s in steps},
         }
         try:
-            (task_dir / "e2e_acceptance.json").write_text(
-                json.dumps(fail_report, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
+            _persist_report(task_dir / "e2e_acceptance.json", fail_report)
         except Exception:  # noqa: BLE001
             pass
         return 1
