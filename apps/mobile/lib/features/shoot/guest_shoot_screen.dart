@@ -1,12 +1,12 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
+import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
-
 /// Гостевой вход по shoot-link (§3.15) — deep link `/shoot/{token}`.
 class GuestShootGateScreen extends StatefulWidget {
   const GuestShootGateScreen({
@@ -44,15 +44,15 @@ class _GuestShootGateScreenState extends State<GuestShootGateScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = formatApiError(e);
         _loading = false;
       });
     }
   }
 
-  Future<void> _startAr() async {
+  Future<ShootDraft?> _draftFromMeta() async {
     final meta = _meta;
-    if (meta == null) return;
+    if (meta == null) return null;
     final taskUuid = meta['task_uuid'] as String;
     final category = ProductCategory.values.firstWhere(
       (e) => e.api == meta['category'],
@@ -69,8 +69,35 @@ class _GuestShootGateScreenState extends State<GuestShootGateScreen> {
       createdAt: DateTime.now(),
     );
     await ShootStorage.instance.writeMetadata(draft);
+    return draft;
+  }
+
+  Future<void> _startAr() async {
+    final draft = await _draftFromMeta();
+    if (draft == null || !mounted) return;
+    context.push('/shoot/${widget.token}/dome', extra: draft.modelUuid);
+  }
+
+  Future<void> _pickGallery() async {
+    final draft = await _draftFromMeta();
+    if (draft == null || !mounted) return;
+    final picker = ImagePicker();
+    final images = await picker.pickMultiImage(limit: kGuidedDomeCount);
+    if (images.length != kGuidedDomeCount) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Нужно ровно $kGuidedDomeCount фото (выбрано ${images.length})'),
+        ),
+      );
+      return;
+    }
+    for (var i = 0; i < kGuidedDomeCount; i++) {
+      final bytes = await images[i].readAsBytes();
+      await ShootStorage.instance.savePhoto(draft.modelUuid, i, bytes);
+    }
     if (!mounted) return;
-    context.push('/shoot/${widget.token}/dome', extra: taskUuid);
+    context.push('/shoot/${widget.token}/upload', extra: draft.modelUuid);
   }
 
   @override
@@ -113,7 +140,7 @@ class _GuestShootGateScreenState extends State<GuestShootGateScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Гостевой режим: только съёмка 12 ракурсов, без доступа к кабинету (§3.15).',
+                        'Гостевой режим: 12 ракурсов через AR или галерею (§3.15).',
                         style: const TextStyle(color: AppColors.textSecondary),
                       ),
                       const Spacer(),
@@ -121,13 +148,18 @@ class _GuestShootGateScreenState extends State<GuestShootGateScreen> {
                         onPress: _startAr,
                         child: const Text('Начать AR-съёмку'),
                       ),
+                      const SizedBox(height: 12),
+                      FButton(
+                        variant: .outline,
+                        onPress: _pickGallery,
+                        child: const Text('12 фото из галереи'),
+                      ),
                     ],
                   ),
                 ),
     );
   }
 }
-
 /// Загрузка 12 фото по shoot-link + complete (§3.15).
 class GuestShootUploadScreen extends StatefulWidget {
   const GuestShootUploadScreen({
@@ -192,14 +224,9 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
         _progress = 1;
         _status = 'Фото отправлены владельцу';
       });
-    } on DioException catch (e) {
-      setState(() {
-        _error = e.response?.data?.toString() ?? e.message ?? 'Ошибка сети';
-        _running = false;
-      });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = formatApiError(e);
         _running = false;
       });
     }
@@ -223,7 +250,7 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
             const SizedBox(height: 12),
             LinearProgressIndicator(
               value: _progress,
-              color: AppColors.wbPrimary,
+              color: AppColors.accent,
               backgroundColor: AppColors.surface,
             ),
             if (_error != null) ...[

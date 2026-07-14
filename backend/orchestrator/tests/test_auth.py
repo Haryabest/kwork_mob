@@ -1,5 +1,7 @@
 """Тесты auth API."""
 
+import uuid
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -16,12 +18,17 @@ async def client():
 
 
 async def test_register_verify_login_flow(client):
-    email = "test_user@example.com"
+    email = f"test_{uuid.uuid4().hex[:8]}@example.com"
     password = "secret123"
 
     reg = await client.post(
         "/api/v1/auth/register",
-        json={"email": email, "password": password, "password_confirm": password},
+        json={
+            "email": email,
+            "password": password,
+            "password_confirm": password,
+            "consents": ["terms", "privacy", "offer", "rights", "nsfw_rules"],
+        },
     )
     assert reg.status_code == 201
     dev_code = reg.json()["dev_code"]

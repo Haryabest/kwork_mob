@@ -15,7 +15,7 @@ class FaqSupportScreen extends StatefulWidget {
 
 class _FaqSupportScreenState extends State<FaqSupportScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs;
+  late final FTabController _tabs;
   List<Map<String, dynamic>> _faq = [];
   List<Map<String, dynamic>> _tickets = [];
   bool _loading = true;
@@ -26,7 +26,7 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    _tabs = FTabController(length: 2, vsync: this);
     _load();
   }
 
@@ -101,35 +101,28 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
           ),
         ],
       ),
-      child: Column(
-        children: [
-          TabBar(
-            controller: _tabs,
-            labelColor: context.theme.colors.primary,
-            tabs: const [
-              Tab(text: 'FAQ'),
-              Tab(text: 'Мои обращения'),
-            ],
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : TabBarView(
-                    controller: _tabs,
-                    children: [
-                      _FaqTab(
-                        items: _faq,
-                        subject: _subject,
-                        message: _message,
-                        sending: _sending,
-                        onAsk: _ask,
-                      ),
-                      _TicketsTab(items: _tickets, api: widget.api),
-                    ],
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : FTabs(
+              expands: true,
+              control: FTabControl.managed(controller: _tabs),
+              children: [
+                FTabEntry(
+                  label: const Text('FAQ'),
+                  child: _FaqTab(
+                    items: _faq,
+                    subject: _subject,
+                    message: _message,
+                    sending: _sending,
+                    onAsk: _ask,
                   ),
-          ),
-        ],
-      ),
+                ),
+                FTabEntry(
+                  label: const Text('Мои обращения'),
+                  child: _TicketsTab(items: _tickets, api: widget.api),
+                ),
+              ],
+            ),
     );
   }
 }
@@ -157,17 +150,17 @@ class _FaqTab extends StatelessWidget {
         if (items.isEmpty)
           const Text('Пока нет вопросов в FAQ')
         else
-          ...items.map(
-            (f) => ExpansionTile(
-              title: Text(f['question']?.toString() ?? ''),
-              subtitle: Text(f['category']?.toString() ?? ''),
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(f['answer']?.toString() ?? ''),
+          FAccordion(
+            children: [
+              for (final f in items)
+                FAccordionItem(
+                  title: Text(f['question']?.toString() ?? ''),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(f['answer']?.toString() ?? ''),
+                  ),
                 ),
-              ],
-            ),
+            ],
           ),
         const SizedBox(height: 24),
         Text(
@@ -177,15 +170,15 @@ class _FaqTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        TextField(
-          controller: subject,
-          decoration: const InputDecoration(labelText: 'Тема (опционально)'),
+        FTextField(
+          control: FTextFieldControl.managed(controller: subject),
+          label: const Text('Тема (опционально)'),
         ),
         const SizedBox(height: 8),
-        TextField(
-          controller: message,
+        FTextField(
+          control: FTextFieldControl.managed(controller: message),
+          label: const Text('Ваш вопрос'),
           maxLines: 4,
-          decoration: const InputDecoration(labelText: 'Ваш вопрос'),
         ),
         const SizedBox(height: 12),
         FButton(
@@ -214,10 +207,10 @@ class _TicketsTab extends StatelessWidget {
       separatorBuilder: (_, __) => const Divider(),
       itemBuilder: (ctx, i) {
         final t = items[i];
-        return ListTile(
+        return FTile(
           title: Text(t['subject']?.toString() ?? 'Обращение #${t['id']}'),
           subtitle: Text('${t['status']} · ${t['created_at'] ?? ''}'),
-          onTap: () async {
+          onPress: () async {
             await showModalBottomSheet<void>(
               context: ctx,
               isScrollControlled: true,
@@ -318,7 +311,7 @@ class _TicketThreadSheetState extends State<_TicketThreadSheet> {
                             decoration: BoxDecoration(
                               color: m['is_staff'] == true
                                   ? AppColors.surface
-                                  : AppColors.wbPrimary.withValues(alpha: 0.08),
+                                  : AppColors.accent.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
@@ -330,9 +323,9 @@ class _TicketThreadSheetState extends State<_TicketThreadSheet> {
                     ),
             ),
             if (!_closed) ...[
-              TextField(
-                controller: _reply,
-                decoration: const InputDecoration(hintText: 'Уточняющий вопрос…'),
+              FTextField(
+                control: FTextFieldControl.managed(controller: _reply),
+                hint: 'Уточняющий вопрос…',
               ),
               const SizedBox(height: 8),
               Row(

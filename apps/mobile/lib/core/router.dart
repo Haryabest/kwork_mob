@@ -5,8 +5,12 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/features/auth/auth_screen.dart';
 import 'package:kwork_mobile/features/company/shoot_link_screen.dart';
+import 'package:kwork_mobile/features/company/team_screen.dart';
+import 'package:kwork_mobile/features/profile/balance_screen.dart';
+import 'package:kwork_mobile/features/profile/storage_settings_screen.dart';
 import 'package:kwork_mobile/features/home/home_shell.dart';
 import 'package:kwork_mobile/features/models/model_viewer_screen.dart';
+import 'package:kwork_mobile/features/models/trash_screen.dart';
 import 'package:kwork_mobile/features/onboarding/onboarding_screen.dart';
 import 'package:kwork_mobile/features/legal/consent_gate_screen.dart';
 import 'package:kwork_mobile/features/queue/queue_screen.dart';
@@ -15,7 +19,10 @@ import 'package:kwork_mobile/features/shoot/guided_dome_screen.dart';
 import 'package:kwork_mobile/features/shoot/guest_shoot_screen.dart';
 import 'package:kwork_mobile/features/shoot/quality_review_screen.dart';
 import 'package:kwork_mobile/features/shoot/upload_checkout_screen.dart';
+import 'package:kwork_mobile/features/notifications/notifications_screen.dart';
+import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
+import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -37,7 +44,12 @@ GoRouter createRouter({
       ),
       GoRoute(
         path: '/auth',
-        builder: (context, state) => AuthScreen(api: api, session: session, push: push),
+        builder: (context, state) => AuthScreen(
+          api: api,
+          session: session,
+          push: push,
+          initialMode: state.uri.queryParameters['mode'],
+        ),
       ),
       GoRoute(
         path: '/legal/consent',
@@ -95,7 +107,11 @@ GoRouter createRouter({
       ),
       GoRoute(
         path: '/home',
-        builder: (context, state) => HomeShell(api: api, session: session, push: push),
+        builder: (context, state) => HomeShell(
+          api: api,
+          session: session,
+          push: push,
+        ),
         routes: [
           GoRoute(
             path: 'shoot',
@@ -143,6 +159,26 @@ GoRouter createRouter({
               session: session,
               orderId: int.parse(state.pathParameters['orderId']!),
             ),
+          ),
+          GoRoute(
+            path: 'models/trash',
+            builder: (context, state) => ModelsTrashScreen(api: api),
+          ),
+          GoRoute(
+            path: 'balance',
+            builder: (context, state) => BalanceScreen(api: api, session: session),
+          ),
+          GoRoute(
+            path: 'notifications',
+            builder: (context, state) => NotificationsScreen(api: api),
+          ),
+          GoRoute(
+            path: 'team',
+            builder: (context, state) => TeamScreen(api: api, session: session),
+          ),
+          GoRoute(
+            path: 'storage',
+            builder: (context, state) => StorageSettingsScreen(api: api),
           ),
           GoRoute(
             path: 'models/:uuid',
@@ -222,8 +258,52 @@ class _SplashScreenState extends State<_SplashScreen> {
         }
       } catch (_) {}
       if (!mounted) return;
-      context.go('/home');
+      final resumed = await _maybeResumeDraft();
+      if (!mounted) return;
+      if (resumed) return;
+      await _goAuthenticatedHome();
     }
+  }
+
+  Future<void> _goAuthenticatedHome() async {
+    if (!mounted) return;
+    if (await widget.push.applyPendingRoute(GoRouter.of(context))) return;
+    context.go('/home');
+  }
+
+  Future<bool> _maybeResumeDraft() async {
+    if (!await ShootStorage.instance.hasResumableDraft()) return false;
+    final draft = await ShootStorage.instance.loadActiveDraft();
+    if (draft == null || !mounted) return false;
+    final count = await ShootStorage.instance.capturedCount(draft.modelUuid);
+    final choice = await showFDialog<String>(
+      context: context,
+      builder: (ctx, style, animation) => FDialog(
+        title: const Text('Незавершённая съёмка'),
+        body: Text(
+          'У вас есть черновик (${draft.category.label}, $count/$kGuidedDomeCount кадров). '
+          'Продолжить или начать заново?',
+        ),
+        actions: [
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, 'discard'), child: const Text('Заново')),
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, 'cancel'), child: const Text('Отмена')),
+          FButton(onPress: () => Navigator.pop(ctx, 'continue'), child: const Text('Продолжить')),
+        ],
+      ),
+    );
+    if (!mounted || choice == null || choice == 'cancel') {
+      context.go('/home');
+      return true;
+    }
+    if (choice == 'discard') {
+      await ShootStorage.instance.discardDraft(draft.modelUuid);
+      if (mounted) context.go('/home');
+      return true;
+    }
+    final idx = await ShootStorage.instance.resumeIndex(draft.modelUuid);
+    if (!mounted) return true;
+    context.go('/home/shoot/dome', extra: {'uuid': draft.modelUuid, 'reshoot': idx});
+    return true;
   }
 
   @override

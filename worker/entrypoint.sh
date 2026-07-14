@@ -1,6 +1,14 @@
 #!/bin/sh
-# Tailscale sidecar (опционально) + старт агента
+# Tailscale (опционально) + авто-режим пайплайна + старт агента
 set -eu
+
+if [ -z "${WORKER_PIPELINE_MODE:-}" ]; then
+  if [ -d /app/trellis ] && [ -f /app/trellis/setup.sh ]; then
+    export WORKER_PIPELINE_MODE=trellis
+  else
+    export WORKER_PIPELINE_MODE=stub
+  fi
+fi
 
 if [ -n "${TAILSCALE_AUTH_KEY:-}" ] && command -v tailscaled >/dev/null 2>&1; then
   tailscaled --state=/var/lib/tailscale/tailscaled.state --socket=/var/run/tailscale/tailscaled.sock &

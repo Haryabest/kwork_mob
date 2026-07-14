@@ -175,6 +175,38 @@ async def block_company(company_id: int, _: dict = Depends(require_admin), db: A
     return {"message": "ok", "status": company.status}
 
 
+class CompanySettingsPatch(BaseModel):
+    force_trellis_version: str | None = None
+
+
+@router.patch("/companies/{company_id}/settings")
+async def patch_company_settings(
+    company_id: int,
+    body: CompanySettingsPatch,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """§18.4.2 — принудительная версия TRELLIS для заказов компании."""
+    from app.services import trellis_rollout as tr
+
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(404, "Компания не найдена")
+    settings = dict(company.settings or {})
+    if body.force_trellis_version is not None:
+        ftv = str(body.force_trellis_version).strip()
+        if ftv.lower() in ("", "default", "none", "null"):
+            settings.pop("force_trellis_version", None)
+        else:
+            settings["force_trellis_version"] = tr.normalize_version(ftv) or ftv
+    company.settings = settings
+    await db.commit()
+    return {
+        "company_id": company_id,
+        "force_trellis_version": settings.get("force_trellis_version"),
+    }
+
+
 @router.get("/users")
 async def list_users(_: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     rows = (await db.scalars(select(User).order_by(User.id.desc()).limit(200))).all()
@@ -271,6 +303,9 @@ async def list_workers(_: dict = Depends(require_admin), db: AsyncSession = Depe
                 "weight": w.weight,
                 "grace_period": w.grace_period,
                 "last_heartbeat": w.last_heartbeat.isoformat() if w.last_heartbeat else None,
+                "trellis_version": (w.meta or {}).get("trellis_version") or (w.meta or {}).get("version"),
+                "docker_image": (w.meta or {}).get("docker_image"),
+                "maintenance": bool((w.meta or {}).get("maintenance")),
             }
             for w in rows
         ],
@@ -328,6 +363,133 @@ async def set_worker_weight(
     node.weight = weight
     await db.commit()
     return {"worker_id": worker_id, "weight": node.weight}
+
+
+class TrellisRolloutBody(BaseModel):
+    target_version: str = "2"
+    default_docker_image: str | None = None
+    allowed_versions: list[str] | None = None
+
+
+class WorkerTrellisBody(BaseModel):
+    trellis_version: str
+    docker_image: str | None = None
+
+
+class WorkerMaintenanceBody(BaseModel):
+    enabled: bool = True
+
+
+@router.get("/trellis/rollout")
+async def trellis_rollout_get(_: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """§18.3 — конфиг rolling update."""
+    from app.services import trellis_rollout as tr
+
+    return await tr.get_rollout_config(db)
+
+
+@router.put("/trellis/rollout")
+async def trellis_rollout_put(
+    body: TrellisRolloutBody,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import trellis_rollout as tr
+
+    result = await tr.put_rollout_config(
+        db,
+        target_version=body.target_version,
+        default_docker_image=body.default_docker_image,
+        allowed_versions=body.allowed_versions,
+        user_id=int(admin.get("sub") or 0) or None,
+    )
+    await db.commit()
+    return result
+
+
+@router.get("/trellis/history")
+async def trellis_history(
+    limit: int = 50,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import trellis_rollout as tr
+
+    return {"items": await tr.list_history(db, limit=limit)}
+
+
+@router.post("/workers/{worker_id}/maintenance")
+async def worker_maintenance(
+    worker_id: str,
+    body: WorkerMaintenanceBody,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import trellis_rollout as tr
+
+    result = await tr.set_worker_maintenance(
+        db, worker_id, enabled=body.enabled, user_id=int(admin.get("sub") or 0) or None
+    )
+    await db.commit()
+    return result
+
+
+@router.post("/workers/{worker_id}/trellis/rollback")
+async def worker_trellis_rollback(
+    worker_id: str,
+    body: WorkerTrellisBody,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """§18.4.1 откат воркера на предыдущий образ."""
+    from app.services import trellis_rollout as tr
+
+    result = await tr.rollback_worker(
+        db,
+        worker_id,
+        trellis_version=body.trellis_version,
+        docker_image=body.docker_image,
+        user_id=int(admin.get("sub") or 0) or None,
+    )
+    await db.commit()
+    return result
+
+
+@router.post("/workers/{worker_id}/trellis/rollout")
+async def worker_trellis_rollout(
+    worker_id: str,
+    body: WorkerTrellisBody | None = None,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """§18.3.2 rolling update — maintenance + target version."""
+    from app.services import trellis_rollout as tr
+
+    payload = body or WorkerTrellisBody(trellis_version="2")
+    result = await tr.rollout_worker(
+        db,
+        worker_id,
+        trellis_version=payload.trellis_version,
+        docker_image=payload.docker_image,
+        user_id=int(admin.get("sub") or 0) or None,
+    )
+    await db.commit()
+    return result
+
+
+@router.post("/workers/{worker_id}/trellis/complete")
+async def worker_trellis_complete(
+    worker_id: str,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import trellis_rollout as tr
+
+    result = await tr.clear_worker_maintenance(
+        db, worker_id, user_id=int(admin.get("sub") or 0) or None
+    )
+    await db.commit()
+    return result
 
 
 @router.get("/support/questions")
@@ -861,13 +1023,36 @@ async def source_expire_notify_now(
 @router.get("/storage/node-timeline")
 async def storage_node_timeline(
     days: int = Query(7, ge=1, le=90),
+    node_id: str | None = Query(None),
     _: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """История доступности узлов §11.16.3."""
     from app.services import node_timeline as nt
 
-    return await nt.node_timeline(db, days=days)
+    return await nt.node_timeline(db, days=days, node_id=node_id)
+
+
+@router.get("/storage/node-timeline/export")
+async def storage_node_timeline_export(
+    days: int = Query(7, ge=1, le=90),
+    node_id: str | None = Query(None),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """CSV экспорт timeline §11.16.3."""
+    from fastapi.responses import Response
+
+    from app.services import node_timeline as nt
+
+    data = await nt.node_timeline(db, days=days, node_id=node_id)
+    content = "\ufeff" + nt.timeline_to_csv(data)
+    suffix = f"_{node_id}" if node_id else ""
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="node_timeline{suffix}.csv"'},
+    )
 
 
 @router.post("/storage/node-timeline/sample")
@@ -912,6 +1097,30 @@ async def admin_webhook_deliveries_dashboard(
     from app.services import company_webhooks as wh
 
     return await wh.delivery_dashboard(db, company_id=company_id)
+
+
+@router.get("/webhooks/deliveries/{delivery_id}")
+async def admin_webhook_delivery_detail(
+    delivery_id: int,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_webhooks as wh
+
+    return await wh.admin_get_delivery(db, delivery_id)
+
+
+@router.post("/webhooks/deliveries/{delivery_id}/retry")
+async def admin_webhook_delivery_retry(
+    delivery_id: int,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_webhooks as wh
+
+    result = await wh.admin_retry_delivery(db, delivery_id)
+    await db.commit()
+    return result
 
 
 @router.post("/shoot-links/cleanup-photos")

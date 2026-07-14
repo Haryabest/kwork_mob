@@ -4,15 +4,26 @@ import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/domain/catalog.dart';
+import 'package:kwork_mobile/services/local_model_library.dart';
+import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Список моделей + 3D viewer + оценка + публикация WB/Ozon (§3.9 / §7 / §19).
 class ModelsScreen extends StatefulWidget {
-  const ModelsScreen({super.key, required this.api});
+  const ModelsScreen({
+    super.key,
+    required this.api,
+    this.onNotifications,
+    this.unread = 0,
+  });
 
   final ApiClient api;
+  final VoidCallback? onNotifications;
+  final int unread;
 
   @override
   State<ModelsScreen> createState() => _ModelsScreenState();
@@ -22,6 +33,39 @@ class _ModelsScreenState extends State<ModelsScreen> {
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   String? _error;
+  String _statusFilter = 'all';
+  ProductCategory? _categoryFilter;
+  bool _sortNewest = true;
+  bool _favoritesOnly = false;
+  Set<String> _favorites = {};
+
+  List<Map<String, dynamic>> get _filtered {
+    var list = [..._items];
+    if (_favoritesOnly) {
+      list = list.where((m) => _favorites.contains(m['uuid']?.toString())).toList();
+    }
+    if (_statusFilter == 'published') {
+      list = list.where((m) {
+        final s = m['publish_status']?.toString() ?? '';
+        return s.contains('published') || s.contains('verified');
+      }).toList();
+    } else if (_statusFilter == 'draft') {
+      list = list.where((m) {
+        final s = m['publish_status']?.toString() ?? '';
+        return s.isEmpty || s == 'none' || s == 'not_published';
+      }).toList();
+    }
+    if (_categoryFilter != null) {
+      final api = _categoryFilter!.api;
+      list = list.where((m) => m['category']?.toString() == api).toList();
+    }
+    list.sort((a, b) {
+      final da = a['created_at']?.toString() ?? '';
+      final db = b['created_at']?.toString() ?? '';
+      return _sortNewest ? db.compareTo(da) : da.compareTo(db);
+    });
+    return list;
+  }
 
   @override
   void initState() {
@@ -36,8 +80,9 @@ class _ModelsScreenState extends State<ModelsScreen> {
     });
     try {
       _items = await widget.api.listModels();
+      _favorites = await LocalModelLibrary.instance.favorites();
     } catch (e) {
-      _error = e.toString();
+      _error = formatApiError(e);
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -59,23 +104,115 @@ class _ModelsScreenState extends State<ModelsScreen> {
     if (_items.isEmpty) {
       return const Center(child: Text('Пока нет моделей'));
     }
+    final visible = _filtered;
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, i) {
-          final m = _items[i];
-          return ListTile(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            tileColor: AppColors.surface,
-            title: Text(m['uuid']?.toString().substring(0, 8) ?? '—'),
-            subtitle: Text(m['publish_status']?.toString() ?? ''),
-            trailing: const Icon(Icons.view_in_ar),
-            onTap: () => context.push('/home/models/${m['uuid']}', extra: m),
-          );
-        },
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 48, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Модели',
+                      style: context.theme.typography.xl.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (widget.onNotifications != null)
+                    IconButton(
+                      onPressed: widget.onNotifications,
+                      icon: Badge(
+                        isLabelVisible: widget.unread > 0,
+                        label: Text('${widget.unread}'),
+                        child: const Icon(FIcons.bell),
+                      ),
+                    ),
+                  FButton(
+                    variant: .outline,
+                    onPress: () => context.push('/home/models/trash'),
+                    child: const Text('Корзина'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    label: const Text('Все'),
+                    selected: _statusFilter == 'all',
+                    onSelected: (_) => setState(() => _statusFilter = 'all'),
+                  ),
+                  FilterChip(
+                    label: const Text('Опубликовано'),
+                    selected: _statusFilter == 'published',
+                    onSelected: (_) => setState(() => _statusFilter = 'published'),
+                  ),
+                  FilterChip(
+                    label: const Text('Не опубликовано'),
+                    selected: _statusFilter == 'draft',
+                    onSelected: (_) => setState(() => _statusFilter = 'draft'),
+                  ),
+                  FilterChip(
+                    label: const Text('Избранное'),
+                    selected: _favoritesOnly,
+                    onSelected: (_) => setState(() => _favoritesOnly = !_favoritesOnly),
+                  ),
+                  FilterChip(
+                    label: Text(_sortNewest ? 'Сначала новые' : 'Сначала старые'),
+                    selected: true,
+                    onSelected: (_) => setState(() => _sortNewest = !_sortNewest),
+                  ),
+                  ...ProductCategory.values.map(
+                    (c) => FilterChip(
+                      label: Text(c.label),
+                      selected: _categoryFilter == c,
+                      onSelected: (v) => setState(() => _categoryFilter = v ? c : null),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (visible.isEmpty)
+            const SliverFillRemaining(
+              child: Center(child: Text('Нет моделей по фильтру')),
+            )
+          else
+            SliverList.separated(
+              itemCount: visible.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, i) {
+                final m = visible[i];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    tileColor: AppColors.surface,
+                    title: Text(m['uuid']?.toString().substring(0, 8) ?? '—'),
+                    subtitle: Text(
+                      '${m['publish_status']?.toString() ?? '—'} · ${m['category']?.toString() ?? ''}',
+                    ),
+                    leading: Icon(
+                      _favorites.contains(m['uuid']?.toString())
+                          ? Icons.star
+                          : Icons.star_border,
+                      color: AppColors.warning,
+                    ),
+                    trailing: const Icon(Icons.view_in_ar),
+                    onTap: () => context.push('/home/models/${m['uuid']}', extra: m),
+                  ),
+                );
+              },
+            ),
+        ],
       ),
     );
   }
@@ -101,8 +238,11 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
   String? _glbUrl;
   String? _publishStatus;
   Map<String, dynamic>? _storage;
+  Map<String, dynamic>? _modelMeta;
   bool _rated = false;
   bool _busy = false;
+  bool _favorite = false;
+  bool _hasLocalGlb = false;
 
   static const _reasons = [
     'размытые текстуры',
@@ -117,6 +257,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
     super.initState();
     _glbUrl = widget.model?['glb_url']?.toString();
     _publishStatus = widget.model?['publish_status']?.toString();
+    _modelMeta = widget.model == null ? null : Map<String, dynamic>.from(widget.model!);
     final storage = widget.model?['storage'];
     if (storage is Map) {
       _storage = Map<String, dynamic>.from(storage);
@@ -127,6 +268,9 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
   Future<void> _boot() async {
     final prefs = await SharedPreferences.getInstance();
     _rated = prefs.getBool('rated_${widget.modelUuid}') ?? false;
+    _favorite = await LocalModelLibrary.instance.isFavorite(widget.modelUuid);
+    _hasLocalGlb = await LocalModelLibrary.instance.hasLocalGlb(widget.modelUuid);
+    await LocalModelLibrary.instance.touchAccess(widget.modelUuid);
     try {
       final detail = await widget.api.getModel(widget.modelUuid);
       _publishStatus = detail['publish_status']?.toString() ?? _publishStatus;
@@ -145,6 +289,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
       final items = await widget.api.listModels();
       final match = items.where((e) => e['uuid'] == widget.modelUuid);
       if (match.isNotEmpty) {
+        _modelMeta = Map<String, dynamic>.from(match.first);
         _publishStatus = match.first['publish_status']?.toString();
         try {
           final dl = await widget.api.downloadModel(modelUuid: widget.modelUuid);
@@ -153,6 +298,10 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
           _glbUrl = match.first['glb_url']?.toString();
         }
       }
+    }
+    if (_hasLocalGlb) {
+      final local = await LocalModelLibrary.instance.glbFile(widget.modelUuid);
+      _glbUrl = local.uri.toString();
     }
     if (mounted) setState(() {});
     if (!_rated && mounted) {
@@ -180,6 +329,138 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _downloadLocalGlb() async {
+    setState(() => _busy = true);
+    try {
+      final file = await LocalModelLibrary.instance.downloadGlb(
+        api: widget.api,
+        modelUuid: widget.modelUuid,
+      );
+      if (file != null && mounted) {
+        setState(() {
+          _hasLocalGlb = true;
+          _glbUrl = file.uri.toString();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('GLB сохранён: ${file.path}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _sharePublic() async {
+    setState(() => _busy = true);
+    try {
+      final res = await widget.api.createShareLink(modelUuid: widget.modelUuid);
+      final url = res['url']?.toString();
+      if (url == null || !mounted) return;
+      await Clipboard.setData(ClipboardData(text: url));
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Публичная ссылка §3.12'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              QrImageView(data: url, size: 200),
+              const SizedBox(height: 8),
+              SelectableText(url, style: const TextStyle(fontSize: 12)),
+              if (res['expires_at'] != null)
+                Text('До: ${res['expires_at']}', style: const TextStyle(fontSize: 11)),
+            ],
+          ),
+          actions: [
+            FButton(onPress: () => Navigator.pop(ctx), child: const Text('Закрыть')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    final next = !_favorite;
+    await LocalModelLibrary.instance.setFavorite(widget.modelUuid, next);
+    setState(() => _favorite = next);
+  }
+
+  Future<void> _regenerate() async {
+    final count = await ShootStorage.instance.capturedCount(widget.modelUuid);
+    if (count < 12) {
+      if (!mounted) return;
+      final restore = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Нет локальных фото'),
+          content: const Text(
+            'Для перегенерации нужны 12 исходников на устройстве. '
+            'Восстановить из облака или снять заново?',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Восстановить')),
+          ],
+        ),
+      );
+      if (restore == true) {
+        await _restoreSources();
+      }
+      return;
+    }
+    final meta = _modelMeta ?? widget.model;
+    final categoryApi = meta?['category']?.toString();
+    final tierApi = meta?['tier']?.toString();
+    if (categoryApi == null || tierApi == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось определить категорию/тариф')),
+        );
+      }
+      return;
+    }
+    final category = ProductCategory.values.firstWhere(
+      (e) => e.api == categoryApi,
+      orElse: () => ProductCategory.other,
+    );
+    final tier = Tier.values.firstWhere(
+      (e) => e.api == tierApi,
+      orElse: () => Tier.small,
+    );
+    setState(() => _busy = true);
+    try {
+      final newUuid = await ShootStorage.instance.cloneForRegeneration(
+        sourceModelUuid: widget.modelUuid,
+        category: category,
+        tier: tier,
+      );
+      if (!mounted) return;
+      context.push('/home/shoot/upload', extra: newUuid);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -243,7 +524,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(res['message']?.toString() ?? 'В корзине')),
         );
-        context.pop();
+        context.go('/home/models/trash');
       }
     } catch (e) {
       if (mounted) {
@@ -309,11 +590,9 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Ссылка на карточку'),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(
-            hintText: 'https://www.wildberries.ru/... или ozon.ru/...',
-          ),
+        content: FTextField(
+          control: FTextFieldControl.managed(controller: ctrl),
+          hint: 'https://www.wildberries.ru/... или ozon.ru/...',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
@@ -403,9 +682,9 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                 ),
               ),
               if (selected.contains('другое'))
-                TextField(
-                  controller: other,
-                  decoration: const InputDecoration(labelText: 'Комментарий'),
+                FTextField(
+                  control: FTextFieldControl.managed(controller: other),
+                  label: const Text('Комментарий'),
                 ),
               const SizedBox(height: 8),
               FButton(
@@ -449,6 +728,10 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
         title: const Text('3D-модель'),
         prefixes: [FHeaderAction.back(onPress: () => context.pop())],
         suffixes: [
+          FHeaderAction(
+            icon: Icon(_favorite ? Icons.star : Icons.star_border),
+            onPress: _busy ? null : _toggleFavorite,
+          ),
           if (_rated)
             FHeaderAction(
               icon: const Icon(Icons.star_outline),
@@ -490,11 +773,34 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                       style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                     ),
                   ),
+                if (_hasLocalGlb)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Локальный GLB сохранён',
+                      style: TextStyle(fontSize: 11, color: AppColors.success),
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
+                    FButton(
+                      variant: .outline,
+                      onPress: _busy ? null : _regenerate,
+                      child: const Text('Перегенерировать'),
+                    ),
+                    FButton(
+                      variant: .outline,
+                      onPress: _busy ? null : _sharePublic,
+                      child: const Text('Share'),
+                    ),
+                    FButton(
+                      variant: .outline,
+                      onPress: _busy ? null : _downloadLocalGlb,
+                      child: Text(_hasLocalGlb ? 'Обновить GLB' : 'GLB локально'),
+                    ),
                     FButton(
                       onPress: _busy ? null : () => _download('wb'),
                       child: const Text('Скачать WB'),
@@ -549,9 +855,9 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                                   content: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      TextField(
-                                        controller: ctrl,
-                                        decoration: const InputDecoration(labelText: 'SKU'),
+                                      FTextField(
+                                        control: FTextFieldControl.managed(controller: ctrl),
+                                        label: const Text('SKU'),
                                       ),
                                     ],
                                   ),

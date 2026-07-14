@@ -41,6 +41,10 @@ type Dashboard = {
     low_rating_reasons: Array<[string, number]>;
   };
   moderation: { nsfw_blocked: number };
+  publication_funnel?: PublicationFunnel & {
+    source?: string;
+    live?: { source?: string; events_30d?: Record<string, number> };
+  };
   pg_error?: string;
 };
 
@@ -153,12 +157,16 @@ export default function DashboardPage() {
 
   const load = useCallback(async () => {
     try {
-      const [dash, pub] = await Promise.all([
-        api.get<Dashboard>('/admin/metrics/dashboard'),
-        api.get<PublicationFunnel>('/admin/metrics/publication-funnel', { params: funnelParams() }),
-      ]);
-      setData(dash.data);
-      setPubFunnel(pub.data);
+      const { data: dash } = await api.get<Dashboard>('/admin/metrics/dashboard');
+      setData(dash);
+      if (dash.publication_funnel?.funnel) {
+        setPubFunnel(dash.publication_funnel as PublicationFunnel);
+      } else {
+        const { data: pub } = await api.get<PublicationFunnel>('/admin/metrics/publication-funnel', {
+          params: funnelParams(),
+        });
+        setPubFunnel(pub);
+      }
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
     } finally {
@@ -425,6 +433,9 @@ export default function DashboardPage() {
           <div className="vz-surface">
             <Group justify="space-between">
               <Text fw={600}>Воронка публикации §7.9</Text>
+              <Badge variant="light" color="brand">
+                {data?.publication_funnel?.live?.source ?? data?.publication_funnel?.source ?? 'postgresql'}
+              </Badge>
             </Group>
             <FunnelSteps f={pubFunnel?.funnel} />
           </div>

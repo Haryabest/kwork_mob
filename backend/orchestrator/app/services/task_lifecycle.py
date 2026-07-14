@@ -19,6 +19,53 @@ from app.services.queue import queue_service
 logger = logging.getLogger(__name__)
 
 
+async def _notify_order_user_push(
+    db: AsyncSession,
+    order: Order,
+    *,
+    pref_key: str,
+    event_type: str,
+    title: str,
+    body: str,
+    model_uuid: str | None = None,
+) -> None:
+    """Push B2C-владельцу заказа (§3.4.3)."""
+    try:
+        from app.models import User as UserModel
+        from app.services import push as push_svc
+
+        user = await db.get(UserModel, order.user_id)
+        if not user:
+            return
+        prefs = dict(user.notification_prefs or {})
+        if prefs.get(pref_key) is False:
+            return
+        if prefs.get("push_enabled") is False and prefs.get("email_enabled") is False:
+            return
+        if model_uuid:
+            deeplink = f"kworkmob://open/models/{model_uuid}"
+        else:
+            deeplink = f"kworkmob://open/queue/{order.id}"
+        data: dict[str, str] = {
+            "type": event_type,
+            "event": event_type,
+            "order_id": str(order.id),
+            "deeplink": deeplink,
+        }
+        if model_uuid:
+            data["model_uuid"] = model_uuid
+        await push_svc.send_to_user(
+            db,
+            user.id,
+            title,
+            body,
+            data=data,
+            email_fallback=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("order user push %s order=%s: %s", event_type, order.id, exc)
+
+
 async def upsert_worker_heartbeat(
     db: AsyncSession,
     worker_id: str,
@@ -89,18 +136,21 @@ async def mark_completed(
 
     order.status = "completed"
     existing = await db.scalar(select(Model3D).where(Model3D.order_id == order.id))
+    model_uuid: str | None = None
     if existing:
         existing.glb_url = glb_url
         if usdz_url:
             existing.usdz_url = usdz_url
         if watermark_hmac:
             existing.watermark_hmac = watermark_hmac
+        model_uuid = existing.uuid
     else:
         from app.services.model_storage import default_expires_at
 
+        model_uuid = str(uuid.uuid4())
         db.add(
             Model3D(
-                uuid=str(uuid.uuid4()),
+                uuid=model_uuid,
                 order_id=order.id,
                 user_id=order.user_id,
                 company_id=order.company_id,
@@ -112,6 +162,15 @@ async def mark_completed(
             )
         )
     await db.flush()
+    if model_uuid:
+        from app.services.publication_funnel import emit_funnel_ch_event
+
+        emit_funnel_ch_event(
+            model_uuid=model_uuid,
+            event_type="generated",
+            user_id=order.user_id,
+            company_id=order.company_id,
+        )
     try:
         from app.services import company_webhooks as wh
 
@@ -153,6 +212,18 @@ async def mark_completed(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("company notify generation_done: %s", exc)
+    try:
+        await _notify_order_user_push(
+            db,
+            order,
+            pref_key="generation_done",
+            event_type="generation_done",
+            title="Модель готова",
+            body=f"Заказ #{order.id} завершён.",
+            model_uuid=model_uuid,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("user push generation_done: %s", exc)
     await db.commit()
     await publish_order_status(
         user_id=order.user_id,
@@ -207,6 +278,23 @@ async def mark_failed(db: AsyncSession, task_id: str, error: str) -> Order | Non
             )
     except Exception:  # noqa: BLE001
         pass
+    if order:
+        try:
+            refunded = bool(refund_meta and refund_meta.get("refunded"))
+            await _notify_order_user_push(
+                db,
+                order,
+                pref_key="refund" if refunded else "generation_done",
+                event_type="generation_failed",
+                title="Возврат средств" if refunded else "Ошибка генерации",
+                body=(
+                    f"Заказ #{order.id} не выполнен. Средства возвращены."
+                    if refunded
+                    else f"Заказ #{order.id} не выполнен."
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("user push generation_failed: %s", exc)
     await db.commit()
     if order:
         await publish_order_status(

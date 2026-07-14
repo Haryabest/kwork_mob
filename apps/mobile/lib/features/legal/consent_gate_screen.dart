@@ -3,6 +3,7 @@ import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/services/push_deep_link.dart';
 
 /// Блокировка приложения до принятия новых версий документов (§2.8.2).
 class LegalConsentGateScreen extends StatefulWidget {
@@ -50,18 +51,28 @@ class _LegalConsentGateScreenState extends State<LegalConsentGateScreen> {
       setState(() {
         _pending = pending;
         _loading = false;
-        if (pending.isEmpty) {
-          context.go('/home');
-        }
       });
+      if (pending.isEmpty) {
+        await _goHomeAfterConsent();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = e.toString();
+          _error = formatApiError(e);
         });
       }
     }
+  }
+
+  Future<void> _goHomeAfterConsent() async {
+    if (!mounted) return;
+    final pending = await PushDeepLink.take();
+    if (pending != null) {
+      context.go(pending);
+      return;
+    }
+    context.go('/home');
   }
 
   Future<void> _submit() async {
@@ -75,11 +86,11 @@ class _LegalConsentGateScreenState extends State<LegalConsentGateScreen> {
     setState(() => _submitting = true);
     try {
       await widget.api.legalAccept(slugs);
-      if (mounted) context.go('/home');
+      if (mounted) await _goHomeAfterConsent();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text(formatApiError(e)), backgroundColor: AppColors.error),
         );
       }
     } finally {

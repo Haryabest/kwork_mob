@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:forui/forui.dart';
 import 'package:kwork_mobile/core/api.dart';
+import 'package:kwork_mobile/core/locale_controller.dart';
 import 'package:kwork_mobile/core/router.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/push_service.dart';
 
 Future<void> main() async {
@@ -13,7 +15,17 @@ Future<void> main() async {
   final api = ApiClient();
   final session = AppSession();
   final push = PushService(api);
-  runApp(KworkApp(api: api, session: session, push: push));
+  final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+  push.bindMessenger(scaffoldMessengerKey);
+  push.bindNavigationGuard(() => api.hasToken);
+  await AppLocaleController.instance.load();
+  await LocalModelLibrary.instance.loadAutoDownloadEnabled();
+  runApp(KworkApp(
+    api: api,
+    session: session,
+    push: push,
+    scaffoldMessengerKey: scaffoldMessengerKey,
+  ));
 }
 
 class KworkApp extends StatelessWidget {
@@ -22,38 +34,53 @@ class KworkApp extends StatelessWidget {
     required this.api,
     required this.session,
     required this.push,
+    required this.scaffoldMessengerKey,
   });
 
   final ApiClient api;
   final AppSession session;
   final PushService push;
+  final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey;
 
   @override
   Widget build(BuildContext context) {
+    final locale = AppLocaleController.instance;
     final foruiTheme = buildForuiTheme();
     final router = createRouter(api: api, session: session, push: push);
     push.bindRouter(router);
 
-    return MaterialApp.router(
-      title: 'KWork Mob',
-      theme: buildMaterialTheme(foruiTheme),
-      routerConfig: router,
-      locale: const Locale('ru'),
-      supportedLocales: [
-        ...AppLocalizations.supportedLocales,
-        ...FLocalizations.supportedLocales,
-      ],
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        ...FLocalizations.localizationsDelegates,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      builder: (context, child) => FTheme(
-        data: foruiTheme,
-        child: FToaster(child: child ?? const SizedBox.shrink()),
-      ),
+    return ListenableBuilder(
+      listenable: locale,
+      builder: (context, _) {
+        return MaterialApp.router(
+          title: 'KWork Mob',
+          scaffoldMessengerKey: scaffoldMessengerKey,
+          theme: buildMaterialTheme(foruiTheme),
+          routerConfig: router,
+          locale: locale.locale,
+          supportedLocales: [
+            ...AppLocalizations.supportedLocales,
+            ...FLocalizations.supportedLocales,
+          ],
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...FLocalizations.localizationsDelegates,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          builder: (context, child) => FTheme(
+            data: foruiTheme,
+            child: Material(
+              color: AppColors.background,
+              child: DefaultTextStyle(
+                style: foruiTheme.typography.sm,
+                child: FToaster(child: child ?? const SizedBox.shrink()),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

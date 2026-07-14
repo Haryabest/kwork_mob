@@ -30,6 +30,10 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
   bool _loading = false;
   String? _error;
 
+  Map<String, ProductCategory> get _categoryItems => {
+        for (final c in ProductCategory.values) c.label: c,
+      };
+
   Future<void> _create() async {
     final companyId = widget.session.companyId;
     if (companyId == null) {
@@ -47,7 +51,7 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
         tier: _tier.api,
       );
     } catch (e) {
-      _error = e.toString();
+      _error = formatApiError(e);
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -55,6 +59,7 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
   @override
   Widget build(BuildContext context) {
     final url = _link?['url']?.toString();
+    final hidePrices = widget.session.hidePrices;
     return FScaffold(
       header: FHeader.nested(
         title: const Text('Съёмка по ссылке'),
@@ -63,26 +68,35 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text('Категория', style: context.theme.typography.lg),
-          DropdownButton<ProductCategory>(
-            value: _category,
-            isExpanded: true,
-            items: ProductCategory.values
-                .map((c) => DropdownMenuItem(value: c, child: Text(c.label)))
-                .toList(),
-            onChanged: (v) => setState(() => _category = v!),
-          ),
-          const SizedBox(height: 12),
-          Text('Тариф', style: context.theme.typography.lg),
-          ...Tier.values.map(
-            (t) => RadioListTile<Tier>(
-              value: t,
-              groupValue: _tier,
-              title: Text(widget.session.hidePrices ? t.label : '${t.label} — ${t.priceRub} ₽'),
-              onChanged: (v) => setState(() => _tier = v!),
+          FSelect<ProductCategory>(
+            label: const Text('Категория'),
+            control: FSelectControl.managed(
+              initial: _category,
+              onChange: (v) {
+                if (v != null) setState(() => _category = v);
+              },
             ),
+            items: _categoryItems,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          Text('Тариф', style: context.theme.typography.lg),
+          const SizedBox(height: 8),
+          FSelectGroup<Tier>(
+            control: FMultiValueControl.managedRadio(
+              initial: _tier,
+              onChange: (v) {
+                if (v.isNotEmpty) setState(() => _tier = v.first);
+              },
+            ),
+            children: [
+              for (final t in Tier.values)
+                FSelectGroupItemMixin.radio(
+                  value: t,
+                  label: Text(hidePrices ? t.label : '${t.label} — ${t.priceRub} ₽'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
           FButton(
             onPress: _loading ? null : _create,
             child: _loading

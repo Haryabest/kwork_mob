@@ -1,35 +1,51 @@
-# Облачные GPU-воркеры
+# Облачные GPU-воркеры: Intelion + Immers
 
-Провайдеры из `Адреса Облачных Воркеров.txt`:
+| Провайдер | Сайт | API | Поддержка |
+|-----------|------|-----|-----------|
+| **Intelion** | [intelion.cloud](https://intelion.cloud/) | [api](https://intelion.cloud/api/) v2 | Telegram `@CareIntelionCloud_bot` |
+| **Immers** | [immers.cloud](https://immers.cloud/) | [api](https://immers.cloud/api/) | Личный кабинет / support |
 
-| Провайдер | Сайт | API |
-|-----------|------|-----|
-| IntelionCloud | https://intelion.cloud/ | https://intelion.cloud/api/ |
-| Immers | https://immers.cloud/ | https://immers.cloud/api/ |
+TRELLIS собирается на GPU-VM через `bootstrap-{id}.sh`, не на домашнем ПК.
 
-Telegram: `@CareIntelionCloud_bot`
-
-## Роль в архитектуре
-
-Воркеры (раздел 3 `Архитектура 3dvektor.txt`) — домашние ПК или облачные GPU-инстансы.
-Каждый узел:
-1. Входит в Tailscale (основной канал) или резервный WSS к оркестратору
-2. Поднимает Docker-образ `worker/` (TRELLIS + agent)
-3. Шлёт heartbeat `/ws/worker` каждые 5 сек
-4. Скачивает ZIP из MinIO → генерация → upload результата → очистка temp
-
-## Быстрый старт (скрипт)
+## Env (.env)
 
 ```bash
-# из корня репо
-export ORCHESTRATOR_WS_URL=wss://api.example.com/ws/worker
-export WORKER_TOKEN=...
-export CLOUD_PROVIDER=intelion   # или immers
-export CLOUD_API_TOKEN=...
+# Intelion
+CLOUD_INTELION_TOKEN=...
+INTELION_FLAVOR_ID=1
+INTELION_OS_ID=1
 
-python worker/cloud/provision.py --action status
-python worker/cloud/provision.py --action start --gpu a10
-python worker/cloud/provision.py --action stop
+# Immers
+CLOUD_IMMERS_TOKEN=...
+IMMERS_FLAVOR_ID=1
+IMMERS_OS_ID=1
+
+# или один токен на оба (fallback)
+CLOUD_API_TOKEN=...
+
+CLOUD_API_MOCK=0   # 1 — локальный mock без API
 ```
 
-Пока API провайдеров не зафиксированы в SDK — скрипт печатает чеклист и пишет `.env.worker` для ручного деплоя.
+## CLI
+
+```bash
+python worker/cloud/provision.py --action providers
+
+python worker/cloud/provision.py --action flavors --provider intelion
+python worker/cloud/provision.py --action create --provider intelion --gpu rtx4090 --flavor-id 1 --os-id 1
+
+python worker/cloud/provision.py --action flavors --provider immers
+python worker/cloud/provision.py --action create --provider immers --gpu rtx4090 --flavor-id 1 --os-id 1
+```
+
+## Admin API
+
+- `GET /api/v1/admin/cloud/providers`
+- `GET /api/v1/admin/cloud/flavors?provider=intelion|immers`
+- `POST /api/v1/admin/cloud/instances` — поле `provider`, `flavor_id`, `os_id`
+
+## Immers OpenStack
+
+Immers также даёт native [OpenStack Zed API](https://immers.cloud/api/) для продвинутой автоматизации.
+Cabinet API v2 (как Intelion) покрывает create/flavors/os-images; если endpoints отличаются —
+переопредели `IMMERS_PATH_*` в `.env`.

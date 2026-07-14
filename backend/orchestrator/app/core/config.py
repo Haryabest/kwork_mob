@@ -91,8 +91,20 @@ class Settings(BaseSettings):
     # Облако Intelion / Immers (§11.3.3 / §14.7)
     CLOUD_PROVIDER: str = "intelion"
     CLOUD_API_TOKEN: str = ""
+    CLOUD_INTELION_TOKEN: str = ""
+    CLOUD_IMMERS_TOKEN: str = ""
     CLOUD_API_BASE: str = ""
+    CLOUD_INTELION_API_BASE: str = ""
+    CLOUD_IMMERS_API_BASE: str = ""
     CLOUD_API_MOCK: bool = False
+    INTELION_FLAVOR_ID: int = 0
+    INTELION_OS_ID: int = 0
+    INTELION_SSD_GB: int = 100
+    # §11.3.3 / soft-launch: лимит расходов на облачные GPU (0 = без лимита)
+    CLOUD_MONTHLY_BUDGET_RUB: int = 0
+    CLOUD_DAILY_BUDGET_RUB: int = 0
+    CLOUD_BURN_ALERT_RUB_PER_HOUR: int = 500
+    CLOUD_BUDGET_ALERT_COOLDOWN_SEC: int = 3600
 
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3"

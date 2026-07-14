@@ -5,6 +5,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/queue_ws.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/services/local_model_library.dart';
 
 /// Экран очереди / генерации (§3.4.1–3.4.2).
 class QueueScreen extends StatefulWidget {
@@ -48,7 +49,7 @@ class _QueueScreenState extends State<QueueScreen> {
       }
       if (mounted) setState(() {});
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = formatApiError(e));
     }
   }
 
@@ -72,6 +73,7 @@ class _QueueScreenState extends State<QueueScreen> {
       final model = _order?['model'] as Map?;
       final uuid = model?['uuid']?.toString();
       if (uuid != null) {
+        LocalModelLibrary.instance.downloadIfNeeded(api: widget.api, modelUuid: uuid);
         context.go('/home/models/$uuid');
       } else {
         _refresh();
@@ -86,7 +88,9 @@ class _QueueScreenState extends State<QueueScreen> {
     setState(() {});
     final model = _order?['model'] as Map?;
     if (_order?['status'] == 'completed' && model?['uuid'] != null) {
-      context.go('/home/models/${model!['uuid']}');
+      final uuid = model!['uuid'].toString();
+      LocalModelLibrary.instance.downloadIfNeeded(api: widget.api, modelUuid: uuid);
+      context.go('/home/models/$uuid');
     }
   }
 
@@ -129,6 +133,19 @@ class _QueueScreenState extends State<QueueScreen> {
     await _refresh();
   }
 
+  Future<void> _reconnectWs() async {
+    try {
+      final uid = widget.session.userId;
+      final token = await widget.api.accessToken;
+      if (uid != null && token != null) {
+        await _ws.connect(userId: uid, token: token);
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) setState(() => _error = formatApiError(e));
+    }
+  }
+
   @override
   void dispose() {
     _ws.removeListener(_onWs);
@@ -153,7 +170,21 @@ class _QueueScreenState extends State<QueueScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_error != null) Text(_error!, style: const TextStyle(color: AppColors.error)),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(_error!, style: const TextStyle(color: AppColors.error)),
+              ),
+            if (_ws.error != null) ...[
+              Text(_ws.error!, style: const TextStyle(color: AppColors.error)),
+              const SizedBox(height: 8),
+              FButton(
+                variant: .outline,
+                onPress: _reconnectWs,
+                child: const Text('Переподключить WebSocket'),
+              ),
+              const SizedBox(height: 12),
+            ],
             Text('Статус: $status', style: context.theme.typography.lg),
             const SizedBox(height: 12),
             if (pos != null)
@@ -163,11 +194,13 @@ class _QueueScreenState extends State<QueueScreen> {
             const SizedBox(height: 16),
             LinearProgressIndicator(
               value: pos is int && pos > 0 ? (1 / (pos + 1)).clamp(0.05, 0.95) : null,
-              color: AppColors.wbPrimary,
+              color: AppColors.accent,
             ),
             const SizedBox(height: 8),
             Text(
-              _ws.connected ? 'WebSocket: подключено' : 'WebSocket: …',
+              _ws.connected
+                  ? 'WebSocket: подключено'
+                  : (_ws.error != null ? 'WebSocket: ошибка' : 'WebSocket: …'),
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const Spacer(),

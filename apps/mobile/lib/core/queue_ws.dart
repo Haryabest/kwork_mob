@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:kwork_mobile/core/ws_errors.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// WebSocket `/ws/queue/{user_id}` — §3.4.1.
@@ -34,7 +35,7 @@ class QueueWsClient extends ChangeNotifier {
           } catch (_) {}
         },
         onError: (e) {
-          error = e.toString();
+          error = formatWsError(e);
           connected = false;
           notifyListeners();
         },
@@ -47,7 +48,7 @@ class QueueWsClient extends ChangeNotifier {
         _channel?.sink.add(jsonEncode({'type': 'ping'}));
       });
     } catch (e) {
-      error = e.toString();
+      error = formatWsError(e);
       connected = false;
       notifyListeners();
     }

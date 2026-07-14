@@ -147,6 +147,61 @@ async def list_trash(db: AsyncSession, user: User) -> list[dict[str, Any]]:
     return out
 
 
+async def mass_extend_company_storage(
+    db: AsyncSession,
+    *,
+    company_id: int,
+    user: User,
+    limit: int = 500,
+) -> dict[str, Any]:
+    """Owner: продлить хранение для всех моделей компании (§9.1.2)."""
+    rows = (
+        await db.scalars(
+            select(Model3D)
+            .where(
+                Model3D.company_id == company_id,
+                Model3D.trashed_at.is_(None),
+                Model3D.source_extend_count < MAX_EXTENDS,
+            )
+            .order_by(Model3D.id.asc())
+            .limit(limit)
+        )
+    ).all()
+    extended = 0
+    skipped = 0
+    for model in rows:
+        extends = int(model.source_extend_count or 0)
+        if extends >= MAX_EXTENDS:
+            skipped += 1
+            continue
+        exp = ensure_expires(model)
+        now = datetime.now(timezone.utc)
+        base = exp if exp > now else now
+        model.source_expires_at = base + timedelta(days=ttl_days())
+        model.source_extend_count = extends + 1
+        extended += 1
+    if extended:
+        db.add(
+            AuditLog(
+                company_id=company_id,
+                user_id=user.id,
+                action="source_storage_mass_extend",
+                details={
+                    "extended": extended,
+                    "skipped_at_limit": skipped,
+                    "ttl_days": ttl_days(),
+                },
+            )
+        )
+    await db.flush()
+    return {
+        "ok": True,
+        "extended": extended,
+        "skipped_at_limit": skipped,
+        "message": f"Продлено {extended} моделей на {ttl_days()} дней",
+    }
+
+
 async def purge_expired_trash(db: AsyncSession, *, limit: int = 100) -> dict[str, Any]:
     cutoff = datetime.now(timezone.utc) - timedelta(days=TRASH_DAYS)
     rows = (

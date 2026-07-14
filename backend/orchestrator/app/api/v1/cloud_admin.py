@@ -22,6 +22,9 @@ class CreateWorkersBody(BaseModel):
     image: str | None = None
     vcpus: int = Field(default=8, ge=2, le=64)
     ram_gb: int = Field(default=32, ge=8, le=512)
+    flavor_id: int | None = None
+    os_id: int | None = None
+    ssd_gb: int | None = Field(default=None, ge=30, le=2000)
 
 
 class AutoscalingRuleBody(BaseModel):
@@ -43,6 +46,21 @@ class BonusSettingsBody(BaseModel):
     promocode_ttl_days: int = Field(default=30, ge=1)
     max_uses: int = Field(default=1, ge=1)
     is_active: bool = True
+
+
+@router.get("/providers")
+async def providers_list(_: dict = Depends(require_admin)):
+    return {"items": list_providers()}
+
+
+@router.get("/os-images")
+async def os_images(
+    provider: str = "intelion",
+    flavor_id: int | None = None,
+    _: dict = Depends(require_admin),
+):
+    client = cloud_svc._client(provider)
+    return {"provider": provider, "items": client.list_os_images(flavor_id=flavor_id)}
 
 
 @router.get("/flavors")
@@ -69,6 +87,9 @@ async def create_instances(
         image=body.image,
         vcpus=body.vcpus,
         ram_gb=body.ram_gb,
+        flavor_id=body.flavor_id,
+        os_id=body.os_id,
+        ssd_gb=body.ssd_gb,
         triggered_by="admin",
     )
     await db.commit()

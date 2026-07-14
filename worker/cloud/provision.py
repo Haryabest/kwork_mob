@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI create/start/stop облачных GPU-воркеров Intelion / Immers (§14.7 / §11.3.3)."""
+"""CLI: Intelion Cloud GPU-воркеры (§14.7). TRELLIS собирается на VM, не на ПК."""
 
 from __future__ import annotations
 
@@ -15,7 +15,9 @@ from cloud.providers import (  # noqa: E402
     PROVIDERS,
     CloudProviderClient,
     CloudProviderError,
-    cloud_user_data,
+    cloud_env_int,
+    list_providers,
+    worker_bootstrap_script,
 )
 
 
@@ -24,31 +26,47 @@ def _env(name: str, default: str = "") -> str:
 
 
 def write_worker_env(path: Path) -> None:
-    content = f"""# Автоген worker/cloud/provision.py
+    content = f"""# Автоген worker/cloud/provision.py — локальный stub-воркер
 ORCHESTRATOR_WS_URL={_env("ORCHESTRATOR_WS_URL", "ws://localhost:8000/ws/worker")}
 ORCHESTRATOR_WS_FALLBACK_URL={_env("ORCHESTRATOR_WS_FALLBACK_URL")}
 WORKER_TOKEN={_env("WORKER_TOKEN", "worker-dev-token")}
-WORKER_ID={_env("WORKER_ID", "cloud-gpu-01")}
-WORKER_PIPELINE_MODE=trellis
+WORKER_ID={_env("WORKER_ID", "local-stub-01")}
+WORKER_PIPELINE_MODE=stub
 MINIO_ENDPOINT={_env("MINIO_ENDPOINT", "http://localhost:9010")}
 MINIO_ACCESS_KEY={_env("MINIO_ACCESS_KEY", "minioadmin")}
 MINIO_SECRET_KEY={_env("MINIO_SECRET_KEY", "minioadmin")}
+REDIS_URL={_env("REDIS_URL", "redis://localhost:6382/0")}
 CLOUD_PROVIDER={_env("CLOUD_PROVIDER", "intelion")}
-TAILSCALE_AUTH_KEY={_env("TAILSCALE_AUTH_KEY")}
-WORKER_DOCKER_IMAGE={_env("WORKER_DOCKER_IMAGE", "kwork-worker:latest")}
 """
     path.write_text(content, encoding="utf-8")
     print(f"Записан {path}")
 
 
+def _print_bootstrap_hint(inst, script: str) -> None:
+    ip = inst.public_ip or "?"
+    login = inst.login or "root"
+    print(f"\n--- Bootstrap TRELLIS on VM ({inst.provider}) ---")
+    print(f"1. Пароль: python worker/cloud/provision.py --action password --instance-id {inst.id}")
+    print(f"2. SSH: ssh {login}@{ip}")
+    print("3. Сохраните и запустите bootstrap.sh на VM:")
+    print(f"   scp bootstrap-{inst.id}.sh {login}@{ip}:/tmp/bootstrap.sh")
+    print("   chmod +x /tmp/bootstrap.sh && sudo /tmp/bootstrap.sh")
+    out = Path(f"bootstrap-{inst.id}.sh")
+    out.write_text(script, encoding="utf-8")
+    print(f"   (скрипт записан локально: {out})")
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Облачный GPU-воркер Intelion/Immers")
+    parser = argparse.ArgumentParser(description="Intelion Cloud GPU + TRELLIS.2")
     parser.add_argument(
         "--action",
-        choices=["status", "env", "flavors", "create", "start", "stop", "get"],
+        choices=["status", "env", "providers", "flavors", "os-images", "create", "start", "stop", "get", "password"],
         default="status",
     )
-    parser.add_argument("--gpu", default="rtx4090")
+    parser.add_argument("--gpu", default="rtx4090", help="slug для поиска flavor (или INTELION_FLAVOR_ID)")
+    parser.add_argument("--flavor-id", type=int, default=None)
+    parser.add_argument("--os-id", type=int, default=None)
+    parser.add_argument("--ssd-gb", type=int, default=None)
     parser.add_argument("--provider", default=None)
     parser.add_argument("--instance-id", default="")
     parser.add_argument("--count", type=int, default=1)
@@ -75,6 +93,13 @@ def main() -> int:
         print(f"  Token: {'задан' if client.token else 'НЕ ЗАДАН'}")
         print(f"  Mock: {client.mock}")
         print(f"  Stop mode: {meta['stop_mode']}")
+        print("  Локально: WORKER_PIPELINE_MODE=stub (без TRELLIS)")
+        print("  GPU/TRELLIS: только Intelion → bootstrap.sh на VM")
+        return 0
+
+    if args.action == "providers":
+        for p in list_providers():
+            print(p)
         return 0
 
     if args.action == "flavors":
@@ -82,12 +107,18 @@ def main() -> int:
             print(f)
         return 0
 
+    if args.action == "os-images":
+        fid = args.flavor_id or cloud_env_int(provider, "FLAVOR_ID")
+        for img in client.list_os_images(flavor_id=fid):
+            print(img)
+        return 0
+
     try:
         if args.action == "create":
             write_worker_env(env_path)
             for i in range(args.count):
-                wid = args.worker_id or f"cloud-{provider}-{_env('WORKER_ID', 'gpu')}-{i+1}"
-                ud = cloud_user_data(
+                wid = args.worker_id or f"{provider}-{args.gpu}-{i + 1}"
+                bootstrap = worker_bootstrap_script(
                     worker_id=wid,
                     orchestrator_ws=_env("ORCHESTRATOR_WS_URL", "wss://orchestrator/ws/worker"),
                     worker_token=_env("WORKER_TOKEN", "worker-dev-token"),
@@ -97,17 +128,24 @@ def main() -> int:
                         "MINIO_ACCESS_KEY": _env("MINIO_ACCESS_KEY"),
                         "MINIO_SECRET_KEY": _env("MINIO_SECRET_KEY"),
                         "TAILSCALE_AUTH_KEY": _env("TAILSCALE_AUTH_KEY"),
-                        "WORKER_DOCKER_IMAGE": _env("WORKER_DOCKER_IMAGE", "kwork-worker:latest"),
                         "ORCHESTRATOR_WS_FALLBACK_URL": _env("ORCHESTRATOR_WS_FALLBACK_URL"),
+                        "WORKER_GIT_REPO": _env("WORKER_GIT_REPO"),
+                        "WORKER_GIT_BRANCH": _env("WORKER_GIT_BRANCH", "main"),
                     },
                 )
                 inst = client.create_instance(
                     gpu=args.gpu,
-                    image=_env("WORKER_DOCKER_IMAGE", "kwork-worker:latest"),
+                    image=_env("WORKER_DOCKER_IMAGE", "kwork-worker:trellis2"),
                     worker_id=wid,
-                    user_data=ud,
+                    user_data=bootstrap,
+                    flavor_id=args.flavor_id,
+                    os_id=args.os_id,
+                    ssd_gb=args.ssd_gb,
                 )
-                print(f"CREATED id={inst.id} status={inst.status} ts={inst.tailscale_ip} ip={inst.public_ip}")
+                print(
+                    f"CREATED id={inst.id} status={inst.status} ip={inst.public_ip} login={inst.login}"
+                )
+                _print_bootstrap_hint(inst, bootstrap)
             return 0
 
         if args.action == "get":
@@ -118,12 +156,20 @@ def main() -> int:
             print(inst)
             return 0
 
+        if args.action == "password":
+            if not args.instance_id:
+                print("--instance-id required", file=sys.stderr)
+                return 2
+            pwd = client.get_password(args.instance_id)
+            print(pwd or "(пароль ещё не готов — подождите 2–5 мин после create)")
+            return 0
+
         if args.action == "start":
             if not args.instance_id:
                 print("--instance-id required", file=sys.stderr)
                 return 2
             inst = client.start_instance(args.instance_id)
-            print(f"STARTED id={inst.id} status={inst.status}")
+            print(f"STARTED id={inst.id} status={inst.status} ip={inst.public_ip}")
             return 0
 
         if args.action == "stop":

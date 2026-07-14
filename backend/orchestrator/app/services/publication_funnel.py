@@ -247,6 +247,29 @@ def _empty_funnel() -> dict[str, Any]:
     return _funnel_from_models([], downloaded=set(), with_links=set(), verified_links={})
 
 
+def emit_funnel_ch_event(
+    *,
+    model_uuid: str,
+    event_type: str,
+    user_id: int,
+    company_id: int | None = None,
+    marketplace: str | None = None,
+) -> None:
+    """ClickHouse live-слой воронки (§7.9 / dashboard)."""
+    try:
+        from app.services.metrics import record_publication_funnel_event
+
+        record_publication_funnel_event(
+            model_uuid=model_uuid,
+            event_type=event_type,
+            user_id=user_id,
+            company_id=company_id,
+            marketplace=marketplace,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def team_funnel(
     db: AsyncSession,
     *,
@@ -378,6 +401,13 @@ async def log_download(
         request=request,
         action="download",
         file_format=file_format,
+    )
+    emit_funnel_ch_event(
+        model_uuid=model.uuid,
+        event_type="downloaded",
+        user_id=user.id,
+        company_id=model.company_id,
+        marketplace=mp,
     )
 
 

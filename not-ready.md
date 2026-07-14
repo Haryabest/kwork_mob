@@ -72,10 +72,16 @@
 
 ---
 
-## Следующие задачи (код)
+## Следующие задачи (код, без GPU)
 
-1. Cloud burn limit hard-stop polish
-2. Owner mass extend storage для всех моделей компании §9.1.2
-3. Mobile trash list + restore-from-trash экран
-4. Webhook delivery detail + retry из admin dashboard
-5. Node timeline export CSV
+1. Owner marketplace credentials UI + API — **сделано** (`/company/marketplace/credentials`, seller `/team/marketplace`)
+2. Admin Logs: API 4xx/5xx → PG — **сделано** (`ApiRequestLogMiddleware`)
+3. Guided dome: эмулятор / DEV capture — **сделано** (fallback gyro, кнопка DEV)
+4. Mobile `formatApiError` на trash — **сделано**
+
+## Следующие задачи (осталось)
+
+1. Immers API smoke + env paths (после токена)
+2. WB/Ozon real upload endpoints (сейчас scaffold + HTTP POST)
+3. Mobile QA: hot restart, пройти все экраны
+4. Prod deploy: alembic, celery beat, Firebase, LOKI

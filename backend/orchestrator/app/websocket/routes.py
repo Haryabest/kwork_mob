@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.database import async_session
 from app.core.redis import get_redis, release_task_lock
 from app.core.security import TokenType
+from app.models import WorkerNode
 from app.services.events import user_channel
 from app.services.queue import queue_service
 from app.services.task_lifecycle import (
@@ -158,6 +159,19 @@ async def worker_ws(websocket: WebSocket):
                 if not worker_id:
                     await websocket.send_json({"type": "error", "error": "worker_id required"})
                     continue
+                version = str(data.get("version") or data.get("trellis_version") or "")
+                from app.services.trellis_rollout import is_version_allowed, normalize_version
+
+                if version and not await is_version_allowed(version):
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "error": "trellis_version_not_allowed",
+                            "version": version,
+                        }
+                    )
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
                 # повторный ready после охлаждения
                 existing = await worker_hub.get(worker_id)
                 if existing and existing.websocket is websocket:
@@ -171,18 +185,32 @@ async def worker_ws(websocket: WebSocket):
                     worker_id=worker_id,
                     websocket=websocket,
                     status="idle",
-                    version=str(data.get("version") or ""),
+                    version=str(data.get("version") or data.get("trellis_version") or ""),
                     capabilities=list(data.get("capabilities") or []),
                     weight=float(data.get("weight") or 0),
+                    meta={
+                        "maintenance": bool((data.get("maintenance") or False)),
+                        "docker_image": data.get("docker_image"),
+                        "pipeline_mode": data.get("pipeline_mode"),
+                    },
                 )
-                await worker_hub.register(conn)
                 async with async_session() as db:
+                    node = await db.get(WorkerNode, worker_id)
+                    if node and node.meta:
+                        conn.meta = {**conn.meta, **node.meta}
                     await upsert_worker_heartbeat(
                         db,
                         worker_id,
                         status="idle",
-                        meta={"version": conn.version, "capabilities": conn.capabilities},
+                        meta={
+                            "version": conn.version,
+                            "trellis_version": normalize_version(conn.version) or conn.version,
+                            "capabilities": conn.capabilities,
+                            "docker_image": (data.get("docker_image") or ""),
+                            "pipeline_mode": data.get("pipeline_mode"),
+                        },
                     )
+                await worker_hub.register(conn)
                 await websocket.send_json({"type": "registered", "worker_id": worker_id})
                 await _worker_log(
                     level="info",

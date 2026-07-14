@@ -99,6 +99,7 @@ async def get_policies(db: AsyncSession, user: User) -> dict:
         "notification_audiences": list(cn.AUDIENCES),
         "available_categories": list(ALL_CATEGORIES),
         "balance": company.balance,
+        "force_trellis_version": (company.settings or {}).get("force_trellis_version"),
         # совместимость со старым клиентом
         "settings": {**(company.settings or {}), **policies},
     }
@@ -127,8 +128,17 @@ async def update_policies(db: AsyncSession, user: User, body: dict) -> dict:
     routing_patch = body.get("notification_routing")
     if routing_patch is None and isinstance(body.get("settings"), dict):
         routing_patch = body["settings"].get(cn.SETTINGS_KEY)
+    force_trellis = body.get("force_trellis_version")
+    if force_trellis is None and isinstance(body.get("settings"), dict):
+        force_trellis = body["settings"].get("force_trellis_version")
     if routing_patch is not None:
         rest = cn.merge_routing_into_settings(rest, routing_patch)
+    if force_trellis is not None:
+        ftv = str(force_trellis).strip()
+        if ftv.lower() in ("", "default", "none", "null"):
+            rest.pop("force_trellis_version", None)
+        else:
+            rest["force_trellis_version"] = ftv
     company.settings = {**rest, **policies}
     await audit(
         db,

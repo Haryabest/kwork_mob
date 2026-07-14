@@ -85,3 +85,40 @@ class RobotsTagMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive, nosnippet"
         return response
+
+
+class ApiRequestLogMiddleware(BaseHTTPMiddleware):
+    """Пишет 4xx/5xx API в service_log_events для /admin/logs (§11.5)."""
+
+    _SKIP_SUFFIXES = ("/admin/logs", "/health", "/metrics")
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        path = request.url.path
+        if not path.startswith("/api/v1") or any(path.endswith(s) for s in self._SKIP_SUFFIXES):
+            return await call_next(request)
+
+        started = time.perf_counter()
+        response = await call_next(request)
+        status = response.status_code
+        if status < 400:
+            return response
+
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        level = "ERROR" if status >= 500 else "WARNING"
+        message = f"{request.method} {path} {status} {elapsed_ms}ms"
+        try:
+            from app.core.database import async_session
+            from app.services.log_writer import emit_log
+
+            async with async_session() as db:
+                await emit_log(
+                    db,
+                    source="api",
+                    level=level,
+                    message=message,
+                    details={"status": status, "path": path, "method": request.method},
+                )
+                await db.commit()
+        except Exception:  # noqa: BLE001
+            pass
+        return response

@@ -135,6 +135,82 @@ def record_order_event(
         logger.debug("CH order event: %s", exc)
 
 
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("CH order event: %s", exc)
+
+
+def record_publication_funnel_event(
+    *,
+    model_uuid: str,
+    event_type: str,
+    user_id: int,
+    company_id: int | None = None,
+    marketplace: str | None = None,
+) -> None:
+    client = _ch()
+    if not client:
+        return
+    try:
+        client.insert(
+            "publication_funnel_events",
+            [
+                [
+                    datetime.now(timezone.utc).replace(tzinfo=None),
+                    model_uuid[:64],
+                    event_type[:32],
+                    int(user_id),
+                    int(company_id) if company_id else None,
+                    (marketplace or "")[:16] or None,
+                ]
+            ],
+            column_names=[
+                "timestamp",
+                "model_uuid",
+                "event_type",
+                "user_id",
+                "company_id",
+                "marketplace",
+            ],
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("CH publication funnel: %s", exc)
+
+
+def _ch_publication_funnel_live() -> dict[str, Any]:
+    client = _ch()
+    if not client:
+        return {"source": "postgresql", "events_30d": {}}
+    try:
+        rows = client.query(
+            "SELECT event_type, count() FROM publication_funnel_events "
+            "WHERE timestamp > now() - INTERVAL 30 DAY GROUP BY event_type"
+        ).result_rows
+        events = {str(r[0]): int(r[1]) for r in rows}
+        return {"source": "clickhouse", "events_30d": events}
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("CH publication funnel query: %s", exc)
+        return {"source": "postgresql", "events_30d": {}, "error": str(exc)}
+
+
+async def _publication_funnel_dashboard() -> dict[str, Any]:
+    from app.core.database import async_session
+    from app.services import publication_funnel as funnel_svc
+
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+    async with async_session() as db:
+        pg = await funnel_svc.global_funnel(db, date_from=since, date_to=None)
+        await db.commit()
+    ch = _ch_publication_funnel_live()
+    return {
+        "source": ch.get("source") if ch.get("events_30d") else "postgresql",
+        "period": pg.get("period"),
+        "funnel": pg.get("funnel"),
+        "by_segment": pg.get("by_segment"),
+        "by_category": pg.get("by_category"),
+        "live": ch,
+    }
+
+
 async def _pg_dashboard() -> dict:
     """Агрегаты из PostgreSQL (§11.2) — fallback и дополнение к ClickHouse."""
     from app.core.database import async_session
@@ -318,6 +394,12 @@ async def dashboard_aggregates() -> dict:
         logger.warning("dashboard PG: %s", exc)
         pg = {"error": str(exc)}
 
+    try:
+        publication_funnel = await _publication_funnel_dashboard()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("dashboard funnel: %s", exc)
+        publication_funnel = {"source": "error", "error": str(exc)}
+
     return {
         "source": ch.get("source"),
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -350,5 +432,6 @@ async def dashboard_aggregates() -> dict:
         "moderation": {
             "nsfw_blocked": pg.get("nsfw_blocked", 0),
         },
+        "publication_funnel": publication_funnel,
         "pg_error": pg.get("error"),
     }

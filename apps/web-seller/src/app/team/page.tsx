@@ -197,6 +197,7 @@ export default function TeamPage() {
           { href: '/team/audit', label: 'Аудит' },
           { href: '/team/sessions', label: 'Сессии' },
           { href: '/team/api-keys', label: 'API-ключи' },
+          { href: '/team/marketplace', label: 'Marketplace API' },
         ]}
       />
 

@@ -11,8 +11,9 @@
 
 FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
 
-ARG INSTALL_TRELLIS=1
+ARG INSTALL_TRELLIS=0
 ARG DOWNLOAD_WEIGHTS=1
+ARG INSTALL_FLASH_ATTN=0
 ARG TRELLIS_VERSION=2
 ARG TRELLIS_REPO=https://github.com/microsoft/TRELLIS.2.git
 ARG INSTALL_SAM=1
@@ -72,13 +73,20 @@ RUN sed -i 's/\r$//' /usr/local/bin/worker_entrypoint.sh && \
 
 RUN mkdir -p /var/log/worker /tmp/worker
 
-# TRELLIS.2: setup.sh + o-voxel/xformers + pip install -e + веса (§5.1)
+# TRELLIS.2: clone отдельно — кэш слоя при повторной сборке
+RUN if [ "$INSTALL_TRELLIS" = "1" ]; then \
+      git clone --depth 1 --recursive "${TRELLIS_REPO}" /app/trellis; \
+    fi
+
+# setup.sh + xformers (без flash-attn по умолчанию) + веса (§5.1)
 COPY scripts/install_trellis2.sh /tmp/install_trellis2.sh
 RUN if [ "$INSTALL_TRELLIS" = "1" ]; then \
-      git clone --depth 1 --recursive "${TRELLIS_REPO}" /app/trellis && \
       chmod +x /tmp/install_trellis2.sh && \
       if [ "$TRELLIS_VERSION" = "2" ]; then \
-        DOWNLOAD_WEIGHTS="${DOWNLOAD_WEIGHTS}" TRELLIS_WEIGHTS=microsoft/TRELLIS.2-4B \
+        DOWNLOAD_WEIGHTS="${DOWNLOAD_WEIGHTS}" \
+        INSTALL_FLASH_ATTN="${INSTALL_FLASH_ATTN}" \
+        TRELLIS_WEIGHTS=microsoft/TRELLIS.2-4B \
+        MAX_JOBS=2 \
           bash /tmp/install_trellis2.sh /app/trellis; \
       else \
         pip3 install --no-cache-dir -r /app/trellis/requirements.txt && \
@@ -87,9 +95,9 @@ RUN if [ "$INSTALL_TRELLIS" = "1" ]; then \
       rm -f /tmp/install_trellis2.sh; \
     fi
 
-# Production default: trellis (не stub)
+# Production: trellis только на облачном GPU (Intelion). Локально — stub.
 ENV PYTHONUNBUFFERED=1 \
-    WORKER_PIPELINE_MODE=trellis \
+    WORKER_PIPELINE_MODE=stub \
     TRELLIS_VERSION=2 \
     TRELLIS_ROOT=/app/trellis \
     TRELLIS_WEIGHTS=microsoft/TRELLIS.2-4B \

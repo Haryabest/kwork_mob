@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import async_session
-from app.core.middleware import RateLimitMiddleware, RobotsTagMiddleware
+from app.core.middleware import ApiRequestLogMiddleware, RateLimitMiddleware, RobotsTagMiddleware
 from app.services.dispatcher import start_dispatcher, stop_dispatcher
 from app.services.queue import queue_service
 from app.websocket.routes import ws_router
@@ -57,6 +57,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(ApiRequestLogMiddleware)
 app.add_middleware(RobotsTagMiddleware)
 
 app.include_router(api_router, prefix="/api/v1")

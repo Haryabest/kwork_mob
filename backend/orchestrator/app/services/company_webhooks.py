@@ -358,17 +358,13 @@ async def replay_dlq(db: AsyncSession, user, *, limit: int = 50) -> dict:
     return {"replayed": len(rows), "delivered": delivered, "failed": failed}
 
 
-async def get_delivery(db: AsyncSession, user, delivery_id: int) -> dict:
-    company = await get_owned_company(db, user)
-    d = await db.get(CompanyWebhookDelivery, delivery_id)
-    if not d:
-        raise HTTPException(404, "Delivery не найден")
-    hook = await db.get(CompanyWebhook, d.webhook_id)
-    if not hook or hook.company_id != company.id:
-        raise HTTPException(404, "Delivery не найден")
+def _delivery_dict(d: CompanyWebhookDelivery, *, hook: CompanyWebhook | None = None, company_name: str | None = None) -> dict:
     return {
         "id": d.id,
         "webhook_id": d.webhook_id,
+        "company_id": hook.company_id if hook else None,
+        "company_name": company_name,
+        "url": hook.url if hook else None,
         "event": d.event,
         "ok": d.ok,
         "status": d.status,
@@ -380,6 +376,55 @@ async def get_delivery(db: AsyncSession, user, delivery_id: int) -> dict:
         "next_retry_at": d.next_retry_at.isoformat() if d.next_retry_at else None,
         "created_at": d.created_at.isoformat() if d.created_at else None,
     }
+
+
+async def get_delivery(db: AsyncSession, user, delivery_id: int) -> dict:
+    company = await get_owned_company(db, user)
+    d = await db.get(CompanyWebhookDelivery, delivery_id)
+    if not d:
+        raise HTTPException(404, "Delivery не найден")
+    hook = await db.get(CompanyWebhook, d.webhook_id)
+    if not hook or hook.company_id != company.id:
+        raise HTTPException(404, "Delivery не найден")
+    return _delivery_dict(d, hook=hook)
+
+
+async def admin_get_delivery(db: AsyncSession, delivery_id: int) -> dict:
+    """Admin: детали delivery без ограничения company (§14.5.4)."""
+    from app.models import Company
+
+    d = await db.get(CompanyWebhookDelivery, delivery_id)
+    if not d:
+        raise HTTPException(404, "Delivery не найден")
+    hook = await db.get(CompanyWebhook, d.webhook_id)
+    company_name = None
+    if hook:
+        company = await db.get(Company, hook.company_id)
+        company_name = company.name if company else None
+    return _delivery_dict(d, hook=hook, company_name=company_name)
+
+
+async def admin_retry_delivery(db: AsyncSession, delivery_id: int) -> dict:
+    """Admin manual retry (§14.5.4)."""
+    d = await db.get(CompanyWebhookDelivery, delivery_id)
+    if not d:
+        raise HTTPException(404, "Delivery не найден")
+    hook = await db.get(CompanyWebhook, d.webhook_id)
+    if not hook:
+        raise HTTPException(404, "Webhook не найден")
+    d.attempt = int(d.attempt or 0) + 1
+    d.status = "pending"
+    ok = await _deliver_once(hook, d)
+    if ok:
+        d.status = "delivered"
+        d.next_retry_at = None
+    elif d.attempt >= (d.max_attempts or MAX_ATTEMPTS):
+        d.status = "dlq"
+        d.next_retry_at = None
+    else:
+        d.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=_backoff_seconds(d.attempt))
+    await db.flush()
+    return {"id": d.id, "ok": d.ok, "status": d.status, "attempt": d.attempt}
 
 
 async def delivery_dashboard(db: AsyncSession, *, company_id: int | None = None, limit: int = 100) -> dict:

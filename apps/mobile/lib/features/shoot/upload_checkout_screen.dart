@@ -1,7 +1,6 @@
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +9,7 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/services/photo_encryption.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
+import 'package:kwork_mobile/widgets/order_limit_dialog.dart';
 
 /// ZIP/SHA-256 + prepare + presigned upload + create order (§3.4 / §3.6.3).
 class UploadCheckoutScreen extends StatefulWidget {
@@ -82,7 +82,7 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
 
       String? encKeyB64;
       if (encryptionRequired) {
-        encKeyB64 = await PhotoEncryptionService.instance.generateKeyB64();
+        encKeyB64 = PhotoEncryptionService.instance.generateKeyB64();
         await widget.api.registerPhotoEncryptionKey(
           taskUuid: taskUuid,
           keyB64: encKeyB64,
@@ -103,7 +103,7 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         var contentType = uploads[i]['content_type'] as String? ?? 'image/jpeg';
         if (encryptionRequired && encKeyB64 != null) {
           final raw = await file.readAsBytes();
-          payload = await PhotoEncryptionService.instance.encryptJpeg(
+          payload = PhotoEncryptionService.instance.encryptJpeg(
             raw,
             encKeyB64,
           );
@@ -144,14 +144,13 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
       if (!mounted) return;
       final orderId = order['id'] as int;
       context.go('/home/queue/$orderId');
-    } on DioException catch (e) {
-      setState(() {
-        _error = e.response?.data?.toString() ?? e.message ?? 'Ошибка сети';
-        _running = false;
-      });
     } catch (e) {
+      final msg = formatApiError(e);
+      if (isOrderLimitError(msg) && mounted) {
+        await showOrderLimitDialog(context);
+      }
       setState(() {
-        _error = e.toString();
+        _error = msg;
         _running = false;
       });
     }
@@ -171,13 +170,10 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (!hidePrices) ...[
-              TextField(
-                controller: _promo,
+              FTextField(
+                control: FTextFieldControl.managed(controller: _promo),
+                label: const Text('Промокод'),
                 enabled: !_running,
-                decoration: const InputDecoration(
-                  labelText: 'Промокод',
-                  border: OutlineInputBorder(),
-                ),
               ),
               const SizedBox(height: 16),
             ],
@@ -185,7 +181,7 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
             const SizedBox(height: 12),
             LinearProgressIndicator(
               value: _progress,
-              color: AppColors.wbPrimary,
+              color: AppColors.accent,
               backgroundColor: AppColors.surface,
             ),
             if (_error != null) ...[

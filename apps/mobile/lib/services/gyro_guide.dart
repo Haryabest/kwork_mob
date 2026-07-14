@@ -54,25 +54,31 @@ class GyroGuide extends ChangeNotifier {
   }
 
   /// Цель: pitch по elevation; yaw относительно калибровки = azimuth.
-  ({bool ok, String? hint}) check(DomeAngle angle) {
+  ({bool ok, String? hint, double deltaYawDeg}) check(DomeAngle angle) {
     final targetPitch = -angle.elevationDeg; // верхнее кольцо — наклон вниз
     final pitchErr = (pitchDeg - targetPitch).abs();
-    final yawErr = (relativeYaw() - angle.azimuthDeg).abs();
+    final rel = relativeYaw();
+    final delta = angle.azimuthDeg - rel;
+    final yawErr = delta.abs();
     final yawWrapped = math.min(yawErr, 360 - yawErr);
 
     if (pitchErr > kGyroToleranceDeg) {
       final dir = pitchDeg > targetPitch ? 'наклоните телефон вниз' : 'поднимите телефон';
-      return (ok: false, hint: 'Поверните телефон: $dir (~${targetPitch.toStringAsFixed(0)}°)');
+      return (
+        ok: false,
+        hint: 'Поверните телефон: $dir (~${targetPitch.toStringAsFixed(0)}°)',
+        deltaYawDeg: delta,
+      );
     }
     if (_refYaw != null && yawWrapped > kGyroToleranceDeg) {
-      final delta = angle.azimuthDeg - relativeYaw();
       final dir = delta > 0 ? 'влево' : 'вправо';
       return (
         ok: false,
         hint: 'Поверните телефон примерно на ${delta.abs().toStringAsFixed(0)}° $dir',
+        deltaYawDeg: delta,
       );
     }
-    return (ok: true, hint: null);
+    return (ok: true, hint: null, deltaYawDeg: delta);
   }
 
   @override

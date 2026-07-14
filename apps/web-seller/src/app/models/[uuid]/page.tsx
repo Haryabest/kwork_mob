@@ -77,6 +77,10 @@ export default function ModelDetailPage() {
   const [productUrl, setProductUrl] = useState('');
   const [rateOpen, { open: openRate, close: closeRate }] = useDisclosure(false);
   const [rating, setRating] = useState<string | null>('5');
+  const [mpStatus, setMpStatus] = useState<{
+    upload_enabled: boolean;
+    credentials: { wb: boolean; ozon: boolean };
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,6 +105,12 @@ export default function ModelDetailPage() {
 
   useEffect(() => {
     void load();
+    api
+      .get<{ upload_enabled: boolean; credentials: { wb: boolean; ozon: boolean } }>(
+        '/company/marketplace/status',
+      )
+      .then(({ data }) => setMpStatus(data))
+      .catch(() => undefined);
     return () => {
       setPreviewUrl((prev) => {
         revokeModelPreviewUrl(prev);
@@ -433,9 +443,26 @@ export default function ModelDetailPage() {
 
       <Modal opened={apiUploadOpen} onClose={closeApiUpload} title="Загрузка через API (§7.6)" centered radius="lg">
         <Stack>
-          <Text size="sm" c="#6d6c77">
-            Требуются credentials в admin и флаг MARKETPLACE_UPLOAD_ENABLED. При ошибке — ручная публикация.
-          </Text>
+          <Group gap="xs">
+            <Badge color={mpStatus?.upload_enabled ? 'teal' : 'gray'}>
+              API: {mpStatus?.upload_enabled ? 'включён' : 'выключен'}
+            </Badge>
+            <Badge color={mpStatus?.credentials.wb ? 'teal' : 'orange'}>WB key</Badge>
+            <Badge color={mpStatus?.credentials.ozon ? 'teal' : 'orange'}>Ozon key</Badge>
+          </Group>
+          {!mpStatus?.credentials.wb && !mpStatus?.credentials.ozon ? (
+            <Text size="sm" c="#6d6c77">
+              Настройте ключи в{' '}
+              <Link href="/team/marketplace" style={{ color: 'var(--mantine-color-brand-6)' }}>
+                Команда → Marketplace API
+              </Link>{' '}
+              или попросите admin включить глобальные credentials.
+            </Text>
+          ) : (
+            <Text size="sm" c="#6d6c77">
+              GLB загружается напрямую в маркетплейс. При ошибке — скачайте GLB и опубликуйте вручную.
+            </Text>
+          )}
           <Select
             label="Маркетплейс"
             data={[

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -12,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models import AutoscalingRule, CloudCost, CloudInstanceRecord, CloudOperation, WorkerNode
-from app.services.cloud_client import CloudProviderClient, cloud_user_data
+from app.services.cloud_client import (
+    PROVIDERS,
+    CloudProviderClient,
+    cloud_token,
+    cloud_user_data,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +26,10 @@ logger = logging.getLogger(__name__)
 def _client(provider: str) -> CloudProviderClient:
     return CloudProviderClient(
         provider,
-        token=os.getenv("CLOUD_API_TOKEN") or getattr(settings, "CLOUD_API_TOKEN", "") or "",
-        base_url=os.getenv("CLOUD_API_BASE") or getattr(settings, "CLOUD_API_BASE", None),
+        token=cloud_token(provider) or getattr(settings, "CLOUD_API_TOKEN", "") or "",
+        base_url=os.getenv(f"CLOUD_{provider.upper()}_API_BASE")
+        or os.getenv("CLOUD_API_BASE")
+        or getattr(settings, "CLOUD_API_BASE", None),
     )
 
 
@@ -30,6 +38,134 @@ async def list_flavors(provider: str) -> list[dict]:
         return _client(provider).list_flavors()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, f"Cloud API: {exc}") from exc
+
+
+def _estimate_rate(gpu: str) -> int:
+    rates = {"rtx4090": 120, "a100": 280, "l40s": 220, "a6000": 200}
+    return rates.get(gpu.lower(), int(os.getenv("CLOUD_DEFAULT_RUB_HOUR", "150")))
+
+
+async def _budget_thresholds(db: AsyncSession) -> dict:
+    from app.services import alert_thresholds as at
+
+    return await at.load_thresholds(db)
+
+
+async def _raw_cost_summary(db: AsyncSession) -> dict:
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    month = today.replace(day=1)
+    day_sum = await db.scalar(
+        select(func.coalesce(func.sum(CloudCost.amount_rub), 0)).where(CloudCost.created_at >= today)
+    )
+    month_sum = await db.scalar(
+        select(func.coalesce(func.sum(CloudCost.amount_rub), 0)).where(CloudCost.created_at >= month)
+    )
+    running = (
+        await db.scalars(select(CloudInstanceRecord).where(CloudInstanceRecord.status.in_(("running", "active", "ready"))))
+    ).all()
+    burn = sum(r.rub_per_hour or 0 for r in running)
+    return {
+        "today_rub": int(day_sum or 0),
+        "month_rub": int(month_sum or 0),
+        "burn_rub_per_hour": burn,
+        "running_instances": len(running),
+    }
+
+
+async def budget_status(db: AsyncSession) -> dict[str, Any]:
+    """Сводка бюджета облака для admin / soft-launch §11.3.3."""
+    costs = await _raw_cost_summary(db)
+    th = await _budget_thresholds(db)
+    monthly_limit = int(th.get("cloud_monthly_budget_rub") or 0)
+    daily_limit = int(th.get("cloud_daily_budget_rub") or 0)
+    burn_alert = int(th.get("cloud_burn_alert_rub_per_hour") or 0)
+    month_rub = int(costs.get("month_rub") or 0)
+    today_rub = int(costs.get("today_rub") or 0)
+    burn = int(costs.get("burn_rub_per_hour") or 0)
+    blocked = False
+    reasons: list[str] = []
+    if monthly_limit > 0 and month_rub >= monthly_limit:
+        blocked = True
+        reasons.append("monthly_budget_exceeded")
+    if daily_limit > 0 and today_rub >= daily_limit:
+        blocked = True
+        reasons.append("daily_budget_exceeded")
+    burn_over = burn_alert > 0 and burn > burn_alert
+    return {
+        **costs,
+        "cloud_monthly_budget_rub": monthly_limit,
+        "cloud_daily_budget_rub": daily_limit,
+        "cloud_burn_alert_rub_per_hour": burn_alert,
+        "budget_blocked": blocked,
+        "budget_block_reasons": reasons,
+        "burn_over_alert_threshold": burn_over,
+        "monthly_remaining_rub": max(monthly_limit - month_rub, 0) if monthly_limit > 0 else None,
+        "daily_remaining_rub": max(daily_limit - today_rub, 0) if daily_limit > 0 else None,
+    }
+
+
+async def _maybe_budget_alert(db: AsyncSession, *, reason: str, msg: str) -> None:
+    from app.core.config import settings
+    from app.services import alerts as alerts_svc
+
+    cooldown = int(getattr(settings, "CLOUD_BUDGET_ALERT_COOLDOWN_SEC", 3600) or 3600)
+    try:
+        from app.core.redis import get_redis
+
+        redis = await get_redis()
+        key = f"cloud:budget_alert:{reason}"
+        if await redis.get(key):
+            return
+        await redis.setex(key, cooldown, "1")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        await alerts_svc.send_dual(
+            db,
+            msg,
+            event_type="cloud_budget",
+            payload={"reason": reason, "fingerprint": f"cloud_budget:{reason}"},
+            subject="[3dvektor] Cloud GPU budget",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cloud budget alert: %s", exc)
+
+
+async def assert_cloud_budget_ok(
+    db: AsyncSession,
+    *,
+    additional_rub_per_hour: int = 0,
+    triggered_by: str = "manual",
+) -> None:
+    """Hard-stop: блок launch при превышении бюджета (§11.3.3 / soft-launch)."""
+    status = await budget_status(db)
+    burn = int(status.get("burn_rub_per_hour") or 0) + max(additional_rub_per_hour, 0)
+    burn_alert = int(status.get("cloud_burn_alert_rub_per_hour") or 0)
+    if status.get("budget_blocked"):
+        reasons = status.get("budget_block_reasons") or []
+        msg = (
+            f"Cloud GPU budget hard-stop ({triggered_by}): "
+            f"month={status.get('month_rub')}₽ / day={status.get('today_rub')}₽ · "
+            f"burn={burn}₽/ч · reasons={','.join(reasons)}"
+        )
+        await _maybe_budget_alert(db, reason="hard_stop", msg=msg)
+        raise HTTPException(
+            402,
+            detail={
+                "code": "cloud_budget_exceeded",
+                "message": "Лимит расходов на облачные GPU исчерпан",
+                "budget": status,
+            },
+        )
+    if burn_alert > 0 and burn > burn_alert:
+        await _maybe_budget_alert(
+            db,
+            reason="burn_high",
+            msg=(
+                f"Cloud burn {burn}₽/ч > порог {burn_alert}₽/ч "
+                f"(month {status.get('month_rub')}₽, today {status.get('today_rub')}₽)"
+            ),
+        )
 
 
 async def create_cloud_workers(
@@ -41,9 +177,14 @@ async def create_cloud_workers(
     image: str | None,
     vcpus: int,
     ram_gb: int,
+    flavor_id: int | None = None,
+    os_id: int | None = None,
+    ssd_gb: int | None = None,
     triggered_by: str = "manual",
 ) -> list[dict]:
     count = max(1, min(count, 10))
+    est_burn = _estimate_rate(gpu) * count
+    await assert_cloud_budget_ok(db, additional_rub_per_hour=est_burn, triggered_by=triggered_by)
     image = image or os.getenv("WORKER_DOCKER_IMAGE", "kwork-worker:latest")
     client = _client(provider)
     created = []
@@ -65,11 +206,21 @@ async def create_cloud_workers(
                 "TAILSCALE_AUTH_KEY": os.getenv("TAILSCALE_AUTH_KEY", ""),
                 "WORKER_DOCKER_IMAGE": image,
                 "ORCHESTRATOR_WS_FALLBACK_URL": os.getenv("ORCHESTRATOR_WS_FALLBACK_URL", ""),
+                "WORKER_GIT_REPO": os.getenv("WORKER_GIT_REPO", ""),
+                "WORKER_GIT_BRANCH": os.getenv("WORKER_GIT_BRANCH", "main"),
             },
         )
         try:
             inst = client.create_instance(
-                gpu=gpu, image=image, worker_id=worker_id, vcpus=vcpus, ram_gb=ram_gb, user_data=ud
+                gpu=gpu,
+                image=image,
+                worker_id=worker_id,
+                vcpus=vcpus,
+                ram_gb=ram_gb,
+                user_data=ud,
+                flavor_id=flavor_id,
+                os_id=os_id,
+                ssd_gb=ssd_gb,
             )
             row = CloudInstanceRecord(
                 provider=provider,
@@ -81,7 +232,12 @@ async def create_cloud_workers(
                 public_ip=inst.public_ip,
                 tailscale_ip=inst.tailscale_ip,
                 rub_per_hour=_estimate_rate(gpu),
-                meta={"raw": inst.raw, "triggered_by": triggered_by},
+                meta={
+                    "raw": inst.raw,
+                    "triggered_by": triggered_by,
+                    "bootstrap_script": inst.bootstrap_script or ud,
+                    "login": inst.login,
+                },
             )
             db.add(row)
             db.add(
@@ -111,6 +267,12 @@ async def create_cloud_workers(
                     "status": inst.status,
                     "tailscale_ip": inst.tailscale_ip,
                     "public_ip": inst.public_ip,
+                    "login": inst.login,
+                    "bootstrap_hint": (
+                        f"SSH {inst.login}@{inst.public_ip}, run bootstrap from meta.bootstrap_script"
+                        if provider in PROVIDERS
+                        else None
+                    ),
                 }
             )
         except Exception as exc:  # noqa: BLE001
@@ -127,11 +289,6 @@ async def create_cloud_workers(
             raise HTTPException(502, f"Не удалось создать инстанс: {exc}") from exc
     await db.flush()
     return created
-
-
-def _estimate_rate(gpu: str) -> int:
-    rates = {"rtx4090": 120, "a100": 280, "l40s": 220, "a6000": 200}
-    return rates.get(gpu.lower(), int(os.getenv("CLOUD_DEFAULT_RUB_HOUR", "150")))
 
 
 async def start_instance(db: AsyncSession, instance_id: str) -> dict:
@@ -281,6 +438,19 @@ async def run_autoscaling_once(db: AsyncSession) -> dict:
         if total_q > rule.queue_threshold and active_cloud < rule.max_cloud_workers:
             need = min(rule.launch_count, rule.max_cloud_workers - active_cloud)
             if need > 0:
+                try:
+                    await assert_cloud_budget_ok(
+                        db,
+                        additional_rub_per_hour=_estimate_rate(rule.gpu) * need,
+                        triggered_by=f"autoscaling:{rule.id}",
+                    )
+                except HTTPException:
+                    logger.warning(
+                        "cloud_autoscaling_budget_blocked rule=%s queue=%s",
+                        rule.id,
+                        total_q,
+                    )
+                    break
                 created = await create_cloud_workers(
                     db,
                     provider=rule.provider,
@@ -324,21 +494,4 @@ async def run_autoscaling_once(db: AsyncSession) -> dict:
 
 
 async def cost_summary(db: AsyncSession) -> dict:
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    month = today.replace(day=1)
-    day_sum = await db.scalar(
-        select(func.coalesce(func.sum(CloudCost.amount_rub), 0)).where(CloudCost.created_at >= today)
-    )
-    month_sum = await db.scalar(
-        select(func.coalesce(func.sum(CloudCost.amount_rub), 0)).where(CloudCost.created_at >= month)
-    )
-    running = (
-        await db.scalars(select(CloudInstanceRecord).where(CloudInstanceRecord.status.in_(("running", "active", "ready"))))
-    ).all()
-    burn = sum(r.rub_per_hour or 0 for r in running)
-    return {
-        "today_rub": int(day_sum or 0),
-        "month_rub": int(month_sum or 0),
-        "burn_rub_per_hour": burn,
-        "running_instances": len(running),
-    }
+    return await budget_status(db)

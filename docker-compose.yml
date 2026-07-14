@@ -129,6 +129,25 @@ services:
     depends_on:
       - orchestrator
 
+  # Локальный stub-воркер (без TRELLIS/GPU). TRELLIS — только Intelion Cloud.
+  worker-stub:
+    build:
+      context: ./worker
+      args:
+        INSTALL_TRELLIS: "0"
+    env_file: .env
+    environment:
+      WORKER_PIPELINE_MODE: stub
+      ORCHESTRATOR_WS_URL: ws://orchestrator:8000/ws/worker
+      MINIO_ENDPOINT: http://minio:9000
+      REDIS_URL: redis://redis:6379/0
+      WORKER_ID: docker-stub-01
+    depends_on:
+      orchestrator:
+        condition: service_started
+    profiles:
+      - worker
+
 volumes:
   postgres_data:
   redis_data:

@@ -25,16 +25,39 @@ _stop = asyncio.Event()
 
 
 async def _assign_once() -> bool:
-    worker = await worker_hub.pick_idle()
-    if not worker:
-        return False
-
     item = await queue_service.dequeue()
     if not item:
         return False
 
     task_id = item["task_id"]
     payload = item.get("payload") or {}
+    required_version: str | None = None
+
+    async with async_session() as db:
+        row = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))
+        order = await db.get(Order, item.get("order_id") or (row.order_id if row else 0))
+        if order and order.company_id:
+            from app.services.trellis_rollout import resolve_required_version
+
+            required_version = await resolve_required_version(db, order.company_id)
+
+    worker = await worker_hub.pick_idle(required_trellis_version=required_version)
+    if not worker:
+        # вернуть задачу в очередь
+        async with async_session() as db:
+            row = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))
+            order = await db.get(Order, item.get("order_id") or (row.order_id if row else 0))
+            if row and order:
+                await queue_service.enqueue(
+                    db,
+                    task_id=task_id,
+                    order_id=order.id,
+                    company_id=order.company_id,
+                    payload=payload or row.payload_json or {},
+                    priority=row.priority,
+                )
+                await db.commit()
+        return False
 
     async with async_session() as db:
         row = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))

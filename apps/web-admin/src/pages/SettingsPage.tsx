@@ -54,6 +54,9 @@ const THRESHOLD_LABELS: Record<string, string> = {
   storage_node_offline_seconds: 'Storage node offline, сек',
   storage_write_stale_minutes: 'Write stale (нагрузка), мин',
   storage_write_freeze_minutes: 'Write freeze indicator, мин',
+  cloud_monthly_budget_rub: 'Cloud GPU budget месяц, ₽ (0=∞)',
+  cloud_daily_budget_rub: 'Cloud GPU budget день, ₽ (0=∞)',
+  cloud_burn_alert_rub_per_hour: 'Cloud burn alert, ₽/ч',
 };
 
 export default function SettingsPage() {

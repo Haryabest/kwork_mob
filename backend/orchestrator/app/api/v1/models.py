@@ -292,6 +292,15 @@ async def mark_published(
     model = await _get_owned_model(db, model_uuid, user)
     await require_company_permission(db, user, model.company_id, "can_mark_published")
     model.publish_status = f"published_{body.marketplace}"
+    from app.services.publication_funnel import emit_funnel_ch_event
+
+    emit_funnel_ch_event(
+        model_uuid=model.uuid,
+        event_type="manual_marked",
+        user_id=user.id,
+        company_id=model.company_id,
+        marketplace=body.marketplace,
+    )
     await db.commit()
     return {
         "uuid": model.uuid,

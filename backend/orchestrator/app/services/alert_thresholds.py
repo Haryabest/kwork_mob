@@ -34,6 +34,10 @@ THRESHOLD_KEYS: dict[str, Any] = {
     "storage_node_offline_seconds": 60,
     "storage_write_stale_minutes": 10,
     "storage_write_freeze_minutes": 5,
+    # Cloud GPU budget §11.3.3 / soft-launch
+    "cloud_monthly_budget_rub": 0,
+    "cloud_daily_budget_rub": 0,
+    "cloud_burn_alert_rub_per_hour": 500,
 }
 
 REDIS_HASH = "alerts:thresholds"
@@ -70,6 +74,9 @@ def env_defaults() -> dict[str, Any]:
         "storage_node_offline_seconds": int(getattr(settings, "STORAGE_NODE_OFFLINE_SECONDS", 60) or 60),
         "storage_write_stale_minutes": int(getattr(settings, "STORAGE_WRITE_STALE_MINUTES", 10) or 10),
         "storage_write_freeze_minutes": int(getattr(settings, "STORAGE_WRITE_FREEZE_MINUTES", 5) or 5),
+        "cloud_monthly_budget_rub": int(getattr(settings, "CLOUD_MONTHLY_BUDGET_RUB", 0) or 0),
+        "cloud_daily_budget_rub": int(getattr(settings, "CLOUD_DAILY_BUDGET_RUB", 0) or 0),
+        "cloud_burn_alert_rub_per_hour": int(getattr(settings, "CLOUD_BURN_ALERT_RUB_PER_HOUR", 500) or 500),
     }
 
 

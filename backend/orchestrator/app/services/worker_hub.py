@@ -84,14 +84,32 @@ class WorkerHub:
                 conn.status = "overheated"
                 conn.current_task_id = None
 
-    async def pick_idle(self) -> WorkerConnection | None:
-        """Выбрать idle-воркера с максимальным весом (не overheated)."""
+    async def pick_idle(self, *, required_trellis_version: str | None = None) -> WorkerConnection | None:
+        """Выбрать idle-воркера с макс. весом (§18.4.2 — фильтр по версии компании)."""
         async with self._lock:
             idle = [
                 w
                 for w in self._workers.values()
-                if w.status == "idle" and w.current_task_id is None
+                if w.status == "idle"
+                and w.current_task_id is None
+                and not (w.meta or {}).get("maintenance")
             ]
+            if required_trellis_version:
+                req = required_trellis_version.strip().lower()
+
+                def _match(w: WorkerConnection) -> bool:
+                    ver = (w.version or "").lower()
+                    if not ver:
+                        return True
+                    if req in ver or ver in req:
+                        return True
+                    if req in ("1", "v1") and ver.startswith(("1", "trellis-1", "v1")):
+                        return True
+                    if req in ("2", "v2") and ver.startswith(("2", "trellis-2", "v2")):
+                        return True
+                    return False
+
+                idle = [w for w in idle if _match(w)]
             if not idle:
                 return None
             idle.sort(key=lambda w: w.weight, reverse=True)

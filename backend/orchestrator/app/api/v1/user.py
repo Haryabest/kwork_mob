@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_db_user
-from app.models import DeviceToken, Model3D, Transaction, User
+from app.models import DeviceToken, Model3D, Order, Transaction, User
 from app.schemas.auth import AccountTypeRequest
 from app.services import auth as auth_service
 from app.services import pii as pii_svc
@@ -241,8 +241,9 @@ async def list_user_models(
     db: AsyncSession = Depends(get_db),
 ):
     rows = (
-        await db.scalars(
-            select(Model3D)
+        await db.execute(
+            select(Model3D, Order.category, Order.tier)
+            .outerjoin(Order, Model3D.order_id == Order.id)
             .where(Model3D.user_id == user.id, Model3D.trashed_at.is_(None))
             .order_by(Model3D.id.desc())
             .limit(100)
@@ -255,13 +256,15 @@ async def list_user_models(
             {
                 "uuid": m.uuid,
                 "order_id": m.order_id,
+                "category": category,
+                "tier": tier,
                 "glb_url": m.glb_url,
                 "usdz_url": m.usdz_url,
                 "publish_status": m.publish_status,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
                 "storage": ms.storage_meta(m),
             }
-            for m in rows
+            for m, category, tier in rows
         ]
     }
 

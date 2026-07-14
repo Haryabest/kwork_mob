@@ -1,0 +1,32 @@
+# GPU worker — standalone deploy (§15.3)
+# Usage: copy deploy_worker.json env → .env.worker && docker compose -f docker-compose.worker.yml up -d
+
+services:
+  worker:
+    image: ${WORKER_DOCKER_IMAGE:-kwork-worker:trellis2}
+    container_name: kwork-worker
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      WORKER_ID: ${WORKER_ID:-worker-1}
+      WORKER_TOKEN: ${WORKER_TOKEN}
+      ORCHESTRATOR_WS_URL: ${ORCHESTRATOR_WS_URL}
+      ORCHESTRATOR_WS_FALLBACK_URL: ${ORCHESTRATOR_WS_FALLBACK_URL:-${ORCHESTRATOR_WS_URL}}
+      WORKER_PIPELINE_MODE: ${WORKER_PIPELINE_MODE:-trellis}
+      TRELLIS_ALLOW_STUB_FALLBACK: ${TRELLIS_ALLOW_STUB_FALLBACK:-0}
+      TRELLIS_VERSION: ${TRELLIS_VERSION:-2}
+      TRELLIS2_PIPELINE_TYPE: ${TRELLIS2_PIPELINE_TYPE:-512}
+      TRELLIS2_LOW_VRAM: ${TRELLIS2_LOW_VRAM:-1}
+      ATTN_BACKEND: ${ATTN_BACKEND:-xformers}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      REDIS_URL: ${REDIS_URL:-}
+      WATERMARK_HMAC_SECRET: ${WATERMARK_HMAC_SECRET:-}
+      WORKER_SUBPROCESS_STREAM: ${WORKER_SUBPROCESS_STREAM:-1}

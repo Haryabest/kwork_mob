@@ -1,4 +1,5 @@
-import { Badge, Button, Group, Select, Stack, Text, Title } from '@mantine/core';
+import { Badge, Button, Code, Group, Modal, Select, Stack, Text, Title } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { IconRefresh } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -29,12 +30,33 @@ type Dash = {
   }>;
 };
 
+type DeliveryDetail = {
+  id: number;
+  webhook_id: number;
+  company_id?: number | null;
+  company_name?: string | null;
+  url?: string | null;
+  event: string;
+  status: string;
+  attempt: number;
+  max_attempts?: number;
+  status_code?: number | null;
+  ok: boolean;
+  error?: string | null;
+  payload?: unknown;
+  next_retry_at?: string | null;
+  created_at?: string | null;
+};
+
 /** Admin B2B webhook retries / DLQ §14.5.4 */
 export default function WebhooksDashboardPage() {
   const [data, setData] = useState<Dash | null>(null);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [companies, setCompanies] = useState<Array<{ id: number; name: string }>>([]);
   const [loading, setLoading] = useState(true);
+  const [detailOpen, detailHandlers] = useDisclosure(false);
+  const [detail, setDetail] = useState<DeliveryDetail | null>(null);
+  const [retryBusy, setRetryBusy] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,6 +82,35 @@ export default function WebhooksDashboardPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function openDetail(id: number) {
+    try {
+      const { data: d } = await api.get<DeliveryDetail>(`/admin/webhooks/deliveries/${id}`);
+      setDetail(d);
+      detailHandlers.open();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function retry(id: number) {
+    setRetryBusy(id);
+    try {
+      const { data: res } = await api.post<{ status: string; ok: boolean }>(
+        `/admin/webhooks/deliveries/${id}/retry`,
+      );
+      notifications.show({
+        color: res.ok ? 'teal' : 'orange',
+        message: `Retry #${id}: ${res.status}`,
+      });
+      detailHandlers.close();
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setRetryBusy(null);
+    }
+  }
 
   const rate = Math.round((data?.success_rate_24h ?? 1) * 1000) / 10;
 
@@ -96,7 +147,7 @@ export default function WebhooksDashboardPage() {
       <Stack mt="md">
         <Title order={4}>Ожидают retry / DLQ</Title>
         <ShellTable
-          headers={['ID', 'Company', 'Hook', 'Event', 'Status', 'Attempt', 'Next retry', 'Error']}
+          headers={['ID', 'Company', 'Hook', 'Event', 'Status', 'Attempt', 'Next retry', 'Error', '']}
           rows={
             (data?.items || []).length
               ? (data?.items || []).map((d) => [
@@ -112,11 +163,48 @@ export default function WebhooksDashboardPage() {
                   <Text key={`e-${d.id}`} size="xs" lineClamp={2}>
                     {d.error || '—'}
                   </Text>,
+                  <Group key={`a-${d.id}`} gap={4} wrap="nowrap">
+                    <Button size="xs" variant="light" onClick={() => void openDetail(d.id)}>
+                      Detail
+                    </Button>
+                    {d.status !== 'delivered' && (
+                      <Button size="xs" loading={retryBusy === d.id} onClick={() => void retry(d.id)}>
+                        Retry
+                      </Button>
+                    )}
+                  </Group>,
                 ])
-              : [['—', '—', 'Нет pending/DLQ', '—', '—', '—', '—', '—']]
+              : [['—', '—', 'Нет pending/DLQ', '—', '—', '—', '—', '—', '—']]
           }
         />
       </Stack>
+
+      <Modal opened={detailOpen} onClose={detailHandlers.close} title={`Delivery #${detail?.id ?? ''}`} size="lg">
+        <Stack>
+          <Text size="sm">
+            {detail?.company_name || (detail?.company_id != null ? `#${detail.company_id}` : '—')} ·{' '}
+            {detail?.event} · {detail?.status} · HTTP {detail?.status_code ?? '—'}
+          </Text>
+          {detail?.url ? (
+            <Text size="xs" c="dimmed">
+              {detail.url}
+            </Text>
+          ) : null}
+          {detail?.error ? (
+            <Text size="xs" c="red">
+              {detail.error}
+            </Text>
+          ) : null}
+          <Code block style={{ maxHeight: 360, overflow: 'auto' }}>
+            {JSON.stringify(detail?.payload ?? {}, null, 2)}
+          </Code>
+          {detail && detail.status !== 'delivered' ? (
+            <Button loading={retryBusy === detail.id} onClick={() => void retry(detail.id)}>
+              Manual retry
+            </Button>
+          ) : null}
+        </Stack>
+      </Modal>
     </>
   );
 }

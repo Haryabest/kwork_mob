@@ -90,6 +90,22 @@ class NativeArBridge extends ArSession {
     _started = false;
   }
 
+  /// Показать AR-метку ракурса в нативной сцене (§3.1.2).
+  Future<void> showMarker({
+    required int index,
+    required double azimuthDeg,
+    required double elevationDeg,
+  }) async {
+    if (!_started) return;
+    try {
+      await _channel.invokeMethod('showMarker', {
+        'index': index,
+        'azimuthDeg': azimuthDeg,
+        'elevationDeg': elevationDeg,
+      });
+    } catch (_) {}
+  }
+
   @override
   void calibrate() {
     _channel.invokeMethod('calibrate').catchError((_) => null);

@@ -1,5 +1,5 @@
 import { ActionIcon, Button, Card, Center, Code, Group, Loader, Modal, NumberInput, ScrollArea, Select, SimpleGrid, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
-import { IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
+import { IconDownload, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -14,7 +14,19 @@ export function WorkersPage() {
     gpu_load?: number | null;
     weight: number;
     grace_period: number;
+    trellis_version?: string | null;
+    docker_image?: string | null;
+    maintenance?: boolean;
   }>>([]);
+  const [rollout, setRollout] = useState({
+    target_version: '2',
+    default_docker_image: '',
+    mixed_versions: false,
+    maintenance_count: 0,
+    workers_by_version: {} as Record<string, number>,
+  });
+  const [targetVersion, setTargetVersion] = useState('2');
+  const [defaultImage, setDefaultImage] = useState('');
   const [summary, setSummary] = useState({ online: 0, total: 0, queue_normal: 0, queue_high: 0 });
   const [cloud, setCloud] = useState<Array<{
     id: number;
@@ -36,7 +48,15 @@ export function WorkersPage() {
     max_cloud_workers: number;
     is_active: boolean;
   }>>([]);
-  const [costs, setCosts] = useState({ today_rub: 0, month_rub: 0, burn_rub_per_hour: 0, running_instances: 0 });
+  const [costs, setCosts] = useState({
+    today_rub: 0,
+    month_rub: 0,
+    burn_rub_per_hour: 0,
+    running_instances: 0,
+    budget_blocked: false,
+    cloud_monthly_budget_rub: 0,
+    cloud_daily_budget_rub: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [provider, setProvider] = useState<string | null>('intelion');
@@ -45,22 +65,43 @@ export function WorkersPage() {
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const [w, c, r, cost] = await Promise.all([
+    const [w, c, r, cost, tr] = await Promise.all([
       api.get<{ summary: typeof summary; items: typeof items }>('/admin/workers'),
       api.get<{ items: typeof cloud }>('/admin/cloud/instances'),
       api.get<{ items: typeof rules }>('/admin/cloud/autoscaling/rules'),
       api.get<typeof costs>('/admin/cloud/costs'),
+      api.get<typeof rollout>('/admin/trellis/rollout'),
     ]);
     setSummary(w.data.summary);
     setItems(w.data.items ?? []);
     setCloud(c.data.items ?? []);
     setRules(r.data.items ?? []);
     setCosts(cost.data);
+    setRollout(tr.data);
+    setTargetVersion(tr.data.target_version ?? '2');
+    setDefaultImage(tr.data.default_docker_image ?? '');
   }
 
   useEffect(() => {
     load().catch((e) => notifications.show({ color: 'red', message: getApiError(e) })).finally(() => setLoading(false));
   }, []);
+
+  async function downloadDeploy(role: string) {
+    try {
+      const { data } = await api.get<Record<string, unknown>>('/admin/deploy/bundle', {
+        params: { role },
+      });
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `deploy_${role.replace('-', '_')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
 
   if (loading) return <Center py="xl"><Loader color="brand" /></Center>;
 
@@ -71,6 +112,12 @@ export function WorkersPage() {
         description="GPU-очередь · Intelion/Immers create/start/stop · авто-масштаб"
         action={
           <Group>
+            <Button variant="light" leftSection={<IconDownload size={16} />} onClick={() => void downloadDeploy('worker')}>
+              Deploy JSON
+            </Button>
+            <Button variant="subtle" size="compact-sm" onClick={() => void downloadDeploy('cloud')}>
+              Cloud env
+            </Button>
             <Button leftSection={<IconPlus size={16} />} onClick={() => setCreateOpen(true)}>
               Облачный инстанс
             </Button>
@@ -85,16 +132,70 @@ export function WorkersPage() {
           { label: 'Онлайн', value: String(summary.online), hint: `из ${summary.total}`, color: 'teal' },
           { label: 'Очередь normal', value: String(summary.queue_normal) },
           { label: 'Очередь high', value: String(summary.queue_high) },
-          { label: 'Burn ₽/ч', value: String(costs.burn_rub_per_hour), hint: `сегодня ${costs.today_rub} ₽` },
+          { label: 'Burn ₽/ч', value: String(costs.burn_rub_per_hour), hint: `сегодня ${costs.today_rub} ₽ · месяц ${costs.month_rub} ₽`, color: costs.budget_blocked ? 'red' : undefined },
+          ...(costs.budget_blocked
+            ? [{ label: 'Cloud budget', value: 'STOP', color: 'red' as const }]
+            : []),
         ]}
       />
+      <Card withBorder mb="md">
+        <Stack gap="sm">
+          <Group justify="space-between">
+            <Text fw={600}>TRELLIS rollout §18</Text>
+            {rollout.mixed_versions && (
+              <StateBadge value="mixed versions" color="orange" />
+            )}
+          </Group>
+          <SimpleGrid cols={{ base: 1, md: 3 }}>
+            <TextInput
+              label="Target version"
+              value={targetVersion}
+              onChange={(e) => setTargetVersion(e.currentTarget.value)}
+            />
+            <TextInput
+              label="Default docker image"
+              value={defaultImage}
+              onChange={(e) => setDefaultImage(e.currentTarget.value)}
+            />
+            <Text size="sm" c="dimmed" mt={28}>
+              maintenance: {rollout.maintenance_count} ·{' '}
+              {Object.entries(rollout.workers_by_version)
+                .map(([v, n]) => `${v}:${n}`)
+                .join(' · ') || 'нет версий'}
+            </Text>
+          </SimpleGrid>
+          <Group>
+            <Button
+              size="xs"
+              variant="light"
+              onClick={async () => {
+                try {
+                  await api.put('/admin/trellis/rollout', {
+                    target_version: targetVersion,
+                    default_docker_image: defaultImage || null,
+                  });
+                  await load();
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                }
+              }}
+            >
+              Сохранить rollout
+            </Button>
+          </Group>
+        </Stack>
+      </Card>
       <ShellTable
-        headers={['Воркер', 'Статус', 'GPU', 'Вес', 'Grace', 'Действия']}
+        headers={['Воркер', 'Статус', 'TRELLIS', 'GPU', 'Вес', 'Grace', 'Действия']}
         rows={
           items.length
             ? items.map((w) => [
                 w.id,
-                <StateBadge key={`s-${w.id}`} value={w.status} color={w.status === 'online' ? 'teal' : 'orange'} />,
+                <Group key={`s-${w.id}`} gap={6}>
+                  <StateBadge value={w.status} color={w.status === 'online' ? 'teal' : 'orange'} />
+                  {w.maintenance && <StateBadge value="maint" color="orange" />}
+                </Group>,
+                `${w.trellis_version ?? '—'}${w.docker_image ? ` · ${w.docker_image}` : ''}`,
                 `${w.gpu_name ?? '—'} · ${w.gpu_load != null ? `${Math.round(w.gpu_load)}%` : '—'}`,
                 <Slider
                   key={`w-${w.id}`}
@@ -112,23 +213,95 @@ export function WorkersPage() {
                   }}
                 />,
                 `${w.grace_period}с`,
-                <Button
-                  key={`g-${w.id}`}
-                  size="xs"
-                  variant="light"
-                  onClick={async () => {
-                    try {
-                      await api.patch(`/admin/workers/${w.id}/grace_period`, { grace_period: 30 });
-                      await load();
-                    } catch (e) {
-                      notifications.show({ color: 'red', message: getApiError(e) });
-                    }
-                  }}
-                >
-                  Grace 30 сек
-                </Button>,
+                <Group key={`g-${w.id}`} gap={4}>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    onClick={async () => {
+                      try {
+                        await api.patch(`/admin/workers/${w.id}/grace_period`, { grace_period: 30 });
+                        await load();
+                      } catch (e) {
+                        notifications.show({ color: 'red', message: getApiError(e) });
+                      }
+                    }}
+                  >
+                    Grace 30
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color={w.maintenance ? 'teal' : 'orange'}
+                    onClick={async () => {
+                      try {
+                        await api.post(`/admin/workers/${w.id}/maintenance`, {
+                          enabled: !w.maintenance,
+                        });
+                        await load();
+                      } catch (e) {
+                        notifications.show({ color: 'red', message: getApiError(e) });
+                      }
+                    }}
+                  >
+                    {w.maintenance ? 'Maint OFF' : 'Maint ON'}
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    onClick={async () => {
+                      const ver = window.prompt('Rollout version', rollout.target_version || '2');
+                      if (!ver) return;
+                      try {
+                        await api.post(`/admin/workers/${w.id}/trellis/rollout`, {
+                          trellis_version: ver,
+                          docker_image: defaultImage || undefined,
+                        });
+                        notifications.show({ color: 'teal', message: 'Rollout queued (maintenance ON)' });
+                        await load();
+                      } catch (e) {
+                        notifications.show({ color: 'red', message: getApiError(e) });
+                      }
+                    }}
+                  >
+                    Rollout
+                  </Button>
+                  <Button
+                    size="xs"
+                    color="orange"
+                    variant="light"
+                    onClick={async () => {
+                      const ver = window.prompt('Rollback version', '1');
+                      if (!ver) return;
+                      try {
+                        await api.post(`/admin/workers/${w.id}/trellis/rollback`, {
+                          trellis_version: ver,
+                        });
+                        notifications.show({ color: 'orange', message: 'Rollback pinned' });
+                        await load();
+                      } catch (e) {
+                        notifications.show({ color: 'red', message: getApiError(e) });
+                      }
+                    }}
+                  >
+                    Rollback
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    onClick={async () => {
+                      try {
+                        await api.post(`/admin/workers/${w.id}/trellis/complete`);
+                        await load();
+                      } catch (e) {
+                        notifications.show({ color: 'red', message: getApiError(e) });
+                      }
+                    }}
+                  >
+                    Complete
+                  </Button>
+                </Group>,
               ])
-            : [['—', 'Нет воркеров', 'Heartbeat ещё не приходил', '—', '—', '—']]
+            : [['—', 'Нет воркеров', '—', 'Heartbeat ещё не приходил', '—', '—', '—']]
         }
       />
 
@@ -429,8 +602,10 @@ export function CompanyDetailPage() {
     inn: string;
     balance: number;
     status: string;
+    settings?: { force_trellis_version?: string | null };
     members: Array<{ user_id: number; role: string }>;
   } | null>(null);
+  const [forceTrellis, setForceTrellis] = useState('');
   const [stats, setStats] = useState({
     orders: 0,
     revenue: 0,
@@ -447,6 +622,7 @@ export function CompanyDetailPage() {
       api.get(`/admin/companies/${id}/shoot-links`),
     ]);
     setCompany(c.data);
+    setForceTrellis(c.data.settings?.force_trellis_version ?? '');
     setStats({
       orders: s.data.orders ?? 0,
       revenue: s.data.revenue ?? 0,
@@ -477,6 +653,28 @@ export function CompanyDetailPage() {
           <Stack>
             <Text fw={600}>Реквизиты</Text>
             <Text size="sm">Баланс: {company.balance.toLocaleString('ru-RU')} ₽</Text>
+            <TextInput
+              label="Force TRELLIS version (§18.4.2)"
+              placeholder="default / 1 / 2"
+              value={forceTrellis}
+              onChange={(e) => setForceTrellis(e.currentTarget.value)}
+            />
+            <Button
+              variant="light"
+              onClick={async () => {
+                try {
+                  await api.patch(`/admin/companies/${company.id}/settings`, {
+                    force_trellis_version: forceTrellis.trim() || 'default',
+                  });
+                  notifications.show({ color: 'teal', message: 'Версия TRELLIS сохранена' });
+                  await load();
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                }
+              }}
+            >
+              Сохранить TRELLIS pin
+            </Button>
             <Text size="sm">
               Заказов: {stats.orders} · Выручка: {stats.revenue.toLocaleString('ru-RU')} ₽
             </Text>
@@ -821,6 +1019,8 @@ export function StoragePage() {
   const [logBackend, setLogBackend] = useState('');
   const [logsLoading, setLogsLoading] = useState(false);
   const [fioBusy, setFioBusy] = useState(false);
+  const [timelineDays, setTimelineDays] = useState('7');
+  const [timelineNodeId, setTimelineNodeId] = useState<string | null>(null);
   const [timeline, setTimeline] = useState<{
     days?: number;
     nodes?: Array<{
@@ -873,7 +1073,12 @@ export function StoragePage() {
       /* optional */
     }
     try {
-      const { data } = await api.get('/admin/storage/node-timeline', { params: { days: 7 } });
+      const { data } = await api.get('/admin/storage/node-timeline', {
+        params: {
+          days: Number(timelineDays) || 7,
+          ...(timelineNodeId ? { node_id: timelineNodeId } : {}),
+        },
+      });
       setTimeline(data);
     } catch {
       /* optional */
@@ -1225,8 +1430,64 @@ export function StoragePage() {
         </Card>
         <Card withBorder>
           <Text fw={600}>Node availability timeline §11.16.3</Text>
-          <Text size="xs" c="dimmed" mt={4} mb="sm">
-            Heartbeat Tailscale · {timeline?.days || 7}д
+          <Group mt="xs" mb="sm" gap="sm">
+            <Select
+              label="Период"
+              data={[
+                { value: '7', label: '7 дней' },
+                { value: '14', label: '14 дней' },
+                { value: '30', label: '30 дней' },
+              ]}
+              value={timelineDays}
+              onChange={(v) => {
+                setTimelineDays(v || '7');
+                void check();
+              }}
+              w={120}
+            />
+            <Select
+              label="Узел"
+              placeholder="Все узлы"
+              clearable
+              data={(timeline?.nodes || []).map((n) => ({
+                value: n.node_id,
+                label: n.node_name || n.node_id,
+              }))}
+              value={timelineNodeId}
+              onChange={(v) => {
+                setTimelineNodeId(v);
+                void check();
+              }}
+              w={200}
+            />
+            <Button
+              mt={22}
+              variant="light"
+              onClick={async () => {
+                try {
+                  const { data } = await api.get('/admin/storage/node-timeline/export', {
+                    params: {
+                      days: Number(timelineDays) || 7,
+                      ...(timelineNodeId ? { node_id: timelineNodeId } : {}),
+                    },
+                    responseType: 'blob',
+                  });
+                  const url = URL.createObjectURL(data as Blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `node_timeline${timelineNodeId ? `_${timelineNodeId}` : ''}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                }
+              }}
+            >
+              CSV
+            </Button>
+          </Group>
+          <Text size="xs" c="dimmed" mb="sm">
+            Heartbeat Tailscale · {timeline?.days || timelineDays}д
           </Text>
           {(timeline?.nodes || []).length === 0 && (
             <Text size="sm" c="dimmed">

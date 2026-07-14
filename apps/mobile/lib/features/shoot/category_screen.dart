@@ -6,6 +6,9 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
+import 'package:kwork_mobile/services/storage_space.dart';
+import 'package:kwork_mobile/widgets/ghost_mesh.dart';
+import 'package:kwork_mobile/widgets/order_limit_dialog.dart';
 
 /// Выбор категории + чек-лист запрещённых (§3.5.4) + age-gate 18+ (§10.8.3).
 class CategoryScreen extends StatefulWidget {
@@ -30,6 +33,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   final _scaleH = TextEditingController();
   final _scaleD = TextEditingController();
   final _birth = TextEditingController();
+  double _ghostScale = 1.0;
 
   @override
   void initState() {
@@ -66,37 +70,31 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   Future<bool> _confirmAgeGate() async {
     if (widget.session.ageVerified) return true;
-    final ok = await showDialog<bool>(
+    final ok = await showFDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) {
+      builder: (ctx, style, animation) {
         final ctrl = TextEditingController(text: _birth.text);
-        return AlertDialog(
+        return FDialog(
           title: const Text('Подтвердите, что вам 18 лет'),
-          content: Column(
+          body: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Введите дату рождения (YYYY-MM-DD).'),
               const SizedBox(height: 12),
-              TextField(
-                controller: ctrl,
-                decoration: const InputDecoration(
-                  labelText: 'Дата рождения',
-                  hintText: '1990-01-15',
-                  border: OutlineInputBorder(),
-                ),
+              FTextField(
+                control: FTextFieldControl.managed(controller: ctrl),
+                label: const Text('Дата рождения'),
+                hint: '1990-01-15',
                 keyboardType: TextInputType.datetime,
               ),
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Отмена'),
-            ),
-            TextButton(
-              onPressed: () {
+            FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+            FButton(
+              onPress: () {
                 final years = _ageYears(ctrl.text);
                 if (years == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -123,20 +121,84 @@ class _CategoryScreenState extends State<CategoryScreen> {
     return ok == true;
   }
 
+  Future<bool> _checkOrderLimit() async {
+    if (!widget.session.corporate) return true;
+    final companyId = widget.session.companyId;
+    if (companyId == null) return true;
+    final isOwner = widget.session.companies.any(
+      (c) => c['id'] == companyId && c['is_owner'] == true,
+    );
+    if (isOwner) return true;
+    try {
+      final membersData = await widget.api.listCompanyMembers();
+      final members = (membersData['items'] as List?)?.cast<Map>() ?? [];
+      final myId = widget.session.userId;
+      Map? me;
+      for (final m in members) {
+        if (m['user_id'] == myId) {
+          me = m;
+          break;
+        }
+      }
+      final max = (me?['max_concurrent_orders'] as num?)?.toInt() ?? 5;
+      final orders = await widget.api.listOrders();
+      final active = widget.api.countActiveOrders(
+        orders,
+        companyId: companyId,
+      );
+      if (active >= max) {
+        if (mounted) await showOrderLimitDialog(context);
+        return false;
+      }
+    } catch (_) {}
+    return true;
+  }
+
+  Future<void> _onCategoryChange(ProductCategory? c) async {
+    if (c == null) return;
+    setState(() => _category = c);
+    if (c.requiresAgeGate && !widget.session.ageVerified) {
+      await _confirmAgeGate();
+      if (mounted) setState(() {});
+    }
+  }
+
   Future<void> _next() async {
     if (_category == null) return;
 
+    if (!await _checkOrderLimit()) return;
+
+    final okSpace = await StorageSpaceGuard.instance.hasEnoughForShoot();
+    if (!okSpace) {
+      final mb = await StorageSpaceGuard.instance.freeMb();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            mb != null
+                ? 'Освободите место на телефоне (нужно ${StorageSpaceGuard.minFreeMb} МБ, доступно ~$mb МБ)'
+                : 'Освободите место на телефоне (нужно ${StorageSpaceGuard.minFreeMb} МБ)',
+          ),
+        ),
+      );
+      return;
+    }
+
     if (_forbidden.isNotEmpty) {
-      final ok = await showDialog<bool>(
+      final ok = await showFDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
+        builder: (ctx, style, animation) => FDialog(
           title: const Text('Запрещённая категория'),
-          content: const Text(
+          body: const Text(
             'Вы выбрали запрещённую категорию. Заказ будет отклонён без возврата средств. Продолжить?',
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Продолжить')),
+            FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+            FButton(
+              variant: .destructive,
+              onPress: () => Navigator.pop(ctx, true),
+              child: const Text('Продолжить'),
+            ),
           ],
         ),
       );
@@ -191,12 +253,17 @@ class _CategoryScreenState extends State<CategoryScreen> {
       scaleCalibration: scale,
       birthDate: birth,
       createdAt: DateTime.now(),
+      ghostScale: _ghostScale,
     );
     await ShootStorage.instance.writeMetadata(draft);
 
     if (!mounted) return;
     context.push('/home/shoot/dome', extra: uuid);
   }
+
+  Map<String, ProductCategory> get _categoryItems => {
+        for (final c in ProductCategory.values) c.label: c,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -210,26 +277,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Категория', style: context.theme.typography.lg),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: ProductCategory.values.map((c) {
-              final selected = _category == c;
-              return ChoiceChip(
-                label: Text(c.label),
-                selected: selected,
-                selectedColor: AppColors.wbPrimary.withValues(alpha: 0.2),
-                onSelected: (_) async {
-                  setState(() => _category = c);
-                  if (c.requiresAgeGate && !widget.session.ageVerified) {
-                    await _confirmAgeGate();
-                    setState(() {});
-                  }
-                },
-              );
-            }).toList(),
+          FSelect<ProductCategory>(
+            label: const Text('Категория'),
+            control: FSelectControl.managed(
+              initial: _category,
+              onChange: (v) => _onCategoryChange(v),
+            ),
+            items: _categoryItems,
           ),
           const SizedBox(height: 20),
           Text('Запрещённые категории', style: context.theme.typography.lg),
@@ -238,35 +292,37 @@ class _CategoryScreenState extends State<CategoryScreen> {
             'Если отметите — заказ не создаётся, средства не списываются',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
           ),
-          ...ForbiddenCategory.values.map(
-            (f) => CheckboxListTile(
-              value: _forbidden.contains(f),
-              title: Text(f.label),
-              onChanged: (v) => setState(() {
-                if (v == true) {
-                  _forbidden.add(f);
-                } else {
-                  _forbidden.remove(f);
-                }
+          const SizedBox(height: 8),
+          FSelectGroup<ForbiddenCategory>(
+            control: FMultiValueControl.lifted(
+              value: _forbidden,
+              onChange: (v) => setState(() {
+                _forbidden
+                  ..clear()
+                  ..addAll(v);
               }),
             ),
+            children: [
+              for (final f in ForbiddenCategory.values)
+                FSelectGroupItemMixin.checkbox(
+                  value: f,
+                  label: Text(f.label),
+                ),
+            ],
           ),
           if (_category?.requiresAgeGate == true) ...[
             const SizedBox(height: 8),
             if (ageOk)
-              const ListTile(
-                leading: Icon(Icons.verified_user, color: Colors.teal),
-                title: Text('Возраст подтверждён'),
-                subtitle: Text('Повторный ввод даты не требуется'),
+              FTile(
+                title: const Text('Возраст подтверждён'),
+                subtitle: const Text('Повторный ввод даты не требуется'),
+                prefix: const Icon(FIcons.shieldCheck, color: AppColors.success),
               )
             else
-              TextField(
-                controller: _birth,
-                decoration: const InputDecoration(
-                  labelText: 'Дата рождения (YYYY-MM-DD)',
-                  border: OutlineInputBorder(),
-                  helperText: 'Сохраняется в профиле после успешной проверки',
-                ),
+              FTextField(
+                control: FTextFieldControl.managed(controller: _birth),
+                label: const Text('Дата рождения (YYYY-MM-DD)'),
+                description: const Text('Сохраняется в профиле после успешной проверки'),
               ),
           ],
           if (_category?.requiresScaleCalibration == true) ...[
@@ -275,25 +331,52 @@ class _CategoryScreenState extends State<CategoryScreen> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Expanded(child: TextField(controller: _scaleW, decoration: const InputDecoration(labelText: 'Длина', border: OutlineInputBorder()))),
+                Expanded(child: FTextField(control: FTextFieldControl.managed(controller: _scaleW), label: const Text('Длина'))),
                 const SizedBox(width: 8),
-                Expanded(child: TextField(controller: _scaleH, decoration: const InputDecoration(labelText: 'Ширина', border: OutlineInputBorder()))),
+                Expanded(child: FTextField(control: FTextFieldControl.managed(controller: _scaleH), label: const Text('Ширина'))),
                 const SizedBox(width: 8),
-                Expanded(child: TextField(controller: _scaleD, decoration: const InputDecoration(labelText: 'Высота', border: OutlineInputBorder()))),
+                Expanded(child: FTextField(control: FTextFieldControl.managed(controller: _scaleD), label: const Text('Высота'))),
               ],
             ),
           ],
           const SizedBox(height: 16),
           Text('Тариф', style: context.theme.typography.lg),
           const SizedBox(height: 8),
-          ...Tier.values.map(
-            (t) => RadioListTile<Tier>(
-              value: t,
-              groupValue: _tier,
-              title: Text(hidePrices ? t.label : '${t.label} — ${t.priceRub} ₽'),
-              onChanged: (v) => setState(() => _tier = v!),
+          FSelectGroup<Tier>(
+            control: FMultiValueControl.managedRadio(
+              initial: _tier,
+              onChange: (v) {
+                if (v.isNotEmpty) setState(() => _tier = v.first);
+              },
             ),
+            children: [
+              for (final t in Tier.values)
+                FSelectGroupItemMixin.radio(
+                  value: t,
+                  label: Text(hidePrices ? t.label : '${t.label} — ${t.priceRub} ₽'),
+                ),
+            ],
           ),
+          if (_category != null) ...[
+            const SizedBox(height: 16),
+            Text('Ghost Mesh — масштаб двумя пальцами', style: context.theme.typography.sm),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 180,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: GhostMeshOverlay(
+                  category: _category!,
+                  scale: _ghostScale,
+                  aligned: true,
+                  onScaleUpdate: (s) => setState(() => _ghostScale = s),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           FButton(
             onPress: _category == null ? null : _next,

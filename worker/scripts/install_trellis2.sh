@@ -34,15 +34,29 @@ if [[ -f requirements.txt ]]; then
     -r requirements.txt
 fi
 
-echo "[install_trellis2] setup.sh"
+INSTALL_FLASH_ATTN="${INSTALL_FLASH_ATTN:-0}"
+# Ограничиваем параллельную компиляцию — иначе Docker/WSL падает с EOF (OOM).
+export MAX_JOBS="${MAX_JOBS:-2}"
+export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
+export NINJAFLAGS="-j${MAX_JOBS}"
+
+echo "[install_trellis2] setup.sh (без --flash-attn, без --new-env)"
 if [[ -f setup.sh ]]; then
-  bash setup.sh || echo "[warn] setup.sh завершился с ошибкой — проверьте deps на GPU-хосте"
+  # Как в README TRELLIS.2, но flash-attn опционален — см. ATTN_BACKEND=xformers в Dockerfile.
+  bash setup.sh --basic --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm \
+    || echo "[warn] setup.sh завершился с ошибкой — проверьте deps на GPU-хосте"
 fi
 
 echo "[install_trellis2] доп. зависимости TRELLIS.2"
 pip3 install --no-cache-dir huggingface_hub
-pip3 install --no-cache-dir xformers || echo "[warn] xformers не установлен — ATTN_BACKEND=flash"
-pip3 install --no-cache-dir flash-attn --no-build-isolation || echo "[warn] flash-attn не собрался"
+pip3 install --no-cache-dir xformers || echo "[warn] xformers не установлен — нужен ATTN_BACKEND=xformers"
+if [[ "${INSTALL_FLASH_ATTN}" == "1" ]]; then
+  echo "[install_trellis2] flash-attn (долго, нужно ≥16 GB RAM Docker)"
+  pip3 install --no-cache-dir flash-attn --no-build-isolation \
+    || echo "[warn] flash-attn не собрался"
+else
+  echo "[install_trellis2] flash-attn пропущен (INSTALL_FLASH_ATTN=0, ATTN_BACKEND=xformers)"
+fi
 pip3 install --no-cache-dir o-voxel || echo "[warn] o-voxel pip — возможно уже из setup.sh"
 
 echo "[install_trellis2] pip install -e (критично)"

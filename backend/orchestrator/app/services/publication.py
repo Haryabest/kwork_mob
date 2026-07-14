@@ -58,6 +58,15 @@ async def add_publication_link(
     )
     db.add(row)
     await db.flush()
+    from app.services.publication_funnel import emit_funnel_ch_event
+
+    emit_funnel_ch_event(
+        model_uuid=model.uuid,
+        event_type="links_added",
+        user_id=user.id,
+        company_id=model.company_id,
+        marketplace=marketplace,
+    )
     return row
 
 
@@ -98,6 +107,15 @@ async def verify_link(db: AsyncSession, link: ModelPublicationLink) -> ModelPubl
             if model:
                 model.publish_status = f"verified_{link.marketplace}"
                 await award_bonus(db, model=model, user_id=link.created_by_user_id or model.user_id)
+                from app.services.publication_funnel import emit_funnel_ch_event
+
+                emit_funnel_ch_event(
+                    model_uuid=model.uuid,
+                    event_type="verified",
+                    user_id=link.created_by_user_id or model.user_id,
+                    company_id=model.company_id,
+                    marketplace=link.marketplace,
+                )
         else:
             link.status = "failed"
             link.error_message = f"HTTP {resp.status_code}, 3D markers not found"
@@ -188,6 +206,15 @@ async def force_verify(
     model.publish_status = f"verified_{link.marketplace}"
     bonus, plain = await award_bonus(db, model=model, user_id=link.created_by_user_id or model.user_id)
     _ = bonus
+    from app.services.publication_funnel import emit_funnel_ch_event
+
+    emit_funnel_ch_event(
+        model_uuid=model.uuid,
+        event_type="verified",
+        user_id=link.created_by_user_id or model.user_id,
+        company_id=model.company_id,
+        marketplace=link.marketplace,
+    )
     await db.flush()
     return link, plain
 

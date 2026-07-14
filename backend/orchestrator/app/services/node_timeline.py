@@ -95,18 +95,21 @@ async def record_node_heartbeats(db: AsyncSession) -> dict[str, Any]:
     return {"ok": True, "nodes": len(nodes), "transitions": transitions}
 
 
-async def node_timeline(db: AsyncSession, *, days: int = 7) -> dict[str, Any]:
+async def node_timeline(
+    db: AsyncSession,
+    *,
+    days: int = 7,
+    node_id: str | None = None,
+) -> dict[str, Any]:
     """Timeline offline/online сегментов для панели §11.16.3."""
     days = max(1, min(days, 90))
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=days)
+    q = select(StorageNodeEvent).where(StorageNodeEvent.started_at >= since - timedelta(days=1))
+    if node_id:
+        q = q.where(StorageNodeEvent.node_id == node_id)
     rows = (
-        await db.scalars(
-            select(StorageNodeEvent)
-            .where(StorageNodeEvent.started_at >= since - timedelta(days=1))
-            .order_by(StorageNodeEvent.started_at.asc())
-            .limit(2000)
-        )
+        await db.scalars(q.order_by(StorageNodeEvent.started_at.asc()).limit(2000))
     ).all()
 
     by_node: dict[str, list[dict[str, Any]]] = {}
@@ -150,8 +153,47 @@ async def node_timeline(db: AsyncSession, *, days: int = 7) -> dict[str, Any]:
     nodes.sort(key=lambda n: n["node_id"])
     return {
         "days": days,
+        "node_id": node_id,
         "from": since.isoformat(),
         "to": now.isoformat(),
         "nodes": nodes,
         "as_of": now.isoformat(),
     }
+
+
+def timeline_to_csv(data: dict[str, Any]) -> str:
+    """CSV экспорт сегментов §11.16.3."""
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(
+        [
+            "node_id",
+            "node_name",
+            "status",
+            "started_at",
+            "ended_at",
+            "duration_sec",
+            "open",
+            "offline_percent",
+            "uptime_percent",
+        ]
+    )
+    for node in data.get("nodes") or []:
+        for seg in node.get("segments") or []:
+            w.writerow(
+                [
+                    node.get("node_id"),
+                    node.get("node_name"),
+                    seg.get("status"),
+                    seg.get("started_at"),
+                    seg.get("ended_at") or "",
+                    seg.get("duration_sec"),
+                    seg.get("open"),
+                    node.get("offline_percent"),
+                    node.get("uptime_percent"),
+                ]
+            )
+    return buf.getvalue()

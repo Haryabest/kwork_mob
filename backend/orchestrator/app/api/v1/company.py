@@ -524,6 +524,7 @@ class PoliciesBody(BaseModel):
     require_2fa_for_all: bool | None = None
     auto_block_inactive_days: int | None = Field(default=None, ge=1, le=3650)
     low_balance_threshold: int | None = Field(default=None, ge=0)
+    force_trellis_version: str | None = None
 
 
 @router.patch("/settings")
@@ -893,6 +894,127 @@ async def webhook_delivery_detail(
     from app.services import company_webhooks as wh
 
     return await wh.get_delivery(db, user, delivery_id)
+
+
+@router.post("/models/mass-extend-storage")
+async def company_mass_extend_storage(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Owner: массовое продление хранения исходников §9.1.2."""
+    from app.services import model_storage as ms
+    from app.services.company_members import get_owned_company
+    from app.services.company_owner_2fa import require_owner_2fa_if_needed
+
+    await require_owner_2fa_if_needed(user=user, db=db)
+    company = await get_owned_company(db, user)
+    result = await ms.mass_extend_company_storage(db, company_id=company.id, user=user)
+    await db.commit()
+    return result
+
+
+class CompanyMarketplaceCredentialBody(BaseModel):
+    marketplace: str = Field(pattern=r"^(wb|ozon|wildberries)$")
+    api_key: str = Field(min_length=8, max_length=512)
+    client_id: str | None = Field(default=None, max_length=64)
+    enabled: bool = True
+
+
+@router.get("/marketplace/status")
+async def company_marketplace_status(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Статус API-публикации для seller UI §7.6."""
+    from app.models import MarketplaceCredential
+    from app.services import marketplace_upload as mp_svc
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    creds = (
+        await db.scalars(
+            select(MarketplaceCredential).where(
+                MarketplaceCredential.company_id == company.id,
+                MarketplaceCredential.enabled.is_(True),
+            )
+        )
+    ).all()
+    global_creds = (
+        await db.scalars(
+            select(MarketplaceCredential).where(
+                MarketplaceCredential.company_id.is_(None),
+                MarketplaceCredential.enabled.is_(True),
+            )
+        )
+    ).all()
+    have = {c.marketplace for c in creds} | {c.marketplace for c in global_creds}
+    return {
+        "upload_enabled": settings.MARKETPLACE_UPLOAD_ENABLED,
+        "company_id": company.id,
+        "credentials": {
+            "wb": "wb" in have,
+            "ozon": "ozon" in have,
+        },
+        "company_keys_count": len(creds),
+    }
+
+
+@router.get("/marketplace/credentials")
+async def company_list_marketplace_credentials(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Owner: WB/Ozon API-ключи компании §7.6 / §14.6."""
+    from app.models import MarketplaceCredential
+    from app.services import marketplace_upload as mp_svc
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    rows = (
+        await db.scalars(
+            select(MarketplaceCredential)
+            .where(MarketplaceCredential.company_id == company.id)
+            .order_by(MarketplaceCredential.marketplace)
+        )
+    ).all()
+    return {
+        "upload_enabled": settings.MARKETPLACE_UPLOAD_ENABLED,
+        "items": [mp_svc.credential_public(r) for r in rows],
+    }
+
+
+@router.put("/marketplace/credentials")
+async def company_upsert_marketplace_credentials(
+    body: CompanyMarketplaceCredentialBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Owner: сохранить WB/Ozon API-ключ компании §7.6 / §14.6."""
+    from app.models import AuditLog
+    from app.services import marketplace_upload as mp_svc
+    from app.services.company_members import get_owned_company
+    from app.services.company_owner_2fa import require_owner_2fa_if_needed
+
+    await require_owner_2fa_if_needed(user=user, db=db)
+    company = await get_owned_company(db, user)
+    row = await mp_svc.upsert_credential(
+        db,
+        marketplace=body.marketplace,
+        api_key=body.api_key,
+        company_id=company.id,
+        client_id=body.client_id,
+        enabled=body.enabled,
+    )
+    db.add(
+        AuditLog(
+            company_id=company.id,
+            user_id=user.id,
+            action="marketplace_credential.upsert",
+            details={"marketplace": row.marketplace, "enabled": row.enabled},
+        )
+    )
+    await db.commit()
+    return mp_svc.credential_public(row)
 
 
 @router.post("/shoot_link")

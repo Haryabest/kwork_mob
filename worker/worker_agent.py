@@ -35,8 +35,9 @@ MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 TEMP_DIR = Path(os.getenv("TEMP_DIR", "/tmp/worker"))
-PIPELINE_MODE = os.getenv("WORKER_PIPELINE_MODE", "trellis")  # trellis | stub
-WATERMARK_SECRET = os.getenv("WATERMARK_HMAC_SECRET", "change-me-watermark")
+PIPELINE_MODE = os.getenv("WORKER_PIPELINE_MODE", "stub")  # stub локально; trellis — Intelion GPU
+WORKER_IMAGE_TAG = os.getenv("WORKER_IMAGE_TAG", os.getenv("TRELLIS_VERSION", "2"))
+WORKER_DOCKER_IMAGE = os.getenv("WORKER_DOCKER_IMAGE", "")
 
 
 def _resolve_scripts_dir() -> Path:
@@ -632,18 +633,7 @@ class WorkerAgent:
                 self._overheated = False
                 self._stop_task = False
                 self.status = "idle"
-                await ws.send(
-                    json.dumps(
-                        {
-                            "type": "ready",
-                            "worker_id": self.worker_id,
-                            "version": "0.4.0",
-                            "capabilities": self._capabilities(),
-                            "weight": float(os.getenv("WORKER_WEIGHT", "0")),
-                            "pipeline_mode": PIPELINE_MODE,
-                        }
-                    )
-                )
+                await ws.send(json.dumps(self._ready_payload()))
                 logger.info("GPU cooled to %s°C — ready", temp)
 
             await ws.send(
@@ -659,6 +649,30 @@ class WorkerAgent:
                 )
             )
             await asyncio.sleep(5)
+
+    def _ready_payload(self) -> dict:
+        return {
+            "type": "ready",
+            "worker_id": self.worker_id,
+            "version": WORKER_IMAGE_TAG,
+            "trellis_version": os.getenv("TRELLIS_VERSION", "2"),
+            "capabilities": self._capabilities(),
+            "weight": float(os.getenv("WORKER_WEIGHT", "0")),
+            "pipeline_mode": PIPELINE_MODE,
+            "docker_image": WORKER_DOCKER_IMAGE or None,
+            "maintenance": os.getenv("WORKER_MAINTENANCE", "0").lower() in ("1", "true", "yes"),
+        }
+
+    def _preflight_at_start(self) -> None:
+        ver = os.getenv("TRELLIS_VERSION", "2").strip().lower()
+        if ver not in ("2", "trellis2", "trellis.2"):
+            return
+        if os.getenv("WORKER_SKIP_CUDA_PREFLIGHT", "0").lower() in ("1", "true", "yes"):
+            return
+        sys.path.insert(0, str(_resolve_scripts_dir()))
+        from trellis_runtime import preflight_cuda
+
+        preflight_cuda()
 
     def _capabilities(self) -> list[str]:
         caps = [
@@ -694,6 +708,12 @@ class WorkerAgent:
                 return websockets.connect(url, **connect_kwargs)
 
     async def connect(self) -> None:
+        try:
+            await asyncio.to_thread(self._preflight_at_start)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("CUDA preflight failed: %s", exc)
+            if os.getenv("WORKER_PREFLIGHT_FATAL", "1").lower() in ("1", "true", "yes"):
+                raise
         headers = {"Authorization": f"Bearer {WORKER_TOKEN}"}
         backoff = 1
         urls = [ORCHESTRATOR_URL]
@@ -705,18 +725,7 @@ class WorkerAgent:
                     logger.info("Connecting to %s as %s (Tailscale/primary or WSS fallback)", url, self.worker_id)
                     async with self._ws_connect_cm(url, headers) as ws:
                         self._ws = ws
-                        await ws.send(
-                            json.dumps(
-                                {
-                                    "type": "ready",
-                                    "worker_id": self.worker_id,
-                                    "version": "0.4.0",
-                                    "capabilities": self._capabilities(),
-                                    "weight": float(os.getenv("WORKER_WEIGHT", "0")),
-                                    "pipeline_mode": PIPELINE_MODE,
-                                }
-                            )
-                        )
+                        await ws.send(json.dumps(self._ready_payload()))
                         backoff = 1
                         hb = asyncio.create_task(self.send_heartbeat(ws))
                         mx = asyncio.create_task(self.send_metrics(ws))

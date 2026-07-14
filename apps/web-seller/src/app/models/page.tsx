@@ -12,10 +12,27 @@ import { api, apiMessage } from '../../services/api';
 type Model = {
   uuid: string;
   order_id: number;
+  category?: string | null;
+  tier?: string | null;
   glb_url?: string | null;
   publish_status?: string;
   created_at?: string;
 };
+
+const CATEGORY_OPTIONS = [
+  { value: 'clothing', label: 'Одежда' },
+  { value: 'shoes', label: 'Обувь' },
+  { value: 'electronics', label: 'Электроника' },
+  { value: 'furniture', label: 'Мебель' },
+  { value: 'decor', label: 'Декор' },
+  { value: 'toys', label: 'Игрушки' },
+  { value: 'adult', label: '18+' },
+  { value: 'other', label: 'Другое' },
+];
+
+const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
+  CATEGORY_OPTIONS.map((c) => [c.value, c.label]),
+);
 
 const PUBLISH_LABEL: Record<string, string> = {
   not_published: 'Не опубликовано',
@@ -28,7 +45,11 @@ export default function ModelsPage() {
   const [items, setItems] = useState<Model[]>([]);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<string | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
+  const [tier, setTier] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isOwner, setIsOwner] = useState(false);
+  const [massBusy, setMassBusy] = useState(false);
 
   useEffect(() => {
     api
@@ -36,15 +57,41 @@ export default function ModelsPage() {
       .then(({ data }) => setItems(data.items ?? []))
       .catch((e) => notifications.show({ color: 'red', message: apiMessage(e) }))
       .finally(() => setLoading(false));
+    api
+      .get<{ items: Array<{ role?: string }> }>('/company/mine')
+      .then(({ data }) => setIsOwner((data.items ?? []).some((c) => c.role === 'owner')))
+      .catch(() => undefined);
   }, []);
+
+  async function massExtendAll() {
+    if (!window.confirm('Продлить хранение исходников для всех моделей компании? (лимит 3× на модель)')) {
+      return;
+    }
+    setMassBusy(true);
+    try {
+      const { data } = await api.post<{ message?: string; extended?: number }>(
+        '/company/models/mass-extend-storage',
+      );
+      notifications.show({
+        color: 'teal',
+        message: data.message || `Продлено: ${data.extended ?? 0}`,
+      });
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setMassBusy(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     return items.filter((m) => {
       if (status && m.publish_status !== status) return false;
+      if (category && m.category !== category) return false;
+      if (tier && m.tier !== tier) return false;
       if (q && !m.uuid.includes(q) && !String(m.order_id).includes(q)) return false;
       return true;
     });
-  }, [items, q, status]);
+  }, [items, q, status, category, tier]);
 
   return (
     <SellerShell>
@@ -59,6 +106,11 @@ export default function ModelsPage() {
             <Button component={Link} href="/models/trash" variant="light" visibleFrom="xs">
               Корзина
             </Button>
+            {isOwner && (
+              <Button variant="light" loading={massBusy} onClick={() => void massExtendAll()} visibleFrom="xs">
+                Продлить все исходники
+              </Button>
+            )}
             <Button component={Link} href="/orders/new" leftSection={<IconPlus size={16} />} visibleFrom="xs">
               Новая
             </Button>
@@ -83,8 +135,25 @@ export default function ModelsPage() {
             onChange={setStatus}
             data={Object.entries(PUBLISH_LABEL).map(([value, label]) => ({ value, label }))}
           />
-          <Select label="Категория" placeholder="Все" data={['Одежда', 'Обувь', 'Электроника', 'Другое']} clearable disabled />
-          <Select label="Тариф" placeholder="Все" data={['small', 'large']} clearable disabled />
+          <Select
+            label="Категория"
+            placeholder="Все"
+            data={CATEGORY_OPTIONS}
+            clearable
+            value={category}
+            onChange={setCategory}
+          />
+          <Select
+            label="Тариф"
+            placeholder="Все"
+            data={[
+              { value: 'small', label: 'Small' },
+              { value: 'large', label: 'Large' },
+            ]}
+            clearable
+            value={tier}
+            onChange={setTier}
+          />
         </FilterRow>
 
         {!loading && filtered.length === 0 ? (

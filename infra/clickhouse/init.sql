@@ -29,6 +29,16 @@ CREATE TABLE IF NOT EXISTS order_events (
 ) ENGINE = MergeTree()
 ORDER BY (timestamp, order_id);
 
+CREATE TABLE IF NOT EXISTS publication_funnel_events (
+    timestamp DateTime,
+    model_uuid String,
+    event_type String,
+    user_id UInt64,
+    company_id Nullable(UInt64),
+    marketplace Nullable(String)
+) ENGINE = MergeTree()
+ORDER BY (timestamp, event_type);
+
 -- Materialized Views (§12.2.2)
 CREATE MATERIALIZED VIEW IF NOT EXISTS worker_metrics_hourly
 ENGINE = AggregatingMergeTree()

@@ -21,6 +21,7 @@ class ShootDraft {
     this.scaleCalibration,
     this.reshootCounts = const {},
     this.birthDate,
+    this.ghostScale = 1.0,
   });
 
   final String modelUuid;
@@ -32,6 +33,7 @@ class ShootDraft {
   DateTime createdAt;
   Map<int, int> reshootCounts;
   String? birthDate;
+  double ghostScale;
 
   Map<String, dynamic> toJson() => {
         'model_uuid': modelUuid,
@@ -43,6 +45,7 @@ class ShootDraft {
         'created_at': createdAt.toIso8601String(),
         'reshoot_counts': reshootCounts.map((k, v) => MapEntry('$k', v)),
         if (birthDate != null) 'birth_date': birthDate,
+        'ghost_scale': ghostScale,
       };
 
   static ShootDraft fromJson(Map<String, dynamic> j) {
@@ -72,6 +75,7 @@ class ShootDraft {
           int.parse(e.key.toString()): e.value as int,
       },
       birthDate: j['birth_date']?.toString(),
+      ghostScale: (j['ghost_scale'] as num?)?.toDouble() ?? 1.0,
     );
   }
 }
@@ -148,6 +152,27 @@ class ShootStorage {
     if (await index.exists()) await index.delete();
   }
 
+  Future<void> discardDraft(String modelUuid) async {
+    await clearActiveDraft();
+    final dir = Directory(p.join((await _root()).path, modelUuid));
+    if (await dir.exists()) await dir.delete(recursive: true);
+  }
+
+  Future<bool> hasResumableDraft() async {
+    final draft = await loadActiveDraft();
+    if (draft == null) return false;
+    final n = await capturedCount(draft.modelUuid);
+    return n > 0 && n < kGuidedDomeCount;
+  }
+
+  Future<int> resumeIndex(String modelUuid) async {
+    final photos = await listPhotos(modelUuid);
+    for (var i = 0; i < kGuidedDomeCount; i++) {
+      if (photos[i] == null) return i;
+    }
+    return kGuidedDomeCount - 1;
+  }
+
   Future<ShootDraft?> loadDraft(String modelUuid) async {
     final f = File(p.join((await _root()).path, modelUuid, 'metadata.json'));
     if (!await f.exists()) return loadActiveDraft();
@@ -179,4 +204,35 @@ class ShootStorage {
   }
 
   String newUuid() => const Uuid().v4();
+
+  /// Копия 12 фото для перегенерации (новый task_uuid).
+  Future<String> cloneForRegeneration({
+    required String sourceModelUuid,
+    required ProductCategory category,
+    required Tier tier,
+    int? companyId,
+    Map<String, dynamic>? scaleCalibration,
+    String? birthDate,
+  }) async {
+    final newUuid = this.newUuid();
+    for (var i = 0; i < kGuidedDomeCount; i++) {
+      final src = await photoFile(sourceModelUuid, i);
+      if (!await src.exists()) {
+        throw StateError('Нет локального фото ракурса ${i + 1}');
+      }
+      final dst = await photoFile(newUuid, i);
+      await dst.writeAsBytes(await src.readAsBytes(), flush: true);
+    }
+    final draft = ShootDraft(
+      modelUuid: newUuid,
+      category: category,
+      tier: tier,
+      companyId: companyId,
+      scaleCalibration: scaleCalibration,
+      birthDate: birthDate,
+      createdAt: DateTime.now(),
+    );
+    await writeMetadata(draft);
+    return newUuid;
+  }
 }

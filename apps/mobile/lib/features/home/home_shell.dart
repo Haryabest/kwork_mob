@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
+import 'package:kwork_mobile/core/locale_controller.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/features/models/model_viewer_screen.dart';
 import 'package:kwork_mobile/features/support/faq_support_screen.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/push_service.dart';
+import 'package:kwork_mobile/services/local_model_library.dart';
+import 'package:kwork_mobile/services/notification_inbox.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -27,12 +30,20 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  int _unread = 0;
 
   @override
   void initState() {
     super.initState();
     widget.session.addListener(_onSession);
     _refresh();
+    _loadUnread();
+    LocalModelLibrary.instance.runAutoCleanup();
+  }
+
+  Future<void> _loadUnread() async {
+    final n = await NotificationInbox.instance.unreadCount();
+    if (mounted) setState(() => _unread = n);
   }
 
   void _onSession() {
@@ -56,38 +67,38 @@ class _HomeShellState extends State<HomeShell> {
       );
       return;
     }
-    final choice = await showModalBottomSheet<Object>(
+    final choice = await showFSheet<Object>(
       context: context,
+      side: .btt,
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: FTileGroup(
           children: [
-            ListTile(
+            FTile(
               title: const Text('Личный'),
               selected: !session.corporate,
-              onTap: () => Navigator.pop(ctx, 'personal'),
+              onPress: () => Navigator.pop(ctx, 'personal'),
             ),
             ...session.companies.map(
-              (c) => ListTile(
+              (c) => FTile(
                 title: Text(c['name']?.toString() ?? 'Компания'),
                 subtitle: Text(c['role']?.toString() ?? ''),
                 selected: session.corporate && session.companyId == c['id'],
-                onTap: () => Navigator.pop(ctx, c),
+                onPress: () => Navigator.pop(ctx, c),
               ),
             ),
           ],
         ),
       ),
     );
-    if (choice == null) return;
-    final confirmed = await showDialog<bool>(
+    if (choice == null || !mounted) return;
+    final confirmed = await showFDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx, style, animation) => FDialog(
         title: const Text('Сменить режим?'),
-        content: const Text('Подтвердите переключение Личный / Компания'),
+        body: const Text('Подтвердите переключение Личный / Компания'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Подтвердить')),
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: const Text('Подтвердить')),
         ],
       ),
     );
@@ -113,13 +124,24 @@ class _HomeShellState extends State<HomeShell> {
       _HomeTab(
         session: session,
         onSwitchMode: _switchMode,
-        onShoot: () => context.push('/home/shoot'),
         onQueue: () => context.push('/home/queue'),
+        onNotifications: () async {
+          await context.push('/home/notifications');
+          await _loadUnread();
+        },
+        unread: _unread,
         onShootLink: session.canManageTeam
             ? () => context.push('/home/shoot-link')
             : null,
       ),
-      ModelsScreen(api: widget.api),
+      ModelsScreen(
+        api: widget.api,
+        onNotifications: () async {
+          await context.push('/home/notifications');
+          await _loadUnread();
+        },
+        unread: _unread,
+      ),
       _OrdersTab(api: widget.api),
       FaqSupportScreen(api: widget.api),
       _ProfileTab(
@@ -134,31 +156,50 @@ class _HomeShellState extends State<HomeShell> {
       ),
     ];
 
-    return FScaffold(
-      child: pages[_index],
-      footer: FBottomNavigationBar(
-        index: _index,
-        onChange: (i) => setState(() => _index = i),
+    return Material(
+      color: AppColors.background,
+      child: Stack(
         children: [
-          FBottomNavigationBarItem(
-            icon: const Icon(FIcons.house),
-            label: Text(l10n.home),
+          FScaffold(
+            child: pages[_index],
+            footer: FBottomNavigationBar(
+            index: _index,
+            onChange: (i) => setState(() => _index = i),
+            children: [
+              FBottomNavigationBarItem(
+                icon: const Icon(FIcons.house),
+                label: Text(l10n.home),
+              ),
+              FBottomNavigationBarItem(
+                icon: const Icon(FIcons.box),
+                label: Text(l10n.models),
+              ),
+              FBottomNavigationBarItem(
+                icon: const Icon(FIcons.receipt),
+                label: Text(l10n.orders),
+              ),
+              FBottomNavigationBarItem(
+                icon: const Icon(FIcons.lifeBuoy),
+                label: Text(l10n.support),
+              ),
+              FBottomNavigationBarItem(
+                icon: const Icon(FIcons.user),
+                label: Text(l10n.profile),
+              ),
+            ],
           ),
-          FBottomNavigationBarItem(
-            icon: const Icon(FIcons.box),
-            label: Text(l10n.models),
-          ),
-          FBottomNavigationBarItem(
-            icon: const Icon(FIcons.receipt),
-            label: Text(l10n.orders),
-          ),
-          FBottomNavigationBarItem(
-            icon: const Icon(FIcons.lifeBuoy),
-            label: Text(l10n.support),
-          ),
-          FBottomNavigationBarItem(
-            icon: const Icon(FIcons.user),
-            label: Text(l10n.profile),
+        ),
+        if (_index <= 1)
+          Positioned(
+            right: 20,
+            bottom: 88,
+            child: FloatingActionButton(
+              backgroundColor: AppColors.accent,
+              foregroundColor: Colors.white,
+              onPressed: () => context.push('/home/shoot'),
+              tooltip: l10n.shoot,
+              child: const Icon(FIcons.camera),
+            ),
           ),
         ],
       ),
@@ -170,15 +211,17 @@ class _HomeTab extends StatelessWidget {
   const _HomeTab({
     required this.session,
     required this.onSwitchMode,
-    required this.onShoot,
     required this.onQueue,
+    required this.onNotifications,
+    required this.unread,
     this.onShootLink,
   });
 
   final AppSession session;
   final VoidCallback onSwitchMode;
-  final VoidCallback onShoot;
   final VoidCallback onQueue;
+  final VoidCallback onNotifications;
+  final int unread;
   final VoidCallback? onShootLink;
 
   @override
@@ -191,7 +234,31 @@ class _HomeTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 48, 20, 100),
       children: [
-        Text(l10n.appName, style: context.theme.typography.xl.copyWith(fontWeight: FontWeight.bold)),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                l10n.appName,
+                style: context.theme.typography.xl.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+            IconButton(
+              onPressed: onNotifications,
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(FIcons.bell),
+                  if (unread > 0)
+                    Positioned(
+                      right: -6,
+                      top: -4,
+                      child: FBadge(child: Text('$unread')),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 4),
         Text(session.email ?? '…', style: TextStyle(color: AppColors.textSecondary)),
         if (!session.hidePrices && session.balance != null) ...[
@@ -208,12 +275,6 @@ class _HomeTab extends StatelessWidget {
           child: Text('Режим: $modeLabel'),
         ),
         const SizedBox(height: 24),
-        FButton(
-          onPress: onShoot,
-          prefix: const Icon(FIcons.camera),
-          child: Text(l10n.shoot),
-        ),
-        const SizedBox(height: 12),
         FButton(
           variant: .secondary,
           onPress: onQueue,
@@ -268,10 +329,10 @@ class _OrdersTabState extends State<_OrdersTab> {
       itemCount: _items.length,
       itemBuilder: (context, i) {
         final o = _items[i];
-        return ListTile(
+        return FTile(
           title: Text('#${o['id']} · ${o['status']}'),
           subtitle: Text('${o['category']} · ${o['tier']}'),
-          onTap: () => context.push('/home/queue/${o['id']}'),
+          onPress: () => context.push('/home/queue/${o['id']}'),
         );
       },
     );
@@ -394,23 +455,71 @@ class _ProfileTabState extends State<_ProfileTab> {
       children: [
         Text(l10n.profile, style: context.theme.typography.xl),
         const SizedBox(height: 12),
-        ListTile(title: Text(widget.session.email ?? '—'), subtitle: const Text('Аккаунт')),
-        ListTile(
-          title: const Text('Режим Личный / Компания'),
-          leading: const Icon(Icons.swap_horiz),
-          onTap: widget.onSwitchMode,
+        FTileGroup(
+          children: [
+            FTile(
+              title: Text(widget.session.email ?? '—'),
+              subtitle: const Text('Аккаунт'),
+            ),
+            if (!widget.session.hidePrices)
+              FTile(
+                title: Text('Баланс: ${widget.session.balance?.toStringAsFixed(0) ?? '—'} ₽'),
+                prefix: const Icon(FIcons.wallet),
+                onPress: () => context.push('/home/balance'),
+              ),
+            if (widget.session.canManageTeam)
+              FTile(
+                title: const Text('Команда'),
+                prefix: const Icon(FIcons.users),
+                onPress: () => context.push('/home/team'),
+              ),
+            FTile(
+              title: const Text('Режим Личный / Компания'),
+              prefix: const Icon(FIcons.arrowLeftRight),
+              onPress: widget.onSwitchMode,
+            ),
+            FTile(
+              title: const Text('Локальное хранилище'),
+              subtitle: const Text('GLB, автоочистка, экспорт ZIP'),
+              prefix: const Icon(FIcons.hardDrive),
+              onPress: () => context.push('/home/storage'),
+            ),
+            FTile(
+              title: const Text('Язык'),
+              prefix: const Icon(FIcons.languages),
+            ),
+          ],
         ),
-        const Divider(),
+        const SizedBox(height: 8),
+        FSelect<String>(
+          label: const Text('Язык интерфейса'),
+          control: FSelectControl.managed(
+            initial: AppLocaleController.instance.locale.languageCode,
+            onChange: (v) async {
+              if (v == null) return;
+              await AppLocaleController.instance.setLocale(Locale(v));
+              if (mounted) setState(() {});
+            },
+          ),
+          items: const {
+            'Русский': 'ru',
+            'English': 'en',
+          },
+        ),
+        const SizedBox(height: 16),
         Text('Уведомления (push) §3.4.3', style: context.theme.typography.sm),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8),
         ..._prefLabels.entries.map(
-          (e) => SwitchListTile(
-            title: Text(e.value),
-            value: _prefs[e.key] ?? true,
-            onChanged: (v) => _togglePref(e.key, v),
+          (e) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: FSwitch(
+              label: Text(e.value),
+              value: _prefs[e.key] ?? true,
+              onChange: (v) => _togglePref(e.key, v),
+            ),
           ),
         ),
-        const Divider(),
+        const SizedBox(height: 16),
         Text('Двухфакторная аутентификация', style: context.theme.typography.sm),
         if (_ownerRequired)
           const Padding(
@@ -420,11 +529,11 @@ class _ProfileTabState extends State<_ProfileTab> {
               style: TextStyle(color: AppColors.warning),
             ),
           ),
-        ListTile(
+        FTile(
           title: Text(_totpEnabled ? '2FA включена' : '2FA выключена'),
           subtitle: Text(_totpEnabled ? 'TOTP активен' : 'Google Authenticator / аналог'),
-          trailing: _totpEnabled
-              ? const Icon(Icons.verified_user, color: AppColors.success)
+          details: _totpEnabled
+              ? const Icon(FIcons.shieldCheck, color: AppColors.success)
               : FButton(
                   onPress: _loading2fa ? null : _start2fa,
                   child: Text(_loading2fa ? '…' : 'Включить'),
@@ -433,15 +542,11 @@ class _ProfileTabState extends State<_ProfileTab> {
         if (_setupSecret != null) ...[
           SelectableText('Секрет: $_setupSecret', style: const TextStyle(fontSize: 12)),
           const SizedBox(height: 8),
-          TextField(
-            controller: _code,
+          FTextField(
+            control: FTextFieldControl.managed(controller: _code),
+            label: const Text('Код подтверждения'),
             keyboardType: TextInputType.number,
             maxLength: 6,
-            decoration: const InputDecoration(
-              labelText: 'Код подтверждения',
-              border: OutlineInputBorder(),
-              counterText: '',
-            ),
           ),
           const SizedBox(height: 8),
           FButton(
@@ -449,11 +554,12 @@ class _ProfileTabState extends State<_ProfileTab> {
             child: const Text('Подтвердить 2FA'),
           ),
         ],
-        const Divider(),
-        ListTile(
+        const SizedBox(height: 16),
+        FTile(
           title: const Text('Выйти'),
-          leading: const Icon(Icons.logout),
-          onTap: widget.onLogout,
+          prefix: const Icon(FIcons.logOut),
+          variant: .destructive,
+          onPress: widget.onLogout,
         ),
       ],
     );

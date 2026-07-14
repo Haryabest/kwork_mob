@@ -28,7 +28,35 @@ def test_storage_meta_extends():
     assert meta["days_left"] >= 4
 
 
-def test_extend_limit():
+def test_timeline_csv():
+    from app.services.node_timeline import timeline_to_csv
+
+    data = {
+        "nodes": [
+            {
+                "node_id": "n1",
+                "node_name": "Node 1",
+                "offline_percent": 1.0,
+                "uptime_percent": 99.0,
+                "segments": [
+                    {
+                        "status": "online",
+                        "started_at": "2026-07-01T00:00:00+00:00",
+                        "ended_at": "2026-07-01T01:00:00+00:00",
+                        "duration_sec": 3600,
+                        "open": False,
+                    }
+                ],
+            }
+        ]
+    }
+    csv_text = timeline_to_csv(data)
+    assert "node_id" in csv_text
+    assert "n1" in csv_text
+    assert "online" in csv_text
+
+
+def test_mass_extend_limit():
     assert ms.MAX_EXTENDS == 3
     assert ms.TRASH_DAYS == 30
 

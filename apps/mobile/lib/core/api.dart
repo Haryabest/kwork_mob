@@ -6,6 +6,44 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:kwork_mobile/domain/catalog.dart';
 
+/// Человекочитаемая ошибка API (без простыни DioException).
+String formatApiError(Object error) {
+  if (error is DioException) {
+    final code = error.response?.statusCode;
+    final detail = error.response?.data;
+    String? msg;
+    if (detail is Map) {
+      final d = detail['detail'];
+      if (d is String) {
+        msg = d;
+      } else if (d is Map) {
+        msg = d['message']?.toString() ?? d['code']?.toString();
+      } else if (d is List && d.isNotEmpty) {
+        final first = d.first;
+        if (first is Map) {
+          msg = first['msg']?.toString() ?? first.toString();
+        } else {
+          msg = first.toString();
+        }
+      }
+      msg ??= detail['message']?.toString();
+    } else if (detail is String) {
+      msg = detail;
+    }
+    return switch (code) {
+      401 => msg ?? 'Сессия истекла. Войдите снова.',
+      403 => msg ?? 'Нет доступа для этой операции.',
+      404 => msg ?? 'Не найдено.',
+      402 => msg ?? 'Лимит или бюджет исчерпан.',
+      429 => msg ?? 'Слишком много запросов. Подождите.',
+      502 => msg ?? 'Ошибка внешнего сервиса. Попробуйте позже.',
+      _ => msg ?? error.message ?? '$error',
+    };
+  }
+  if (error is StateError) return error.message;
+  return error.toString();
+}
+
 class ApiClient {
   ApiClient({String? baseUrl})
       : _baseUrl = baseUrl ??
@@ -33,6 +71,37 @@ class ApiClient {
             options.headers['Authorization'] = 'Bearer $token';
           }
           handler.next(options);
+        },
+        onError: (error, handler) async {
+          final status = error.response?.statusCode;
+          final path = error.requestOptions.path;
+          if (status == 401 &&
+              !path.contains('/auth/refresh') &&
+              error.requestOptions.extra['auth_retry'] != true) {
+            final refresh = await _storage.read(key: 'refresh_token');
+            if (refresh != null) {
+              try {
+                final res = await _dio.post(
+                  '/auth/refresh',
+                  data: {'refresh_token': refresh},
+                  options: Options(extra: {'auth_retry': true}),
+                );
+                final data = Map<String, dynamic>.from(res.data as Map);
+                await saveTokens(
+                  data['access_token'] as String,
+                  data['refresh_token'] as String,
+                );
+                error.requestOptions.headers['Authorization'] =
+                    'Bearer ${data['access_token']}';
+                error.requestOptions.extra['auth_retry'] = true;
+                final retry = await _dio.fetch(error.requestOptions);
+                return handler.resolve(retry);
+              } catch (_) {
+                await clearTokens();
+              }
+            }
+          }
+          handler.next(error);
         },
       ),
     );
@@ -65,11 +134,98 @@ class ApiClient {
   Future<bool> get hasToken async =>
       (await _storage.read(key: 'access_token')) != null;
 
-  Future<Map<String, dynamic>> login(String email, String password) async {
+  Future<Map<String, dynamic>> register({
+    required String email,
+    required String password,
+    required String passwordConfirm,
+    List<String> consents = const [
+      'terms',
+      'privacy',
+      'offer',
+      'rights',
+      'nsfw_rules',
+    ],
+  }) async {
+    final res = await _dio.post('/auth/register', data: {
+      'email': email,
+      'password': password,
+      'password_confirm': passwordConfirm,
+      'consents': consents,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> verifyEmail({
+    required String email,
+    required String code,
+  }) async {
+    final res = await _dio.post('/auth/verify-email', data: {
+      'email': email,
+      'code': code,
+    });
+    final data = Map<String, dynamic>.from(res.data as Map);
+    final access = data['access_token'] as String?;
+    final refresh = data['refresh_token'] as String?;
+    if (access != null && refresh != null) {
+      await saveTokens(access, refresh);
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> setAccountType({
+    required String accountType,
+    String? fullName,
+    String? companyName,
+    String? inn,
+    String? ogrn,
+    String? legalAddress,
+    String? directorName,
+    String? bankName,
+    String? bik,
+    String? checkingAccount,
+  }) async {
+    final res = await _dio.post('/auth/account-type', data: {
+      'account_type': accountType,
+      if (fullName != null && fullName.isNotEmpty) 'full_name': fullName,
+      if (companyName != null && companyName.isNotEmpty) 'company_name': companyName,
+      if (inn != null && inn.isNotEmpty) 'inn': inn,
+      if (ogrn != null && ogrn.isNotEmpty) 'ogrn': ogrn,
+      if (legalAddress != null && legalAddress.isNotEmpty) 'legal_address': legalAddress,
+      if (directorName != null && directorName.isNotEmpty) 'director_name': directorName,
+      if (bankName != null && bankName.isNotEmpty) 'bank_name': bankName,
+      if (bik != null && bik.isNotEmpty) 'bik': bik,
+      if (checkingAccount != null && checkingAccount.isNotEmpty) 'checking_account': checkingAccount,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> requestPasswordReset(String email) async {
+    final res = await _dio.post('/auth/password/forgot', data: {'email': email});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> confirmPasswordReset({
+    required String token,
+    required String newPassword,
+    required String passwordConfirm,
+  }) async {
+    final res = await _dio.post('/auth/password/confirm', data: {
+      'token': token,
+      'new_password': newPassword,
+      'password_confirm': passwordConfirm,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> login(
+    String email,
+    String password, {
+    bool rememberMe = true,
+  }) async {
     final res = await _dio.post('/auth/login', data: {
       'email': email,
       'password': password,
-      'remember_me': true,
+      'remember_me': rememberMe,
     });
     final data = Map<String, dynamic>.from(res.data as Map);
     if (data['requires_2fa'] == true) {
@@ -137,6 +293,80 @@ class ApiClient {
   Future<Map<String, dynamic>> me() async {
     final res = await _dio.get('/user/me');
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> patchMe(Map<String, dynamic> payload) async {
+    final res = await _dio.patch('/user/me', data: payload);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createShareLink({
+    required String modelUuid,
+    int ttlDays = 7,
+  }) async {
+    final res = await _dio.post('/models/$modelUuid/share', data: {
+      'ttl_days': ttlDays,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> inviteMember({
+    required String email,
+    String role = 'photographer',
+    int? companyId,
+    int maxConcurrentOrders = 3,
+    int? monthlySpendingLimit,
+  }) async {
+    final res = await _dio.post('/company/invite', data: {
+      'email': email,
+      'role': role,
+      if (companyId != null) 'company_id': companyId,
+      'max_concurrent_orders': maxConcurrentOrders,
+      if (monthlySpendingLimit != null) 'monthly_spending_limit': monthlySpendingLimit,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listInvitations() async {
+    final res = await _dio.get('/company/invitations');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> changeMemberRole({
+    required int userId,
+    required String role,
+  }) async {
+    final res = await _dio.patch('/company/members/$userId/role', data: {
+      'role': role,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> changeMemberLimits({
+    required int userId,
+    int? maxConcurrentOrders,
+    int? monthlySpendingLimit,
+  }) async {
+    final res = await _dio.patch('/company/members/$userId/limits', data: {
+      if (maxConcurrentOrders != null) 'max_concurrent_orders': maxConcurrentOrders,
+      if (monthlySpendingLimit != null) 'monthly_spending_limit': monthlySpendingLimit,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listAuditLog() async {
+    final res = await _dio.get('/company/audit');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  int countActiveOrders(List<Map<String, dynamic>> orders, {int? companyId}) {
+    const active = {'queued', 'processing', 'awaiting_payment', 'pending'};
+    return orders.where((o) {
+      if (companyId != null && o['company_id'] != companyId) return false;
+      return active.contains(o['status']?.toString());
+    }).length;
   }
 
   Future<List<Map<String, dynamic>>> myCompanies() async {
@@ -315,6 +545,44 @@ class ApiClient {
 
   Future<Map<String, dynamic>> trashModel({required String modelUuid}) async {
     final res = await _dio.post('/models/$modelUuid/trash');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listTrashModels() async {
+    final res = await _dio.get('/models/trash');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> getBalance() async {
+    final res = await _dio.get('/user/balance');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listTransactions() async {
+    final res = await _dio.get('/user/transactions');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> topupBalance({
+    required int amount,
+    String paymentMethod = 'redirect',
+  }) async {
+    final res = await _dio.post('/user/balance/topup', data: {
+      'amount': amount,
+      'payment_method': paymentMethod,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> listCompanyMembers() async {
+    final res = await _dio.get('/company/members');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> restoreFromTrash({required String modelUuid}) async {
+    final res = await _dio.post('/models/$modelUuid/restore-from-trash');
     return Map<String, dynamic>.from(res.data as Map);
   }
 

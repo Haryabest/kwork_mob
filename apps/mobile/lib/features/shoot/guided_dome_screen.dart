@@ -1,22 +1,35 @@
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/core/ar/ar.dart';
-import 'package:kwork_mobile/core/ar/gyro_ar_session.dart';
+import 'package:kwork_mobile/core/ar/native_ar_bridge.dart';
 import 'package:kwork_mobile/services/ar_tariff.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/services/gyro_guide.dart';
 import 'package:kwork_mobile/services/quality_analyzer.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/thermal_monitor.dart';
+import 'package:kwork_mobile/widgets/ar_markers_overlay.dart';
+import 'package:kwork_mobile/widgets/ghost_mesh.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:vibration/vibration.dart';
+
+/// Debug/emulator: `flutter run --dart-define=SHOOT_BYPASS_QUALITY=true`
+bool get _bypassQualityGate =>
+    kDebugMode || const bool.fromEnvironment('SHOOT_BYPASS_QUALITY');
+
+/// Debug/emulator: `flutter run --dart-define=SHOOT_BYPASS_GYRO=true`
+bool get _bypassGyroGate =>
+    kDebugMode || const bool.fromEnvironment('SHOOT_BYPASS_GYRO');
 
 /// Guided Dome: камера + AR-абстракция (ARKit/ARCore или gyro) ±15° (§3.1 / §3.2).
 class GuidedDomeScreen extends StatefulWidget {
@@ -38,6 +51,7 @@ class GuidedDomeScreen extends StatefulWidget {
 
 class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   CameraController? _cam;
+  CameraDescription? _cameraDesc;
   ArSession? _ar;
   GyroGuide? _gyro;
   ArBackend _arBackend = ArBackend.gyroFallback;
@@ -51,12 +65,48 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   bool _gyroOk = true;
   bool _arTariffApplied = false;
   bool _criticalDialogOpen = false;
+  bool _thermalLowRes = false;
+  DateTime? _lastShutterAt;
+  ProductCategory _category = ProductCategory.other;
+  double _ghostScale = 1.0;
+  File? _prevFrame;
+  double _yawOffsetDeg = 0;
 
   @override
   void initState() {
     super.initState();
     _index = widget.reshootIndex ?? 0;
+    _loadDraftMeta();
     _boot();
+  }
+
+  Future<void> _loadDraftMeta() async {
+    final draft = await ShootStorage.instance.loadDraft(widget.modelUuid);
+    if (draft == null) return;
+    if (!mounted) return;
+    setState(() {
+      _category = draft.category;
+      _ghostScale = draft.ghostScale;
+    });
+    await _loadPrevFrame();
+  }
+
+  Future<void> _loadPrevFrame() async {
+    if (_index <= 0) {
+      if (mounted) setState(() => _prevFrame = null);
+      return;
+    }
+    final prev = await ShootStorage.instance.photoFile(widget.modelUuid, _index - 1);
+    if (await prev.exists()) {
+      if (mounted) setState(() => _prevFrame = prev);
+    }
+  }
+
+  Future<void> _persistGhostScale() async {
+    final draft = await ShootStorage.instance.loadDraft(widget.modelUuid);
+    if (draft == null) return;
+    draft.ghostScale = _ghostScale;
+    await ShootStorage.instance.writeMetadata(draft);
   }
 
   Future<void> _boot() async {
@@ -71,34 +121,75 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
+      _cameraDesc = back;
       await DeviceBenchmark.instance.loadPersisted();
-      final ctrl = CameraController(
+      await _openCamera(
         back,
         DeviceBenchmark.instance.cameraPreset,
-        enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.jpeg,
       );
-      await ctrl.initialize();
       if (!mounted) return;
-      _cam = ctrl;
       await _thermal.start();
       _thermal.addListener(_onThermal);
-      _ar = await ArSessionFactory.create(preferNative: true);
-      _arBackend = _ar!.backend;
-      await _ar!.start();
-      _ar!.addListener(_onGyro);
-      if (_ar is GyroArSession) {
-        _gyro = (_ar as GyroArSession).guide;
-      } else {
-        // native AR: гиро-подсказки через тот же GyroGuide для UI-хинтов
-        _gyro = GyroGuide()..start()..calibrateYaw();
-        _gyro!.addListener(_onGyro);
+      try {
+        _ar = await ArSessionFactory.create(preferNative: true);
+        _arBackend = _ar!.backend;
+        await _ar!.start();
+        _ar!.addListener(_onGyro);
+        if (_ar is GyroArSession) {
+          _gyro = (_ar as GyroArSession).guide;
+        } else {
+          _gyro = GyroGuide()..start()..calibrateYaw();
+          _gyro!.addListener(_onGyro);
+        }
+      } catch (_) {
+        _ensureGyro();
       }
       _ready = true;
       setState(() {});
+      await _syncNativeMarker();
     } catch (e) {
-      setState(() => _error = e.toString());
+      _ensureGyro();
+      if (_cam != null && _cam!.value.isInitialized) {
+        _ready = true;
+        if (mounted) setState(() => _error = null);
+        return;
+      }
+      setState(() => _error = formatApiError(e));
     }
+  }
+
+  void _ensureGyro() {
+    if (_gyro != null) return;
+    _gyro = GyroGuide()..start()..calibrateYaw();
+    _gyro!.addListener(_onGyro);
+    _arBackend = ArBackend.gyroFallback;
+  }
+
+  Future<void> _openCamera(CameraDescription desc, ResolutionPreset preset) async {
+    final old = _cam;
+    _cam = null;
+    await old?.dispose();
+    final ctrl = CameraController(
+      desc,
+      preset,
+      enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.jpeg,
+    );
+    await ctrl.initialize();
+    if (!mounted) {
+      await ctrl.dispose();
+      return;
+    }
+    _cam = ctrl;
+  }
+
+  ResolutionPreset _cameraPresetForThermal() {
+    if (!_thermal.powerSave) {
+      return DeviceBenchmark.instance.cameraPreset;
+    }
+    final base = DeviceBenchmark.instance.cameraPreset;
+    if (base == ResolutionPreset.low) return ResolutionPreset.low;
+    return ResolutionPreset.medium;
   }
 
   void _onThermal() {
@@ -111,12 +202,19 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   }
 
   Future<void> _applyThermalCamera() async {
+    final wantLow = _thermal.powerSave;
+    if (wantLow != _thermalLowRes && _cameraDesc != null) {
+      _thermalLowRes = wantLow;
+      final preset = _cameraPresetForThermal();
+      await _openCamera(_cameraDesc!, preset);
+      if (mounted) setState(() {});
+      return;
+    }
     final cam = _cam;
     if (cam == null || !cam.value.isInitialized) return;
     try {
-      // §3.8.2: ≥40°C → FPS 15
       await cam.setExposureMode(ExposureMode.auto);
-      if (_thermal.powerSave) {
+      if (wantLow) {
         await cam.lockCaptureOrientation();
       }
     } catch (_) {}
@@ -161,6 +259,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
     final check = _gyro!.check(kGuidedDomeAngles[_index]);
     setState(() {
       _gyroOk = check.ok;
+      _yawOffsetDeg = check.deltaYawDeg;
       if (!check.ok) _gateMsg = check.hint;
     });
     _maybeApplyArTariff();
@@ -179,21 +278,33 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
     await ShootStorage.instance.writeMetadata(draft);
   }
 
-  bool get _canShoot => _ready && !_busy && _gyroOk && _gyro != null;
+  bool get _canShoot {
+    if (!_ready || _busy || _cam == null) return false;
+    if (_bypassGyroGate) return true;
+    return _gyroOk && _gyro != null;
+  }
 
   Future<void> _shutter() async {
-    if (!_canShoot || _cam == null || _gyro == null) return;
-    final gyro = _gyro!.check(kGuidedDomeAngles[_index]);
-    if (!gyro.ok) {
+    if (!_canShoot || _cam == null) return;
+    if (!_bypassGyroGate && _gyro == null) return;
+    final minGap = Duration(milliseconds: (1000 / _thermal.targetFps).round());
+    final last = _lastShutterAt;
+    if (last != null && DateTime.now().difference(last) < minGap) {
+      setState(() => _gateMsg = 'Подождите (${_thermal.targetFps} FPS, энергосбережение)');
+      return;
+    }
+    final gyro = _gyro?.check(kGuidedDomeAngles[_index]);
+    if (!_bypassGyroGate && gyro != null && !gyro.ok) {
       setState(() => _gateMsg = gyro.hint);
       return;
     }
     setState(() => _busy = true);
     try {
+      _lastShutterAt = DateTime.now();
       final shot = await _cam!.takePicture();
       final bytes = await File(shot.path).readAsBytes();
       final gate = QualityAnalyzer.instance.liveGate(bytes);
-      if (!gate.centered || !gate.fillOk) {
+      if (!_bypassQualityGate && (!gate.centered || !gate.fillOk)) {
         await File(shot.path).delete().catchError((_) => File(shot.path));
         setState(() {
           _busy = false;
@@ -217,6 +328,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
 
       if (_index >= kGuidedDomeCount - 1) {
         if (mounted) {
+          setState(() => _busy = false);
           context.pushReplacement(
             '${widget.flowBase}/review',
             extra: widget.modelUuid,
@@ -230,14 +342,64 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         _crosshairOk = true;
         _gateMsg = null;
       });
+      await _loadPrevFrame();
+      await _syncNativeMarker();
       _ar?.calibrate();
       _gyro?.calibrateYaw();
     } catch (e) {
       setState(() {
         _busy = false;
-        _error = e.toString();
+        _error = formatApiError(e);
       });
     }
+  }
+
+  /// Debug: снять кадр без гиро/quality (эмулятор).
+  Future<void> _devForceCapture() async {
+    if (!kDebugMode || !_ready || _cam == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final shot = await _cam!.takePicture();
+      final bytes = await File(shot.path).readAsBytes();
+      await ShootStorage.instance.savePhoto(widget.modelUuid, _index, bytes);
+      await File(shot.path).delete().catchError((_) => File(shot.path));
+      if (widget.reshootIndex != null) {
+        if (mounted) context.pop(true);
+        return;
+      }
+      if (_index >= kGuidedDomeCount - 1) {
+        if (mounted) {
+          setState(() => _busy = false);
+          context.pushReplacement('${widget.flowBase}/review', extra: widget.modelUuid);
+        }
+        return;
+      }
+      setState(() {
+        _index++;
+        _busy = false;
+        _gateMsg = null;
+      });
+      await _loadPrevFrame();
+      await _syncNativeMarker();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = formatApiError(e);
+        });
+      }
+    }
+  }
+
+  Future<void> _syncNativeMarker() async {
+    final ar = _ar;
+    if (ar is! NativeArBridge) return;
+    final angle = kGuidedDomeAngles[_index];
+    await ar.showMarker(
+      index: _index,
+      azimuthDeg: angle.azimuthDeg,
+      elevationDeg: angle.elevationDeg,
+    );
   }
 
   @override
@@ -281,25 +443,40 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
               Center(child: CameraPreview(_cam!))
             else
               const Center(child: CircularProgressIndicator()),
-            // Ghost Mesh — полупрозрачный овал (§3.11); отключается при thermal power-save
-            if (!_thermal.effectsReduced)
+            // §3.2.3 — полупрозрачный силуэт предыдущего кадра
+            if (_prevFrame != null)
               IgnorePointer(
-              child: Center(
-                child: Container(
-                  width: MediaQuery.sizeOf(context).width * 0.55,
-                  height: MediaQuery.sizeOf(context).height * 0.45,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: (_crosshairOk ? AppColors.success : AppColors.error)
-                          .withValues(alpha: 0.7),
-                      width: 2,
+                child: Center(
+                  child: Opacity(
+                    opacity: 0.35,
+                    child: Image.file(
+                      _prevFrame!,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
                     ),
-                    borderRadius: BorderRadius.circular(24),
-                    color: Colors.white.withValues(alpha: 0.08),
                   ),
                 ),
               ),
-            ),
+            // AR-метки 12 ракурсов (§3.1.2)
+            if (!_thermal.effectsReduced)
+              IgnorePointer(
+                child: ArMarkersOverlay(
+                  currentIndex: _index,
+                  yawOffsetDeg: _yawOffsetDeg,
+                ),
+              ),
+            // Ghost Mesh §3.11
+            if (!_thermal.effectsReduced)
+              GhostMeshOverlay(
+                category: _category,
+                scale: _ghostScale,
+                aligned: _crosshairOk && _gyroOk,
+                onScaleUpdate: (s) {
+                  setState(() => _ghostScale = s);
+                  _persistGhostScale();
+                },
+              ),
             // Перекрестие §3.1.3
             IgnorePointer(
               child: CustomPaint(
@@ -319,7 +496,9 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
                   Text(
                     'Ракурс ${_index + 1}/$kGuidedDomeCount · ${angle.label} · $backendLabel'
                     '${_thermal.powerSave ? ' · FPS ${_thermal.targetFps} (тепло)' : ''}'
-                    '${_thermal.celsius != null ? ' · ${_thermal.celsius!.toStringAsFixed(0)}°C' : ''}',
+                    '${_thermal.celsius != null ? ' · ${_thermal.celsius!.toStringAsFixed(0)}°C' : ''}'
+                    '${_bypassQualityGate ? ' · DEV: без проверки кадра' : ''}'
+                    '${_bypassGyroGate ? ' · DEV: без гиро' : ''}',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
@@ -370,7 +549,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 4),
                         color: _canShoot
-                            ? AppColors.wbPrimary
+                            ? AppColors.accent
                             : Colors.grey.shade600,
                       ),
                       child: _busy
@@ -389,6 +568,12 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
                     },
                     child: const Text('Калибр.'),
                   ),
+                  if (kDebugMode)
+                    FButton(
+                      variant: .ghost,
+                      onPress: _devForceCapture,
+                      child: const Text('DEV'),
+                    ),
                 ],
               ),
             ),

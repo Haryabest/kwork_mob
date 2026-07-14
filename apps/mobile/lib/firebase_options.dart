@@ -41,7 +41,7 @@ class DefaultFirebaseOptions {
           projectId: projectId,
           iosBundleId: const String.fromEnvironment(
             'FIREBASE_IOS_BUNDLE_ID',
-            defaultValue: 'com.kwork.mob.kworkMobile',
+            defaultValue: 'com.kworkmob.kworkMobile',
           ),
           storageBucket: const String.fromEnvironment(
             'FIREBASE_STORAGE_BUCKET',
