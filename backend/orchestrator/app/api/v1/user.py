@@ -256,6 +256,7 @@ async def list_user_models(
             {
                 "uuid": m.uuid,
                 "order_id": m.order_id,
+                "display_name": m.display_name,
                 "category": category,
                 "tier": tier,
                 "glb_url": m.glb_url,

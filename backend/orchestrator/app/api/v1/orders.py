@@ -247,6 +247,7 @@ async def create_order(
         receipt_email=body.receipt_email or user.email,
         device_model=device_model,
         os_version=os_version,
+        model_display_name=(body.model_display_name or "").strip() or None,
     )
     db.add(order)
     await db.flush()

@@ -34,6 +34,10 @@ class ShareBody(BaseModel):
     ttl_days: int = Field(default=7, ge=1, le=90)
 
 
+class ModelRenameBody(BaseModel):
+    display_name: str = Field(min_length=1, max_length=120)
+
+
 class MarketplaceUploadBody(BaseModel):
     marketplace: str = Field(pattern=r"^(wb|ozon|wildberries)$")
     sku: str = Field(min_length=1, max_length=64)
@@ -168,6 +172,7 @@ async def get_model(
     return {
         "uuid": model.uuid,
         "order_id": model.order_id,
+        "display_name": model.display_name,
         "glb_url": model.glb_url,
         "usdz_url": model.usdz_url,
         "publish_status": model.publish_status,
@@ -279,6 +284,51 @@ async def preview_model_stream(
         media_type="model/gltf-binary",
         headers={"Cache-Control": "private, max-age=300"},
     )
+
+
+@router.get("/{model_uuid}/thumbnail")
+async def model_thumbnail(
+    model_uuid: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Превью §19.4.3: thumbnail.jpg или первый ракурс view_00."""
+    from app.models import Order
+    from app.services.photos import view_key
+
+    model = await _get_owned_model(db, model_uuid, user)
+    # final/thumbnail.jpg в bucket models
+    thumb_key = f"{model.uuid}/final/thumbnail.jpg"
+    if minio_service.object_exists(settings.MINIO_BUCKET_MODELS, thumb_key):
+        url = minio_service.generate_presigned_url(
+            settings.MINIO_BUCKET_MODELS, thumb_key, expires=3600, method="get_object"
+        )
+        return {"thumbnail_url": url, "source": "final", "expires_in": 3600}
+
+    order = await db.get(Order, model.order_id)
+    if order and order.task_uuid:
+        photo_key = view_key(order.task_uuid, 0)
+        if minio_service.object_exists(settings.MINIO_BUCKET_PHOTOS, photo_key):
+            url = minio_service.generate_presigned_url(
+                settings.MINIO_BUCKET_PHOTOS, photo_key, expires=3600, method="get_object"
+            )
+            return {"thumbnail_url": url, "source": "photo", "expires_in": 3600}
+
+    raise HTTPException(404, "Превью недоступно")
+
+
+@router.patch("/{model_uuid}")
+async def rename_model(
+    model_uuid: str,
+    body: ModelRenameBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Переименование модели §19.4.3."""
+    model = await _get_owned_model(db, model_uuid, user)
+    model.display_name = body.display_name.strip()
+    await db.commit()
+    return {"uuid": model.uuid, "display_name": model.display_name}
 
 
 @router.post("/{model_uuid}/publish/mark")

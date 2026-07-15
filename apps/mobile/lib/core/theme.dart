@@ -46,20 +46,26 @@ abstract final class AppColors {
   static const surface = Color(0xFFF9FAFB);
   static const textPrimary = Color(0xFF374151);
   static const textSecondary = Color(0xFF6D6C77);
+
+  /// §19.1 тёмная тема
+  static const backgroundDark = Color(0xFF121212);
+  static const surfaceDark = Color(0xFF1E1E1E);
+  static const textPrimaryDark = Color(0xFFE0E0E0);
+  static const textSecondaryDark = Color(0xFF9E9E9E);
 }
 
-FThemeData buildForuiTheme() {
-  final base = FThemes.neutral.light.touch;
+FThemeData buildForuiTheme({bool dark = false}) {
+  final base = dark ? FThemes.neutral.dark.touch : FThemes.neutral.light.touch;
   final colors = base.colors.copyWith(
     primary: AppColors.accent,
     primaryForeground: const Color(0xFFFFFFFF),
     secondary: AppColors.accentBright,
     secondaryForeground: const Color(0xFFFFFFFF),
     destructive: AppColors.error,
-    background: AppColors.background,
-    foreground: AppColors.textPrimary,
-    muted: AppColors.surface,
-    mutedForeground: AppColors.textSecondary,
+    background: dark ? AppColors.backgroundDark : AppColors.background,
+    foreground: dark ? AppColors.textPrimaryDark : AppColors.textPrimary,
+    muted: dark ? AppColors.surfaceDark : AppColors.surface,
+    mutedForeground: dark ? AppColors.textSecondaryDark : AppColors.textSecondary,
   );
   final typography = FTypography.inherit(
     colors: colors,

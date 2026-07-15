@@ -109,6 +109,7 @@ class Order(Base):
     receipt_email: Mapped[str | None] = mapped_column(String(255))
     device_model: Mapped[str | None] = mapped_column(String(64))
     os_version: Mapped[str | None] = mapped_column(String(64))
+    model_display_name: Mapped[str | None] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -128,6 +129,7 @@ class Model3D(Base):
     source_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     source_extend_count: Mapped[int] = mapped_column(Integer, default=0)
     trashed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    display_name: Mapped[str | None] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

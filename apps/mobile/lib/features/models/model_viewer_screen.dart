@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
@@ -38,6 +40,138 @@ class _ModelsScreenState extends State<ModelsScreen> {
   bool _sortNewest = true;
   bool _favoritesOnly = false;
   Set<String> _favorites = {};
+  final Map<String, String?> _thumbnails = {};
+  final Map<String, File?> _localThumbs = {};
+  String? _menuBusyUuid;
+
+  String _modelTitle(Map<String, dynamic> m) {
+    final name = m['display_name']?.toString();
+    if (name != null && name.isNotEmpty) return name;
+    final u = m['uuid']?.toString() ?? '—';
+    return u.length > 8 ? u.substring(0, 8) : u;
+  }
+
+  String _formatDate(String? iso) {
+    final d = DateTime.tryParse(iso ?? '');
+    if (d == null) return '—';
+    return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+  }
+
+  IconData _publishIcon(String? status) {
+    final s = status?.toLowerCase() ?? '';
+    if (s.contains('verified') || s.contains('published')) {
+      return Icons.check_circle;
+    }
+    return Icons.radio_button_unchecked;
+  }
+
+  Color _publishColor(String? status) {
+    final s = status?.toLowerCase() ?? '';
+    if (s.contains('verified') || s.contains('published')) {
+      return AppColors.success;
+    }
+    return AppColors.textSecondary;
+  }
+
+  Future<void> _loadThumb(String uuid) async {
+    final local = await ShootStorage.instance.photoFile(uuid, 0);
+    if (await local.exists()) {
+      if (mounted) {
+        setState(() {
+          _localThumbs[uuid] = local;
+        });
+      }
+      return;
+    }
+    try {
+      final url = await widget.api.modelThumbnailUrl(uuid);
+      if (url != null && mounted) {
+        setState(() => _thumbnails[uuid] = url);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _renameModel(Map<String, dynamic> m) async {
+    final uuid = m['uuid']?.toString();
+    if (uuid == null) return;
+    final ctrl = TextEditingController(text: m['display_name']?.toString() ?? '');
+    final ok = await showFDialog<bool>(
+      context: context,
+      builder: (ctx, style, animation) => FDialog(
+        title: const Text('Переименовать модель'),
+        body: FTextField(
+          control: FTextFieldControl.managed(controller: ctrl),
+          label: const Text('Название'),
+        ),
+        actions: [
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: const Text('Сохранить')),
+        ],
+      ),
+    );
+    if (ok != true || ctrl.text.trim().isEmpty) {
+      ctrl.dispose();
+      return;
+    }
+    try {
+      await widget.api.renameModel(modelUuid: uuid, displayName: ctrl.text.trim());
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+    ctrl.dispose();
+  }
+
+  Future<void> _onMenu(String action, Map<String, dynamic> m) async {
+    final uuid = m['uuid']?.toString();
+    if (uuid == null) return;
+    setState(() => _menuBusyUuid = uuid);
+    try {
+      switch (action) {
+        case 'glb_ozon':
+          final r = await widget.api.downloadModel(modelUuid: uuid, format: 'glb', marketplace: 'ozon');
+          final url = r['download_url']?.toString();
+          if (url != null) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        case 'usdz_wb':
+          final r = await widget.api.downloadModel(modelUuid: uuid, format: 'usdz', marketplace: 'wb');
+          final url = r['download_url']?.toString();
+          if (url != null) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        case 'share':
+          final r = await widget.api.createShareLink(modelUuid: uuid);
+          final link = r['public_url']?.toString() ?? r['url']?.toString();
+          if (link != null && mounted) {
+            await Clipboard.setData(ClipboardData(text: link));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Ссылка скопирована')),
+            );
+          }
+        case 'rate':
+          if (mounted) context.push('/home/models/$uuid', extra: m);
+        case 'pub_link':
+          if (mounted) context.push('/home/models/$uuid', extra: m);
+        case 'regen':
+          if (mounted) context.push('/home/models/$uuid', extra: m);
+        case 'rename':
+          await _renameModel(m);
+        case 'trash':
+          await widget.api.trashModel(modelUuid: uuid);
+          await _load();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Модель перемещена в корзину')),
+            );
+          }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _menuBusyUuid = null);
+    }
+  }
 
   List<Map<String, dynamic>> get _filtered {
     var list = [..._items];
@@ -81,6 +215,10 @@ class _ModelsScreenState extends State<ModelsScreen> {
     try {
       _items = await widget.api.listModels();
       _favorites = await LocalModelLibrary.instance.favorites();
+      for (final m in _items) {
+        final uuid = m['uuid']?.toString();
+        if (uuid != null) _loadThumb(uuid);
+      }
     } catch (e) {
       _error = formatApiError(e);
     }
@@ -191,29 +329,131 @@ class _ModelsScreenState extends State<ModelsScreen> {
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, i) {
                 final m = visible[i];
+                final uuid = m['uuid']?.toString() ?? '';
+                final busy = _menuBusyUuid == uuid;
+                final localThumb = _localThumbs[uuid];
+                final netThumb = _thumbnails[uuid];
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    tileColor: AppColors.surface,
-                    title: Text(m['uuid']?.toString().substring(0, 8) ?? '—'),
-                    subtitle: Text(
-                      '${m['publish_status']?.toString() ?? '—'} · ${m['category']?.toString() ?? ''}',
+                  child: Material(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => context.push('/home/models/$uuid', extra: m),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: SizedBox(
+                                width: 64,
+                                height: 64,
+                                child: localThumb != null
+                                    ? Image.file(localThumb, fit: BoxFit.cover)
+                                    : netThumb != null
+                                        ? Image.network(
+                                            netThumb,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => _thumbPlaceholder(m),
+                                          )
+                                        : _thumbPlaceholder(m),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _modelTitle(m),
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _formatDate(m['created_at']?.toString()),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        _publishIcon(m['publish_status']?.toString()),
+                                        size: 14,
+                                        color: _publishColor(m['publish_status']?.toString()),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          m['publish_status']?.toString() ?? '—',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: _publishColor(m['publish_status']?.toString()),
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuButton<String>(
+                              enabled: !busy,
+                              onSelected: (v) => _onMenu(v, m),
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: 'glb_ozon',
+                                  child: Text(
+                                    'Скачать .glb (Ozon)',
+                                    style: TextStyle(color: AppColors.ozonPrimary),
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'usdz_wb',
+                                  child: Text(
+                                    'Скачать .usdz (Wildberries)',
+                                    style: TextStyle(color: AppColors.accentPurple),
+                                  ),
+                                ),
+                                PopupMenuItem(value: 'share', child: Text('Поделиться')),
+                                PopupMenuItem(value: 'rate', child: Text('Оценить модель')),
+                                PopupMenuItem(
+                                  value: 'pub_link',
+                                  child: Text('Ссылка для верификации'),
+                                ),
+                                PopupMenuItem(value: 'regen', child: Text('Редактировать')),
+                                PopupMenuItem(value: 'rename', child: Text('Переименовать')),
+                                PopupMenuItem(value: 'trash', child: Text('Удалить')),
+                              ],
+                              icon: busy
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.more_vert),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    leading: Icon(
-                      _favorites.contains(m['uuid']?.toString())
-                          ? Icons.star
-                          : Icons.star_border,
-                      color: AppColors.warning,
-                    ),
-                    trailing: const Icon(Icons.view_in_ar),
-                    onTap: () => context.push('/home/models/${m['uuid']}', extra: m),
                   ),
                 );
               },
             ),
         ],
       ),
+    );
+  }
+
+  Widget _thumbPlaceholder(Map<String, dynamic> m) {
+    return Container(
+      color: AppColors.surface,
+      child: Icon(Icons.view_in_ar, color: AppColors.accent.withValues(alpha: 0.6)),
     );
   }
 }

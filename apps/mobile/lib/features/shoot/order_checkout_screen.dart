@@ -159,6 +159,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
         zipSha256: draft.zipSha256,
         upsells: _selectedUpsells.toList(),
         customerName: _fio.text.trim().isEmpty ? null : _fio.text.trim(),
+        modelDisplayName: draft.displayName,
         deviceModel: Platform.isIOS
             ? 'iOS'
             : (Platform.isAndroid ? 'Android' : Platform.operatingSystem),

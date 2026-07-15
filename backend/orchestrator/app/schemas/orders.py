@@ -54,3 +54,4 @@ class OrderCreateRequest(BaseModel):
     # §11.2.5 / §12.4.1 — для алертов сегментации по устройству
     device_model: str | None = Field(default=None, max_length=64)
     os_version: str | None = Field(default=None, max_length=64)
+    model_display_name: str | None = Field(default=None, max_length=120)

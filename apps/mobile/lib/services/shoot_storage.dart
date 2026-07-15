@@ -25,6 +25,7 @@ class ShootDraft {
     this.zipSha256,
     this.photosPrefix,
     this.photosUploaded = false,
+    this.displayName,
   });
 
   final String modelUuid;
@@ -40,6 +41,7 @@ class ShootDraft {
   String? zipSha256;
   String? photosPrefix;
   bool photosUploaded;
+  String? displayName;
 
   Map<String, dynamic> toJson() => {
         'model_uuid': modelUuid,
@@ -55,6 +57,7 @@ class ShootDraft {
         if (zipSha256 != null) 'zip_sha256': zipSha256,
         if (photosPrefix != null) 'photos_prefix': photosPrefix,
         'photos_uploaded': photosUploaded,
+        if (displayName != null && displayName!.isNotEmpty) 'display_name': displayName,
       };
 
   static ShootDraft fromJson(Map<String, dynamic> j) {
@@ -88,6 +91,7 @@ class ShootDraft {
       zipSha256: j['zip_sha256']?.toString(),
       photosPrefix: j['photos_prefix']?.toString(),
       photosUploaded: j['photos_uploaded'] == true,
+      displayName: j['display_name']?.toString(),
     );
   }
 }

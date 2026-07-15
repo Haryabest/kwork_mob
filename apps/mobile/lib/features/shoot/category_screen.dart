@@ -34,6 +34,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   final _scaleH = TextEditingController();
   final _scaleD = TextEditingController();
   final _birth = TextEditingController();
+  final _modelName = TextEditingController();
   double _ghostScale = 1.0;
 
   @override
@@ -50,6 +51,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
     _scaleH.dispose();
     _scaleD.dispose();
     _birth.dispose();
+    _modelName.dispose();
     super.dispose();
   }
 
@@ -266,6 +268,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
       birthDate: birth,
       createdAt: DateTime.now(),
       ghostScale: _ghostScale,
+      displayName: _modelName.text.trim().isEmpty ? null : _modelName.text.trim(),
     );
     await ShootStorage.instance.writeMetadata(draft);
 
@@ -366,6 +369,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
               ],
             ),
           ],
+          const SizedBox(height: 16),
+          FTextField(
+            control: FTextFieldControl.managed(controller: _modelName),
+            label: const Text('Название модели (необязательно)'),
+            hint: 'Например: Кроссовки Nike Air',
+          ),
           const SizedBox(height: 16),
           Text('Тариф', style: context.theme.typography.lg),
           const SizedBox(height: 8),

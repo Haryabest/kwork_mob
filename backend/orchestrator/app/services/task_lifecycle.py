@@ -159,6 +159,7 @@ async def mark_completed(
                 watermark_hmac=watermark_hmac,
                 publish_status="not_published",
                 source_expires_at=default_expires_at(),
+                display_name=order.model_display_name,
             )
         )
     await db.flush()

@@ -5,6 +5,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/locale_controller.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/core/theme_controller.dart';
 import 'package:kwork_mobile/features/models/model_viewer_screen.dart';
 import 'package:kwork_mobile/features/support/faq_support_screen.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
@@ -157,7 +158,7 @@ class _HomeShellState extends State<HomeShell> {
     ];
 
     return Material(
-      color: AppColors.background,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: Stack(
         children: [
           FScaffold(
@@ -366,6 +367,11 @@ class _ProfileTabState extends State<_ProfileTab> {
   String? _setupSecret;
   String? _setupChallenge;
   final _code = TextEditingController();
+  final _oldPass = TextEditingController();
+  final _newPass = TextEditingController();
+  final _newPass2 = TextEditingController();
+  bool _changingPass = false;
+  bool _deleting = false;
 
   static const _prefLabels = {
     'generation_done': 'Генерация готова',
@@ -384,6 +390,9 @@ class _ProfileTabState extends State<_ProfileTab> {
   @override
   void dispose() {
     _code.dispose();
+    _oldPass.dispose();
+    _newPass.dispose();
+    _newPass2.dispose();
     super.dispose();
   }
 
@@ -447,6 +456,119 @@ class _ProfileTabState extends State<_ProfileTab> {
     }
   }
 
+  Future<void> _changePassword() async {
+    final ok = await showFDialog<bool>(
+      context: context,
+      builder: (ctx, style, animation) => FDialog(
+        title: const Text('Изменить пароль'),
+        body: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FTextField(
+              control: FTextFieldControl.managed(controller: _oldPass),
+              label: const Text('Текущий пароль'),
+              obscureText: true,
+            ),
+            const SizedBox(height: 8),
+            FTextField(
+              control: FTextFieldControl.managed(controller: _newPass),
+              label: const Text('Новый пароль'),
+              obscureText: true,
+            ),
+            const SizedBox(height: 8),
+            FTextField(
+              control: FTextFieldControl.managed(controller: _newPass2),
+              label: const Text('Подтверждение'),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: const Text('Сохранить')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    if (_newPass.text.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Минимум 8 символов')),
+      );
+      return;
+    }
+    if (_newPass.text != _newPass2.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Пароли не совпадают')),
+      );
+      return;
+    }
+    setState(() => _changingPass = true);
+    try {
+      await widget.api.changePassword(
+        oldPassword: _oldPass.text,
+        newPassword: _newPass.text,
+      );
+      _oldPass.clear();
+      _newPass.clear();
+      _newPass2.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Пароль изменён')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _changingPass = false);
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final ok = await showFDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx, style, animation) => FDialog(
+        title: const Text('Удалить аккаунт?'),
+        body: const Text(
+          'Все модели и персональные данные будут удалены в течение 30 дней (§2.8.3). '
+          'Финансовые записи анонимизируются и хранятся 5 лет.',
+        ),
+        actions: [
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          FButton(
+            variant: .destructive,
+            onPress: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _deleting = true);
+    try {
+      final res = await widget.api.requestAccountDeletion();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message']?.toString() ?? 'Запрос принят')),
+        );
+        await widget.api.clearTokens();
+        if (context.mounted) context.go('/auth');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -498,6 +620,33 @@ class _ProfileTabState extends State<_ProfileTab> {
         ),
         const SizedBox(height: 8),
         FSelect<String>(
+          label: const Text('Тема оформления §19.14.3'),
+          control: FSelectControl.managed(
+            initial: switch (AppThemeController.instance.preference) {
+              AppThemePreference.light => 'light',
+              AppThemePreference.dark => 'dark',
+              AppThemePreference.system => 'system',
+            },
+            onChange: (v) async {
+              if (v == null) return;
+              await AppThemeController.instance.setPreference(
+                switch (v) {
+                  'light' => AppThemePreference.light,
+                  'dark' => AppThemePreference.dark,
+                  _ => AppThemePreference.system,
+                },
+              );
+              if (mounted) setState(() {});
+            },
+          ),
+          items: const {
+            'Системная': 'system',
+            'Светлая': 'light',
+            'Тёмная': 'dark',
+          },
+        ),
+        const SizedBox(height: 8),
+        FSelect<String>(
           label: const Text('Язык интерфейса'),
           control: FSelectControl.managed(
             initial: AppLocaleController.instance.locale.languageCode,
@@ -524,6 +673,14 @@ class _ProfileTabState extends State<_ProfileTab> {
               onChange: (v) => _togglePref(e.key, v),
             ),
           ),
+        ),
+        const SizedBox(height: 16),
+        Text('Безопасность §19.14.4', style: context.theme.typography.sm),
+        const SizedBox(height: 8),
+        FTile(
+          title: const Text('Изменить пароль'),
+          prefix: const Icon(FIcons.key),
+          onPress: _changingPass ? null : _changePassword,
         ),
         const SizedBox(height: 16),
         Text('Двухфакторная аутентификация', style: context.theme.typography.sm),
@@ -560,7 +717,13 @@ class _ProfileTabState extends State<_ProfileTab> {
             child: const Text('Подтвердить 2FA'),
           ),
         ],
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
+        FButton(
+          variant: .destructive,
+          onPress: _deleting ? null : _deleteAccount,
+          child: Text(_deleting ? '…' : 'Удалить аккаунт'),
+        ),
+        const SizedBox(height: 12),
         FTile(
           title: const Text('Выйти'),
           prefix: const Icon(FIcons.logOut),

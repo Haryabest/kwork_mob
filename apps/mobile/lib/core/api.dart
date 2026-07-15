@@ -464,6 +464,7 @@ class ApiClient {
     String? photosPrefix,
     String? zipSha256,
     String? customerName,
+    String? modelDisplayName,
     String? deviceModel,
     String? osVersion,
   }) async {
@@ -480,10 +481,47 @@ class ApiClient {
       if (photosPrefix != null) 'photos_prefix': photosPrefix,
       if (zipSha256 != null) 'zip_sha256': zipSha256,
       if (customerName != null && customerName.isNotEmpty) 'customer_name': customerName,
+      if (modelDisplayName != null && modelDisplayName.isNotEmpty)
+        'model_display_name': modelDisplayName,
       if (deviceModel != null) 'device_model': deviceModel,
       if (osVersion != null) 'os_version': osVersion,
     });
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    await _dio.post('/auth/password/change', data: {
+      'old_password': oldPassword,
+      'new_password': newPassword,
+    });
+  }
+
+  Future<Map<String, dynamic>> requestAccountDeletion() async {
+    final res = await _dio.post('/user/me/delete-request');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> renameModel({
+    required String modelUuid,
+    required String displayName,
+  }) async {
+    final res = await _dio.patch('/models/$modelUuid', data: {
+      'display_name': displayName,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<String?> modelThumbnailUrl(String modelUuid) async {
+    try {
+      final res = await _dio.get('/models/$modelUuid/thumbnail');
+      return (res.data as Map)['thumbnail_url']?.toString();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
   }
 
   Future<List<Map<String, dynamic>>> listUpsells() async {
