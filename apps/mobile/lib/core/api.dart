@@ -589,9 +589,10 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<List<Map<String, dynamic>>> listOrders({int? companyId}) async {
+  Future<List<Map<String, dynamic>>> listOrders({int? companyId, int? userId}) async {
     final res = await _dio.get('/orders', queryParameters: {
       if (companyId != null) 'company_id': companyId,
+      if (userId != null) 'user_id': userId,
     });
     final items = (res.data as Map)['items'] as List? ?? [];
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -710,6 +711,14 @@ class ApiClient {
       'payment_method': paymentMethod,
     });
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listCompanyTransactions({int? userId}) async {
+    final res = await _dio.get('/company/transactions', queryParameters: {
+      if (userId != null) 'user_id': userId,
+    });
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
   Future<Map<String, dynamic>> listCompanyMembers() async {

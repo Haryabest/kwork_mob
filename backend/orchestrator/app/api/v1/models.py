@@ -101,6 +101,27 @@ class ImportModelBody(BaseModel):
     model_uuid: str | None = Field(default=None, max_length=36)
 
 
+class BulkImportPrepareItem(BaseModel):
+    category: str = "other"
+    display_name: str | None = Field(default=None, max_length=120)
+
+
+class BulkImportPrepareBody(BaseModel):
+    items: list[BulkImportPrepareItem] = Field(min_length=1, max_length=100)
+
+
+class BulkImportItem(BaseModel):
+    glb_key: str = Field(min_length=12, max_length=256)
+    model_uuid: str = Field(min_length=32, max_length=36)
+    category: str = "other"
+    display_name: str | None = Field(default=None, max_length=120)
+
+
+class BulkImportBody(BaseModel):
+    company_id: int
+    items: list[BulkImportItem] = Field(min_length=1, max_length=100)
+
+
 @router.get("/import/price")
 async def import_model_price(
     user: User = Depends(get_current_db_user),
@@ -168,101 +189,146 @@ async def import_model(
     db: AsyncSession = Depends(get_db),
 ):
     """Импорт готового GLB Owner компании (§6.10) — без пайплайна TRELLIS."""
-    import uuid as uuid_lib
-
-    from app.models import AuditLog, Order
     from app.services import access_log as access_svc
-    from app.services.company_balance import charge_company
     from app.services.company_members import get_owned_company
-    from app.services import tariffs as tariff_svc
+    from app.services import import_models as imp_svc
 
     company = await get_owned_company(db, user)
-    import_price = await tariff_svc.get_amount(db, "import_glb")
-    if import_price > 0 and company.balance < import_price:
-        raise HTTPException(402, "Недостаточно средств на балансе компании")
     if body.company_id != company.id:
         raise HTTPException(403, "company_id не совпадает с вашей компанией")
-    if not body.glb_key.startswith("imports/") or not body.glb_key.endswith(".glb"):
-        raise HTTPException(400, "Некорректный glb_key")
-    if body.model_uuid and body.glb_key.split("/")[1] != body.model_uuid:
-        raise HTTPException(400, "model_uuid не совпадает с glb_key")
-    if not minio_service.object_exists(settings.MINIO_BUCKET_MODELS, body.glb_key):
-        raise HTTPException(400, "GLB не найден в MinIO — сначала загрузите файл")
-    model_uuid = body.model_uuid or body.glb_key.split("/")[1]
-    if len(model_uuid) < 32:
-        raise HTTPException(400, "Некорректный UUID модели")
-    existing = await db.scalar(select(Model3D).where(Model3D.uuid == model_uuid))
-    if existing:
-        raise HTTPException(409, "Модель с таким UUID уже существует")
-    glb_url = f"s3://{settings.MINIO_BUCKET_MODELS}/{body.glb_key}"
-    row = Model3D(
-        uuid=model_uuid,
-        order_id=0,
-        user_id=user.id,
-        company_id=company.id,
-        glb_url=glb_url,
-        display_name=(body.display_name or "").strip() or None,
-        publish_status="import_validating",
-    )
-    order = Order(
-        user_id=user.id,
-        company_id=company.id,
-        task_uuid=model_uuid,
+    result = await imp_svc.queue_single_import(
+        db,
+        company=company,
+        user=user,
+        glb_key=body.glb_key,
         category=body.category,
-        tier="small",
-        status="processing",
-        amount=import_price,
-        amount_original=import_price,
-        discount_amount=0,
-        upsell_options=[],
-        upsell_amount=0,
-        model_display_name=row.display_name,
-    )
-    db.add(order)
-    await db.flush()
-    row.order_id = order.id
-    db.add(row)
-    if import_price > 0:
-        await charge_company(
-            db,
-            company=company,
-            amount=import_price,
-            user=user,
-            description=f"Импорт GLB {model_uuid}",
-            order_id=order.id,
-        )
-    from app.services import import_validation as iv
-
-    await iv.enqueue_import_validation(
-        db, model=row, order=order, glb_key=body.glb_key, user=user
-    )
-    db.add(
-        AuditLog(
-            company_id=company.id,
-            user_id=user.id,
-            action="model_import_queued",
-            details={"model_uuid": model_uuid, "category": body.category, "source": "external"},
-        )
+        display_name=body.display_name,
+        model_uuid=body.model_uuid,
     )
     await access_svc.log_access(
         db,
         user_id=user.id,
         company_id=company.id,
-        model_uuid=model_uuid,
+        model_uuid=result["uuid"],
         action="import",
         request=request,
         file_format="glb",
     )
     await db.commit()
-    await db.refresh(row)
+    return result
+
+
+@router.post("/import/bulk/prepare")
+async def prepare_bulk_model_import(
+    body: BulkImportPrepareBody,
+    request: Request,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Presigned PUT для массового импорта до 100 GLB §6.10 / API."""
+    import uuid as uuid_lib
+
+    from app.services import access_log as access_svc
+    from app.services.company_members import get_owned_company
+    from app.services import import_models as imp_svc
+
+    company = await get_owned_company(db, user)
+    unit_price = await imp_svc.get_import_price(db)
+    try:
+        minio_service.ensure_buckets()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"MinIO недоступен: {exc}") from exc
+    items = []
+    for spec in body.items:
+        model_uuid = str(uuid_lib.uuid4())
+        key = f"imports/{model_uuid}/model.glb"
+        url = minio_service.generate_presigned_url(
+            settings.MINIO_BUCKET_MODELS, key, expires=1800, method="put_object"
+        )
+        await access_svc.log_access(
+            db,
+            user_id=user.id,
+            company_id=company.id,
+            model_uuid=model_uuid,
+            action="presign_put",
+            request=request,
+            file_format="glb_import",
+        )
+        items.append(
+            {
+                "model_uuid": model_uuid,
+                "key": key,
+                "upload_url": url,
+                "category": spec.category,
+                "display_name": spec.display_name,
+            }
+        )
+    await db.commit()
     return {
-        "uuid": row.uuid,
-        "glb_url": row.glb_url,
-        "order_id": order.id,
-        "status": "import_validating",
-        "display_name": row.display_name,
-        "source": "external",
-        "import_price_rub": import_price,
+        "company_id": company.id,
+        "import_price_rub": unit_price,
+        "total_price_rub": unit_price * len(items),
+        "expires_in": 1800,
+        "max_bytes": 50 * 1024 * 1024,
+        "items": items,
+    }
+
+
+@router.post("/import/bulk")
+async def bulk_import_models(
+    body: BulkImportBody,
+    request: Request,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Массовый импорт GLB (>10 за раз) §6.10 — до 100 моделей."""
+    from app.services import access_log as access_svc
+    from app.services.company_members import get_owned_company
+    from app.services import import_models as imp_svc
+
+    company = await get_owned_company(db, user)
+    if body.company_id != company.id:
+        raise HTTPException(403, "company_id не совпадает с вашей компанией")
+    unit = await imp_svc.get_import_price(db)
+    total = unit * len(body.items)
+    if total > 0 and company.balance < total:
+        raise HTTPException(402, "Недостаточно средств на балансе компании")
+    created: list[dict] = []
+    errors: list[dict] = []
+    for item in body.items:
+        try:
+            row = await imp_svc.queue_single_import(
+                db,
+                company=company,
+                user=user,
+                glb_key=item.glb_key,
+                category=item.category,
+                display_name=item.display_name,
+                model_uuid=item.model_uuid,
+            )
+            await access_svc.log_access(
+                db,
+                user_id=user.id,
+                company_id=company.id,
+                model_uuid=row["uuid"],
+                action="import",
+                request=request,
+                file_format="glb",
+            )
+            created.append(row)
+        except HTTPException as exc:
+            errors.append({"model_uuid": item.model_uuid, "glb_key": item.glb_key, "error": exc.detail})
+        except Exception as exc:  # noqa: BLE001
+            errors.append(
+                {"model_uuid": item.model_uuid, "glb_key": item.glb_key, "error": str(exc)[:200]}
+            )
+    await db.commit()
+    return {
+        "company_id": company.id,
+        "created": created,
+        "errors": errors,
+        "import_price_rub": unit,
+        "total_charged_rub": unit * len(created),
     }
 
 

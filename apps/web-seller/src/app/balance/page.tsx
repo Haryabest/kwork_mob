@@ -8,6 +8,7 @@ import {
   Loader,
   Modal,
   NumberInput,
+  Select,
   Stack,
   Table,
   Text,
@@ -15,20 +16,30 @@ import {
 import { IconDownload, IconPlus } from '@tabler/icons-react';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SellerShell } from '../../components/SellerShell';
-import { EmptyState, PageHeader, ScrollTable, Surface } from '../../components/ui';
+import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
 import { api, apiMessage } from '../../services/api';
 
 type Tx = {
   id: number;
+  user_id?: number;
   amount: number;
   type: string;
   description?: string;
   created_at?: string;
 };
 
-/** §20.3 Баланс и пополнение */
+type Member = {
+  user_id: number;
+  email?: string | null;
+  full_name?: string | null;
+  role?: string;
+};
+
+const MANAGE_ROLES = new Set(['owner', 'manager']);
+
+/** §20.3 / §8 — баланс и транзакции (личный или компания) */
 export default function BalancePage() {
   const [opened, { open, close }] = useDisclosure(false);
   const [balance, setBalance] = useState(0);
@@ -37,23 +48,56 @@ export default function BalancePage() {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [corporate, setCorporate] = useState(false);
+  const [canFilterAuthors, setCanFilterAuthors] = useState(false);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [authorId, setAuthorId] = useState<string | null>(null);
+
+  const memberLabel = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const m of members) {
+      map.set(m.user_id, m.full_name || m.email || `#${m.user_id}`);
+    }
+    return map;
+  }, [members]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [me, tx] = await Promise.all([
-        api.get<{ balance: number }>('/user/me'),
-        api.get<{ items: Tx[] }>('/user/transactions'),
-      ]);
-      setBalance(me.data.balance ?? 0);
-      setItems(tx.data.items ?? []);
+      const mine = await api.get<{ items: Array<{ id: number; role?: string; balance?: number | null }> }>(
+        '/company/mine',
+      );
+      const company = mine.data.items?.[0];
+      const role = company?.role ?? '';
+      const useCorporate = Boolean(company?.id && company.balance != null);
+      setCorporate(useCorporate);
+      setCanFilterAuthors(MANAGE_ROLES.has(role));
+
+      if (useCorporate && company) {
+        setBalance(company.balance ?? 0);
+        const params: Record<string, string | number> = {};
+        if (authorId) params.user_id = Number(authorId);
+        const tx = await api.get<{ items: Tx[] }>('/company/transactions', { params });
+        setItems(tx.data.items ?? []);
+        if (MANAGE_ROLES.has(role)) {
+          const mem = await api.get<{ items: Member[] }>('/company/members');
+          setMembers(mem.data.items ?? []);
+        }
+      } else {
+        const [me, tx] = await Promise.all([
+          api.get<{ balance: number }>('/user/me'),
+          api.get<{ items: Tx[] }>('/user/transactions'),
+        ]);
+        setBalance(me.data.balance ?? 0);
+        setItems(tx.data.items ?? []);
+      }
       setUpdatedAt(new Date());
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authorId]);
 
   useEffect(() => {
     void load();
@@ -96,9 +140,10 @@ export default function BalancePage() {
 
   function exportCsv() {
     const rows = [
-      ['id', 'date', 'type', 'amount', 'description'],
+      ['id', 'user_id', 'date', 'type', 'amount', 'description'],
       ...items.map((t) => [
         String(t.id),
+        t.user_id != null ? String(t.user_id) : '',
         t.created_at ?? '',
         t.type,
         String(t.amount),
@@ -118,12 +163,18 @@ export default function BalancePage() {
   return (
     <SellerShell>
       <PageHeader
-        title="Баланс и пополнение"
-        description="ЮKassa · СБП и карта · история операций"
+        title={corporate ? 'Баланс компании' : 'Баланс и пополнение'}
+        description={
+          corporate
+            ? 'Корпоративный счёт · история списаний §8'
+            : 'ЮKassa · СБП и карта · история операций'
+        }
         action={
-          <Button leftSection={<IconPlus size={16} />} onClick={open}>
-            Пополнить баланс
-          </Button>
+          !corporate ? (
+            <Button leftSection={<IconPlus size={16} />} onClick={open}>
+              Пополнить баланс
+            </Button>
+          ) : undefined
         }
       />
 
@@ -159,6 +210,23 @@ export default function BalancePage() {
             </Button>
           </Group>
 
+          {corporate && canFilterAuthors && (
+            <FilterRow mb="md">
+              <Select
+                label="Сотрудник §8"
+                placeholder="Все"
+                clearable
+                searchable
+                value={authorId}
+                onChange={setAuthorId}
+                data={members.map((m) => ({
+                  value: String(m.user_id),
+                  label: memberLabel.get(m.user_id) || String(m.user_id),
+                }))}
+              />
+            </FilterRow>
+          )}
+
           <Text fw={700} mb="md">
             История транзакций
           </Text>
@@ -171,6 +239,7 @@ export default function BalancePage() {
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Дата</Table.Th>
+                    {corporate && canFilterAuthors && <Table.Th>Сотрудник</Table.Th>}
                     <Table.Th>Тип</Table.Th>
                     <Table.Th>Сумма</Table.Th>
                     <Table.Th>Описание</Table.Th>
@@ -182,6 +251,9 @@ export default function BalancePage() {
                       <Table.Td>
                         {t.created_at ? new Date(t.created_at).toLocaleString('ru-RU') : '—'}
                       </Table.Td>
+                      {corporate && canFilterAuthors && (
+                        <Table.Td>{memberLabel.get(t.user_id || 0) || t.user_id || '—'}</Table.Td>
+                      )}
                       <Table.Td>
                         <Badge variant="light" color="brand">
                           {t.type}

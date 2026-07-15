@@ -46,6 +46,10 @@ class AppSession extends ChangeNotifier {
   /// Owner компании (§6.10 import, §9.1.2 mass extend).
   bool get isOwner => _corporate && _companyRole == 'owner';
 
+  /// Owner/Manager — фильтр заказов по сотруднику §3.16.2.
+  bool get canFilterCompanyOrders =>
+      _corporate && (isOwner || _companyRole == 'manager');
+
   bool get canCreateOrders => hasPermission('can_create_orders');
 
   bool get canManageTeam =>

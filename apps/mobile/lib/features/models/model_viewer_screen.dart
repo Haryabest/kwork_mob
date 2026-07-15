@@ -105,6 +105,27 @@ class _ModelsScreenState extends State<ModelsScreen> {
     return s == 'import_validating' || s == 'imported' || s == 'import_failed';
   }
 
+  bool _isNsfwBlocked(Map<String, dynamic> m) =>
+      m['order_status']?.toString() == 'blocked_nsfw';
+
+  String _listStatusLabel(Map<String, dynamic> m) {
+    if (_isNsfwBlocked(m)) return 'NSFW блок';
+    return _publishLabel(m['publish_status']?.toString());
+  }
+
+  IconData _listStatusIcon(Map<String, dynamic> m) {
+    if (_isNsfwBlocked(m)) return Icons.block;
+    return _publishIcon(m['publish_status']?.toString());
+  }
+
+  Color _listStatusColor(Map<String, dynamic> m) {
+    if (_isNsfwBlocked(m)) return AppColors.error;
+    return _publishColor(m['publish_status']?.toString());
+  }
+
+  bool _showListBadge(Map<String, dynamic> m) =>
+      _isImportBadge(m['publish_status']?.toString()) || _isNsfwBlocked(m);
+
   Future<void> _loadThumb(String uuid) async {
     final local = await ShootStorage.instance.photoFile(uuid, 0);
     if (await local.exists()) {
@@ -419,26 +440,26 @@ class _ModelsScreenState extends State<ModelsScreen> {
                                   Row(
                                     children: [
                                       Icon(
-                                        _publishIcon(m['publish_status']?.toString()),
+                                        _listStatusIcon(m),
                                         size: 14,
-                                        color: _publishColor(m['publish_status']?.toString()),
+                                        color: _listStatusColor(m),
                                       ),
                                       const SizedBox(width: 4),
-                                      if (_isImportBadge(m['publish_status']?.toString()))
+                                      if (_showListBadge(m))
                                         FBadge(
                                           style: FBadgeStyle.primary(),
                                           child: Text(
-                                            _publishLabel(m['publish_status']?.toString()),
+                                            _listStatusLabel(m),
                                             style: const TextStyle(fontSize: 10),
                                           ),
                                         )
                                       else
                                         Expanded(
                                           child: Text(
-                                            _publishLabel(m['publish_status']?.toString()),
+                                            _listStatusLabel(m),
                                             style: TextStyle(
                                               fontSize: 11,
-                                              color: _publishColor(m['publish_status']?.toString()),
+                                              color: _listStatusColor(m),
                                             ),
                                             overflow: TextOverflow.ellipsis,
                                           ),

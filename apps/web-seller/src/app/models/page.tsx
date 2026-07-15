@@ -16,6 +16,7 @@ type Model = {
   tier?: string | null;
   glb_url?: string | null;
   publish_status?: string;
+  order_status?: string | null;
   created_at?: string;
 };
 
@@ -44,7 +45,8 @@ const PUBLISH_LABEL: Record<string, string> = {
   import_failed: 'Ошибка импорта',
 };
 
-function publishBadgeColor(status?: string | null): string {
+function publishBadgeColor(status?: string | null, orderStatus?: string | null): string {
+  if (orderStatus === 'blocked_nsfw') return 'red';
   switch (status) {
     case 'import_validating':
       return 'blue';
@@ -64,7 +66,8 @@ function publishBadgeColor(status?: string | null): string {
   }
 }
 
-function publishLabel(status?: string | null): string {
+function publishLabel(status?: string | null, orderStatus?: string | null): string {
+  if (orderStatus === 'blocked_nsfw') return 'NSFW блок';
   if (!status) return '—';
   if (PUBLISH_LABEL[status]) return PUBLISH_LABEL[status];
   if (status.includes('verified')) return 'Верифицировано';
@@ -222,8 +225,8 @@ export default function ModelsPage() {
                     <Table.Td>{CATEGORY_LABEL[m.category || ''] || m.category || '—'}</Table.Td>
                     <Table.Td>{m.created_at ? new Date(m.created_at).toLocaleString('ru-RU') : '—'}</Table.Td>
                     <Table.Td>
-                      <Badge variant="light" color={publishBadgeColor(m.publish_status)}>
-                        {publishLabel(m.publish_status)}
+                      <Badge variant="light" color={publishBadgeColor(m.publish_status, m.order_status)}>
+                        {publishLabel(m.publish_status, m.order_status)}
                       </Badge>
                     </Table.Td>
                     <Table.Td>

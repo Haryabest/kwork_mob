@@ -259,7 +259,7 @@ async def list_user_models(
 
     rows = (
         await db.execute(
-            select(Model3D, Order.category, Order.tier)
+            select(Model3D, Order.category, Order.tier, Order.status)
             .outerjoin(Order, Model3D.order_id == Order.id)
             .where(*where)
             .order_by(Model3D.id.desc())
@@ -278,10 +278,11 @@ async def list_user_models(
                 "glb_url": m.glb_url,
                 "usdz_url": m.usdz_url,
                 "publish_status": m.publish_status,
+                "order_status": order_status,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
                 "storage": ms.storage_meta(m),
             }
-            for m, category, tier in rows
+            for m, category, tier, order_status in rows
         ],
         "scope": "company" if company_id else "personal",
     }

@@ -760,18 +760,24 @@ async def company_topup(
 async def company_transactions(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
+    user_id: int | None = Query(default=None, description="Фильтр по сотруднику §8"),
 ):
     from app.services.access import company_for_permission
+    from app.services.company_members import MANAGE_ROLES, get_membership
 
     company = await company_for_permission(db, user, "can_view_finance")
-    rows = (
-        await db.scalars(
-            select(Transaction)
-            .where(Transaction.company_id == company.id)
-            .order_by(Transaction.id.desc())
-            .limit(200)
-        )
-    ).all()
+    stmt = select(Transaction).where(Transaction.company_id == company.id)
+    if user_id is not None:
+        membership = await get_membership(db, company.id, user.id)
+        role = "owner" if company.owner_id == user.id else (membership.role if membership else None)
+        if role not in MANAGE_ROLES and company.owner_id != user.id:
+            raise HTTPException(403, "Фильтр user_id доступен Owner/Manager")
+        if user_id != company.owner_id:
+            author = await get_membership(db, company.id, user_id)
+            if not author:
+                raise HTTPException(400, "user_id не является сотрудником компании")
+        stmt = stmt.where(Transaction.user_id == user_id)
+    rows = (await db.scalars(stmt.order_by(Transaction.id.desc()).limit(200))).all()
     return {
         "company_id": company.id,
         "items": [

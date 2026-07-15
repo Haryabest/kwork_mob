@@ -155,7 +155,7 @@ class _HomeShellState extends State<HomeShell> {
         },
         unread: _unread,
       ),
-      _OrdersTab(api: widget.api),
+      _OrdersTab(api: widget.api, session: session),
       FaqSupportScreen(api: widget.api),
       _ProfileTab(
         api: widget.api,
@@ -387,8 +387,9 @@ class _HomeTabState extends State<_HomeTab> {
 }
 
 class _OrdersTab extends StatefulWidget {
-  const _OrdersTab({required this.api});
+  const _OrdersTab({required this.api, required this.session});
   final ApiClient api;
+  final AppSession session;
 
   @override
   State<_OrdersTab> createState() => _OrdersTabState();
@@ -396,36 +397,128 @@ class _OrdersTab extends StatefulWidget {
 
 class _OrdersTabState extends State<_OrdersTab> {
   List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _members = [];
+  int _authorFilter = -1;
   bool _loading = true;
+
+  static const _statusLabel = {
+    'pending': 'Новый',
+    'awaiting_payment': 'Ожидает оплаты',
+    'queued': 'В очереди',
+    'processing': 'В обработке',
+    'completed': 'Готов',
+    'failed': 'Ошибка',
+    'cancelled': 'Отменён',
+    'paid': 'Оплачен',
+    'blocked_nsfw': 'NSFW блок',
+  };
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    if (widget.session.canFilterCompanyOrders) {
+      try {
+        final m = await widget.api.listCompanyMembers();
+        final raw = m['items'] as List? ?? [];
+        _members = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      } catch (_) {}
+    }
+    await _load();
   }
 
   Future<void> _load() async {
+    setState(() => _loading = true);
     try {
-      _items = await widget.api.listOrders();
+      _items = await widget.api.listOrders(
+        companyId: widget.session.corporate ? widget.session.companyId : null,
+        userId: _authorFilter >= 0 ? _authorFilter : null,
+      );
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
+  }
+
+  String _statusText(String? status) => _statusLabel[status ?? ''] ?? status ?? '—';
+
+  Color _statusColor(String? status) {
+    switch (status) {
+      case 'completed':
+        return AppColors.success;
+      case 'processing':
+      case 'queued':
+        return AppColors.accentBright;
+      case 'failed':
+      case 'blocked_nsfw':
+        return AppColors.error;
+      case 'cancelled':
+        return AppColors.textSecondary;
+      default:
+        return AppColors.textSecondary;
+    }
+  }
+
+  String _authorLabel(int? userId) {
+    if (userId == null) return '';
+    for (final m in _members) {
+      if (m['user_id'] == userId) {
+        return m['full_name']?.toString() ?? m['email']?.toString() ?? '#$userId';
+      }
+    }
+    return '#$userId';
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_items.isEmpty) return const Center(child: Text('Нет заказов'));
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 48, 16, 16),
-      itemCount: _items.length,
-      itemBuilder: (context, i) {
-        final o = _items[i];
-        return FTile(
-          title: Text('#${o['id']} · ${o['status']}'),
-          subtitle: Text('${o['category']} · ${o['tier']}'),
-          onPress: () => context.push('/home/queue/${o['id']}'),
-        );
-      },
+    return Column(
+      children: [
+        if (widget.session.canFilterCompanyOrders && _members.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 48, 16, 0),
+            child: FSelect<int>(
+              label: const Text('Исполнитель §3.16.2'),
+              control: FSelectControl.managed(
+                initial: _authorFilter,
+                onChange: (v) {
+                  setState(() => _authorFilter = v ?? -1);
+                  _load();
+                },
+              ),
+              items: {
+                'Все сотрудники': -1,
+                for (final m in _members)
+                  _authorLabel(m['user_id'] as int?): m['user_id'] as int,
+              },
+            ),
+          ),
+        Expanded(
+          child: _items.isEmpty
+              ? const Center(child: Text('Нет заказов'))
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  itemCount: _items.length,
+                  itemBuilder: (context, i) {
+                    final o = _items[i];
+                    final status = o['status']?.toString();
+                    return FTile(
+                      title: Text('#${o['id']} · ${_statusText(status)}'),
+                      subtitle: Text(
+                        '${o['category']} · ${o['tier']}'
+                        '${widget.session.canFilterCompanyOrders && o['user_id'] != null ? ' · ${_authorLabel(o['user_id'] as int?)}' : ''}',
+                      ),
+                      prefix: Icon(
+                        status == 'blocked_nsfw' ? Icons.block : Icons.shopping_bag_outlined,
+                        color: _statusColor(status),
+                      ),
+                      onPress: () => context.push('/home/queue/${o['id']}'),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }
