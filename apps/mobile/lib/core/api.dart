@@ -640,6 +640,35 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  /// §6.10 — presigned PUT для imports/{uuid}/model.glb (Owner).
+  Future<Map<String, dynamic>> prepareModelImport() async {
+    final res = await _dio.post('/models/import/prepare');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> importModel({
+    required String glbKey,
+    required int companyId,
+    required String category,
+    String? displayName,
+    String? modelUuid,
+  }) async {
+    final res = await _dio.post('/models/import', data: {
+      'glb_key': glbKey,
+      'company_id': companyId,
+      'category': category,
+      if (displayName != null && displayName.isNotEmpty) 'display_name': displayName,
+      if (modelUuid != null) 'model_uuid': modelUuid,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// §9.1.2 — Owner: продлить хранение исходников всех моделей компании.
+  Future<Map<String, dynamic>> massExtendCompanyStorage() async {
+    final res = await _dio.post('/company/models/mass-extend-storage');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> trashModel({required String modelUuid}) async {
     final res = await _dio.post('/models/$modelUuid/trash');
     return Map<String, dynamic>.from(res.data as Map);

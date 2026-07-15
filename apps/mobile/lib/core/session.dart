@@ -21,11 +21,13 @@ class AppSession extends ChangeNotifier {
   String? _dateOfBirth;
   String? _fullName;
   String? _inn;
+  String? _phone;
 
   int? get userId => _userId;
   String? get email => _email;
   String? get fullName => _fullName;
   String? get inn => _inn;
+  String? get phone => _phone;
   double? get balance => _balance;
   bool get corporate => _corporate;
   int? get companyId => _corporate ? _companyId : null;
@@ -40,6 +42,9 @@ class AppSession extends ChangeNotifier {
     if (!_corporate) return true;
     return _permissions[key] == true;
   }
+
+  /// Owner компании (§6.10 import, §9.1.2 mass extend).
+  bool get isOwner => _corporate && _companyRole == 'owner';
 
   bool get canCreateOrders => hasPermission('can_create_orders');
 
@@ -93,6 +98,7 @@ class AppSession extends ChangeNotifier {
     _dateOfBirth = me['date_of_birth']?.toString();
     _fullName = me['full_name']?.toString();
     _inn = me['inn']?.toString();
+    _phone = me['phone']?.toString();
     notifyListeners();
   }
 

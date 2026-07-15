@@ -96,40 +96,96 @@ async def public_share(short_hash: str, db: AsyncSession = Depends(get_db)):
 class ImportModelBody(BaseModel):
     glb_key: str = Field(description="Ключ в MinIO models/, например imports/{uuid}/model.glb")
     category: str = "other"
-    company_id: int | None = None
+    company_id: int
+    display_name: str | None = Field(default=None, max_length=120)
+    model_uuid: str | None = Field(default=None, max_length=36)
+
+
+@router.post("/import/prepare")
+async def prepare_model_import(
+    request: Request,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Presigned PUT imports/{uuid}/model.glb для Owner (§6.10)."""
+    import uuid as uuid_lib
+
+    from app.services import access_log as access_svc
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    model_uuid = str(uuid_lib.uuid4())
+    key = f"imports/{model_uuid}/model.glb"
+    bucket = settings.MINIO_BUCKET_MODELS
+    try:
+        minio_service.ensure_buckets()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"MinIO недоступен: {exc}") from exc
+    url = minio_service.generate_presigned_url(bucket, key, expires=1800, method="put_object")
+    await access_svc.log_access(
+        db,
+        user_id=user.id,
+        company_id=company.id,
+        model_uuid=model_uuid,
+        action="presign_put",
+        request=request,
+        file_format="glb_import",
+    )
+    await db.commit()
+    return {
+        "model_uuid": model_uuid,
+        "company_id": company.id,
+        "key": key,
+        "upload_url": url,
+        "expires_in": 1800,
+        "max_bytes": 50 * 1024 * 1024,
+        "content_type": "model/gltf-binary",
+    }
 
 
 @router.post("/import")
 async def import_model(
     body: ImportModelBody,
+    request: Request,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Импорт готового GLB Owner (§5 / §20) — без пайплайна TRELLIS."""
+    """Импорт готового GLB Owner компании (§6.10) — без пайплайна TRELLIS."""
     import uuid as uuid_lib
 
-    from app.models import Company, Order
+    from app.models import AuditLog, Order
+    from app.services import access_log as access_svc
+    from app.services.company_members import get_owned_company
 
-    if body.company_id:
-        company = await db.get(Company, body.company_id)
-        if not company or company.owner_id != user.id:
-            raise HTTPException(403, "Только Owner компании")
+    company = await get_owned_company(db, user)
+    if body.company_id != company.id:
+        raise HTTPException(403, "company_id не совпадает с вашей компанией")
+    if not body.glb_key.startswith("imports/") or not body.glb_key.endswith(".glb"):
+        raise HTTPException(400, "Некорректный glb_key")
+    if body.model_uuid and body.glb_key.split("/")[1] != body.model_uuid:
+        raise HTTPException(400, "model_uuid не совпадает с glb_key")
     if not minio_service.object_exists(settings.MINIO_BUCKET_MODELS, body.glb_key):
-        raise HTTPException(400, "GLB не найден в MinIO")
-    model_uuid = str(uuid_lib.uuid4())
+        raise HTTPException(400, "GLB не найден в MinIO — сначала загрузите файл")
+    model_uuid = body.model_uuid or body.glb_key.split("/")[1]
+    if len(model_uuid) < 32:
+        raise HTTPException(400, "Некорректный UUID модели")
+    existing = await db.scalar(select(Model3D).where(Model3D.uuid == model_uuid))
+    if existing:
+        raise HTTPException(409, "Модель с таким UUID уже существует")
     glb_url = f"s3://{settings.MINIO_BUCKET_MODELS}/{body.glb_key}"
     row = Model3D(
         uuid=model_uuid,
         order_id=0,
         user_id=user.id,
-        company_id=body.company_id,
+        company_id=company.id,
         glb_url=glb_url,
+        display_name=(body.display_name or "").strip() or None,
         publish_status="imported",
     )
     order = Order(
         user_id=user.id,
-        company_id=body.company_id,
-        task_uuid=str(uuid_lib.uuid4()),
+        company_id=company.id,
+        task_uuid=model_uuid,
         category=body.category,
         tier="small",
         status="completed",
@@ -138,14 +194,39 @@ async def import_model(
         discount_amount=0,
         upsell_options=[],
         upsell_amount=0,
+        model_display_name=row.display_name,
     )
     db.add(order)
     await db.flush()
     row.order_id = order.id
     db.add(row)
+    db.add(
+        AuditLog(
+            company_id=company.id,
+            user_id=user.id,
+            action="model_imported",
+            details={"model_uuid": model_uuid, "category": body.category, "source": "external"},
+        )
+    )
+    await access_svc.log_access(
+        db,
+        user_id=user.id,
+        company_id=company.id,
+        model_uuid=model_uuid,
+        action="import",
+        request=request,
+        file_format="glb",
+    )
     await db.commit()
     await db.refresh(row)
-    return {"uuid": row.uuid, "glb_url": row.glb_url, "order_id": order.id, "status": "imported"}
+    return {
+        "uuid": row.uuid,
+        "glb_url": row.glb_url,
+        "order_id": order.id,
+        "status": "imported",
+        "display_name": row.display_name,
+        "source": "external",
+    }
 
 
 @router.get("/trash")

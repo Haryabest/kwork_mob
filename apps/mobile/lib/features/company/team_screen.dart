@@ -55,6 +55,41 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
     if (mounted) setState(() => _loading = false);
   }
 
+  Future<void> _massExtendStorage() async {
+    final ok = await showFDialog<bool>(
+      context: context,
+      builder: (ctx, style, animation) => FDialog(
+        title: const Text('Продлить все исходники'),
+        body: const Text(
+          'Продлить хранение облачных исходников для всех моделей компании на 30 дней? '
+          'Лимит — 3 продления на модель (§9.1.2).',
+        ),
+        actions: [
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: const Text('Продлить')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      final res = await widget.api.massExtendCompanyStorage();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(res['message']?.toString() ?? 'Готово')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _invite() async {
     final email = _inviteEmail.text.trim();
     if (email.length < 5) return;
@@ -173,6 +208,15 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                         : ListView(
                             padding: const EdgeInsets.all(16),
                             children: [
+                              if (widget.session.isOwner) ...[
+                                FButton(
+                                  variant: .outline,
+                                  onPress: _busy ? null : _massExtendStorage,
+                                  prefix: const Icon(FIcons.clock),
+                                  child: const Text('Продлить все исходники §9.1.2'),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
                               for (final m in _members)
                                 FTile(
                                   title: Text(m['full_name']?.toString() ?? m['email']?.toString() ?? '—'),

@@ -451,6 +451,7 @@ class _ProfileTabState extends State<_ProfileTab> {
   final _newPass2 = TextEditingController();
   final _fullName = TextEditingController();
   final _inn = TextEditingController();
+  final _phone = TextEditingController();
   bool _changingPass = false;
   bool _deleting = false;
 
@@ -476,6 +477,7 @@ class _ProfileTabState extends State<_ProfileTab> {
     _newPass2.dispose();
     _fullName.dispose();
     _inn.dispose();
+    _phone.dispose();
     super.dispose();
   }
 
@@ -483,6 +485,7 @@ class _ProfileTabState extends State<_ProfileTab> {
     final prefs = await widget.push.loadPrefs();
     _fullName.text = widget.session.fullName ?? '';
     _inn.text = widget.session.inn ?? '';
+    _phone.text = widget.session.phone ?? '';
     await ExportPrefsService.instance.load();
     try {
       final st = await widget.api.twoFaStatus();
@@ -547,6 +550,7 @@ class _ProfileTabState extends State<_ProfileTab> {
       final me = await widget.api.updateProfile({
         'full_name': _fullName.text.trim(),
         'inn': _inn.text.trim(),
+        'phone': _phone.text.trim(),
       });
       widget.session.applyMe(me);
       if (mounted) {
@@ -710,6 +714,13 @@ class _ProfileTabState extends State<_ProfileTab> {
                 prefix: const Icon(FIcons.users),
                 onPress: () => context.push('/home/team'),
               ),
+            if (widget.session.isOwner)
+              FTile(
+                title: const Text('Импорт модели'),
+                subtitle: const Text('Готовый GLB · §6.10'),
+                prefix: const Icon(FIcons.upload),
+                onPress: () => context.push('/home/import-model'),
+              ),
             FTile(
               title: const Text('Режим Личный / Компания'),
               prefix: const Icon(FIcons.arrowLeftRight),
@@ -743,6 +754,12 @@ class _ProfileTabState extends State<_ProfileTab> {
           control: FTextFieldControl.managed(controller: _inn),
           label: const Text('ИНН (необязательно) §19.14.1'),
           keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 8),
+        FTextField(
+          control: FTextFieldControl.managed(controller: _phone),
+          label: const Text('Телефон (необязательно) §19.14.1'),
+          keyboardType: TextInputType.phone,
         ),
         const SizedBox(height: 8),
         FButton(onPress: _saveProfile, child: const Text('Сохранить профиль')),

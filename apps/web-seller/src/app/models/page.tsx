@@ -107,9 +107,14 @@ export default function ModelsPage() {
               Корзина
             </Button>
             {isOwner && (
-              <Button variant="light" loading={massBusy} onClick={() => void massExtendAll()} visibleFrom="xs">
-                Продлить все исходники
-              </Button>
+              <>
+                <Button component={Link} href="/models/import" variant="light" visibleFrom="xs">
+                  Импорт GLB
+                </Button>
+                <Button variant="light" loading={massBusy} onClick={() => void massExtendAll()} visibleFrom="xs">
+                  Продлить все исходники
+                </Button>
+              </>
             )}
             <Button component={Link} href="/orders/new" leftSection={<IconPlus size={16} />} visibleFrom="xs">
               Новая

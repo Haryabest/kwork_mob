@@ -9,6 +9,7 @@ import 'package:kwork_mobile/features/company/team_screen.dart';
 import 'package:kwork_mobile/features/profile/balance_screen.dart';
 import 'package:kwork_mobile/features/profile/storage_settings_screen.dart';
 import 'package:kwork_mobile/features/home/home_shell.dart';
+import 'package:kwork_mobile/features/models/import_model_screen.dart';
 import 'package:kwork_mobile/features/models/model_viewer_screen.dart';
 import 'package:kwork_mobile/features/models/trash_screen.dart';
 import 'package:kwork_mobile/features/onboarding/onboarding_screen.dart';
@@ -193,6 +194,13 @@ GoRouter createRouter({
           GoRoute(
             path: 'notifications',
             builder: (context, state) => NotificationsScreen(api: api),
+          ),
+          GoRoute(
+            path: 'import-model',
+            builder: (context, state) => ImportModelScreen(
+              api: api,
+              session: session,
+            ),
           ),
           GoRoute(
             path: 'team',
