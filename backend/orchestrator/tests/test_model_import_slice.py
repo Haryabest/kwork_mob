@@ -50,3 +50,23 @@ def test_validate_import_glb_minimal():
         report = json.loads((root / "import_report.json").read_text(encoding="utf-8"))
         assert report["passed"] is True
         assert report["gltf_version"] == "2.0"
+
+
+def test_generate_thumbnail_512():
+    import sys
+
+    scripts = Path(__file__).resolve().parents[3] / "worker" / "scripts"
+    sys.path.insert(0, str(scripts))
+    from generate_thumbnail import SIZE, main
+    from PIL import Image
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        img = Image.new("RGB", (800, 600), (120, 80, 200))
+        (root / "photos").mkdir()
+        img.save(root / "photos" / "view_00.jpg")
+        main(str(root))
+        out = root / "final" / "thumbnail.jpg"
+        assert out.exists()
+        with Image.open(out) as thumb:
+            assert thumb.size == (SIZE, SIZE)

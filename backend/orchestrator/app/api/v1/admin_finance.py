@@ -23,7 +23,7 @@ router = APIRouter(dependencies=[Depends(_vpn), Depends(require_admin)])
 
 
 class TariffUpdate(BaseModel):
-    amount_rub: int = Field(ge=1)
+    amount_rub: int = Field(ge=0)
     note: str | None = None
 
 

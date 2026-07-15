@@ -101,6 +101,20 @@ class ImportModelBody(BaseModel):
     model_uuid: str | None = Field(default=None, max_length=36)
 
 
+@router.get("/import/price")
+async def import_model_price(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Стоимость импорта GLB §6.10 (admin tariff import_glb)."""
+    from app.services import tariffs as tariff_svc
+    from app.services.company_members import get_owned_company
+
+    await get_owned_company(db, user)
+    amount = await tariff_svc.get_amount(db, "import_glb")
+    return {"code": "import_glb", "amount_rub": amount}
+
+
 @router.post("/import/prepare")
 async def prepare_model_import(
     request: Request,
@@ -112,8 +126,10 @@ async def prepare_model_import(
 
     from app.services import access_log as access_svc
     from app.services.company_members import get_owned_company
+    from app.services import tariffs as tariff_svc
 
     company = await get_owned_company(db, user)
+    import_price = await tariff_svc.get_amount(db, "import_glb")
     model_uuid = str(uuid_lib.uuid4())
     key = f"imports/{model_uuid}/model.glb"
     bucket = settings.MINIO_BUCKET_MODELS
@@ -140,6 +156,7 @@ async def prepare_model_import(
         "expires_in": 1800,
         "max_bytes": 50 * 1024 * 1024,
         "content_type": "model/gltf-binary",
+        "import_price_rub": import_price,
     }
 
 
@@ -155,9 +172,14 @@ async def import_model(
 
     from app.models import AuditLog, Order
     from app.services import access_log as access_svc
+    from app.services.company_balance import charge_company
     from app.services.company_members import get_owned_company
+    from app.services import tariffs as tariff_svc
 
     company = await get_owned_company(db, user)
+    import_price = await tariff_svc.get_amount(db, "import_glb")
+    if import_price > 0 and company.balance < import_price:
+        raise HTTPException(402, "Недостаточно средств на балансе компании")
     if body.company_id != company.id:
         raise HTTPException(403, "company_id не совпадает с вашей компанией")
     if not body.glb_key.startswith("imports/") or not body.glb_key.endswith(".glb"):
@@ -189,8 +211,8 @@ async def import_model(
         category=body.category,
         tier="small",
         status="processing",
-        amount=0,
-        amount_original=0,
+        amount=import_price,
+        amount_original=import_price,
         discount_amount=0,
         upsell_options=[],
         upsell_amount=0,
@@ -200,6 +222,15 @@ async def import_model(
     await db.flush()
     row.order_id = order.id
     db.add(row)
+    if import_price > 0:
+        await charge_company(
+            db,
+            company=company,
+            amount=import_price,
+            user=user,
+            description=f"Импорт GLB {model_uuid}",
+            order_id=order.id,
+        )
     from app.services import import_validation as iv
 
     await iv.enqueue_import_validation(
@@ -231,6 +262,7 @@ async def import_model(
         "status": "import_validating",
         "display_name": row.display_name,
         "source": "external",
+        "import_price_rub": import_price,
     }
 
 

@@ -13,7 +13,7 @@ import {
 import { IconUpload } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import axios from 'axios';
 import { SellerShell } from '../../../components/SellerShell';
@@ -40,6 +40,14 @@ export default function ImportModelPage() {
   const [category, setCategory] = useState<string | null>('other');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [importPriceRub, setImportPriceRub] = useState<number | null>(null);
+
+  useEffect(() => {
+    api
+      .get<{ amount_rub: number }>('/models/import/price')
+      .then(({ data }) => setImportPriceRub(data.amount_rub))
+      .catch(() => {});
+  }, []);
 
   async function submit() {
     if (!file || !category) return;
@@ -55,6 +63,7 @@ export default function ImportModelPage() {
         key: string;
         model_uuid: string;
         company_id: number;
+        import_price_rub?: number;
       }>('/models/import/prepare');
 
       await axios.put(prep.upload_url, file, {
@@ -107,6 +116,13 @@ export default function ImportModelPage() {
             Модель сохраняется как external import — без генерации TRELLIS. После валидации доступна
             для скачивания и публикации как обычная.
           </Text>
+          {importPriceRub != null && (
+            <Text size="sm" fw={600}>
+              {importPriceRub > 0
+                ? `Стоимость импорта: ${importPriceRub} ₽ (списание с баланса компании)`
+                : 'Импорт бесплатный'}
+            </Text>
+          )}
           <TextInput
             label="Название"
             value={displayName}
@@ -137,6 +153,7 @@ export default function ImportModelPage() {
           <Group>
             <Button loading={busy} disabled={!file || !category} onClick={() => void submit()}>
               Импортировать
+              {importPriceRub != null && importPriceRub > 0 ? ` · ${importPriceRub} ₽` : ''}
             </Button>
           </Group>
         </Stack>

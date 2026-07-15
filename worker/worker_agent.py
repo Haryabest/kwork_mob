@@ -64,6 +64,7 @@ SUBPROCESS_STREAM = os.getenv("WORKER_SUBPROCESS_STREAM", "1").lower() in ("1", 
 IMPORT_PIPELINE = [
     "validate_import_glb.py",
     "compress_draco.py",
+    "generate_thumbnail.py",
 ]
 
 PIPELINE_STEPS = [
@@ -74,6 +75,7 @@ PIPELINE_STEPS = [
     "apply_watermark.py",
     "compress_draco.py",
     "validate_glb.py",
+    "generate_thumbnail.py",
 ]
 
 # апсейлы §17 — hole_filling после retopology (на retopo.glb); остальные после validate
@@ -217,6 +219,15 @@ class WorkerAgent:
             bucket,
             key,
             ExtraArgs={"ContentType": "model/gltf-binary"},
+        )
+        return f"s3://{bucket}/{key}"
+
+    def upload_image(self, bucket: str, key: str, local_path: Path) -> str:
+        self.minio.upload_file(
+            str(local_path),
+            bucket,
+            key,
+            ExtraArgs={"ContentType": "image/jpeg"},
         )
         return f"s3://{bucket}/{key}"
 
@@ -492,6 +503,12 @@ class WorkerAgent:
 
             glb_key = f"models/{task_id}/model.glb"
             result_url = await asyncio.to_thread(self.upload_model, models_bucket, glb_key, model_path)
+            thumb_path = task_dir / "final" / "thumbnail.jpg"
+            if thumb_path.exists():
+                thumb_key = f"{task_id}/final/thumbnail.jpg"
+                await asyncio.to_thread(
+                    self.upload_image, models_bucket, thumb_key, thumb_path
+                )
             extras_urls: dict[str, str] = {}
             usdz_path = task_dir / "model.usdz"
             if usdz_path.exists():

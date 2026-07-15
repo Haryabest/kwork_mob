@@ -37,6 +37,23 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
   double _progress = 0;
   bool _busy = false;
   String? _error;
+  int? _importPriceRub;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrice();
+  }
+
+  Future<void> _loadPrice() async {
+    if (!widget.session.isOwner) return;
+    try {
+      final p = await widget.api.importModelPrice();
+      if (mounted) {
+        setState(() => _importPriceRub = (p['amount_rub'] as num?)?.toInt());
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -84,6 +101,8 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
       final key = prep['key']?.toString();
       final modelUuid = prep['model_uuid']?.toString();
       final companyId = (prep['company_id'] as num?)?.toInt() ?? widget.session.companyId!;
+      final priceRub = (prep['import_price_rub'] as num?)?.toInt() ?? _importPriceRub;
+      if (priceRub != null && mounted) setState(() => _importPriceRub = priceRub);
       if (uploadUrl == null || key == null || modelUuid == null) {
         throw StateError('Сервер не вернул параметры загрузки');
       }
@@ -157,6 +176,19 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
             'Загрузите готовый GLB (до 50 МБ). Доступно только Owner компании §6.10.',
             style: TextStyle(color: AppColors.textSecondary),
           ),
+          if (_importPriceRub != null && _importPriceRub! > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Стоимость импорта: $_importPriceRub ₽ (списание с баланса компании)',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ] else if (_importPriceRub == 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Импорт бесплатный',
+              style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w600),
+            ),
+          ],
           const SizedBox(height: 16),
           FTextField(
             control: FTextFieldControl.managed(controller: _nameCtrl),
@@ -203,10 +235,15 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
           const SizedBox(height: 20),
           FButton(
             onPress: (_busy || _filePath == null) ? null : _submit,
-            child: Text(_busy ? 'Импорт…' : 'Импортировать'),
+            child: Text(_busy ? 'Импорт…' : 'Импортировать${priceLabel()}'),
           ),
         ],
       ),
     );
+  }
+
+  String priceLabel() {
+    if (_importPriceRub == null || _importPriceRub! <= 0) return '';
+    return ' · $_importPriceRub ₽';
   }
 }

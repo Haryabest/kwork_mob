@@ -62,6 +62,9 @@ class _ModelsScreenState extends State<ModelsScreen> {
 
   IconData _publishIcon(String? status) {
     final s = status?.toLowerCase() ?? '';
+    if (s == 'import_validating') return Icons.hourglass_top;
+    if (s == 'imported') return Icons.file_download_done;
+    if (s == 'import_failed') return Icons.error_outline;
     if (s.contains('verified') || s.contains('published')) {
       return Icons.check_circle;
     }
@@ -70,10 +73,36 @@ class _ModelsScreenState extends State<ModelsScreen> {
 
   Color _publishColor(String? status) {
     final s = status?.toLowerCase() ?? '';
+    if (s == 'import_validating') return AppColors.accentBright;
+    if (s == 'imported') return AppColors.success;
+    if (s == 'import_failed') return AppColors.error;
     if (s.contains('verified') || s.contains('published')) {
       return AppColors.success;
     }
     return AppColors.textSecondary;
+  }
+
+  String _publishLabel(String? status) {
+    final s = status?.toLowerCase() ?? '';
+    switch (s) {
+      case 'import_validating':
+        return 'Проверка импорта';
+      case 'imported':
+        return 'Импортировано';
+      case 'import_failed':
+        return 'Ошибка импорта';
+      case 'not_published':
+        return 'Не опубликовано';
+      default:
+        if (s.contains('verified')) return 'Проверено';
+        if (s.contains('published')) return 'Опубликовано';
+        return status ?? '—';
+    }
+  }
+
+  bool _isImportBadge(String? status) {
+    final s = status?.toLowerCase() ?? '';
+    return s == 'import_validating' || s == 'imported' || s == 'import_failed';
   }
 
   Future<void> _loadThumb(String uuid) async {
@@ -395,16 +424,25 @@ class _ModelsScreenState extends State<ModelsScreen> {
                                         color: _publishColor(m['publish_status']?.toString()),
                                       ),
                                       const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          m['publish_status']?.toString() ?? '—',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: _publishColor(m['publish_status']?.toString()),
+                                      if (_isImportBadge(m['publish_status']?.toString()))
+                                        FBadge(
+                                          style: FBadgeStyle.primary(),
+                                          child: Text(
+                                            _publishLabel(m['publish_status']?.toString()),
+                                            style: const TextStyle(fontSize: 10),
                                           ),
-                                          overflow: TextOverflow.ellipsis,
+                                        )
+                                      else
+                                        Expanded(
+                                          child: Text(
+                                            _publishLabel(m['publish_status']?.toString()),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: _publishColor(m['publish_status']?.toString()),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
-                                      ),
                                     ],
                                   ),
                                 ],

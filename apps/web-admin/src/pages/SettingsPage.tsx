@@ -64,6 +64,7 @@ export default function SettingsPage() {
   const [tariffs, setTariffs] = useState<Tariff[]>([]);
   const [small, setSmall] = useState<number | string>(2990);
   const [large, setLarge] = useState<number | string>(5990);
+  const [importGlb, setImportGlb] = useState<number | string>(500);
   const [history, setHistory] = useState<Hist[]>([]);
   const [esc, setEsc] = useState<Esc[]>([]);
   const [tgEnabled, setTgEnabled] = useState(false);
@@ -91,8 +92,10 @@ export default function SettingsPage() {
     setTariffs(t.data.items ?? []);
     const sm = t.data.items?.find((x) => x.code === 'small');
     const lg = t.data.items?.find((x) => x.code === 'large');
+    const imp = t.data.items?.find((x) => x.code === 'import_glb');
     if (sm) setSmall(sm.amount_rub);
     if (lg) setLarge(lg.amount_rub);
+    if (imp) setImportGlb(imp.amount_rub);
     setHistory(h.data.items ?? []);
     setTgEnabled(a.data.telegram_enabled);
     setTgChat(a.data.telegram_chat_id ?? '');
@@ -119,6 +122,7 @@ export default function SettingsPage() {
     try {
       await api.patch('/admin/tariffs/small', { amount_rub: Number(small), note: 'admin UI' });
       await api.patch('/admin/tariffs/large', { amount_rub: Number(large), note: 'admin UI' });
+      await api.patch('/admin/tariffs/import_glb', { amount_rub: Number(importGlb), note: 'admin UI' });
       notifications.show({ color: 'teal', message: 'Тарифы сохранены' });
       await load();
     } catch (e) {
@@ -180,9 +184,16 @@ export default function SettingsPage() {
           <Text fw={600} mb="sm">
             Тарифы
           </Text>
-          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <SimpleGrid cols={{ base: 1, sm: 3 }}>
             <NumberInput label="Малый, ₽" value={small} onChange={setSmall} min={1} />
             <NumberInput label="Крупный, ₽" value={large} onChange={setLarge} min={1} />
+            <NumberInput
+              label="Импорт GLB, ₽"
+              description="§6.10 · 0 = бесплатно"
+              value={importGlb}
+              onChange={setImportGlb}
+              min={0}
+            />
           </SimpleGrid>
           <Button mt="md" onClick={() => void saveTariffs()}>
             Сохранить тарифы

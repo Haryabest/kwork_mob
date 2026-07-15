@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Tariff, TariffPriceHistory
 
-DEFAULTS = {"small": ("Малый", 2990), "large": ("Крупный", 5990)}
+DEFAULTS = {
+    "small": ("Малый", 2990),
+    "large": ("Крупный", 5990),
+    "import_glb": ("Импорт GLB", 500),
+}
 
 
 async def ensure_defaults(db: AsyncSession) -> None:
@@ -53,7 +57,9 @@ async def set_amount(
     changed_by: int | None,
     note: str | None = None,
 ) -> Tariff:
-    if amount_rub < 1:
+    if amount_rub < 0:
+        raise HTTPException(400, "Цена не может быть отрицательной")
+    if amount_rub < 1 and code != "import_glb":
         raise HTTPException(400, "Цена должна быть ≥ 1")
     await ensure_defaults(db)
     row = await db.get(Tariff, code)

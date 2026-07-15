@@ -644,6 +644,12 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  /// §6.10 — стоимость импорта GLB (tariff import_glb).
+  Future<Map<String, dynamic>> importModelPrice() async {
+    final res = await _dio.get('/models/import/price');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   /// §6.10 — presigned PUT для imports/{uuid}/model.glb (Owner).
   Future<Map<String, dynamic>> prepareModelImport() async {
     final res = await _dio.post('/models/import/prepare');
