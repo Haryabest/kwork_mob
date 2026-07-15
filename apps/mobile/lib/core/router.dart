@@ -26,6 +26,7 @@ import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
+import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -288,6 +289,9 @@ class _SplashScreenState extends State<_SplashScreen> {
       final cloudRestored = await _maybeCloudRestore();
       if (!mounted) return;
       if (cloudRestored) return;
+      // §3.5.3 — auto-download GLB после потери связи
+      // ignore: unawaited_futures
+      LocalModelLibrary.instance.syncPendingDownloads(widget.api);
       await _goAuthenticatedHome();
     }
   }

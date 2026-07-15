@@ -163,6 +163,47 @@ class LocalModelLibrary {
     } catch (_) {}
   }
 
+  /// §3.5.3 — при запуске / «Мои модели»: скачать GLB для completed без локальной копии.
+  Future<int> syncPendingDownloads(ApiClient api) async {
+    if (!await loadAutoDownloadEnabled()) return 0;
+    var count = 0;
+    final seen = <String>{};
+
+    try {
+      final orders = await api.listOrders();
+      for (final o in orders) {
+        final status = o['status']?.toString().toLowerCase() ?? '';
+        if (status != 'completed') continue;
+        final uuid = o['task_uuid']?.toString();
+        if (uuid == null || uuid.isEmpty || seen.contains(uuid)) continue;
+        seen.add(uuid);
+        if (await hasLocalGlb(uuid)) continue;
+        try {
+          await downloadGlb(api: api, modelUuid: uuid);
+          count++;
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    try {
+      final models = await api.listModels();
+      for (final m in models) {
+        final uuid = m['uuid']?.toString();
+        if (uuid == null || seen.contains(uuid)) continue;
+        final glbUrl = m['glb_url']?.toString();
+        if (glbUrl == null || glbUrl.isEmpty) continue;
+        seen.add(uuid);
+        if (await hasLocalGlb(uuid)) continue;
+        try {
+          await downloadGlb(api: api, modelUuid: uuid);
+          count++;
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    return count;
+  }
+
   Future<File> exportAllZip() async {
     final root = await _modelsRoot();
     final archive = Archive();

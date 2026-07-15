@@ -13,6 +13,7 @@ import 'package:kwork_mobile/services/push_service.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
+import 'package:kwork_mobile/services/upload_progress_service.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -33,6 +34,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
   int _unread = 0;
+  final _homeTabKey = GlobalKey<_HomeTabState>();
 
   @override
   void initState() {
@@ -41,6 +43,7 @@ class _HomeShellState extends State<HomeShell> {
     _refresh();
     _loadUnread();
     LocalModelLibrary.instance.runAutoCleanup();
+    LocalModelLibrary.instance.syncPendingDownloads(widget.api);
   }
 
   Future<void> _loadUnread() async {
@@ -124,6 +127,8 @@ class _HomeShellState extends State<HomeShell> {
     final session = widget.session;
     final pages = [
       _HomeTab(
+        key: _homeTabKey,
+        api: widget.api,
         session: session,
         onSwitchMode: _switchMode,
         onQueue: () => context.push('/home/queue'),
@@ -166,7 +171,11 @@ class _HomeShellState extends State<HomeShell> {
             child: pages[_index],
             footer: FBottomNavigationBar(
             index: _index,
-            onChange: (i) => setState(() => _index = i),
+            onChange: (i) {
+              setState(() => _index = i);
+              if (i == 0) _homeTabKey.currentState?.refreshPending();
+              if (i == 1) LocalModelLibrary.instance.syncPendingDownloads(widget.api);
+            },
             children: [
               FBottomNavigationBarItem(
                 icon: const Icon(FIcons.house),
@@ -209,8 +218,10 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-class _HomeTab extends StatelessWidget {
+class _HomeTab extends StatefulWidget {
   const _HomeTab({
+    super.key,
+    required this.api,
     required this.session,
     required this.onSwitchMode,
     required this.onQueue,
@@ -219,6 +230,7 @@ class _HomeTab extends StatelessWidget {
     this.onShootLink,
   });
 
+  final ApiClient api;
   final AppSession session;
   final VoidCallback onSwitchMode;
   final VoidCallback onQueue;
@@ -227,8 +239,27 @@ class _HomeTab extends StatelessWidget {
   final VoidCallback? onShootLink;
 
   @override
+  State<_HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<_HomeTab> {
+  ({String modelUuid, int uploaded, int total})? _pendingUpload;
+
+  @override
+  void initState() {
+    super.initState();
+    refreshPending();
+  }
+
+  Future<void> refreshPending() async {
+    final summary = await UploadProgressService.instance.pendingSummary();
+    if (mounted) setState(() => _pendingUpload = summary);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final session = widget.session;
     final modeLabel = session.corporate
         ? (session.companyName ?? l10n.corporateMode)
         : l10n.personalMode;
@@ -245,22 +276,69 @@ class _HomeTab extends StatelessWidget {
               ),
             ),
             IconButton(
-              onPressed: onNotifications,
+              onPressed: widget.onNotifications,
               icon: Stack(
                 clipBehavior: Clip.none,
                 children: [
                   const Icon(FIcons.bell),
-                  if (unread > 0)
+                  if (widget.unread > 0)
                     Positioned(
                       right: -6,
                       top: -4,
-                      child: FBadge(child: Text('$unread')),
+                      child: FBadge(child: Text('${widget.unread}')),
                     ),
                 ],
               ),
             ),
           ],
         ),
+        if (_pendingUpload != null) ...[
+          const SizedBox(height: 12),
+          Material(
+            color: AppColors.ozonPrimary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(FIcons.upload, color: AppColors.ozonPrimary, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Незавершённая загрузка фото '
+                          '(${_pendingUpload!.uploaded}/${_pendingUpload!.total})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.ozonPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Загрузка прервалась. Можно продолжить с последнего кадра.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 10),
+                  FButton(
+                    onPress: () async {
+                      await context.push(
+                        '/home/shoot/upload',
+                        extra: _pendingUpload!.modelUuid,
+                      );
+                      await refreshPending();
+                    },
+                    child: const Text('Продолжить загрузку'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 4),
         Text(session.email ?? '…', style: TextStyle(color: AppColors.textSecondary)),
         if (!session.hidePrices && session.balance != null) ...[
@@ -273,21 +351,21 @@ class _HomeTab extends StatelessWidget {
         const SizedBox(height: 16),
         FButton(
           variant: .outline,
-          onPress: onSwitchMode,
+          onPress: widget.onSwitchMode,
           child: Text('Режим: $modeLabel'),
         ),
         const SizedBox(height: 24),
         FButton(
           variant: .secondary,
-          onPress: onQueue,
+          onPress: widget.onQueue,
           prefix: const Icon(FIcons.hourglass),
           child: Text(l10n.queue),
         ),
-        if (onShootLink != null) ...[
+        if (widget.onShootLink != null) ...[
           const SizedBox(height: 12),
           FButton(
             variant: .outline,
-            onPress: onShootLink,
+            onPress: widget.onShootLink,
             prefix: const Icon(FIcons.qrCode),
             child: const Text('Съёмка по ссылке (QR)'),
           ),

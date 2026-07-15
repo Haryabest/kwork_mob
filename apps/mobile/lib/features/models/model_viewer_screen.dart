@@ -216,6 +216,9 @@ class _ModelsScreenState extends State<ModelsScreen> {
     try {
       _items = await widget.api.listModels();
       _favorites = await LocalModelLibrary.instance.favorites();
+      // §3.5.3 — фоновая синхронизация GLB для completed заказов
+      // ignore: unawaited_futures
+      LocalModelLibrary.instance.syncPendingDownloads(widget.api);
       for (final m in _items) {
         final uuid = m['uuid']?.toString();
         if (uuid != null) _loadThumb(uuid);

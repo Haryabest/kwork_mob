@@ -66,4 +66,17 @@ class UploadProgressService {
     }
     return null;
   }
+
+  /// Краткая сводка для баннера на Home (§3.4.1 resume).
+  Future<({String modelUuid, int uploaded, int total})?> pendingSummary() async {
+    final p = await findPending();
+    if (p == null) return null;
+    final uuid = p['_model_uuid']?.toString();
+    if (uuid == null || uuid.isEmpty) return null;
+    return (
+      modelUuid: uuid,
+      uploaded: uploadedIndices(p).length,
+      total: 12,
+    );
+  }
 }
