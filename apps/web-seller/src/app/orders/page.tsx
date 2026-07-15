@@ -13,7 +13,7 @@ import {
 } from '@mantine/core';
 import { IconPlus, IconSearch } from '@tabler/icons-react';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
@@ -26,7 +26,20 @@ type OrderItem = {
   tier: string;
   status: string;
   amount: number;
+  user_id?: number;
   created_at?: string;
+};
+
+type CompanyCtx = {
+  id: number;
+  role: string;
+};
+
+type Member = {
+  user_id: number;
+  email?: string | null;
+  full_name?: string | null;
+  role?: string;
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -38,6 +51,7 @@ const STATUS_LABEL: Record<string, string> = {
   failed: 'Ошибка',
   cancelled: 'Отменён',
   paid: 'Оплачен',
+  blocked_nsfw: 'NSFW блок',
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -47,22 +61,70 @@ const STATUS_COLOR: Record<string, string> = {
   awaiting_payment: 'orange',
   failed: 'red',
   cancelled: 'gray',
+  blocked_nsfw: 'red',
 };
 
-/** §20.6 Заказы */
+const MANAGE_ROLES = new Set(['owner', 'manager']);
+
+/** §20.6 Заказы · §3.16.2 фильтр исполнитель */
 export default function OrdersPage() {
   const [items, setItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<string | null>(null);
+  const [authorId, setAuthorId] = useState<string | null>(null);
+  const [company, setCompany] = useState<CompanyCtx | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+
+  const canFilterAuthors = company != null && MANAGE_ROLES.has(company.role);
+
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: Record<string, string | number> = {};
+      if (company) params.company_id = company.id;
+      if (authorId) params.user_id = Number(authorId);
+      const { data } = await api.get<{ items: OrderItem[] }>('/orders', { params });
+      setItems(data.items ?? []);
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setLoading(false);
+    }
+  }, [company, authorId]);
 
   useEffect(() => {
     api
-      .get<{ items: OrderItem[] }>('/orders')
-      .then(({ data }) => setItems(data.items ?? []))
-      .catch((e) => notifications.show({ color: 'red', message: apiMessage(e) }))
-      .finally(() => setLoading(false));
+      .get<{ items: Array<{ id: number; role?: string }> }>('/company/mine')
+      .then(({ data }) => {
+        const first = data.items?.[0];
+        if (first?.id) {
+          setCompany({ id: first.id, role: first.role || 'member' });
+        }
+      })
+      .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!canFilterAuthors || !company) return;
+    api
+      .get<{ items: Member[] }>('/company/members')
+      .then(({ data }) => setMembers(data.items ?? []))
+      .catch(() => undefined);
+  }, [canFilterAuthors, company]);
+
+  useEffect(() => {
+    void loadOrders();
+  }, [loadOrders]);
+
+  const memberLabel = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const m of members) {
+      const name = m.full_name || m.email || `user #${m.user_id}`;
+      map.set(m.user_id, `${name}${m.role ? ` (${m.role})` : ''}`);
+    }
+    return map;
+  }, [members]);
 
   const filtered = useMemo(() => {
     return items.filter((o) => {
@@ -76,7 +138,11 @@ export default function OrdersPage() {
     <SellerShell>
       <PageHeader
         title="Заказы"
-        description="Статусы генераций, оплата и очередь"
+        description={
+          company
+            ? `Заказы компании · роль ${company.role}`
+            : 'Статусы генераций, оплата и очередь'
+        }
         action={
           <Button component={Link} href="/orders/new" leftSection={<IconPlus size={16} />}>
             Новый заказ
@@ -101,6 +167,20 @@ export default function OrdersPage() {
             onChange={setStatus}
             data={Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))}
           />
+          {canFilterAuthors && (
+            <Select
+              label="Исполнитель §3.16.2"
+              placeholder="Все сотрудники"
+              clearable
+              searchable
+              value={authorId}
+              onChange={setAuthorId}
+              data={members.map((m) => ({
+                value: String(m.user_id),
+                label: memberLabel.get(m.user_id) || String(m.user_id),
+              }))}
+            />
+          )}
         </FilterRow>
 
         {loading ? (
@@ -116,10 +196,11 @@ export default function OrdersPage() {
           />
         ) : (
           <ScrollTable>
-            <Table highlightOnHover miw={680} verticalSpacing="md">
+            <Table highlightOnHover miw={760} verticalSpacing="md">
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Заказ</Table.Th>
+                  {canFilterAuthors && <Table.Th>Исполнитель</Table.Th>}
                   <Table.Th>Создан</Table.Th>
                   <Table.Th>Тариф</Table.Th>
                   <Table.Th>Стоимость</Table.Th>
@@ -140,6 +221,13 @@ export default function OrdersPage() {
                         #{o.id}
                       </Text>
                     </Table.Td>
+                    {canFilterAuthors && (
+                      <Table.Td>
+                        <Text size="sm" c="dimmed">
+                          {memberLabel.get(o.user_id || 0) || (o.user_id ? `#${o.user_id}` : '—')}
+                        </Text>
+                      </Table.Td>
+                    )}
                     <Table.Td>
                       {o.created_at ? new Date(o.created_at).toLocaleString('ru-RU') : '—'}
                     </Table.Td>

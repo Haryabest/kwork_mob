@@ -297,11 +297,11 @@ async def list_members(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    owned = await db.scalar(select(Company).where(Company.owner_id == user.id).limit(1))
-    if not owned:
-        return {"items": [], "company_id": None}
+    from app.services.company_members import require_manager
+
+    company, _role = await require_manager(db, user)
     members = (
-        await db.scalars(select(CompanyMember).where(CompanyMember.company_id == owned.id))
+        await db.scalars(select(CompanyMember).where(CompanyMember.company_id == company.id))
     ).all()
     items = []
     for m in members:
@@ -316,7 +316,7 @@ async def list_members(
                 "monthly_spending_limit": m.monthly_spending_limit,
             }
         )
-    return {"items": items, "company_id": owned.id}
+    return {"items": items, "company_id": company.id}
 
 
 @router.delete("/members/{user_id}")

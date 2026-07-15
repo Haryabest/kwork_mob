@@ -598,15 +598,32 @@ async def list_orders(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
     company_id: int | None = Query(default=None),
+    user_id: int | None = Query(default=None, description="Фильтр исполнитель §3.16.2"),
 ):
-    """§3.5.3 — личные заказы или заказы компании в корпоративном режиме."""
+    """§3.5.3 / §3.16.2 — личные заказы или заказы компании с фильтром по сотруднику."""
     from app.services.access import assert_company_access
+    from app.services.company_members import MANAGE_ROLES, get_membership
 
     if company_id is not None:
-        await assert_company_access(db, user, company_id)
-        stmt = select(Order).where(Order.company_id == company_id)
+        company = await assert_company_access(db, user, company_id)
+        membership = await get_membership(db, company_id, user.id)
+        role = "owner" if company.owner_id == user.id else (membership.role if membership else None)
+        if role in MANAGE_ROLES or company.owner_id == user.id:
+            stmt = select(Order).where(Order.company_id == company_id)
+            if user_id is not None:
+                if user_id != company.owner_id:
+                    author = await get_membership(db, company_id, user_id)
+                    if not author:
+                        raise HTTPException(400, "user_id не является сотрудником компании")
+                stmt = stmt.where(Order.user_id == user_id)
+        else:
+            stmt = select(Order).where(Order.company_id == company_id, Order.user_id == user.id)
     else:
+        if user_id is not None and user_id != user.id:
+            raise HTTPException(403, "Фильтр user_id доступен только для заказов компании")
         stmt = select(Order).where(Order.user_id == user.id)
+        if user_id is not None:
+            stmt = stmt.where(Order.user_id == user_id)
     rows = (await db.scalars(stmt.order_by(Order.id.desc()).limit(100))).all()
     return {
         "items": [
@@ -618,6 +635,7 @@ async def list_orders(
                 "status": o.status,
                 "amount": o.amount,
                 "company_id": o.company_id,
+                "user_id": o.user_id,
                 "created_at": o.created_at.isoformat() if o.created_at else None,
             }
             for o in rows

@@ -249,12 +249,36 @@ async def mark_failed(db: AsyncSession, task_id: str, error: str) -> Order | Non
     if order and order.status not in ("cancelled", "completed"):
         order.status = "failed"
         payload = dict(row.payload_json or {})
-        if payload.get("pipeline") == "import_validate":
+        is_import = payload.get("pipeline") == "import_validate"
+        if is_import:
             model = await db.scalar(select(Model3D).where(Model3D.order_id == order.id))
             if model:
                 model.publish_status = "import_failed"
+        nsfw_blocked = False
+        if is_import and "import_nsfw_detected" in error:
+            try:
+                from app.models import User as UserModel
+                from app.services.nsfw import nsfw_service
+
+                user = await db.get(UserModel, order.user_id)
+                if user:
+                    await nsfw_service.block_order(
+                        db,
+                        order=order,
+                        user=user,
+                        result={
+                            "confidence": 0.0,
+                            "method": "import_glb_texture",
+                            "trigger": error[:120],
+                        },
+                        refund=True,
+                        charged=order.amount > 0,
+                    )
+                    nsfw_blocked = True
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("import nsfw block task=%s: %s", task_id, exc)
         # §6.12: quality gate / фатальный fail → полный возврат
-        if order.amount > 0:
+        if order.amount > 0 and not nsfw_blocked:
             try:
                 from app.models import User as UserModel
                 from app.services.refunds import refund_order

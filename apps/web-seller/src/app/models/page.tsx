@@ -39,7 +39,38 @@ const PUBLISH_LABEL: Record<string, string> = {
   pending_verify: 'На проверке',
   published: 'Опубликовано',
   rejected: 'Отклонено',
+  import_validating: 'Проверка импорта',
+  imported: 'Импортировано',
+  import_failed: 'Ошибка импорта',
 };
+
+function publishBadgeColor(status?: string | null): string {
+  switch (status) {
+    case 'import_validating':
+      return 'blue';
+    case 'imported':
+      return 'teal';
+    case 'import_failed':
+      return 'red';
+    case 'rejected':
+      return 'red';
+    case 'pending_verify':
+      return 'yellow';
+    case 'published':
+      return 'green';
+    default:
+      if (status?.includes('published') || status?.includes('verified')) return 'teal';
+      return 'brand';
+  }
+}
+
+function publishLabel(status?: string | null): string {
+  if (!status) return '—';
+  if (PUBLISH_LABEL[status]) return PUBLISH_LABEL[status];
+  if (status.includes('verified')) return 'Верифицировано';
+  if (status.includes('published')) return 'Опубликовано';
+  return status;
+}
 
 export default function ModelsPage() {
   const [items, setItems] = useState<Model[]>([]);
@@ -175,6 +206,7 @@ export default function ModelsPage() {
                 <Table.Tr>
                   <Table.Th>Модель</Table.Th>
                   <Table.Th>Заказ</Table.Th>
+                  <Table.Th>Категория</Table.Th>
                   <Table.Th>Создана</Table.Th>
                   <Table.Th>Публикация</Table.Th>
                   <Table.Th />
@@ -187,10 +219,11 @@ export default function ModelsPage() {
                       <Text fw={600}>{m.uuid.slice(0, 8)}…</Text>
                     </Table.Td>
                     <Table.Td>#{m.order_id}</Table.Td>
+                    <Table.Td>{CATEGORY_LABEL[m.category || ''] || m.category || '—'}</Table.Td>
                     <Table.Td>{m.created_at ? new Date(m.created_at).toLocaleString('ru-RU') : '—'}</Table.Td>
                     <Table.Td>
-                      <Badge variant="light" color="brand">
-                        {PUBLISH_LABEL[m.publish_status || ''] || m.publish_status || '—'}
+                      <Badge variant="light" color={publishBadgeColor(m.publish_status)}>
+                        {publishLabel(m.publish_status)}
                       </Badge>
                     </Table.Td>
                     <Table.Td>

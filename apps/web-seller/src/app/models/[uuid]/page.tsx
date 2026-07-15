@@ -53,6 +53,9 @@ type Model = {
 
 const PUBLISH_LABEL: Record<string, string> = {
   not_published: 'Не опубликована',
+  import_validating: 'Проверка импорта',
+  imported: 'Импортировано',
+  import_failed: 'Ошибка импорта',
   published_wildberries: 'Опубликовано WB',
   published_ozon: 'Опубликовано Ozon',
   published_both: 'WB + Ozon',

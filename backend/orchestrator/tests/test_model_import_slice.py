@@ -70,3 +70,21 @@ def test_generate_thumbnail_512():
         assert out.exists()
         with Image.open(out) as thumb:
             assert thumb.size == (SIZE, SIZE)
+
+
+def test_scan_import_nsfw_skip_adult():
+    import sys
+
+    scripts = Path(__file__).resolve().parents[3] / "worker" / "scripts"
+    sys.path.insert(0, str(scripts))
+    from scan_import_nsfw import main
+    import json
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "model.glb").write_bytes(_minimal_glb())
+        (root / "task_meta.json").write_text(json.dumps({"category": "adult"}), encoding="utf-8")
+        main(str(root))
+        report = json.loads((root / "import_nsfw_report.json").read_text(encoding="utf-8"))
+        assert report["skipped"] is True
+        assert report["is_nsfw"] is False

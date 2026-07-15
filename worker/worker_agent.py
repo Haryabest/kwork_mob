@@ -63,6 +63,7 @@ SUBPROCESS_STREAM = os.getenv("WORKER_SUBPROCESS_STREAM", "1").lower() in ("1", 
 
 IMPORT_PIPELINE = [
     "validate_import_glb.py",
+    "scan_import_nsfw.py",
     "compress_draco.py",
     "generate_thumbnail.py",
 ]
