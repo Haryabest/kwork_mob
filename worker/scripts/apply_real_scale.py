@@ -43,6 +43,40 @@ def _write_glb(path: Path, gltf: dict, bin_blob: bytes | None = None) -> None:
     path.write_bytes(bytes(out))
 
 
+def _rescale_mesh(glb: Path, w: float, h: float, d: float) -> bool:
+    """Физически масштабирует меш под калиброванный bbox (X=width, Y=height, Z=depth).
+
+    Возвращает True, если геометрия пересчитана и GLB перезаписан. При любой
+    ошибке/недоступности trimesh — False (тогда остаётся metadata-only режим).
+    """
+    try:
+        import numpy as np  # type: ignore
+        import trimesh  # type: ignore
+    except Exception:
+        return False
+    try:
+        scene = trimesh.load(str(glb), force="scene")
+        bounds = getattr(scene, "bounds", None)
+        if bounds is None:
+            return False
+        extents = bounds[1] - bounds[0]  # текущие габариты (x, y, z) в единицах модели
+        targets = (w, h, d)
+        factors = []
+        for cur, tgt in zip(extents, targets):
+            cur = float(cur)
+            factors.append(tgt / cur if cur > 1e-9 and tgt > 0 else 1.0)
+        transform = np.eye(4)
+        transform[0, 0], transform[1, 1], transform[2, 2] = factors
+        scene.apply_transform(transform)
+        data = scene.export(file_type="glb")
+        glb.write_bytes(data)
+        print(f"real_scale mesh rescaled factors={[round(f, 4) for f in factors]}")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        print(f"real_scale rescale skipped: {exc}")
+        return False
+
+
 def main(task_dir: Path) -> None:
     meta = {}
     meta_path = task_dir / "task_meta.json"
@@ -55,10 +89,21 @@ def main(task_dir: Path) -> None:
     glb = task_dir / "model.glb"
     if not glb.exists():
         raise SystemExit("model.glb missing")
+
+    # 1) физически пересчитываем геометрию под реальные размеры (§17)
+    rescaled = _rescale_mesh(glb, w, h, d)
+
+    # 2) фиксируем размеры в extras GLB (для AR/маркетплейсов)
     try:
         gltf, _ = _read_glb_json(glb)
         extras = gltf.setdefault("extras", {})
-        extras["real_scale"] = {"width": w, "height": h, "depth": d, "unit": "m"}
+        extras["real_scale"] = {
+            "width": w,
+            "height": h,
+            "depth": d,
+            "unit": "m",
+            "mesh_rescaled": rescaled,
+        }
         _write_glb(glb, gltf)
     except Exception:
         # fallback sidecar
@@ -66,7 +111,7 @@ def main(task_dir: Path) -> None:
             json.dumps({"width": w, "height": h, "depth": d, "unit": "m"}),
             encoding="utf-8",
         )
-    print(f"real_scale applied {w}x{h}x{d}m")
+    print(f"real_scale applied {w}x{h}x{d}m (mesh_rescaled={rescaled})")
 
 
 if __name__ == "__main__":

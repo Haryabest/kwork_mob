@@ -20,6 +20,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.celery_app.backup_postgres",
         "schedule": crontab(minute=0, hour="*/6"),
     },
+    "push-email-fallback-every-minute": {
+        "task": "app.tasks.celery_app.run_push_email_fallback",
+        "schedule": crontab(minute="*"),
+    },
 }
 
 
@@ -57,6 +61,25 @@ def send_push_notification(user_ids: list[int], title: str, body: str):
 def send_email(to: str, subject: str, body: str):
     """Отправка email (fallback для push)."""
     pass
+
+
+@celery_app.task(name="app.tasks.celery_app.run_push_email_fallback")
+def run_push_email_fallback():
+    """Отложенный email-fallback: push доставлен, но не открыт за 5 мин (§3.4.3)."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.core.redis import get_redis
+    from app.services import push_fallback
+
+    async def _run():
+        redis = await get_redis()
+        async with async_session() as db:
+            result = await push_fallback.process_due(db, redis)
+            await db.commit()
+            return result
+
+    return asyncio.run(_run())
 
 
 @celery_app.task(name="app.tasks.celery_app.run_escalations")

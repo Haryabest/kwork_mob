@@ -222,7 +222,8 @@ async def create_order(
     # §10.8: NSFW до списания и до очереди
     nsfw = await nsfw_service.check_task_photos(body.task_uuid, decryption_key=enc_key)
 
-    base_amount = await tariff_svc.get_amount(db, body.tier.value)
+    order_company = await db.get(Company, body.company_id) if body.company_id else None
+    base_amount = await tariff_svc.get_amount_for_company(db, body.tier.value, order_company)
     upsell_codes, upsell_amount = await upsell_svc.calc_upsell_amount(
         db, [o.value for o in body.upsell_options]
     )

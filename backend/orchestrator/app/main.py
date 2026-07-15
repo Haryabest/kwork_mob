@@ -64,6 +64,24 @@ app.include_router(api_router, prefix="/api/v1")
 app.include_router(ws_router)
 
 
+@app.get("/.well-known/apple-app-site-association", include_in_schema=False)
+async def public_apple_app_site_association():
+    """Universal Links AASA (§3.15) — без VPN/auth."""
+    from fastapi.responses import JSONResponse
+
+    from app.services import applinks as al
+
+    return JSONResponse(content=al.apple_app_site_association_public(), media_type="application/json")
+
+
+@app.get("/.well-known/assetlinks.json", include_in_schema=False)
+async def public_android_assetlinks():
+    """Android App Links (§3.15)."""
+    from app.services import applinks as al
+
+    return al.android_assetlinks()
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "orchestrator"}

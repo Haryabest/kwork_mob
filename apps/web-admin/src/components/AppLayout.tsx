@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   AppShell,
   Badge,
   Box,
@@ -10,6 +11,7 @@ import {
   Text,
   ThemeIcon,
   UnstyledButton,
+  useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import {
@@ -21,12 +23,14 @@ import {
   IconHelp,
   IconLogout,
   IconMessages,
+  IconMoon,
   IconReceipt,
   IconScale,
   IconServer,
   IconSettings,
   IconShield,
   IconStack2,
+  IconSun,
   IconUsers,
   IconUserPlus,
   IconRocket,
@@ -82,6 +86,7 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const [opened, { toggle, close }] = useDisclosure();
   const isMobile = useMediaQuery('(max-width: 767px)');
+  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
 
   const items = NAV.filter((item) => user && item.roles.includes(user.role));
 
@@ -121,6 +126,15 @@ export default function AppLayout() {
             <Badge variant="light" color="brand" visibleFrom="sm" maw={180} style={{ overflow: 'hidden' }}>
               {user?.email}
             </Badge>
+            <ActionIcon
+              variant="light"
+              color="brand"
+              onClick={toggleColorScheme}
+              aria-label="Тема"
+              title={colorScheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+            >
+              {colorScheme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
+            </ActionIcon>
             <UnstyledButton onClick={logout} style={{ minHeight: 44, paddingInline: 8 }}>
               <Group gap={6} wrap="nowrap">
                 <IconLogout size={18} />

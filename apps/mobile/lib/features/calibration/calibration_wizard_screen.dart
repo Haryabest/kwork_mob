@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/scale_calibration_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -10,7 +11,6 @@ import 'package:url_launcher/url_launcher.dart';
 class CalibrationWizardScreen extends StatefulWidget {
   const CalibrationWizardScreen({super.key, this.returnTo});
 
-  /// Куда вернуться после успеха (optional).
   final String? returnTo;
 
   @override
@@ -53,6 +53,7 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
   }
 
   Future<void> _save(Map<String, dynamic> scale, String method) async {
+    final l10n = AppLocalizations.of(context)!;
     setState(() => _busy = true);
     try {
       await _svc.save(
@@ -68,7 +69,7 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Калибровка сохранена на 30 дней')),
+        SnackBar(content: Text(l10n.calSaved)),
       );
       if (widget.returnTo != null && widget.returnTo!.isNotEmpty) {
         context.go(widget.returnTo!);
@@ -81,11 +82,12 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
   }
 
   Future<void> _saveReference(String method, double refW, double refH) async {
+    final l10n = AppLocalizations.of(context)!;
     final wf = double.tryParse(_widthFrac.text.replaceAll(',', '.'));
     final hf = double.tryParse(_heightFrac.text.replaceAll(',', '.'));
     if (wf == null || hf == null || wf <= 0 || hf <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Укажите долю эталона в кадре (0.1–0.9)')),
+        SnackBar(content: Text(l10n.calRefFractionError)),
       );
       return;
     }
@@ -100,12 +102,13 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
   }
 
   Future<void> _saveManual() async {
+    final l10n = AppLocalizations.of(context)!;
     final width = double.tryParse(_w.text.replaceAll(',', '.'));
     final height = double.tryParse(_h.text.replaceAll(',', '.'));
     final depth = double.tryParse(_d.text.replaceAll(',', '.'));
     if (width == null || height == null || depth == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Введите размеры в метрах')),
+        SnackBar(content: Text(l10n.calEnterDimensions)),
       );
       return;
     }
@@ -122,10 +125,11 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final exp = _existing;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Калибровка масштаба'),
+        title: Text(l10n.calibration),
         prefixes: [FHeaderAction.back(onPress: _busy ? null : () => context.pop())],
       ),
       child: ListView(
@@ -133,7 +137,10 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
         children: [
           if (exp != null) ...[
             Text(
-              'Текущая: ${exp['method']} · до ${(exp['expires_at']?.toString() ?? '').substring(0, 10)}',
+              l10n.calCurrentLine(
+                exp['method']?.toString() ?? '—',
+                (exp['expires_at']?.toString() ?? '').substring(0, 10),
+              ),
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 8),
@@ -145,39 +152,36 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
                       await _svc.clear();
                       await _loadExisting();
                     },
-              child: const Text('Сбросить калибровку'),
+              child: Text(l10n.calReset),
             ),
             const SizedBox(height: 20),
           ],
-          const Text(
-            'Для опции «Масштаб 1:1» и мебели нужна калибровка (§3.7). '
-            'Положите эталон рядом с товаром и укажите, какую долю кадра он занимает.',
-          ),
+          Text(l10n.calIntro, style: const TextStyle(color: AppColors.textSecondary)),
           const SizedBox(height: 16),
           FSelect<String>(
-            label: const Text('Способ'),
+            label: Text(l10n.calMethod),
             control: FSelectControl.managed(
               initial: _method,
               onChange: (v) => setState(() => _method = v ?? 'card'),
             ),
-            items: const {
-              'Банковская карта (85.6×54 мм)': 'card',
-              'Лист A4 (210×297 мм)': 'a4',
-              'QR-код с PDF (100 мм)': 'qr',
-              'Ручной ввод размеров (м)': 'manual',
+            items: {
+              l10n.calMethodCard: 'card',
+              l10n.calMethodA4: 'a4',
+              l10n.calMethodQr: 'qr',
+              l10n.calMethodManual: 'manual',
             },
           ),
           const SizedBox(height: 16),
           if (_method == 'card' || _method == 'a4') ...[
             FTextField(
               control: FTextFieldControl.managed(controller: _widthFrac),
-              label: const Text('Ширина эталона в кадре (0.1–0.9)'),
+              label: Text(l10n.calRefWidth),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 8),
             FTextField(
               control: FTextFieldControl.managed(controller: _heightFrac),
-              label: const Text('Высота эталона в кадре (0.1–0.9)'),
+              label: Text(l10n.calRefHeight),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 12),
@@ -193,14 +197,11 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
                             ? ScaleCalibrationService.cardHeightM
                             : ScaleCalibrationService.a4HeightM,
                       ),
-              child: const Text('Сохранить калибровку'),
+              child: Text(l10n.calSave),
             ),
           ],
           if (_method == 'qr') ...[
-            const Text(
-              'Скачайте PDF с QR-кодом эталона (100×100 мм), распечатайте и положите рядом с товаром.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-            ),
+            Text(l10n.calQrIntro, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
             const SizedBox(height: 8),
             FButton(
               variant: .outline,
@@ -208,24 +209,24 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
                 final uri = Uri.parse('https://3d.app/calibration/qr.pdf');
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
               },
-              child: const Text('Скачать PDF QR'),
+              child: Text(l10n.calDownloadPdf),
             ),
             const SizedBox(height: 12),
             FTextField(
               control: FTextFieldControl.managed(controller: _qrSide),
-              label: const Text('Сторона QR (мм)'),
+              label: Text(l10n.calQrSide),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
             const SizedBox(height: 8),
             FTextField(
               control: FTextFieldControl.managed(controller: _widthFrac),
-              label: const Text('QR в кадре — ширина (доля)'),
+              label: Text(l10n.calQrWidth),
             ),
             const SizedBox(height: 8),
             FTextField(
               control: FTextFieldControl.managed(controller: _heightFrac),
-              label: const Text('QR в кадре — высота (доля)'),
+              label: Text(l10n.calQrHeight),
             ),
             const SizedBox(height: 12),
             FButton(
@@ -235,26 +236,26 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
                       final sideMm = double.tryParse(_qrSide.text) ?? 100;
                       _saveReference('qr', sideMm / 1000, sideMm / 1000);
                     },
-              child: const Text('Сохранить по QR'),
+              child: Text(l10n.calSaveQr),
             ),
           ],
           if (_method == 'manual') ...[
             FTextField(
               control: FTextFieldControl.managed(controller: _w),
-              label: const Text('Ширина товара (м)'),
+              label: Text(l10n.calManualW),
             ),
             const SizedBox(height: 8),
             FTextField(
               control: FTextFieldControl.managed(controller: _h),
-              label: const Text('Высота товара (м)'),
+              label: Text(l10n.calManualH),
             ),
             const SizedBox(height: 8),
             FTextField(
               control: FTextFieldControl.managed(controller: _d),
-              label: const Text('Глубина товара (м)'),
+              label: Text(l10n.calManualD),
             ),
             const SizedBox(height: 12),
-            FButton(onPress: _busy ? null : _saveManual, child: const Text('Сохранить')),
+            FButton(onPress: _busy ? null : _saveManual, child: Text(l10n.save)),
           ],
         ],
       ),

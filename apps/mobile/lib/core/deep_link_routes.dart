@@ -28,5 +28,11 @@ String? routeFromDeepLinkUri(Uri? uri) {
     return '${uri.path}?${uri.query}';
   }
   if (uri.path.startsWith('/shoot/')) return uri.path;
+  if (uri.path.startsWith('/orders/')) {
+    final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+    if (segs.length >= 2 && segs[0] == 'orders') {
+      return '/home/queue/${segs[1]}';
+    }
+  }
   return null;
 }

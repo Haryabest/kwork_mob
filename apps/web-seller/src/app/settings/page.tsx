@@ -5,10 +5,12 @@ import {
   Button,
   Checkbox,
   Code,
+  Group,
   Image,
   PasswordInput,
   Stack,
   Switch,
+  Table,
   Tabs,
   Text,
   TextInput,
@@ -17,7 +19,14 @@ import { notifications } from '@mantine/notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { SellerShell } from '../../components/SellerShell';
 import { PageHeader, Surface } from '../../components/ui';
+import { auth } from '../../lib/auth';
 import { api, apiMessage } from '../../services/api';
+
+type SessionItem = {
+  id: number;
+  created_at?: string | null;
+  expires_at?: string | null;
+};
 
 type Me = {
   id: number;
@@ -45,6 +54,7 @@ const PREF_LABELS: Record<string, string> = {
   cleanup: 'Очистка хранилища',
   publish_reminder: 'Напоминание опубликовать',
   topup_failed: 'Ошибка пополнения',
+  support_reply: 'Ответ поддержки',
   email_orders: 'Email о заказах',
   email_balance: 'Email о балансе',
 };
@@ -63,7 +73,18 @@ export default function SettingsPage() {
     null,
   );
   const [totpCode, setTotpCode] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [busy, setBusy] = useState(false);
+
+  const loadSessions = useCallback(async () => {
+    try {
+      const { data } = await api.get<{ items: SessionItem[] }>('/auth/sessions');
+      setSessions(data.items ?? []);
+    } catch {
+      /* сессии не критичны для остальной страницы */
+    }
+  }, []);
 
   const load = useCallback(async () => {
     const [m, s] = await Promise.all([
@@ -83,12 +104,14 @@ export default function SettingsPage() {
       cleanup: false,
       publish_reminder: true,
       topup_failed: true,
+      support_reply: true,
       email_orders: true,
       email_balance: true,
       ...(m.data.notification_prefs || {}),
     });
     setTwoFa(s.data);
-  }, []);
+    void loadSessions();
+  }, [loadSessions]);
 
   useEffect(() => {
     load().catch((e) => notifications.show({ color: 'red', message: apiMessage(e) }));
@@ -166,6 +189,47 @@ export default function SettingsPage() {
       notifications.show({ color: 'red', message: apiMessage(e) });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function disable2fa() {
+    setBusy(true);
+    try {
+      await api.post('/auth/2fa/disable', { code: disableCode.trim() });
+      setDisableCode('');
+      notifications.show({ color: 'teal', message: '2FA отключена' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeSession(id: number) {
+    try {
+      await api.delete(`/auth/sessions/${id}`);
+      notifications.show({ color: 'teal', message: 'Сессия завершена' });
+      await loadSessions();
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    }
+  }
+
+  async function revokeOtherSessions() {
+    const refresh = auth.getRefreshToken();
+    if (!refresh) {
+      notifications.show({ color: 'red', message: 'Нет активной сессии' });
+      return;
+    }
+    try {
+      const { data } = await api.post<{ revoked: number }>('/auth/sessions/revoke-others', {
+        refresh_token: refresh,
+      });
+      notifications.show({ color: 'teal', message: `Завершено сессий: ${data.revoked}` });
+      await loadSessions();
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
     }
   }
 
@@ -247,6 +311,69 @@ export default function SettingsPage() {
                   </Button>
                 </Stack>
               )}
+              {(twoFa?.totp_enabled || me?.totp_enabled) && !twoFa?.owner_2fa_required && (
+                <Stack gap="sm">
+                  <TextInput
+                    label="Код для отключения 2FA"
+                    value={disableCode}
+                    onChange={(e) => setDisableCode(e.currentTarget.value)}
+                    maxLength={8}
+                  />
+                  <Button
+                    color="red"
+                    variant="light"
+                    loading={busy}
+                    disabled={disableCode.trim().length < 6}
+                    onClick={() => void disable2fa()}
+                  >
+                    Отключить 2FA
+                  </Button>
+                </Stack>
+              )}
+
+              <Text fw={600} mt="md">
+                Активные сессии
+              </Text>
+              <Text size="sm" c="#6d6c77">
+                Устройства с активным входом. Завершите незнакомые сессии.
+              </Text>
+              {sessions.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  Нет активных сессий
+                </Text>
+              ) : (
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Начало</Table.Th>
+                      <Table.Th>Действует до</Table.Th>
+                      <Table.Th />
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {sessions.map((s) => (
+                      <Table.Tr key={s.id}>
+                        <Table.Td>
+                          {s.created_at ? new Date(s.created_at).toLocaleString('ru-RU') : '—'}
+                        </Table.Td>
+                        <Table.Td>
+                          {s.expires_at ? new Date(s.expires_at).toLocaleDateString('ru-RU') : '—'}
+                        </Table.Td>
+                        <Table.Td>
+                          <Button size="xs" variant="subtle" color="red" onClick={() => void revokeSession(s.id)}>
+                            Завершить
+                          </Button>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              )}
+              <Group>
+                <Button variant="light" color="red" onClick={() => void revokeOtherSessions()}>
+                  Завершить все, кроме текущей
+                </Button>
+              </Group>
             </Stack>
           </Surface>
         </Tabs.Panel>

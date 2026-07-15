@@ -12,6 +12,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/features/profile/low_balance_banner.dart';
+import 'package:kwork_mobile/core/ws_errors.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/balance_filters_prefs.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -237,12 +238,13 @@ class _BalanceScreenState extends State<BalanceScreen> {
         await _load();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Баланс: ${res['balance']} ₽')),
+            SnackBar(content: Text(AppLocalizations.of(context)!.balDevMock('${res['balance']}'))),
           );
         }
         return;
       }
       if (method == 'sbp_qr') {
+        final l10n = AppLocalizations.of(context)!;
         final qrData = res['confirmation_data']?.toString();
         final paymentId = res['payment_id']?.toString() ?? res['id']?.toString();
         if (qrData != null && qrData.isNotEmpty && mounted) {
@@ -252,7 +254,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
           await showFDialog<void>(
             context: context,
             builder: (ctx, style, animation) => FDialog(
-              title: const Text('СБП — отсканируйте QR'),
+              title: Text(l10n.sbpQrTitle),
               body: SizedBox(
                 width: 260,
                 child: Column(
@@ -262,8 +264,8 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     const SizedBox(height: 8),
                     Text('${amount.toStringAsFixed(0)} ₽', style: context.theme.typography.lg),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Статус обновится автоматически',
+                    Text(
+                      l10n.balStatusAuto,
                       style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     ),
                   ],
@@ -276,9 +278,9 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     Clipboard.setData(ClipboardData(text: qrData));
                     Navigator.pop(ctx);
                   },
-                  child: const Text('Скопировать payload'),
+                  child: Text(l10n.copyPayload),
                 ),
-                FButton(onPress: () => Navigator.pop(ctx), child: const Text('Готово')),
+                FButton(onPress: () => Navigator.pop(ctx), child: Text(l10n.done)),
               ],
             ),
           );
@@ -302,7 +304,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
     final value = int.tryParse(_thresholdCtrl.text.trim());
     if (value == null || value < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Укажите корректный порог')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.balThresholdInvalid)),
       );
       return;
     }
@@ -416,7 +418,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                   if (_corporateFinance) ...[
                     const SizedBox(height: 8),
                     Text(
-                      widget.session.companyName ?? 'Компания',
+                      widget.session.companyName ?? l10n.companyDefaultName,
                       style: TextStyle(color: AppColors.textSecondary),
                     ),
                   ],
@@ -518,7 +520,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                       widget.session.canFilterCompanyOrders &&
                       _members.isNotEmpty) ...[
                     FSelect<int>(
-                      label: const Text('Сотрудник §8'),
+                      label: Text(l10n.balEmployee),
                       control: FSelectControl.managed(
                         initial: _authorFilter,
                         onChange: (v) {
@@ -527,23 +529,23 @@ class _BalanceScreenState extends State<BalanceScreen> {
                         },
                       ),
                       items: {
-                        'Все': -1,
+                        l10n.balAll: -1,
                         for (final m in _members)
                           _authorLabel(m['user_id'] as int?): m['user_id'] as int,
                       },
                     ),
                     const SizedBox(height: 16),
                   ],
-                  Text('Транзакции', style: context.theme.typography.lg),
+                  Text(l10n.balTransactions, style: context.theme.typography.lg),
                   Text(
-                    'Всего: $_total',
+                    l10n.balTotalLine('$_total'),
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
                   if (_tx.isEmpty)
-                    Text('Нет операций', style: TextStyle(color: context.theme.colors.mutedForeground))
+                    Text(l10n.balEmpty, style: TextStyle(color: context.theme.colors.mutedForeground))
                   else
-                    FTileGroup(
+                    Column(
                       children: [
                         for (final t in _tx)
                           _TxTile(
@@ -610,11 +612,12 @@ class _TxTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final tile = FTile(
       title: Text('${tx['type']} · ${tx['amount']} ₽'),
       subtitle: Text(
         [
-          tx['status_label']?.toString() ?? 'Успешно',
+          paymentStatusLabel(l10n, tx['status']?.toString()),
           tx['description']?.toString() ?? '',
         ].where((s) => s.isNotEmpty).join(' · '),
       ),

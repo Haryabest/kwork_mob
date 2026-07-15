@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
-import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 
 /// Корзина моделей 30 дней §3.3.1
 class ModelsTrashScreen extends StatefulWidget {
@@ -41,12 +41,13 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
   }
 
   Future<void> _restore(String uuid) async {
+    final l10n = AppLocalizations.of(context)!;
     setState(() => _busyUuid = uuid);
     try {
       final res = await widget.api.restoreFromTrash(modelUuid: uuid);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(res['message']?.toString() ?? 'Восстановлено')),
+        SnackBar(content: Text(res['message']?.toString() ?? l10n.trashRestored)),
       );
       await _load();
     } catch (e) {
@@ -67,9 +68,10 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Корзина'),
+        title: Text(l10n.trashTitle),
         prefixes: [FHeaderAction.back(onPress: () => context.pop())],
       ),
       child: _loading
@@ -80,14 +82,14 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(_error!, style: const TextStyle(color: AppColors.error)),
-                      FButton(onPress: _load, child: const Text('Повторить')),
+                      FButton(onPress: _load, child: Text(l10n.mvRetry)),
                     ],
                   ),
                 )
               : _items.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'Корзина пуста\nУдалённые модели хранятся 30 дней',
+                        l10n.trashEmpty,
                         textAlign: TextAlign.center,
                       ),
                     )
@@ -101,12 +103,13 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
                           final m = _items[i];
                           final uuid = m['uuid']?.toString() ?? '';
                           final busy = _busyUuid == uuid;
+                          final orderId = m['order_id']?.toString() ?? '—';
                           return FCard.raw(
                             child: FTile(
                               title: Text(uuid.length > 8 ? '${uuid.substring(0, 8)}…' : uuid),
                               subtitle: Text(
-                                'Заказ #${m['order_id']} · в корзине ${_fmt(m['trashed_at']?.toString())}\n'
-                                'Удаление: ${_fmt(m['purge_at']?.toString())}',
+                                '${l10n.trashOrderLine(orderId, _fmt(m['trashed_at']?.toString()))}\n'
+                                '${l10n.trashPurgeLine(_fmt(m['purge_at']?.toString()))}',
                               ),
                               details: busy
                                   ? const SizedBox(
@@ -116,7 +119,7 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
                                     )
                                   : FButton(
                                       onPress: () => _restore(uuid),
-                                      child: const Text('Восстановить'),
+                                      child: Text(l10n.trashRestore),
                                     ),
                               onPress: () => context.push('/home/models/$uuid', extra: m),
                             ),

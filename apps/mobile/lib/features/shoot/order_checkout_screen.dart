@@ -7,6 +7,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/l10n/catalog_l10n.dart';
 import 'package:kwork_mobile/services/scale_calibration_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/widgets/order_limit_dialog.dart';
@@ -39,6 +40,9 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
   final _fio = TextEditingController();
   bool _loading = true;
   bool _busy = false;
+  bool _promoValidating = false;
+  int? _promoDiscount;
+  String? _promoError;
   String? _error;
 
   @override
@@ -56,9 +60,10 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
 
   Future<void> _boot() async {
     try {
+      final l10n = AppLocalizations.of(context)!;
       final draft = await ShootStorage.instance.loadDraft(widget.modelUuid);
       if (draft == null || !draft.photosUploaded) {
-        throw StateError('Сначала загрузите 12 фото');
+        throw StateError(l10n.upload12Photos);
       }
       final cal = await ScaleCalibrationService.instance.scaleForOrder();
       if (cal != null && draft.scaleCalibration == null) {
@@ -106,7 +111,35 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
     return sum;
   }
 
-  int get _total => _baseAmount + _upsellTotal;
+  int get _total => (_baseAmount + _upsellTotal - (_promoDiscount ?? 0)).clamp(0, 1 << 30);
+
+  Future<void> _applyPromo() async {
+    final l10n = AppLocalizations.of(context)!;
+    final code = _promo.text.trim();
+    if (code.isEmpty || _draft == null) return;
+    setState(() {
+      _promoValidating = true;
+      _promoError = null;
+    });
+    try {
+      final res = await widget.api.validatePromocode(
+        code: code,
+        tier: _draft!.tier.api,
+      );
+      if (!mounted) return;
+      setState(() {
+        _promoDiscount = (res['discount_amount'] as num?)?.toInt();
+        _promoValidating = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _promoDiscount = null;
+        _promoError = l10n.checkoutPromoInvalid;
+        _promoValidating = false;
+      });
+    }
+  }
 
   Future<void> _submit({required String payMethod}) async {
     final draft = _draft;
@@ -263,8 +296,8 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text(l10n.checkoutCategory(draft.category.label), style: context.theme.typography.sm),
-          Text(l10n.checkoutTier(draft.tier.label), style: context.theme.typography.sm),
+          Text(l10n.checkoutCategory(draft.category.localized(l10n)), style: context.theme.typography.sm),
+          Text(l10n.checkoutTier(draft.tier.localized(l10n)), style: context.theme.typography.sm),
           if (!hidePrices) ...[
             const SizedBox(height: 12),
             Text(l10n.checkoutBasePrice('$_baseAmount')),
@@ -290,6 +323,11 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
               );
             }),
             const Divider(height: 24),
+            if (_promoDiscount != null && _promoDiscount! > 0)
+              Text(
+                l10n.checkoutPromoApplied('$_promoDiscount'),
+                style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w600),
+              ),
             Text(
               l10n.checkoutTotal('$_total'),
               style: context.theme.typography.lg.copyWith(fontWeight: FontWeight.bold),
@@ -298,8 +336,18 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
             FTextField(
               control: FTextFieldControl.managed(controller: _promo),
               label: Text(l10n.checkoutPromo),
-              enabled: !_busy,
+              enabled: !_busy && !_promoValidating,
             ),
+            const SizedBox(height: 8),
+            FButton(
+              variant: .outline,
+              onPress: (_busy || _promoValidating) ? null : _applyPromo,
+              child: Text(_promoValidating ? '…' : l10n.checkoutPromoApply),
+            ),
+            if (_promoError != null) ...[
+              const SizedBox(height: 8),
+              Text(_promoError!, style: const TextStyle(color: AppColors.error, fontSize: 13)),
+            ],
             const SizedBox(height: 12),
             FTextField(
               control: FTextFieldControl.managed(controller: _fio),

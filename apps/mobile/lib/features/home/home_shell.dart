@@ -14,8 +14,10 @@ import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/push_service.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
 import 'package:kwork_mobile/services/upload_progress_service.dart';
+import 'package:kwork_mobile/widgets/campaign_banner.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({
@@ -41,6 +43,8 @@ class _HomeShellState extends State<HomeShell> {
   late int _index;
   int _unread = 0;
   int? _supportTicketId;
+  List<Map<String, dynamic>> _campaignBanners = [];
+  final _dismissedBannerIds = <int>{};
   final _homeTabKey = GlobalKey<_HomeTabState>();
 
   @override
@@ -51,6 +55,8 @@ class _HomeShellState extends State<HomeShell> {
     widget.session.addListener(_onSession);
     _refresh();
     _loadUnread();
+    _loadCampaignBanners();
+    AnalyticsService.instance.flush(widget.api);
     LocalModelLibrary.instance.runAutoCleanup();
     LocalModelLibrary.instance.syncPendingDownloads(
       widget.api,
@@ -83,6 +89,13 @@ class _HomeShellState extends State<HomeShell> {
       return;
     }
     if (mounted) context.go(route);
+  }
+
+  Future<void> _loadCampaignBanners() async {
+    try {
+      final items = await widget.api.listCampaignBanners();
+      if (mounted) setState(() => _campaignBanners = items);
+    } catch (_) {}
   }
 
   Future<void> _loadUnread() async {
@@ -265,6 +278,30 @@ class _HomeShellState extends State<HomeShell> {
             ],
           ),
         ),
+        if (_index <= 1)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 156,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final b in _campaignBanners)
+                  if (!_dismissedBannerIds.contains(b['id']))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: CampaignBanner(
+                        title: b['title']?.toString() ?? '',
+                        body: b['body']?.toString() ?? '',
+                        onDismiss: () => setState(() {
+                          final id = b['id'];
+                          if (id is int) _dismissedBannerIds.add(id);
+                        }),
+                      ),
+                    ),
+              ],
+            ),
+          ),
         if (_index <= 1)
           Positioned(
             right: 20,
@@ -618,20 +655,45 @@ class _ProfileTabState extends State<_ProfileTab> {
   bool _changingPass = false;
   bool _deleting = false;
 
-  static const _masterPrefLabels = {
-    'push_enabled': 'Push-уведомления',
-    'email_enabled': 'Email-уведомления',
-  };
+  static String _prefLabel(AppLocalizations l, String key) {
+    switch (key) {
+      case 'push_enabled':
+        return l.prefPushEnabled;
+      case 'email_enabled':
+        return l.prefEmailEnabled;
+      case 'generation_done':
+        return l.prefGenerationDone;
+      case 'refund':
+        return l.prefRefund;
+      case 'nsfw_blocked':
+        return l.prefNsfwBlocked;
+      case 'source_expire':
+        return l.prefSourceExpire;
+      case 'cleanup':
+        return l.prefCleanup;
+      case 'publish_reminder':
+        return l.prefPublishReminder;
+      case 'topup_failed':
+        return l.prefTopupFailed;
+      case 'support_reply':
+        return l.prefSupportReply;
+      default:
+        return key;
+    }
+  }
 
-  static const _prefLabels = {
-    'generation_done': 'Генерация готова',
-    'refund': 'Возврат средств',
-    'nsfw_blocked': 'NSFW-блокировка',
-    'source_expire': 'Истечение исходников',
-    'cleanup': 'Очистка хранилища',
-    'publish_reminder': 'Напоминание опубликовать',
-    'topup_failed': 'Ошибка пополнения',
-  };
+  static const _masterPrefKeys = ['push_enabled', 'email_enabled'];
+
+  static const _prefKeys = [
+    'generation_done',
+    'refund',
+    'nsfw_blocked',
+    'source_expire',
+    'cleanup',
+    'publish_reminder',
+    'topup_failed',
+    'support_reply',
+  ];
 
   @override
   void initState() {
@@ -705,7 +767,7 @@ class _ProfileTabState extends State<_ProfileTab> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('2FA включена')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.profile2faEnabledSnackbar)),
         );
       }
     } catch (e) {
@@ -727,7 +789,7 @@ class _ProfileTabState extends State<_ProfileTab> {
       widget.session.applyMe(me);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Профиль сохранён')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.profileSaved)),
         );
       }
     } catch (e) {
@@ -748,48 +810,49 @@ class _ProfileTabState extends State<_ProfileTab> {
   }
 
   Future<void> _changePassword() async {
+    final l10n = AppLocalizations.of(context)!;
     final ok = await showFDialog<bool>(
       context: context,
       builder: (ctx, style, animation) => FDialog(
-        title: const Text('Изменить пароль'),
+        title: Text(l10n.profileChangePasswordTitle),
         body: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             FTextField(
               control: FTextFieldControl.managed(controller: _oldPass),
-              label: const Text('Текущий пароль'),
+              label: Text(l10n.profileCurrentPassword),
               obscureText: true,
             ),
             const SizedBox(height: 8),
             FTextField(
               control: FTextFieldControl.managed(controller: _newPass),
-              label: const Text('Новый пароль'),
+              label: Text(l10n.profileNewPassword),
               obscureText: true,
             ),
             const SizedBox(height: 8),
             FTextField(
               control: FTextFieldControl.managed(controller: _newPass2),
-              label: const Text('Подтверждение'),
+              label: Text(l10n.profilePasswordConfirm),
               obscureText: true,
             ),
           ],
         ),
         actions: [
-          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FButton(onPress: () => Navigator.pop(ctx, true), child: const Text('Сохранить')),
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: Text(l10n.save)),
         ],
       ),
     );
     if (ok != true) return;
     if (_newPass.text.length < 8) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Минимум 8 символов')),
+        SnackBar(content: Text(l10n.profileMinPassword)),
       );
       return;
     }
     if (_newPass.text != _newPass2.text) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пароли не совпадают')),
+        SnackBar(content: Text(l10n.profilePasswordMismatch)),
       );
       return;
     }
@@ -804,7 +867,7 @@ class _ProfileTabState extends State<_ProfileTab> {
       _newPass2.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Пароль изменён')),
+          SnackBar(content: Text(l10n.profilePasswordChanged)),
         );
       }
     } catch (e) {
@@ -819,21 +882,19 @@ class _ProfileTabState extends State<_ProfileTab> {
   }
 
   Future<void> _deleteAccount() async {
+    final l10n = AppLocalizations.of(context)!;
     final ok = await showFDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx, style, animation) => FDialog(
-        title: const Text('Удалить аккаунт?'),
-        body: const Text(
-          'Все модели и персональные данные будут удалены в течение 30 дней (§2.8.3). '
-          'Финансовые записи анонимизируются и хранятся 5 лет.',
-        ),
+        title: Text(l10n.profileDeleteAccountTitle),
+        body: Text(l10n.profileDeleteAccountBody),
         actions: [
-          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
           FButton(
             variant: .destructive,
             onPress: () => Navigator.pop(ctx, true),
-            child: const Text('Удалить'),
+            child: Text(l10n.profileDeleteAccountBtn),
           ),
         ],
       ),
@@ -844,7 +905,7 @@ class _ProfileTabState extends State<_ProfileTab> {
       final res = await widget.api.requestAccountDeletion();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['message']?.toString() ?? 'Запрос принят')),
+          SnackBar(content: Text(res['message']?.toString() ?? l10n.profileDeleteRequestAccepted)),
         );
         await widget.api.clearTokens();
         if (context.mounted) context.go('/auth');
@@ -909,6 +970,19 @@ class _ProfileTabState extends State<_ProfileTab> {
                 prefix: const Icon(FIcons.upload),
                 onPress: () => context.push('/home/import-model'),
               ),
+            if (widget.session.isOwner)
+              FTile(
+                title: Text(l10n.apiKeysTitle),
+                subtitle: Text(l10n.apiKeysSubtitle),
+                prefix: const Icon(FIcons.key),
+                onPress: () => context.push('/home/api-keys'),
+              ),
+            if (widget.session.isOwner)
+              FTile(
+                title: Text(l10n.publishGuideTitle),
+                prefix: const Icon(FIcons.bookOpen),
+                onPress: () => context.push('/home/publish-guide'),
+              ),
             FTile(
               title: Text(l10n.switchMode),
               prefix: const Icon(FIcons.arrowLeftRight),
@@ -926,34 +1000,30 @@ class _ProfileTabState extends State<_ProfileTab> {
               prefix: const Icon(FIcons.ruler),
               onPress: () => context.push('/home/calibration'),
             ),
-            FTile(
-              title: const Text('Язык'),
-              prefix: const Icon(FIcons.languages),
-            ),
           ],
         ),
         const SizedBox(height: 12),
         FTextField(
           control: FTextFieldControl.managed(controller: _fullName),
-          label: const Text('ФИО (необязательно) §19.14.1'),
+          label: Text(l10n.profileFullNameLabel),
         ),
         const SizedBox(height: 8),
         FTextField(
           control: FTextFieldControl.managed(controller: _inn),
-          label: const Text('ИНН (необязательно) §19.14.1'),
+          label: Text(l10n.profileInnLabel),
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 8),
         FTextField(
           control: FTextFieldControl.managed(controller: _phone),
-          label: const Text('Телефон (необязательно) §19.14.1'),
+          label: Text(l10n.profilePhoneLabel),
           keyboardType: TextInputType.phone,
         ),
         const SizedBox(height: 8),
         FButton(onPress: _saveProfile, child: Text(l10n.saveProfile)),
         const SizedBox(height: 16),
         FSelect<String>(
-          label: const Text('Формат экспорта §19.14.3'),
+          label: Text(l10n.profileExportFormat),
           control: FSelectControl.managed(
             initial: ExportPrefsService.instance.format == ExportFormat.usdz ? 'usdz' : 'glb',
             onChange: (v) async {
@@ -961,14 +1031,14 @@ class _ProfileTabState extends State<_ProfileTab> {
               await _saveExportFormat(v == 'usdz' ? ExportFormat.usdz : ExportFormat.glb);
             },
           ),
-          items: const {
-            '.glb (Ozon / универсальный)': 'glb',
-            '.usdz (Wildberries / AR)': 'usdz',
+          items: {
+            l10n.profileExportGlb: 'glb',
+            l10n.profileExportUsdz: 'usdz',
           },
         ),
         const SizedBox(height: 8),
         FSelect<String>(
-          label: const Text('Тема оформления §19.14.3'),
+          label: Text(l10n.profileTheme),
           control: FSelectControl.managed(
             initial: switch (AppThemeController.instance.preference) {
               AppThemePreference.light => 'light',
@@ -987,10 +1057,10 @@ class _ProfileTabState extends State<_ProfileTab> {
               if (mounted) setState(() {});
             },
           ),
-          items: const {
-            'Системная': 'system',
-            'Светлая': 'light',
-            'Тёмная': 'dark',
+          items: {
+            l10n.themeSystem: 'system',
+            l10n.themeLight: 'light',
+            l10n.themeDark: 'dark',
           },
         ),
         const SizedBox(height: 8),
@@ -1012,46 +1082,45 @@ class _ProfileTabState extends State<_ProfileTab> {
           },
         ),
         const SizedBox(height: 16),
-        Text('Уведомления §19.14.3', style: context.theme.typography.sm),
+        Text(l10n.profileNotificationsSection, style: context.theme.typography.sm),
         const SizedBox(height: 8),
-        ..._masterPrefLabels.entries.map(
-          (e) => Padding(
+        ..._masterPrefKeys.map(
+          (key) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: FSwitch(
-              label: Text(e.value),
-              value: _prefs[e.key] ?? true,
-              onChange: (v) => _togglePref(e.key, v),
+              label: Text(_prefLabel(l10n, key)),
+              value: _prefs[key] ?? true,
+              onChange: (v) => _togglePref(key, v),
             ),
           ),
         ),
         const SizedBox(height: 8),
-        Text('События §3.4.3', style: context.theme.typography.xs.copyWith(color: AppColors.textSecondary)),
+        Text(l10n.profileEventsSection, style: context.theme.typography.xs.copyWith(color: AppColors.textSecondary)),
         const SizedBox(height: 8),
-        ..._prefLabels.entries.map(
-          (e) {
+        ..._prefKeys.map(
+          (key) {
             final channelsOn =
                 (_prefs['push_enabled'] ?? true) || (_prefs['email_enabled'] ?? true);
-            final label = e.key == 'topup_failed' ? l10n.prefTopupFailed : e.value;
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: FSwitch(
-                label: Text(label),
-                value: _prefs[e.key] ?? true,
-                onChange: channelsOn ? (v) => _togglePref(e.key, v) : null,
+                label: Text(_prefLabel(l10n, key)),
+                value: _prefs[key] ?? true,
+                onChange: channelsOn ? (v) => _togglePref(key, v) : null,
               ),
             );
           },
         ),
         const SizedBox(height: 16),
-        Text('Безопасность §19.14.4', style: context.theme.typography.sm),
+        Text(l10n.profileSecuritySection, style: context.theme.typography.sm),
         const SizedBox(height: 8),
         FTile(
-          title: const Text('Изменить пароль'),
+          title: Text(l10n.profileChangePassword),
           prefix: const Icon(FIcons.key),
           onPress: _changingPass ? null : _changePassword,
         ),
         const SizedBox(height: 16),
-        Text('Двухфакторная аутентификация §19.14.4', style: context.theme.typography.sm),
+        Text(l10n.profile2faSection, style: context.theme.typography.sm),
         const SizedBox(height: 8),
         Material(
           color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -1070,7 +1139,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        _totpEnabled ? '2FA включена' : '2FA выключена',
+                        _totpEnabled ? l10n.profile2faEnabled : l10n.profile2faDisabled,
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
@@ -1078,20 +1147,20 @@ class _ProfileTabState extends State<_ProfileTab> {
                 ),
                 if (_ownerRequired) ...[
                   const SizedBox(height: 8),
-                  const Text(
-                    'Для Owner 2FA обязательна (§10.7.5)',
-                    style: TextStyle(color: AppColors.warning, fontSize: 13),
+                  Text(
+                    l10n.profile2faOwnerRequired,
+                    style: const TextStyle(color: AppColors.warning, fontSize: 13),
                   ),
                 ],
                 if (_totpEnabled) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'TOTP активен — Google Authenticator, 1Password или аналог.',
+                    l10n.profile2faActiveHint,
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
                 ] else if (_setupSecret != null) ...[
                   const SizedBox(height: 12),
-                  const Text('1. Отсканируйте QR в приложении-аутентификаторе'),
+                  Text(l10n.profile2faStep1),
                   const SizedBox(height: 12),
                   if (_setupUri != null)
                     Center(
@@ -1105,7 +1174,7 @@ class _ProfileTabState extends State<_ProfileTab> {
                       ),
                     ),
                   const SizedBox(height: 12),
-                  const Text('2. Или введите секрет вручную'),
+                  Text(l10n.profile2faStep2),
                   const SizedBox(height: 6),
                   SelectableText(_setupSecret!, style: const TextStyle(fontSize: 12)),
                   const SizedBox(height: 8),
@@ -1115,36 +1184,36 @@ class _ProfileTabState extends State<_ProfileTab> {
                       await Clipboard.setData(ClipboardData(text: _setupSecret!));
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Секрет скопирован')),
+                          SnackBar(content: Text(l10n.profileSecretCopied)),
                         );
                       }
                     },
-                    child: const Text('Скопировать секрет'),
+                    child: Text(l10n.profileCopySecretBtn),
                   ),
                   const SizedBox(height: 12),
-                  const Text('3. Введите 6-значный код'),
+                  Text(l10n.profile2faCodeStep),
                   const SizedBox(height: 8),
                   FTextField(
                     control: FTextFieldControl.managed(controller: _code),
-                    label: const Text('Код подтверждения'),
+                    label: Text(l10n.profile2faCodeLabel),
                     keyboardType: TextInputType.number,
                     maxLength: 6,
                   ),
                   const SizedBox(height: 8),
                   FButton(
                     onPress: _loading2fa ? null : _confirm2fa,
-                    child: Text(_loading2fa ? '…' : 'Подтвердить 2FA'),
+                    child: Text(_loading2fa ? '…' : l10n.profileConfirm2fa),
                   ),
                 ] else ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Защитите аккаунт одноразовыми кодами при входе.',
+                    l10n.profile2faSetupHint,
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
                   const SizedBox(height: 12),
                   FButton(
                     onPress: _loading2fa ? null : _start2fa,
-                    child: Text(_loading2fa ? '…' : 'Настроить 2FA'),
+                    child: Text(_loading2fa ? '…' : l10n.profileEnable2fa),
                   ),
                 ],
               ],
@@ -1155,11 +1224,11 @@ class _ProfileTabState extends State<_ProfileTab> {
         FButton(
           variant: .destructive,
           onPress: _deleting ? null : _deleteAccount,
-          child: Text(_deleting ? '…' : 'Удалить аккаунт'),
+          child: Text(_deleting ? '…' : l10n.profileDeleteAccount),
         ),
         const SizedBox(height: 12),
         FTile(
-          title: const Text('Выйти'),
+          title: Text(l10n.profileLogout),
           prefix: const Icon(FIcons.logOut),
           variant: .destructive,
           onPress: widget.onLogout,

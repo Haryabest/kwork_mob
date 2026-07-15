@@ -21,16 +21,23 @@ def apple_app_site_association() -> dict[str, Any]:
                         {
                             "/": "/shoot/*",
                             "comment": "§3.15 shoot-link Universal Links",
-                        }
+                        },
+                        {
+                            "/": "/orders/*",
+                            "comment": "§3.15 order deep link",
+                        },
                     ],
                 }
             ],
         },
-        "_meta": {
-            "seller_public_url": settings.SELLER_PUBLIC_URL,
-            "team_id_configured": bool((settings.APPLE_TEAM_ID or "").strip()),
-        },
     }
+
+
+def apple_app_site_association_public() -> dict[str, Any]:
+    """Публичный AASA без служебных полей (_meta ломает валидацию Apple)."""
+    data = apple_app_site_association()
+    data.pop("_meta", None)
+    return data
 
 
 def android_assetlinks() -> list[dict[str, Any]]:

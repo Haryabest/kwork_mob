@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 import 'package:kwork_mobile/domain/guided_dome.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 
 enum FrameVerdict { pass, fail }
 
@@ -27,6 +28,14 @@ class FrameQuality {
   final double laplacian;
   final double centerOffset;
   final double fillRatio;
+
+  String localizedReason(AppLocalizations l) {
+    final parts = <String>[];
+    if (blurry) parts.add(l.qaBlur);
+    if (offCenter) parts.add(l.qaOffCenter);
+    if (overexposed) parts.add(l.qaOverexposed);
+    return parts.isEmpty ? l.qaOk : parts.join(', ');
+  }
 
   String get reason {
     final parts = <String>[];
@@ -85,18 +94,18 @@ class QualityAnalyzer {
 
   /// Центрирование + доля контура для блокировки спуска (§3.1.3).
   ({bool centered, bool fillOk, double offset, double fill, String? message})
-      liveGate(List<int> jpegBytes) {
+      liveGate(List<int> jpegBytes, AppLocalizations l) {
     final q = analyzeBytes(0, jpegBytes);
     final centered = q.centerOffset <= kCenterMaxOffsetRatio;
     final fillOk =
         q.fillRatio >= kContourMinFill && q.fillRatio <= kContourMaxFill;
     String? msg;
     if (!centered) {
-      msg = 'Сместите телефон так, чтобы товар был в центре';
+      msg = l.qaCenterPhone;
     } else if (q.fillRatio < kContourMinFill) {
-      msg = 'Приблизьте телефон так, чтобы товар занимал ~70% экрана';
+      msg = l.qaCloser;
     } else if (q.fillRatio > kContourMaxFill) {
-      msg = 'Отдалите телефон так, чтобы товар занимал ~70% экрана';
+      msg = l.qaFarther;
     }
     return (
       centered: centered,

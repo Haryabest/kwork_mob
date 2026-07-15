@@ -10,6 +10,7 @@ import 'package:kwork_mobile/services/storage_space.dart';
 import 'package:kwork_mobile/services/scale_calibration_service.dart';
 import 'package:kwork_mobile/widgets/ghost_mesh.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/l10n/catalog_l10n.dart';
 import 'package:kwork_mobile/widgets/order_limit_dialog.dart';
 
 /// Выбор категории + чек-лист запрещённых (§3.5.4) + age-gate 18+ (§10.8.3).
@@ -239,12 +240,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
         final h = double.tryParse(_scaleH.text.replaceAll(',', '.'));
         final d = double.tryParse(_scaleD.text.replaceAll(',', '.'));
         if (w == null || h == null || d == null) {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Для мебели укажите размеры или выполните калибровку в профиле',
-              ),
-            ),
+            SnackBar(content: Text(l10n.calIntro)),
           );
           return;
         }
@@ -278,9 +276,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
     context.push('/home/shoot/dome', extra: uuid);
   }
 
-  Map<String, ProductCategory> get _categoryItems => {
-        for (final c in ProductCategory.values) c.label: c,
-      };
+  Map<String, ProductCategory> _categoryItems(AppLocalizations l) => productCategorySelectItems(l);
 
   @override
   Widget build(BuildContext context) {
@@ -301,7 +297,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
               initial: _category,
               onChange: (v) => _onCategoryChange(v),
             ),
-            items: _categoryItems,
+            items: _categoryItems(l10n),
           ),
           const SizedBox(height: 20),
           Text(l10n.shootForbiddenCategories, style: context.theme.typography.lg),
@@ -324,7 +320,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
               for (final f in ForbiddenCategory.values)
                 FSelectGroupItemMixin.checkbox(
                   value: f,
-                  label: Text(f.label),
+                  label: Text(f.localized(l10n)),
                 ),
             ],
           ),
@@ -392,7 +388,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
               for (final t in Tier.values)
                 FSelectGroupItemMixin.radio(
                   value: t,
-                  label: Text(hidePrices ? t.label : '${t.label} — ${t.priceRub} ₽'),
+                  label: Text(hidePrices ? t.localized(l10n) : '${t.localized(l10n)} — ${t.priceRub} ₽'),
                 ),
             ],
           ),

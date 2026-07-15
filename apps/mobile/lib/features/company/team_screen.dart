@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
@@ -56,17 +57,15 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _massExtendStorage() async {
+    final l10n = AppLocalizations.of(context)!;
     final ok = await showFDialog<bool>(
       context: context,
       builder: (ctx, style, animation) => FDialog(
-        title: const Text('Продлить все исходники'),
-        body: const Text(
-          'Продлить хранение облачных исходников для всех моделей компании на 30 дней? '
-          'Лимит — 3 продления на модель (§9.1.2).',
-        ),
+        title: Text(l10n.teamExtendAllTitle),
+        body: Text(l10n.teamExtendAllBody),
         actions: [
-          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FButton(onPress: () => Navigator.pop(ctx, true), child: const Text('Продлить')),
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: Text(l10n.teamExtend)),
         ],
       ),
     );
@@ -76,7 +75,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
       final res = await widget.api.massExtendCompanyStorage();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['message']?.toString() ?? 'Готово')),
+          SnackBar(content: Text(res['message']?.toString() ?? l10n.done)),
         );
       }
     } catch (e) {
@@ -91,6 +90,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _invite() async {
+    final l10n = AppLocalizations.of(context)!;
     final email = _inviteEmail.text.trim();
     if (email.length < 5) return;
     setState(() => _busy = true);
@@ -106,7 +106,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
         final url = res['url']?.toString();
         if (url != null) await Clipboard.setData(ClipboardData(text: url));
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Приглашение отправлено${url != null ? ' · ссылка скопирована' : ''}')),
+          SnackBar(content: Text(url != null ? l10n.teamInviteSentWithLink : l10n.teamInviteSent)),
         );
       }
       await _load();
@@ -122,18 +122,19 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _editMember(Map<String, dynamic> m) async {
+    final l10n = AppLocalizations.of(context)!;
     var role = m['role']?.toString() ?? 'photographer';
     var limit = (m['max_concurrent_orders'] as num?)?.toInt() ?? 3;
     final limitCtrl = TextEditingController(text: '$limit');
     final ok = await showFDialog<bool>(
       context: context,
       builder: (ctx, style, animation) => FDialog(
-        title: Text(m['email']?.toString() ?? 'Сотрудник'),
+        title: Text(m['email']?.toString() ?? l10n.teamMemberFallback),
         body: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             FSelect<String>(
-              label: const Text('Роль'),
+              label: Text(l10n.teamRole),
               control: FSelectControl.managed(
                 initial: role,
                 onChange: (v) {
@@ -149,14 +150,14 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
             const SizedBox(height: 8),
             FTextField(
               control: FTextFieldControl.managed(controller: limitCtrl),
-              label: const Text('Лимит активных заказов'),
+              label: Text(l10n.teamActiveOrdersLimit),
               keyboardType: TextInputType.number,
             ),
           ],
         ),
         actions: [
-          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FButton(onPress: () => Navigator.pop(ctx, true), child: const Text('Сохранить')),
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: Text(l10n.save)),
         ],
       ),
     );
@@ -188,11 +189,12 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     if (!widget.session.canManageTeam) {
-      return const FScaffold(child: Center(child: Text('Нет доступа к команде')));
+      return FScaffold(child: Center(child: Text(l10n.teamNoAccess)));
     }
     return FScaffold(
-      header: FHeader(title: const Text('Команда')),
+      header: FHeader(title: Text(l10n.teamTitle)),
       child: _loading
           ? const Center(child: CircularProgressIndicator())
           : FTabs(
@@ -200,11 +202,11 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
               control: FTabControl.managed(controller: _tabs),
               children: [
                 FTabEntry(
-                  label: const Text('Участники'),
+                  label: Text(l10n.teamMembers),
                   child: RefreshIndicator(
                     onRefresh: _load,
                     child: _members.isEmpty
-                        ? ListView(children: const [Center(child: Text('Нет сотрудников'))])
+                        ? ListView(children: [Center(child: Text(l10n.teamNoMembers))])
                         : ListView(
                             padding: const EdgeInsets.all(16),
                             children: [
@@ -213,7 +215,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                   variant: .outline,
                                   onPress: _busy ? null : _massExtendStorage,
                                   prefix: const Icon(FIcons.clock),
-                                  child: const Text('Продлить все исходники §9.1.2'),
+                                  child: Text(l10n.teamExtendAllBtn),
                                 ),
                                 const SizedBox(height: 16),
                               ],
@@ -221,7 +223,10 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                 FTile(
                                   title: Text(m['full_name']?.toString() ?? m['email']?.toString() ?? '—'),
                                   subtitle: Text(
-                                    '${m['role']} · лимит ${m['max_concurrent_orders'] ?? '—'} заказов',
+                                    l10n.teamMemberSubtitle(
+                                      '${m['role']}',
+                                      '${m['max_concurrent_orders'] ?? '—'}',
+                                    ),
                                   ),
                                   onPress: _busy ? null : () => _editMember(m),
                                 ),
@@ -230,12 +235,12 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                   ),
                 ),
                 FTabEntry(
-                  label: const Text('Пригласить'),
+                  label: Text(l10n.teamInvite),
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
                       if (_companyId != null)
-                        Text('Компания #$_companyId', style: context.theme.typography.sm),
+                        Text(l10n.teamCompany('$_companyId'), style: context.theme.typography.sm),
                       const SizedBox(height: 12),
                       FTextField(
                         control: FTextFieldControl.managed(controller: _inviteEmail),
@@ -244,7 +249,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                       ),
                       const SizedBox(height: 12),
                       FSelect<String>(
-                        label: const Text('Роль'),
+                        label: Text(l10n.teamRole),
                         enabled: !_busy,
                         control: FSelectControl.managed(
                           initial: _inviteRole,
@@ -262,7 +267,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                       ),
                       const SizedBox(height: 12),
                       FSelect<int>(
-                        label: const Text('Лимит активных заказов'),
+                        label: Text(l10n.teamActiveOrdersLimit),
                         enabled: !_busy,
                         control: FSelectControl.managed(
                           initial: _inviteLimit,
@@ -283,17 +288,17 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                       const SizedBox(height: 16),
                       FButton(
                         onPress: _busy ? null : _invite,
-                        child: Text(_busy ? '…' : 'Отправить приглашение'),
+                        child: Text(_busy ? '…' : l10n.teamSendInvite),
                       ),
                     ],
                   ),
                 ),
                 FTabEntry(
-                  label: const Text('Аудит'),
+                  label: Text(l10n.teamAudit),
                   child: RefreshIndicator(
                     onRefresh: _load,
                     child: _audit.isEmpty
-                        ? ListView(children: const [Center(child: Text('Нет записей аудита'))])
+                        ? ListView(children: [Center(child: Text(l10n.teamNoAudit))])
                         : ListView(
                             padding: const EdgeInsets.all(16),
                             children: [

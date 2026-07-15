@@ -9,6 +9,17 @@ import {
   IconServer,
   IconStar,
 } from '@tabler/icons-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { api, getApiError } from '../services/api';
 
 type Dashboard = {
@@ -342,11 +353,29 @@ export default function DashboardPage() {
               </Text>
             ))}
             <Text fw={600} mt="lg">
-              Поступление (48ч)
+              Поступление заказов (48ч)
             </Text>
-            <Text size="sm" c="dimmed">
-              точек: {(ops?.orders_hourly ?? []).length}
-            </Text>
+            {(ops?.orders_hourly ?? []).length === 0 ? (
+              <Text size="sm" c="dimmed">
+                Нет данных
+              </Text>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart
+                  data={(ops?.orders_hourly ?? []).map((p) => ({
+                    hour: (p.hour ?? '').toString().slice(5, 16).replace('T', ' '),
+                    count: p.count,
+                  }))}
+                  margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,87,184,0.12)" />
+                  <XAxis dataKey="hour" tick={{ fontSize: 10 }} minTickGap={24} />
+                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="count" stroke="#0057b8" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       )}
@@ -476,16 +505,23 @@ export default function DashboardPage() {
               <Text fw={600}>Оценки 1–5 (доля ≥4: {share45}%, цель ≥80%)</Text>
             </Group>
             <Progress value={share45} mt="md" color={share45 >= 80 ? 'teal' : 'orange'} />
-            <Table mt="md" withTableBorder>
-              <Table.Tbody>
-                {Object.entries(data?.quality.rating_distribution ?? {}).map(([k, v]) => (
-                  <Table.Tr key={k}>
-                    <Table.Td>{k}★</Table.Td>
-                    <Table.Td>{v}</Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
+            {Object.keys(data?.quality.rating_distribution ?? {}).length > 0 && (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart
+                  data={[5, 4, 3, 2, 1].map((star) => ({
+                    star: `${star}★`,
+                    count: Number((data?.quality.rating_distribution ?? {})[String(star)] ?? 0),
+                  }))}
+                  margin={{ top: 12, right: 8, left: -20, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,87,184,0.12)" />
+                  <XAxis dataKey="star" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#0381E9" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
             <Text size="sm" c="dimmed" mt="sm">
               всего: {data?.quality.rating_total ?? 0}
             </Text>

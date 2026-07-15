@@ -4,6 +4,7 @@ import './styles/vektor.css';
 
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
@@ -39,6 +40,12 @@ import SupportStatsPage from './pages/support/SupportStatsPage';
 import { CompanyDetailPage, InvitationsPage, UserDetailPage } from './pages/AdminPages';
 import { theme } from './theme';
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 15_000, refetchOnWindowFocus: false, retry: 1 },
+  },
+});
+
 function RootRedirect() {
   const raw = localStorage.getItem('staff_user');
   if (!raw) return <Navigate to="/login" replace />;
@@ -50,6 +57,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="light">
       <Notifications position="top-right" />
+      <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
           <Routes>
@@ -89,6 +97,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           </Routes>
         </BrowserRouter>
       </AuthProvider>
+      </QueryClientProvider>
     </MantineProvider>
   </React.StrictMode>,
 );

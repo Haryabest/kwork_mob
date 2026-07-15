@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/deep_link_routes.dart';
+import 'package:kwork_mobile/core/push_route.dart';
 import 'package:kwork_mobile/firebase_options.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
 import 'package:kwork_mobile/services/push_deep_link.dart';
@@ -26,11 +27,13 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     }
   } catch (_) {}
   await NotificationInbox.instance.add(
-    title: message.notification?.title ?? 'Уведомление',
+    title: message.notification?.title ?? '',
     body: message.notification?.body ?? '',
     orderId: message.data['order_id']?.toString(),
     modelUuid: message.data['model_uuid']?.toString(),
     type: message.data['type']?.toString() ?? message.data['event']?.toString(),
+    titleKey: message.data['title_key']?.toString() ?? message.data['titleKey']?.toString(),
+    bodyKey: message.data['body_key']?.toString() ?? message.data['bodyKey']?.toString(),
     id: message.messageId,
   );
 }
@@ -138,49 +141,17 @@ class PushService {
   }
 
   Future<void> _record(RemoteMessage msg) async {
+    final data = msg.data;
     await NotificationInbox.instance.add(
-      title: msg.notification?.title ?? 'Уведомление',
+      title: msg.notification?.title ?? '',
       body: msg.notification?.body ?? '',
-      orderId: msg.data['order_id']?.toString(),
-      modelUuid: msg.data['model_uuid']?.toString(),
-      type: msg.data['type']?.toString() ?? msg.data['event']?.toString(),
+      orderId: data['order_id']?.toString(),
+      modelUuid: data['model_uuid']?.toString(),
+      type: data['type']?.toString() ?? data['event']?.toString(),
+      titleKey: data['title_key']?.toString() ?? data['titleKey']?.toString(),
+      bodyKey: data['body_key']?.toString() ?? data['bodyKey']?.toString(),
       id: msg.messageId,
     );
-  }
-
-  String? _routeFromData(Map<String, dynamic> data) {
-    final deeplink = data['deeplink']?.toString() ?? data['link']?.toString();
-    if (deeplink != null && deeplink.isNotEmpty) {
-      return routeFromDeepLinkUri(Uri.tryParse(deeplink));
-    }
-    final orderId = data['order_id']?.toString();
-    final modelUuid = data['model_uuid']?.toString();
-    final type = data['type']?.toString() ?? data['event']?.toString();
-
-    if (orderId != null && orderId.isNotEmpty) {
-      return '/home/queue/$orderId';
-    }
-    if (modelUuid != null && modelUuid.isNotEmpty) {
-      return '/home/models/$modelUuid';
-    }
-    if (type == 'nsfw_blocked' ||
-        type == 'refund' ||
-        type == 'generation_done' ||
-        type == 'generation_failed' ||
-        type == 'cancelled') {
-      return '/home/notifications';
-    }
-    if (type == 'topup_failed') {
-      return '/home/balance';
-    }
-    final ticketId = data['ticket_id']?.toString() ?? data['support_id']?.toString();
-    if (type == 'support' || type == 'support_reply') {
-      if (ticketId != null && ticketId.isNotEmpty) {
-        return '/home?tab=support&supportTicket=$ticketId';
-      }
-      return '/home?tab=support';
-    }
-    return null;
   }
 
   Future<void> _handleExternalUri(Uri uri) async {
@@ -194,7 +165,7 @@ class PushService {
     bool fromForeground = false,
     String? title,
   }) async {
-    final route = _routeFromData(data);
+    final route = routeFromPushData(data);
     if (route == null) {
       if (fromForeground) debugPrint('FCM data без маршрута: $data');
       return;
@@ -278,6 +249,7 @@ class PushService {
       'cleanup': false,
       'publish_reminder': true,
       'topup_failed': true,
+      'support_reply': true,
     };
     try {
       final me = await _api.me();

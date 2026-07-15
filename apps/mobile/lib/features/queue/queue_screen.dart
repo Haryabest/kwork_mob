@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/queue_ws.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/core/ws_errors.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 
 /// Экран очереди / генерации (§3.4.1–3.4.2).
@@ -96,6 +98,7 @@ class _QueueScreenState extends State<QueueScreen> {
 
   Future<void> _cancel() async {
     if (widget.orderId == null) return;
+    final l10n = AppLocalizations.of(context)!;
     final status = _order?['status']?.toString();
     if (status == 'processing' || status == 'generating') {
       var ack = false;
@@ -103,25 +106,23 @@ class _QueueScreenState extends State<QueueScreen> {
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setLocal) => AlertDialog(
-            title: const Text('Отмена генерации'),
+            title: Text(l10n.queueCancelTitle),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Внимание! Отмена во время генерации не приводит к возврату средств, так как вычислительные ресурсы уже затрачены. Отменить?',
-                ),
+                Text(l10n.queueCancelWarning),
                 CheckboxListTile(
                   value: ack,
                   onChanged: (v) => setLocal(() => ack = v ?? false),
-                  title: const Text('Я понимаю'),
+                  title: Text(l10n.queueUnderstand),
                 ),
               ],
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Нет')),
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l10n.no)),
               TextButton(
                 onPressed: ack ? () => Navigator.pop(ctx, true) : null,
-                child: const Text('Да'),
+                child: Text(l10n.yes),
               ),
             ],
           ),
@@ -153,20 +154,20 @@ class _QueueScreenState extends State<QueueScreen> {
     super.dispose();
   }
 
-  String _statusLabel(String status) {
+  String _statusLabel(AppLocalizations l10n, String status) {
     switch (status) {
       case 'blocked_nsfw':
-        return 'NSFW блок';
+        return l10n.orderStatusBlockedNsfw;
       case 'completed':
-        return 'Готов';
+        return l10n.orderStatusCompleted;
       case 'failed':
-        return 'Ошибка';
+        return l10n.orderStatusFailed;
       case 'processing':
-        return 'В обработке';
+        return l10n.orderStatusProcessing;
       case 'queued':
-        return 'В очереди';
+        return l10n.orderStatusQueued;
       case 'cancelled':
-        return 'Отменён';
+        return l10n.orderStatusCancelled;
       default:
         return status;
     }
@@ -174,6 +175,7 @@ class _QueueScreenState extends State<QueueScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final pos = _order?['queue_position'];
     final ewt = _order?['ewt_sec'];
     final status = _order?['status']?.toString() ?? '…';
@@ -182,7 +184,7 @@ class _QueueScreenState extends State<QueueScreen> {
 
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Генерация модели'),
+        title: Text(l10n.queueGenerationTitle),
         prefixes: [FHeaderAction.back(onPress: () => context.go('/home'))],
       ),
       child: Padding(
@@ -195,13 +197,13 @@ class _QueueScreenState extends State<QueueScreen> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(_error!, style: const TextStyle(color: AppColors.error)),
               ),
-            if (_ws.error != null) ...[
-              Text(_ws.error!, style: const TextStyle(color: AppColors.error)),
+            if (_ws.lastError != null) ...[
+              Text(formatWsError(_ws.lastError!, l10n), style: const TextStyle(color: AppColors.error)),
               const SizedBox(height: 8),
               FButton(
                 variant: .outline,
                 onPress: _reconnectWs,
-                child: const Text('Переподключить WebSocket'),
+                child: Text(l10n.queueReconnectWs),
               ),
               const SizedBox(height: 12),
             ],
@@ -213,20 +215,17 @@ class _QueueScreenState extends State<QueueScreen> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
                 ),
-                child: const Text(
-                  'Заказ заблокирован: NSFW на текстурах импорта. Средства возвращены на баланс компании. '
-                  'Аккаунт на ручной проверке до 24 ч (§10.8).',
-                  style: TextStyle(color: AppColors.error),
+                child: Text(
+                  l10n.queueNsfwBlocked,
+                  style: const TextStyle(color: AppColors.error),
                 ),
               ),
               const SizedBox(height: 12),
             ],
-            Text('Статус: ${_statusLabel(status)}', style: context.theme.typography.lg),
+            Text(l10n.queueStatus(_statusLabel(l10n, status)), style: context.theme.typography.lg),
             const SizedBox(height: 12),
             if (pos != null)
-              Text(
-                'Позиция в очереди: $pos. Примерное время ожидания: ${ewtMin ?? '—'} мин',
-              ),
+              Text(l10n.queuePosition('$pos', '${ewtMin ?? '—'}')),
             const SizedBox(height: 16),
             LinearProgressIndicator(
               value: pos is int && pos > 0 ? (1 / (pos + 1)).clamp(0.05, 0.95) : null,
@@ -235,17 +234,17 @@ class _QueueScreenState extends State<QueueScreen> {
             const SizedBox(height: 8),
             Text(
               _ws.connected
-                  ? 'WebSocket: подключено'
-                  : (_ws.error != null ? 'WebSocket: ошибка' : 'WebSocket: …'),
+                  ? l10n.queueWsConnected
+                  : (_ws.lastError != null ? l10n.queueWsErrorShort : l10n.queueWsConnecting),
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const Spacer(),
-            FButton(variant: .outline, onPress: _refresh, child: const Text('Обновить')),
+            FButton(variant: .outline, onPress: _refresh, child: Text(l10n.queueRefresh)),
             const SizedBox(height: 8),
             FButton(
               variant: .destructive,
               onPress: widget.orderId == null || isNsfwBlocked ? null : _cancel,
-              child: const Text('Отменить'),
+              child: Text(l10n.queueCancelOrder),
             ),
           ],
         ),

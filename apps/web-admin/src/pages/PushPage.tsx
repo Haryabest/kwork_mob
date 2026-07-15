@@ -1,4 +1,4 @@
-import { Button, Center, Group, Loader, Select, Stack, TextInput, Textarea } from '@mantine/core';
+import { Button, Center, Group, Select, Stack, TextInput, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { PageHeader } from '../components/Panel';

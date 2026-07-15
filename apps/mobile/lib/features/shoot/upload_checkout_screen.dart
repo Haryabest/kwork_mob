@@ -83,14 +83,13 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
     });
 
     try {
+      final l10n = AppLocalizations.of(context)!;
       final draft = await ShootStorage.instance.loadActiveDraft();
       if (draft == null || draft.modelUuid != widget.modelUuid) {
-        throw StateError('Черновик съёмки не найден');
+        throw StateError(l10n.ucDraftNotFound);
       }
       if (draft.forbidden.isNotEmpty) {
-        throw StateError(
-          'Вы выбрали запрещённую категорию. Заказ будет отклонён без возврата средств.',
-        );
+        throw StateError(l10n.ucForbiddenCategory);
       }
 
       try {
@@ -184,7 +183,7 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         if (uploaded.contains(i)) continue;
 
         final file = photos[i];
-        if (file == null) throw StateError('Нет файла ракурса $i');
+        if (file == null) throw StateError(l10n.ucNoViewFile('$i'));
 
         await _uploadWithRetry(
           index: i,

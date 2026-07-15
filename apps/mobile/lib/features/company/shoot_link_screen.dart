@@ -6,6 +6,8 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/l10n/catalog_l10n.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 /// Создание shoot-link + QR (§3.15).
@@ -30,14 +32,11 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
   bool _loading = false;
   String? _error;
 
-  Map<String, ProductCategory> get _categoryItems => {
-        for (final c in ProductCategory.values) c.label: c,
-      };
-
   Future<void> _create() async {
+    final l10n = AppLocalizations.of(context)!;
     final companyId = widget.session.companyId;
     if (companyId == null) {
-      setState(() => _error = 'Выберите корпоративный режим');
+      setState(() => _error = l10n.shootLinkCorpMode);
       return;
     }
     setState(() {
@@ -58,28 +57,29 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final url = _link?['url']?.toString();
     final hidePrices = widget.session.hidePrices;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Съёмка по ссылке'),
+        title: Text(l10n.shootLinkTitle),
         prefixes: [FHeaderAction.back(onPress: () => context.pop())],
       ),
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           FSelect<ProductCategory>(
-            label: const Text('Категория'),
+            label: Text(l10n.shootCategoryLabel),
             control: FSelectControl.managed(
               initial: _category,
               onChange: (v) {
                 if (v != null) setState(() => _category = v);
               },
             ),
-            items: _categoryItems,
+            items: productCategorySelectItems(l10n),
           ),
           const SizedBox(height: 16),
-          Text('Тариф', style: context.theme.typography.lg),
+          Text(l10n.shootLinkTier, style: context.theme.typography.lg),
           const SizedBox(height: 8),
           FSelectGroup<Tier>(
             control: FMultiValueControl.managedRadio(
@@ -92,7 +92,11 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
               for (final t in Tier.values)
                 FSelectGroupItemMixin.radio(
                   value: t,
-                  label: Text(hidePrices ? t.label : '${t.label} — ${t.priceRub} ₽'),
+                  label: Text(
+                    hidePrices
+                        ? t.localized(l10n)
+                        : '${t.localized(l10n)} — ${t.priceRub} ₽',
+                  ),
                 ),
             ],
           ),
@@ -105,7 +109,7 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Создать ссылку и QR'),
+                : Text(l10n.shootLinkCreate),
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -129,11 +133,11 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
                 await Clipboard.setData(ClipboardData(text: url));
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Ссылка скопирована')),
+                    SnackBar(content: Text(l10n.shootLinkCopied)),
                   );
                 }
               },
-              child: const Text('Копировать'),
+              child: Text(l10n.shootLinkCopy),
             ),
           ],
         ],

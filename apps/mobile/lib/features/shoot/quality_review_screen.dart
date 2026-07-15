@@ -195,7 +195,7 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
                                       left: 4,
                                       right: 4,
                                       child: Text(
-                                        q.reason,
+                                        q.localizedReason(l10n),
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(color: Colors.white, fontSize: 10),

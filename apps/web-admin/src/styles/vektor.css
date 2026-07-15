@@ -11,6 +11,15 @@
   --vz-glow: 0 18px 40px rgba(0, 87, 184, 0.07);
 }
 
+/* Тёмная тема (§11.15) */
+[data-mantine-color-scheme='dark'] {
+  --vz-ink: #e7e9ee;
+  --vz-mute: #9aa0ab;
+  --vz-surface: #1f2023;
+  --vz-canvas: #131417;
+  --vz-glow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
 html,
 body,
 #root {

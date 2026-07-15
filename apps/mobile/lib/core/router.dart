@@ -14,6 +14,8 @@ import 'package:kwork_mobile/features/home/home_shell.dart';
 import 'package:kwork_mobile/features/models/import_model_screen.dart';
 import 'package:kwork_mobile/features/models/model_viewer_screen.dart';
 import 'package:kwork_mobile/features/models/trash_screen.dart';
+import 'package:kwork_mobile/features/models/publish_guide_screen.dart';
+import 'package:kwork_mobile/features/profile/api_keys_screen.dart';
 import 'package:kwork_mobile/features/onboarding/onboarding_screen.dart';
 import 'package:kwork_mobile/features/legal/consent_gate_screen.dart';
 import 'package:kwork_mobile/features/queue/queue_screen.dart';
@@ -26,6 +28,8 @@ import 'package:kwork_mobile/features/shoot/order_checkout_screen.dart';
 import 'package:kwork_mobile/features/calibration/calibration_wizard_screen.dart';
 import 'package:kwork_mobile/features/notifications/notifications_screen.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/l10n/catalog_l10n.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
@@ -199,6 +203,14 @@ GoRouter createRouter({
             builder: (context, state) => ModelsTrashScreen(api: api),
           ),
           GoRoute(
+            path: 'publish-guide',
+            builder: (context, state) => const PublishGuideScreen(),
+          ),
+          GoRoute(
+            path: 'api-keys',
+            builder: (context, state) => ApiKeysScreen(api: api),
+          ),
+          GoRoute(
             path: 'balance',
             builder: (context, state) => BalanceScreen(api: api, session: session),
           ),
@@ -344,23 +356,21 @@ class _SplashScreenState extends State<_SplashScreen> {
     final items = await CloudDraftBackupService.instance.listRemote(widget.api);
     if (items.isEmpty || !mounted) return false;
 
+    final l10n = AppLocalizations.of(context)!;
     final choice = await showFDialog<String>(
       context: context,
       builder: (ctx, style, animation) => FDialog(
-        title: const Text('Восстановить черновики?'),
-        body: Text(
-          'Найдено ${items.length} облачных бэкапов (TTL 7 дней, §3.3.2). '
-          'Восстановить незавершённые съёмки?',
-        ),
+        title: Text(l10n.draftRestoreTitle),
+        body: Text(l10n.draftRestoreBody('${items.length}')),
         actions: [
           FButton(
             variant: .outline,
             onPress: () => Navigator.pop(ctx, 'skip'),
-            child: const Text('Пропустить'),
+            child: Text(l10n.skip),
           ),
           FButton(
             onPress: () => Navigator.pop(ctx, 'restore'),
-            child: const Text('Восстановить'),
+            child: Text(l10n.mvRestore),
           ),
         ],
       ),
@@ -377,7 +387,7 @@ class _SplashScreenState extends State<_SplashScreen> {
     }
     if (!mounted) return false;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Черновики восстановлены из облака')),
+      SnackBar(content: Text(l10n.draftRestoredSnackbar)),
     );
     final draft = await ShootStorage.instance.loadActiveDraft();
     if (draft != null) {
@@ -402,18 +412,24 @@ class _SplashScreenState extends State<_SplashScreen> {
     final count = await ShootStorage.instance.capturedCount(draft.modelUuid);
     final choice = await showFDialog<String>(
       context: context,
-      builder: (ctx, style, animation) => FDialog(
-        title: const Text('Незавершённая съёмка'),
-        body: Text(
-          'У вас есть черновик (${draft.category.label}, $count/$kGuidedDomeCount кадров). '
-          'Продолжить или начать заново?',
-        ),
-        actions: [
-          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, 'discard'), child: const Text('Заново')),
-          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, 'cancel'), child: const Text('Отмена')),
-          FButton(onPress: () => Navigator.pop(ctx, 'continue'), child: const Text('Продолжить')),
-        ],
-      ),
+      builder: (ctx, style, animation) {
+        final l10n = AppLocalizations.of(ctx)!;
+        return FDialog(
+          title: Text(l10n.resumeDraftTitle),
+          body: Text(
+            l10n.resumeDraftBody(
+              draft.category.localized(l10n),
+              '$count',
+              '$kGuidedDomeCount',
+            ),
+          ),
+          actions: [
+            FButton(variant: .outline, onPress: () => Navigator.pop(ctx, 'discard'), child: Text(l10n.resumeDraftDiscard)),
+            FButton(variant: .outline, onPress: () => Navigator.pop(ctx, 'cancel'), child: Text(l10n.cancel)),
+            FButton(onPress: () => Navigator.pop(ctx, 'continue'), child: Text(l10n.resumeDraftContinue)),
+          ],
+        );
+      },
     );
     if (!mounted || choice == null || choice == 'cancel') {
       context.go('/home');

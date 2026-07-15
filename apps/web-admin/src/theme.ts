@@ -29,7 +29,7 @@ export const theme = createTheme({
   components: {
     Button: {
       defaultProps: { radius: 'md' },
-      styles: (_theme, params) => {
+      styles: (_theme: unknown, params: { variant?: string }) => {
         if (params.variant === 'gradient' || params.variant === 'filled') {
           return {
             root: {
@@ -58,8 +58,8 @@ export const theme = createTheme({
         },
         tab: {
           border: '1px solid rgba(0,87,184,0.14)',
-          background: '#fff',
-          color: '#374151',
+          background: 'light-dark(#fff, var(--mantine-color-dark-6))',
+          color: 'light-dark(#374151, var(--mantine-color-dark-0))',
           fontWeight: 600,
           transition: 'background 160ms ease, color 160ms ease, box-shadow 160ms ease',
           '&[data-active]': {
@@ -89,12 +89,12 @@ export const theme = createTheme({
       styles: {
         main: { background: 'transparent' },
         header: {
-          background: 'rgba(255,255,255,0.92)',
+          background: 'light-dark(rgba(255,255,255,0.92), rgba(20,21,23,0.92))',
           backdropFilter: 'blur(10px)',
           borderBottom: '1px solid rgba(0,87,184,0.08)',
         },
         navbar: {
-          background: '#fff',
+          background: 'light-dark(#fff, var(--mantine-color-dark-7))',
           borderRight: '1px solid rgba(0,87,184,0.08)',
         },
       },
@@ -103,7 +103,7 @@ export const theme = createTheme({
       defaultProps: { padding: 'lg', radius: 'lg', withBorder: false },
       styles: {
         root: {
-          background: '#fff',
+          background: 'light-dark(#fff, var(--mantine-color-dark-6))',
           boxShadow: '0 18px 40px rgba(0, 87, 184, 0.07)',
           border: '1px solid rgba(0, 87, 184, 0.06)',
         },

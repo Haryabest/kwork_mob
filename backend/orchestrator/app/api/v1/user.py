@@ -89,6 +89,7 @@ async def update_me(
             "email_balance",
             "nsfw_blocked",
             "topup_failed",
+            "support_reply",
             "export_format",
         }
         cur = dict(user.notification_prefs or {})
@@ -589,3 +590,61 @@ async def restore_draft_backup(
     from app.services import draft_backup as dbk
 
     return dbk.restore_download(user.id, model_uuid)
+
+
+class AnalyticsEventsBody(BaseModel):
+    events: list[dict] = Field(default_factory=list, max_length=200)
+
+
+@router.post("/analytics/events")
+async def post_analytics_events(
+    body: AnalyticsEventsBody,
+    user: User = Depends(get_current_db_user),
+):
+    """Приём пакета аналитики с мобильного клиента §19.20."""
+    return {"accepted": len(body.events), "user_id": user.id}
+
+
+@router.get("/campaign_banners")
+async def list_campaign_banners(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Баннеры из неиспользованных CampaignEntitlement."""
+    from app.models import Campaign, CampaignEntitlement, Promocode
+
+    ents = (
+        await db.scalars(
+            select(CampaignEntitlement)
+            .where(
+                CampaignEntitlement.user_id == user.id,
+                CampaignEntitlement.consumed_at.is_(None),
+            )
+            .order_by(CampaignEntitlement.created_at.desc())
+        )
+    ).all()
+    items: list[dict] = []
+    for ent in ents:
+        camp = await db.get(Campaign, ent.campaign_id)
+        if not camp or camp.status != "running":
+            continue
+        meta = dict(ent.meta or {})
+        cfg = dict(camp.config or {})
+        title = str(meta.get("banner_title") or cfg.get("banner_title") or camp.name)
+        body_text = str(meta.get("banner_body") or cfg.get("banner_body") or "")
+        if not body_text and meta.get("issued_code"):
+            body_text = str(meta["issued_code"])
+        elif ent.promocode_id and not body_text:
+            promo = await db.get(Promocode, ent.promocode_id)
+            if promo and meta.get("issued_code"):
+                body_text = str(meta["issued_code"])
+        items.append(
+            {
+                "id": ent.id,
+                "campaign_id": ent.campaign_id,
+                "kind": ent.kind,
+                "title": title,
+                "body": body_text,
+            }
+        )
+    return {"items": items}

@@ -850,4 +850,1136 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notificationsEmpty => '暂无通知';
+
+  @override
+  String get queueGenerationTitle => '模型生成';
+
+  @override
+  String get queueCancelTitle => '取消生成';
+
+  @override
+  String get queueCancelWarning => '注意！生成过程中取消不会退款，因为计算资源已被消耗。仍要取消吗？';
+
+  @override
+  String get queueUnderstand => '我明白';
+
+  @override
+  String get queueReconnectWs => '重新连接 WebSocket';
+
+  @override
+  String get queueNsfwBlocked =>
+      '订单被拦截：导入贴图含 NSFW 内容。款项已退回公司余额。账户将进行最多 24 小时的人工审核 (§10.8)。';
+
+  @override
+  String queueStatus(String status) {
+    return '状态：$status';
+  }
+
+  @override
+  String queuePosition(String pos, String ewt) {
+    return '排队位置：$pos。预计等待时间：$ewt 分钟';
+  }
+
+  @override
+  String get queueWsConnected => 'WebSocket：已连接';
+
+  @override
+  String get queueWsErrorShort => 'WebSocket：错误';
+
+  @override
+  String get queueWsConnecting => 'WebSocket：…';
+
+  @override
+  String get queueRefresh => '刷新';
+
+  @override
+  String get queueCancelOrder => '取消';
+
+  @override
+  String get faqSupportTitle => '常见问题 / 支持';
+
+  @override
+  String get faqTab => '常见问题';
+
+  @override
+  String get faqMyTickets => '我的工单';
+
+  @override
+  String faqLoadError(String error) {
+    return '加载错误：$error';
+  }
+
+  @override
+  String get faqQuestionMin => '问题：至少 10 个字符';
+
+  @override
+  String get faqDefaultSubject => '来自应用的提问';
+
+  @override
+  String get faqQuestionSent => '问题已发送';
+
+  @override
+  String get faqEmpty => '暂无常见问题';
+
+  @override
+  String get faqAskPrompt => '没有找到答案？提个问题吧';
+
+  @override
+  String get faqSubjectOptional => '主题（可选）';
+
+  @override
+  String get faqYourQuestion => '您的问题';
+
+  @override
+  String get faqSending => '发送中…';
+
+  @override
+  String get faqSend => '发送';
+
+  @override
+  String get faqNoTickets => '暂无工单';
+
+  @override
+  String faqTicketDefault(String id) {
+    return '工单 #$id';
+  }
+
+  @override
+  String get faqSupportRole => '支持';
+
+  @override
+  String get faqYouRole => '您';
+
+  @override
+  String get faqClarifyHint => '补充提问…';
+
+  @override
+  String get faqReply => '回复';
+
+  @override
+  String get faqClose => '关闭';
+
+  @override
+  String get faqTicketClosed => '工单已关闭';
+
+  @override
+  String get teamTitle => '团队';
+
+  @override
+  String get teamNoAccess => '无团队访问权限';
+
+  @override
+  String get teamMembers => '成员';
+
+  @override
+  String get teamNoMembers => '暂无成员';
+
+  @override
+  String get teamInvite => '邀请';
+
+  @override
+  String get teamAudit => '审计';
+
+  @override
+  String get teamNoAudit => '暂无审计记录';
+
+  @override
+  String get teamExtendAllTitle => '延长所有源文件';
+
+  @override
+  String get teamExtendAllBody =>
+      '将公司所有模型的云端源文件存储延长 30 天。限制——每个模型 3 次延长 (§9.1.2)。';
+
+  @override
+  String get teamExtend => '延长';
+
+  @override
+  String get teamExtendAllBtn => '延长所有源文件 §9.1.2';
+
+  @override
+  String get teamMemberFallback => '成员';
+
+  @override
+  String get teamRole => '角色';
+
+  @override
+  String get teamActiveOrdersLimit => '活跃订单上限';
+
+  @override
+  String get teamInviteSent => '邀请已发送';
+
+  @override
+  String get teamInviteSentWithLink => '邀请已发送 · 链接已复制';
+
+  @override
+  String teamMemberSubtitle(String role, String limit) {
+    return '$role · 上限 $limit 个订单';
+  }
+
+  @override
+  String teamCompany(String id) {
+    return '公司 #$id';
+  }
+
+  @override
+  String get teamSendInvite => '发送邀请';
+
+  @override
+  String get mvPublishValidating => '导入校验中';
+
+  @override
+  String get mvPublishImported => '已导入';
+
+  @override
+  String get mvPublishImportFailed => '导入失败';
+
+  @override
+  String get mvPublishNotPublished => '未发布';
+
+  @override
+  String get mvPublishVerified => '已验证';
+
+  @override
+  String get mvPublishPublished => '已发布';
+
+  @override
+  String get mvRenameTitle => '重命名模型';
+
+  @override
+  String get mvNameLabel => '名称';
+
+  @override
+  String get mvLinkCopied => '链接已复制';
+
+  @override
+  String get mvMovedToTrash => '模型已移至回收站';
+
+  @override
+  String get mvRetry => '重试';
+
+  @override
+  String get mvNoModels => '暂无模型';
+
+  @override
+  String get mvTitle => '模型';
+
+  @override
+  String get mvTrash => '回收站';
+
+  @override
+  String get mvFilterAll => '全部';
+
+  @override
+  String get mvFilterFavorites => '收藏';
+
+  @override
+  String get mvSortNewest => '最新优先';
+
+  @override
+  String get mvSortOldest => '最早优先';
+
+  @override
+  String get mvNoModelsFilter => '该筛选条件下无模型';
+
+  @override
+  String get mvDownloadGlbOzon => '下载 .glb (Ozon)';
+
+  @override
+  String get mvDownloadUsdzWb => '下载 .usdz (Wildberries)';
+
+  @override
+  String get mvShare => '分享';
+
+  @override
+  String get mvRate => '评价模型';
+
+  @override
+  String get mvVerifyLink => '验证链接';
+
+  @override
+  String get mvEdit => '编辑';
+
+  @override
+  String get mvRename => '重命名';
+
+  @override
+  String get mvDelete => '删除';
+
+  @override
+  String mvLinkCopiedMarketplace(String mp) {
+    return '$mp 链接已复制';
+  }
+
+  @override
+  String mvGlbSaved(String path) {
+    return 'GLB 已保存：$path';
+  }
+
+  @override
+  String get mvPublicLinkTitle => '公开链接 §3.12';
+
+  @override
+  String mvUntil(String date) {
+    return '至：$date';
+  }
+
+  @override
+  String get mvNoLocalPhotosTitle => '无本地照片';
+
+  @override
+  String get mvNoLocalPhotosBody => '重新生成需要设备上有 12 张源照片。从云端恢复还是重新拍摄？';
+
+  @override
+  String get mvRestore => '恢复';
+
+  @override
+  String get mvCantDetectCategory => '无法识别类目/套餐';
+
+  @override
+  String get mvStorageExtended => '存储已延长';
+
+  @override
+  String get mvDeleteTitle => '删除模型？';
+
+  @override
+  String get mvDeleteBody => '源照片和模型将移至回收站 30 天。是否继续？';
+
+  @override
+  String get mvInTrash => '已在回收站';
+
+  @override
+  String get mvSourcesRestored => '源文件已恢复';
+
+  @override
+  String get mvCardLinkTitle => '商品卡链接';
+
+  @override
+  String get mvCardLinkHint => 'https://www.wildberries.ru/... 或 ozon.ru/...';
+
+  @override
+  String get mvAdd => '添加';
+
+  @override
+  String mvLinkStatus(String status) {
+    return '链接：$status';
+  }
+
+  @override
+  String get mvRateTitle => '请为模型质量打分（1 到 5）';
+
+  @override
+  String get mvWhatsWrong => '哪里不对？';
+
+  @override
+  String get mvReasonBlurry => '纹理模糊';
+
+  @override
+  String get mvReasonHoles => '破洞或伪影';
+
+  @override
+  String get mvReasonScale => '比例不对';
+
+  @override
+  String get mvReasonColor => '颜色/光照不对';
+
+  @override
+  String get mvReasonOther => '其他';
+
+  @override
+  String get mvComment => '备注';
+
+  @override
+  String get mvLater => '稍后';
+
+  @override
+  String get mvModelTitle => '3D 模型';
+
+  @override
+  String get mvGlbNotReady => 'GLB 尚未就绪';
+
+  @override
+  String mvCloud(String days, String used, String max) {
+    return '云端：$days 天 · 续期 $used/$max';
+  }
+
+  @override
+  String get mvLocalGlbSaved => '本地 GLB 已保存';
+
+  @override
+  String get mvRegenerate => '重新生成';
+
+  @override
+  String get mvUpdateGlb => '更新 GLB';
+
+  @override
+  String get mvGlbLocal => 'GLB 本地';
+
+  @override
+  String get mvDownloadWb => '下载 WB';
+
+  @override
+  String get mvDownloadOzon => '下载 Ozon';
+
+  @override
+  String get mvSources => '源文件';
+
+  @override
+  String get mvExtend30 => '+30 天';
+
+  @override
+  String get mvToTrash => '移至回收站';
+
+  @override
+  String get mvLink => '链接';
+
+  @override
+  String get mvImOnWb => '我在 WB';
+
+  @override
+  String get mvImOnOzon => '我在 Ozon';
+
+  @override
+  String mvApiResult(String status) {
+    return 'API：$status';
+  }
+
+  @override
+  String get orderLimitTitle => '活跃订单上限';
+
+  @override
+  String get orderLimitBody => '已达到您角色的并发订单上限。请等待当前生成完成或联系 Owner。';
+
+  @override
+  String get orderLimitOk => '知道了';
+
+  @override
+  String get trashTitle => '回收站';
+
+  @override
+  String get trashEmpty => '回收站为空\n已删除模型保留 30 天';
+
+  @override
+  String get trashRestore => '恢复';
+
+  @override
+  String get trashRestored => '已恢复';
+
+  @override
+  String trashOrderLine(String id, String date) {
+    return '订单 #$id · 删除于 $date';
+  }
+
+  @override
+  String trashPurgeLine(String date) {
+    return '永久删除：$date';
+  }
+
+  @override
+  String get prefPushEnabled => '推送通知';
+
+  @override
+  String get prefEmailEnabled => '邮件通知';
+
+  @override
+  String get prefGenerationDone => '生成完成';
+
+  @override
+  String get prefRefund => '退款';
+
+  @override
+  String get prefNsfwBlocked => 'NSFW 拦截';
+
+  @override
+  String get prefSourceExpire => '源文件过期';
+
+  @override
+  String get prefCleanup => '存储清理';
+
+  @override
+  String get prefPublishReminder => '发布提醒';
+
+  @override
+  String get prefSupportReply => '客服回复';
+
+  @override
+  String get profileInnLabel => '税号（可选）§19.14.1';
+
+  @override
+  String get profilePhoneLabel => '电话（可选）§19.14.1';
+
+  @override
+  String get profileFullNameLabel => '姓名（可选）§19.14.1';
+
+  @override
+  String get profileExportFormat => '导出格式 §19.14.3';
+
+  @override
+  String get profileExportGlb => '.glb（Ozon / 通用）';
+
+  @override
+  String get profileExportUsdz => '.usdz（Wildberries / AR）';
+
+  @override
+  String get profileTheme => '主题 §19.14.3';
+
+  @override
+  String get themeSystem => '跟随系统';
+
+  @override
+  String get themeLight => '浅色';
+
+  @override
+  String get themeDark => '深色';
+
+  @override
+  String get profileLanguage => '语言';
+
+  @override
+  String get profileNotificationsSection => '通知 §19.14.3';
+
+  @override
+  String get profileEventsSection => '事件 §3.4.3';
+
+  @override
+  String get profileSecuritySection => '安全 §19.14.4';
+
+  @override
+  String get profileChangePassword => '修改密码';
+
+  @override
+  String get profileChangePasswordTitle => '修改密码';
+
+  @override
+  String get profileCurrentPassword => '当前密码';
+
+  @override
+  String get profileNewPassword => '新密码';
+
+  @override
+  String get profilePasswordConfirm => '确认';
+
+  @override
+  String get profilePasswordChanged => '密码已修改';
+
+  @override
+  String get profileMinPassword => '至少 8 个字符';
+
+  @override
+  String get profilePasswordMismatch => '两次密码不一致';
+
+  @override
+  String get profile2faSection => '双因素认证 §19.14.4';
+
+  @override
+  String get profile2faEnabled => '2FA 已启用';
+
+  @override
+  String get profile2faDisabled => '2FA 未启用';
+
+  @override
+  String get profile2faOwnerRequired => 'Owner 必须启用 2FA（§10.7.5）';
+
+  @override
+  String get profile2faActiveHint =>
+      'TOTP 已激活 — Google Authenticator、1Password 等。';
+
+  @override
+  String get profile2faStep1 => '1. 在验证器应用中扫描二维码';
+
+  @override
+  String get profile2faStep2 => '2. 或手动输入密钥';
+
+  @override
+  String get profileSecretCopied => '密钥已复制';
+
+  @override
+  String get profile2faCodeLabel => '验证器代码';
+
+  @override
+  String get profileConfirm2fa => '确认 2FA';
+
+  @override
+  String get profileEnable2fa => '启用 2FA';
+
+  @override
+  String get profile2faEnabledSnackbar => '2FA 已启用';
+
+  @override
+  String get profileDeleteAccountTitle => '删除账户？';
+
+  @override
+  String get profileDeleteAccountBody =>
+      '所有模型和个人数据将在 30 天内删除（§2.8.3）。财务记录将匿名化并保留 5 年。';
+
+  @override
+  String get profileDeleteAccountBtn => '删除';
+
+  @override
+  String get profileDeleteRequestAccepted => '请求已接受';
+
+  @override
+  String get notifGenDoneTitle => '生成完成';
+
+  @override
+  String notifGenDoneBody(String id) {
+    return '订单 #$id 已就绪';
+  }
+
+  @override
+  String get notifNsfwTitle => 'NSFW 拦截';
+
+  @override
+  String notifNsfwBody(String id) {
+    return '订单 #$id 被拒绝。已退款。账户审核最多 24 小时。';
+  }
+
+  @override
+  String get notifGenFailedTitle => '生成失败';
+
+  @override
+  String notifGenFailedBody(String id) {
+    return '订单 #$id 失败';
+  }
+
+  @override
+  String get notifRefundTitle => '退款';
+
+  @override
+  String notifRefundBody(String id) {
+    return '订单 #$id 已退款';
+  }
+
+  @override
+  String get notifCancelledTitle => '订单已取消';
+
+  @override
+  String notifCancelledBody(String id) {
+    return '订单 #$id 已取消';
+  }
+
+  @override
+  String get notifCompanyInviteTitle => '公司邀请';
+
+  @override
+  String get publishGuideTitle => '如何发布';
+
+  @override
+  String get publishGuideIntro => '下载模型文件并上传到 marketplace 商品卡片。';
+
+  @override
+  String get publishGuideWbTitle => 'Wildberries';
+
+  @override
+  String get publishGuideWb1 => '1. 下载 .usdz（模型中的「下载 WB」）。';
+
+  @override
+  String get publishGuideWb2 => '2. 在 WB 卖家后台打开商品 → 媒体 → 3D。';
+
+  @override
+  String get publishGuideWb3 => '3. 为 iOS 买家上传 .usdz。';
+
+  @override
+  String get publishGuideOzonTitle => 'Ozon';
+
+  @override
+  String get publishGuideOzon1 => '1. 下载 .glb（下载 Ozon）。';
+
+  @override
+  String get publishGuideOzon2 => '2. 在 Ozon 后台打开商品 → 3D 模型。';
+
+  @override
+  String get publishGuideOzon3 => '3. 为 Android 买家上传 .glb。';
+
+  @override
+  String get publishGuideOpenModels => '前往模型';
+
+  @override
+  String get apiKeysTitle => 'API 密钥';
+
+  @override
+  String get apiKeysSubtitle => 'Owner · scopes · rate limit';
+
+  @override
+  String get apiKeysCreate => '创建密钥';
+
+  @override
+  String get apiKeysRevoke => '撤销';
+
+  @override
+  String get apiKeysCopyOnce => '请复制密钥 — 不会再次显示';
+
+  @override
+  String get apiKeysName => '名称';
+
+  @override
+  String get apiKeysEmpty => '暂无密钥';
+
+  @override
+  String get apiKeysCreated => '密钥已创建';
+
+  @override
+  String get profileCopySecretBtn => '复制密钥';
+
+  @override
+  String get profile2faCodeStep => '3. 输入 6 位代码';
+
+  @override
+  String get profile2faSetupHint => '使用一次性代码保护登录安全。';
+
+  @override
+  String get profileDeleteAccount => '删除账户';
+
+  @override
+  String get profileLogout => '退出登录';
+
+  @override
+  String get catClothing => '服装';
+
+  @override
+  String get catShoes => '鞋类';
+
+  @override
+  String get catElectronics => '电子产品';
+
+  @override
+  String get catFurniture => '家具';
+
+  @override
+  String get catDecor => '装饰 / 室内';
+
+  @override
+  String get catToys => '玩具';
+
+  @override
+  String get catAdult => '成人用品 (18+)';
+
+  @override
+  String get catOther => '其他';
+
+  @override
+  String get tierSmall => '小型';
+
+  @override
+  String get tierLarge => '大型';
+
+  @override
+  String get forbIntimate => '情趣';
+
+  @override
+  String get forbWeapons => '武器';
+
+  @override
+  String get forbDrugs => '毒品';
+
+  @override
+  String get angle00 => '低 0°（正面）';
+
+  @override
+  String get angle01 => '低 45°';
+
+  @override
+  String get angle02 => '低 90°（左）';
+
+  @override
+  String get angle03 => '低 135°';
+
+  @override
+  String get angle04 => '低 180°（背面）';
+
+  @override
+  String get angle05 => '低 225°';
+
+  @override
+  String get angle06 => '低 270°（右）';
+
+  @override
+  String get angle07 => '低 315°';
+
+  @override
+  String get angle08 => '高 前 45°';
+
+  @override
+  String get angle09 => '高 右 45°';
+
+  @override
+  String get angle10 => '高 后 45°';
+
+  @override
+  String get angle11 => '高 左 45°';
+
+  @override
+  String get wsSessionExpired => '会话已过期，请重新登录。';
+
+  @override
+  String get wsServerUnavailable => '服务器不可用，请检查 API_URL 和网络。';
+
+  @override
+  String get wsQueueFailed => '无法连接队列，请稍后重试。';
+
+  @override
+  String get wsQueueError => '队列连接错误';
+
+  @override
+  String get calSaved => '校准已保存 30 天';
+
+  @override
+  String get calRefFractionError => '请输入参考物在画面中的比例 (0.1–0.9)';
+
+  @override
+  String get calEnterDimensions => '请输入尺寸（米）';
+
+  @override
+  String calCurrentLine(String method, String date) {
+    return '当前：$method · 至 $date';
+  }
+
+  @override
+  String get calReset => '重置校准';
+
+  @override
+  String get calIntro => '1:1 比例和家具需要校准 (§3.7)。将参考物放在商品旁并指定画面比例。';
+
+  @override
+  String get calMethod => '方式';
+
+  @override
+  String get calMethodCard => '银行卡 (85.6×54 mm)';
+
+  @override
+  String get calMethodA4 => 'A4 纸 (210×297 mm)';
+
+  @override
+  String get calMethodQr => 'PDF QR (100 mm)';
+
+  @override
+  String get calMethodManual => '手动输入尺寸 (m)';
+
+  @override
+  String get calRefWidth => '参考物宽度比例 (0.1–0.9)';
+
+  @override
+  String get calRefHeight => '参考物高度比例 (0.1–0.9)';
+
+  @override
+  String get calSave => '保存校准';
+
+  @override
+  String get calQrIntro => '下载 QR 参考 PDF (100×100 mm)，打印并放在商品旁。';
+
+  @override
+  String get calDownloadPdf => '下载 QR PDF';
+
+  @override
+  String get calQrSide => 'QR 边长 (mm)';
+
+  @override
+  String get calQrWidth => 'QR 画面宽度比例';
+
+  @override
+  String get calQrHeight => 'QR 画面高度比例';
+
+  @override
+  String get calSaveQr => '按 QR 保存';
+
+  @override
+  String get calManualW => '商品宽度 (m)';
+
+  @override
+  String get calManualH => '商品高度 (m)';
+
+  @override
+  String get calManualD => '商品深度 (m)';
+
+  @override
+  String storUsedLine(String bytes, String models, String glbs) {
+    return '已用：$bytes · 文件夹：$models · GLB：$glbs';
+  }
+
+  @override
+  String get storAutoDownload => '完成时自动下载 GLB';
+
+  @override
+  String get storAutoDownloadDesc => '§3.3.2 — 在设备上保存模型';
+
+  @override
+  String get storAutoCleanup => 'GLB 自动清理';
+
+  @override
+  String storAutoCleanupDesc(String days) {
+    return '删除超过 $days 天的非收藏 GLB';
+  }
+
+  @override
+  String get storCleanupDays => '自动清理周期（天）';
+
+  @override
+  String get storDays7 => '7 天';
+
+  @override
+  String get storDays14 => '14 天';
+
+  @override
+  String get storDays30 => '30 天';
+
+  @override
+  String get storDays60 => '60 天';
+
+  @override
+  String get storDays90 => '90 天';
+
+  @override
+  String get storCleanupNow => '立即清理';
+
+  @override
+  String get storExportZip => '导出全部 GLB 为 ZIP';
+
+  @override
+  String storZipCopied(String path) {
+    return 'ZIP：$path（路径已复制）';
+  }
+
+  @override
+  String storGlbDeleted(String count) {
+    return '已删除本地 GLB：$count';
+  }
+
+  @override
+  String get impIntro => '上传 GLB（最大 50 MB）。仅公司 Owner §6.10。';
+
+  @override
+  String get impFileTooBig => '文件超过 50 MB (§6.10)';
+
+  @override
+  String get impOwnerOnly => '仅公司 Owner 可导入 (§6.10)';
+
+  @override
+  String get impUploadParamsError => '服务器未返回上传参数';
+
+  @override
+  String get impValidating => '模型验证中 (GLB 2.0 / PBR / Draco)…';
+
+  @override
+  String get impDone => '模型已导入';
+
+  @override
+  String get impName => '名称';
+
+  @override
+  String get impCategory => '类别';
+
+  @override
+  String get impPickGlb => '选择 .glb';
+
+  @override
+  String impSize(String size) {
+    return '大小：$size';
+  }
+
+  @override
+  String get impImporting => '导入中…';
+
+  @override
+  String get impBtn => '导入';
+
+  @override
+  String get impFree => '导入免费';
+
+  @override
+  String impPriceLine(String price) {
+    return '导入费用：$price ₽（从公司余额扣除）';
+  }
+
+  @override
+  String get balStatusAuto => '状态将自动更新';
+
+  @override
+  String get balTransactions => '交易';
+
+  @override
+  String balTotalLine(String total) {
+    return '共：$total';
+  }
+
+  @override
+  String get balEmpty => '暂无交易';
+
+  @override
+  String get balSuccess => '成功';
+
+  @override
+  String get balEmployee => '员工 §8';
+
+  @override
+  String get balAll => '全部';
+
+  @override
+  String get balThresholdInvalid => '请输入有效阈值';
+
+  @override
+  String balDevMock(String balance) {
+    return '余额：$balance ₽';
+  }
+
+  @override
+  String get consentUpdatedTitle => '条款已更新';
+
+  @override
+  String get consentAcceptAllSnackbar => '请接受所有更新的文档';
+
+  @override
+  String get consentIntro => '接受新版本文档以继续 (§2.8)。';
+
+  @override
+  String get consentRead => '阅读';
+
+  @override
+  String get consentHide => '隐藏文本';
+
+  @override
+  String get consentAccept => '我接受';
+
+  @override
+  String get consentContinue => '继续';
+
+  @override
+  String get consentSaving => '保存中…';
+
+  @override
+  String get shootLinkTitle => '链接拍摄';
+
+  @override
+  String get shootLinkCorpMode => '请切换到公司模式';
+
+  @override
+  String get shootLinkTier => '套餐';
+
+  @override
+  String get shootLinkCreate => '创建链接和 QR';
+
+  @override
+  String get shootLinkCopied => '链接已复制';
+
+  @override
+  String get shootLinkCopy => '复制';
+
+  @override
+  String get gdCameraRequired => '需要相机权限';
+
+  @override
+  String gdTurnToMarker(String azimuth, String elevation) {
+    return '转向 AR 标记 $azimuth° / $elevation°';
+  }
+
+  @override
+  String gdFpsWait(String fps) {
+    return '请稍候（$fps FPS，省电模式）';
+  }
+
+  @override
+  String get gdAlignMarker => '将相机对准 AR 标记';
+
+  @override
+  String get ucDraftNotFound => '未找到拍摄草稿';
+
+  @override
+  String get ucForbiddenCategory => '选择了禁止类别，订单将被拒绝且不退款。';
+
+  @override
+  String ucNoViewFile(String index) {
+    return '缺少视角文件 $index';
+  }
+
+  @override
+  String get gyroTiltDown => '向下倾斜手机';
+
+  @override
+  String get gyroTiltUp => '抬起手机';
+
+  @override
+  String gyroTurnPitch(String dir, String pitch) {
+    return '旋转手机：$dir（约 $pitch°）';
+  }
+
+  @override
+  String gyroTurnDegrees(String deg, String dir) {
+    return '将手机旋转约 $deg° $dir';
+  }
+
+  @override
+  String get gyroLeft => '向左';
+
+  @override
+  String get gyroRight => '向右';
+
+  @override
+  String get qaBlur => '模糊';
+
+  @override
+  String get qaOffCenter => '未居中';
+
+  @override
+  String get qaOverexposed => '过曝';
+
+  @override
+  String get qaOk => 'ok';
+
+  @override
+  String get qaCenterPhone => '移动手机使商品居中';
+
+  @override
+  String get qaCloser => '靠近一些，使商品约占屏幕 70%';
+
+  @override
+  String get qaFarther => '远离一些，使商品约占屏幕 70%';
+
+  @override
+  String get checkoutPromoApply => '应用';
+
+  @override
+  String checkoutPromoApplied(String amount) {
+    return '折扣 −$amount ₽';
+  }
+
+  @override
+  String get checkoutPromoInvalid => '优惠码无效';
+
+  @override
+  String get campaignBannerDismiss => '关闭';
+
+  @override
+  String get companyDefaultName => '公司';
+
+  @override
+  String get paymentStatusPending => '待支付';
+
+  @override
+  String get paymentStatusSucceeded => '已支付';
+
+  @override
+  String get paymentStatusCanceled => '已取消';
+
+  @override
+  String get draftRestoreTitle => '恢复草稿？';
+
+  @override
+  String draftRestoreBody(String count) {
+    return '找到 $count 个云备份（TTL 7 天，§3.3.2）。恢复未完成的拍摄？';
+  }
+
+  @override
+  String get draftRestoredSnackbar => '已从云端恢复草稿';
+
+  @override
+  String get resumeDraftTitle => '未完成的拍摄';
+
+  @override
+  String resumeDraftBody(String category, String count, String total) {
+    return '您有草稿（$category，$count/$total 帧）。继续还是重新开始？';
+  }
+
+  @override
+  String get resumeDraftDiscard => '重新开始';
+
+  @override
+  String get resumeDraftContinue => '继续';
 }

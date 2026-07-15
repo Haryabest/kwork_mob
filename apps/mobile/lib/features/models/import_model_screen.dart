@@ -9,6 +9,8 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/l10n/catalog_l10n.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 
 /// Импорт готового GLB Owner компании §6.10.
@@ -62,6 +64,7 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
   }
 
   Future<void> _pickFile() async {
+    final l10n = AppLocalizations.of(context)!;
     final res = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['glb'],
@@ -73,7 +76,7 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
     if (path == null) return;
     final size = f.size > 0 ? f.size : await File(path).length();
     if (size > _maxBytes) {
-      setState(() => _error = 'Файл больше 50 МБ (§6.10)');
+      setState(() => _error = l10n.impFileTooBig);
       return;
     }
     setState(() {
@@ -86,8 +89,9 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
 
   Future<void> _submit() async {
     if (_busy || _filePath == null) return;
+    final l10n = AppLocalizations.of(context)!;
     if (!widget.session.isOwner || widget.session.companyId == null) {
-      setState(() => _error = 'Импорт доступен только Owner компании (§6.10)');
+      setState(() => _error = l10n.impOwnerOnly);
       return;
     }
     setState(() {
@@ -104,7 +108,7 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
       final priceRub = (prep['import_price_rub'] as num?)?.toInt() ?? _importPriceRub;
       if (priceRub != null && mounted) setState(() => _importPriceRub = priceRub);
       if (uploadUrl == null || key == null || modelUuid == null) {
-        throw StateError('Сервер не вернул параметры загрузки');
+        throw StateError(l10n.impUploadParamsError);
       }
 
       final bytes = await File(_filePath!).readAsBytes();
@@ -115,7 +119,7 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
         body: bytes,
       );
       if (put.statusCode < 200 || put.statusCode >= 300) {
-        throw HttpException('Загрузка GLB: HTTP ${put.statusCode}');
+        throw HttpException('GLB HTTP ${put.statusCode}');
       }
       setState(() => _progress = 0.7);
 
@@ -133,7 +137,7 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
       if (!mounted) return;
       if (status == 'import_validating' && orderId != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Модель на проверке (GLB 2.0 / PBR / Draco)…')),
+          SnackBar(content: Text(l10n.impValidating)),
         );
         context.go('/home/queue/$orderId');
         return;
@@ -144,7 +148,7 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Модель импортирована')),
+        SnackBar(content: Text(l10n.impDone)),
       );
       context.go('/home/models/$uuid');
     } catch (e) {
@@ -164,39 +168,40 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Импорт модели'),
+        title: Text(l10n.importModel),
         prefixes: [FHeaderAction.back(onPress: () => context.pop())],
       ),
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           Text(
-            'Загрузите готовый GLB (до 50 МБ). Доступно только Owner компании §6.10.',
+            l10n.impIntro,
             style: TextStyle(color: AppColors.textSecondary),
           ),
           if (_importPriceRub != null && _importPriceRub! > 0) ...[
             const SizedBox(height: 8),
             Text(
-              'Стоимость импорта: $_importPriceRub ₽ (списание с баланса компании)',
+              l10n.impPriceLine('$_importPriceRub'),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ] else if (_importPriceRub == 0) ...[
             const SizedBox(height: 8),
             Text(
-              'Импорт бесплатный',
+              l10n.impFree,
               style: TextStyle(color: AppColors.success, fontWeight: FontWeight.w600),
             ),
           ],
           const SizedBox(height: 16),
           FTextField(
             control: FTextFieldControl.managed(controller: _nameCtrl),
-            label: const Text('Название'),
+            label: Text(l10n.impName),
           ),
           const SizedBox(height: 12),
           FSelect<String>(
-            label: const Text('Категория'),
+            label: Text(l10n.impCategory),
             enabled: !_busy,
             control: FSelectControl.managed(
               initial: _category.api,
@@ -210,7 +215,7 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
                     },
             ),
             items: {
-              for (final c in ProductCategory.values) c.label: c.api,
+              for (final c in ProductCategory.values) c.localized(l10n): c.api,
             },
           ),
           const SizedBox(height: 16),
@@ -218,11 +223,11 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
             variant: .outline,
             onPress: _busy ? null : _pickFile,
             prefix: const Icon(FIcons.upload),
-            child: Text(_fileName ?? 'Выбрать .glb'),
+            child: Text(_fileName ?? l10n.impPickGlb),
           ),
           if (_fileSize != null) ...[
             const SizedBox(height: 8),
-            Text('Размер: ${_formatSize(_fileSize)}', style: context.theme.typography.sm),
+            Text(l10n.impSize(_formatSize(_fileSize)), style: context.theme.typography.sm),
           ],
           if (_busy) ...[
             const SizedBox(height: 16),
@@ -235,7 +240,7 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
           const SizedBox(height: 20),
           FButton(
             onPress: (_busy || _filePath == null) ? null : _submit,
-            child: Text(_busy ? 'Импорт…' : 'Импортировать${priceLabel()}'),
+            child: Text(_busy ? l10n.impImporting : '${l10n.impBtn}${priceLabel()}'),
           ),
         ],
       ),

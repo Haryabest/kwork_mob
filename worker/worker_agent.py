@@ -34,6 +34,9 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+# HMAC-секрет водяного знака (§7.4): единый ключ для watermark-step и сверки digest.
+# По умолчанию совпадает с backend config.WATERMARK_HMAC_SECRET.
+WATERMARK_SECRET = os.getenv("WATERMARK_HMAC_SECRET", "change-me-watermark")
 TEMP_DIR = Path(os.getenv("TEMP_DIR", "/tmp/worker"))
 PIPELINE_MODE = os.getenv("WORKER_PIPELINE_MODE", "stub")  # stub локально; trellis — Intelion GPU
 WORKER_IMAGE_TAG = os.getenv("WORKER_IMAGE_TAG", os.getenv("TRELLIS_VERSION", "2"))

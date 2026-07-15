@@ -12,6 +12,8 @@ class InboxNotification {
     this.modelUuid,
     this.type,
     this.read = false,
+    this.titleKey,
+    this.bodyKey,
   });
 
   final String id;
@@ -22,6 +24,8 @@ class InboxNotification {
   final String? modelUuid;
   final String? type;
   final bool read;
+  final String? titleKey;
+  final String? bodyKey;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -31,6 +35,8 @@ class InboxNotification {
         if (orderId != null) 'order_id': orderId,
         if (modelUuid != null) 'model_uuid': modelUuid,
         if (type != null) 'type': type,
+        if (titleKey != null) 'title_key': titleKey,
+        if (bodyKey != null) 'body_key': bodyKey,
         'read': read,
       };
 
@@ -42,17 +48,22 @@ class InboxNotification {
         orderId: j['order_id']?.toString(),
         modelUuid: j['model_uuid']?.toString(),
         type: j['type']?.toString(),
+        titleKey: j['title_key']?.toString(),
+        bodyKey: j['body_key']?.toString(),
         read: j['read'] == true,
       );
 
-  InboxNotification copyWith({bool? read}) => InboxNotification(
+  InboxNotification copyWith({bool? read, String? title, String? body, String? type}) =>
+      InboxNotification(
         id: id,
-        title: title,
-        body: body,
+        title: title ?? this.title,
+        body: body ?? this.body,
         createdAt: createdAt,
         orderId: orderId,
         modelUuid: modelUuid,
-        type: type,
+        type: type ?? this.type,
+        titleKey: titleKey,
+        bodyKey: bodyKey,
         read: read ?? this.read,
       );
 }
@@ -101,6 +112,8 @@ class NotificationInbox {
     String? modelUuid,
     String? type,
     String? id,
+    String? titleKey,
+    String? bodyKey,
   }) async {
     final items = await load();
     final nid = id ?? '${DateTime.now().millisecondsSinceEpoch}_${orderId ?? modelUuid ?? type ?? 'n'}';
@@ -115,6 +128,8 @@ class NotificationInbox {
         orderId: orderId,
         modelUuid: modelUuid,
         type: type,
+        titleKey: titleKey,
+        bodyKey: bodyKey,
       ),
     );
     await _save(items);
@@ -150,6 +165,8 @@ class NotificationInbox {
         orderId: j['order_id']?.toString(),
         modelUuid: j['model_uuid']?.toString(),
         type: j['type']?.toString(),
+        titleKey: j['title_key']?.toString() ?? j['titleKey']?.toString(),
+        bodyKey: j['body_key']?.toString() ?? j['bodyKey']?.toString(),
         read: j['read'] == true,
       );
     }).toList();
@@ -165,45 +182,53 @@ class NotificationInbox {
         final model = o['model'] as Map?;
         await add(
           id: 'order_completed_$id',
-          title: 'Генерация завершена',
-          body: 'Заказ #$id готов к просмотру',
+          title: '',
+          body: '',
           orderId: id,
           modelUuid: model?['uuid']?.toString(),
           type: 'generation_done',
+          titleKey: 'notification.generation_done',
+          bodyKey: 'notification.generation_done',
         );
       } else if (status == 'blocked_nsfw') {
         await add(
           id: 'order_nsfw_$id',
-          title: 'NSFW-блокировка',
-          body:
-              'Заказ #$id отклонён. Средства возвращены. Аккаунт на проверке до 24 ч.',
+          title: '',
+          body: '',
           orderId: id,
           type: 'nsfw_blocked',
+          titleKey: 'notification.nsfw_blocked',
+          bodyKey: 'notification.nsfw_blocked',
         );
       } else if (status == 'failed') {
         await add(
           id: 'order_failed_$id',
-          title: 'Ошибка генерации',
-          body: o['failure_reason']?.toString() ?? 'Заказ #$id не выполнен',
+          title: '',
+          body: o['failure_reason']?.toString() ?? '',
           orderId: id,
           type: 'generation_failed',
+          titleKey: 'notification.generation_failed',
         );
         if ((o['amount'] as num?) != null && (o['amount'] as num) > 0) {
           await add(
             id: 'order_refund_$id',
-            title: 'Возврат средств',
-            body: 'По заказу #$id средства возвращены',
+            title: '',
+            body: '',
             orderId: id,
             type: 'refund',
+            titleKey: 'notification.refund',
+            bodyKey: 'notification.refund',
           );
         }
       } else if (status == 'cancelled') {
         await add(
           id: 'order_cancelled_$id',
-          title: 'Заказ отменён',
-          body: 'Заказ #$id отменён',
+          title: '',
+          body: '',
           orderId: id,
           type: 'cancelled',
+          titleKey: 'notification.cancelled',
+          bodyKey: 'notification.cancelled',
         );
       }
     }

@@ -3,6 +3,7 @@ import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/push_deep_link.dart';
 
 /// Блокировка приложения до принятия новых версий документов (§2.8.2).
@@ -76,10 +77,11 @@ class _LegalConsentGateScreenState extends State<LegalConsentGateScreen> {
   }
 
   Future<void> _submit() async {
+    final l10n = AppLocalizations.of(context)!;
     final slugs = _pending.map((e) => e['slug']?.toString()).whereType<String>().toList();
     if (!_accepted.containsAll(slugs)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Примите все обновлённые документы')),
+        SnackBar(content: Text(l10n.consentAcceptAllSnackbar)),
       );
       return;
     }
@@ -100,8 +102,9 @@ class _LegalConsentGateScreenState extends State<LegalConsentGateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return FScaffold(
-      header: const FHeader(title: Text('Обновлены условия')),
+      header: FHeader(title: Text(l10n.consentUpdatedTitle)),
       child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -110,16 +113,16 @@ class _LegalConsentGateScreenState extends State<LegalConsentGateScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(_error!, style: const TextStyle(color: AppColors.error)),
-                      FButton(onPress: _load, child: const Text('Повторить')),
+                      FButton(onPress: _load, child: Text(l10n.mvRetry)),
                     ],
                   ),
                 )
               : ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
-                    const Text(
-                      'Для продолжения работы примите новые версии документов (§2.8).',
-                      style: TextStyle(color: AppColors.textSecondary),
+                    Text(
+                      l10n.consentIntro,
+                      style: const TextStyle(color: AppColors.textSecondary),
                     ),
                     const SizedBox(height: 16),
                     ..._pending.map((p) {
@@ -138,7 +141,7 @@ class _LegalConsentGateScreenState extends State<LegalConsentGateScreen> {
                                 onPressed: () => setState(() {
                                   _expanded = _expanded == slug ? null : slug;
                                 }),
-                                child: Text(_expanded == slug ? 'Скрыть текст' : 'Читать'),
+                                child: Text(_expanded == slug ? l10n.consentHide : l10n.consentRead),
                               ),
                               if (_expanded == slug)
                                 Container(
@@ -158,7 +161,7 @@ class _LegalConsentGateScreenState extends State<LegalConsentGateScreen> {
                                     _accepted.remove(slug);
                                   }
                                 }),
-                                title: const Text('Принимаю'),
+                                title: Text(l10n.consentAccept),
                                 controlAffinity: ListTileControlAffinity.leading,
                                 contentPadding: EdgeInsets.zero,
                               ),
@@ -170,7 +173,7 @@ class _LegalConsentGateScreenState extends State<LegalConsentGateScreen> {
                     const SizedBox(height: 12),
                     FButton(
                       onPress: _submitting ? null : _submit,
-                      child: Text(_submitting ? 'Сохранение…' : 'Продолжить'),
+                      child: Text(_submitting ? l10n.consentSaving : l10n.consentContinue),
                     ),
                   ],
                 ),

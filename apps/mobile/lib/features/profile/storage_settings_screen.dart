@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:kwork_mobile/core/api.dart';
-import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 
 class StorageSettingsScreen extends StatefulWidget {
@@ -37,19 +37,20 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
   }
 
   Future<void> _exportZip() async {
+    final l10n = AppLocalizations.of(context)!;
     setState(() => _busy = true);
     try {
       final zip = await _lib.exportAllZip();
       await Clipboard.setData(ClipboardData(text: zip.path));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ZIP: ${zip.path} (путь скопирован)')),
+          SnackBar(content: Text(l10n.storZipCopied(zip.path))),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('$e')),
         );
       }
     } finally {
@@ -58,13 +59,14 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
   }
 
   Future<void> _cleanupNow() async {
+    final l10n = AppLocalizations.of(context)!;
     setState(() => _busy = true);
     try {
       final n = await _lib.runAutoCleanup();
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Удалено локальных GLB: $n')),
+          SnackBar(content: Text(l10n.storGlbDeleted('$n'))),
         );
       }
     } finally {
@@ -74,22 +76,26 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final stats = _stats;
     return FScaffold(
-      header: const FHeader(title: Text('Локальное хранилище')),
+      header: FHeader(title: Text(l10n.localStorage)),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           if (stats != null)
             Text(
-              'Занято: ${_lib.formatBytes(stats.bytes)} · '
-              'папок: ${stats.models} · GLB: ${stats.glbs}',
+              l10n.storUsedLine(
+                _lib.formatBytes(stats.bytes),
+                '${stats.models}',
+                '${stats.glbs}',
+              ),
               style: context.theme.typography.lg,
             ),
           const SizedBox(height: 16),
           FSwitch(
-            label: const Text('Автозагрузка GLB при завершении'),
-            description: const Text('§3.3.2 — сохранять модель на устройство'),
+            label: Text(l10n.storAutoDownload),
+            description: Text(l10n.storAutoDownloadDesc),
             value: _autoDownload,
             enabled: !_busy,
             onChange: (v) async {
@@ -99,8 +105,8 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
           ),
           const SizedBox(height: 12),
           FSwitch(
-            label: const Text('Автоочистка GLB'),
-            description: Text('Удалять не избранные старше $_cleanupDays дн.'),
+            label: Text(l10n.storAutoCleanup),
+            description: Text(l10n.storAutoCleanupDesc('$_cleanupDays')),
             value: _autoCleanup,
             enabled: !_busy,
             onChange: (v) async {
@@ -110,7 +116,7 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
           ),
           const SizedBox(height: 12),
           FSelect<int>(
-            label: const Text('Срок автоочистки (дней)'),
+            label: Text(l10n.storCleanupDays),
             enabled: !_busy,
             control: FSelectControl.managed(
               initial: _cleanupDays,
@@ -120,24 +126,24 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
                 setState(() => _cleanupDays = v);
               },
             ),
-            items: const {
-              '7 дней': 7,
-              '14 дней': 14,
-              '30 дней': 30,
-              '60 дней': 60,
-              '90 дней': 90,
+            items: {
+              l10n.storDays7: 7,
+              l10n.storDays14: 14,
+              l10n.storDays30: 30,
+              l10n.storDays60: 60,
+              l10n.storDays90: 90,
             },
           ),
           const SizedBox(height: 16),
           FButton(
             onPress: _busy ? null : _cleanupNow,
             variant: .outline,
-            child: const Text('Очистить сейчас'),
+            child: Text(l10n.storCleanupNow),
           ),
           const SizedBox(height: 8),
           FButton(
             onPress: _busy ? null : _exportZip,
-            child: const Text('Экспорт всех GLB в ZIP'),
+            child: Text(l10n.storExportZip),
           ),
         ],
       ),

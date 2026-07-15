@@ -1,7 +1,7 @@
 import { ActionIcon, Button, Card, Center, Code, Group, Loader, Modal, NumberInput, ScrollArea, Select, SimpleGrid, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
 import { IconDownload, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { HealthCard, MetricGrid, PageHeader, SaveButton, ShellTable, StateBadge } from '../components/Panel';
 import { api, getApiError } from '../services/api';
@@ -594,6 +594,34 @@ export function CompaniesPage() {
   );
 }
 
+type CompanyMemberRow = {
+  user_id: number;
+  role: string;
+  max_concurrent_orders?: number | null;
+  monthly_spending_limit?: number | null;
+};
+type ApiKeyRow = {
+  id: number;
+  name: string;
+  key_prefix: string;
+  scopes: string[];
+  is_active: boolean;
+  last_used_at: string | null;
+  created_at: string | null;
+};
+type PriceOverride = { type: 'fixed' | 'percent'; value: number };
+type PriceData = {
+  base: Record<string, number>;
+  overrides: Record<string, PriceOverride>;
+  effective: Record<string, number>;
+};
+
+const PRICE_TIERS: Array<{ code: string; label: string }> = [
+  { code: 'small', label: 'Малый' },
+  { code: 'large', label: 'Крупный' },
+  { code: 'import_glb', label: 'Импорт GLB' },
+];
+
 export function CompanyDetailPage() {
   const { id } = useParams();
   const [company, setCompany] = useState<{
@@ -603,7 +631,7 @@ export function CompanyDetailPage() {
     balance: number;
     status: string;
     settings?: { force_trellis_version?: string | null };
-    members: Array<{ user_id: number; role: string }>;
+    members: CompanyMemberRow[];
   } | null>(null);
   const [forceTrellis, setForceTrellis] = useState('');
   const [stats, setStats] = useState({
@@ -614,12 +642,25 @@ export function CompanyDetailPage() {
   const [shootRecent, setShootRecent] = useState<
     Array<{ id: number; token: string; status: string; used_count: number; created_at?: string }>
   >([]);
+  const [apiKeys, setApiKeys] = useState<ApiKeyRow[]>([]);
+  const [invites, setInvites] = useState<Invitation[]>([]);
+  const [logs, setLogs] = useState<
+    Array<{ id: number; action: string; user_id: number | null; created_at: string | null }>
+  >([]);
+  const [prices, setPrices] = useState<PriceData | null>(null);
+  const [priceDraft, setPriceDraft] = useState<Record<string, PriceOverride>>({});
+  const [editMember, setEditMember] = useState<CompanyMemberRow | null>(null);
+  const [limitDraft, setLimitDraft] = useState<{ mco: number | ''; msl: number | '' }>({ mco: '', msl: '' });
 
   async function load() {
-    const [c, s, sl] = await Promise.all([
+    const [c, s, sl, keys, inv, lg, pr] = await Promise.all([
       api.get(`/admin/companies/${id}`),
       api.get(`/admin/companies/${id}/stats`),
       api.get(`/admin/companies/${id}/shoot-links`),
+      api.get(`/admin/companies/${id}/api-keys`),
+      api.get(`/admin/companies/${id}/invitations`),
+      api.get(`/admin/companies/${id}/logs`),
+      api.get(`/admin/companies/${id}/price-overrides`),
     ]);
     setCompany(c.data);
     setForceTrellis(c.data.settings?.force_trellis_version ?? '');
@@ -635,11 +676,65 @@ export function CompanyDetailPage() {
       },
     });
     setShootRecent(sl.data.recent ?? []);
+    setApiKeys(keys.data.items ?? []);
+    setInvites(inv.data.items ?? []);
+    setLogs(lg.data.items ?? []);
+    setPrices(pr.data);
+    setPriceDraft(pr.data.overrides ?? {});
   }
 
   useEffect(() => {
     load().catch((e) => notifications.show({ color: 'red', message: getApiError(e) }));
   }, [id]);
+
+  async function savePrices() {
+    try {
+      await api.put(`/admin/companies/${company!.id}/price-overrides`, {
+        price_overrides: priceDraft,
+      });
+      notifications.show({ color: 'teal', message: 'Индивидуальные цены сохранены' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function revokeKey(keyId: number) {
+    if (!confirm('Отозвать API-ключ?')) return;
+    try {
+      await api.post(`/admin/companies/${company!.id}/api-keys/${keyId}/revoke`);
+      notifications.show({ color: 'teal', message: 'Ключ отозван' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function revokeInvite(inviteId: number) {
+    if (!confirm('Отозвать приглашение?')) return;
+    try {
+      await api.post(`/admin/invitations/${inviteId}/revoke`);
+      notifications.show({ color: 'teal', message: 'Приглашение отозвано' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function saveMemberLimits() {
+    if (!editMember) return;
+    try {
+      await api.patch(`/admin/companies/${company!.id}/members/${editMember.user_id}/limits`, {
+        max_concurrent_orders: limitDraft.mco === '' ? null : limitDraft.mco,
+        monthly_spending_limit: limitDraft.msl === '' ? null : limitDraft.msl,
+      });
+      notifications.show({ color: 'teal', message: 'Лимиты сохранены' });
+      setEditMember(null);
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
 
   if (!company) return <Center py="xl"><Loader color="brand" /></Center>;
 
@@ -691,10 +786,169 @@ export function CompanyDetailPage() {
           </Stack>
         </Card>
         <Card withBorder>
-          <Text fw={600} mb="sm">Сотрудники</Text>
-          <ShellTable headers={['User ID', 'Роль']} rows={company.members.map((m) => [String(m.user_id), m.role])} />
+          <Text fw={600} mb="sm">Сотрудники и лимиты (§11.6)</Text>
+          <ShellTable
+            headers={['User ID', 'Роль', 'Заказов', 'Лимит ₽/мес', '']}
+            rows={company.members.map((m) => [
+              String(m.user_id),
+              m.role,
+              m.max_concurrent_orders != null ? String(m.max_concurrent_orders) : '∞',
+              m.monthly_spending_limit != null ? m.monthly_spending_limit.toLocaleString('ru-RU') : '∞',
+              <Button
+                key={`ml${m.user_id}`}
+                size="xs"
+                variant="light"
+                onClick={() => {
+                  setEditMember(m);
+                  setLimitDraft({
+                    mco: m.max_concurrent_orders ?? '',
+                    msl: m.monthly_spending_limit ?? '',
+                  });
+                }}
+              >
+                Лимиты
+              </Button>,
+            ])}
+          />
         </Card>
       </SimpleGrid>
+
+      <SimpleGrid cols={{ base: 1, md: 2 }} mb="md">
+        <Card withBorder>
+          <Text fw={600} mb="sm">Индивидуальные цены (§11.4)</Text>
+          <Stack gap="xs">
+            {PRICE_TIERS.map((t) => {
+              const ov = priceDraft[t.code];
+              return (
+                <Group key={t.code} align="flex-end" gap="xs" wrap="nowrap">
+                  <Text size="sm" w={90}>{t.label}</Text>
+                  <Text size="xs" c="dimmed" w={70}>
+                    база {prices?.base?.[t.code] ?? '—'}₽
+                  </Text>
+                  <Select
+                    w={110}
+                    value={ov?.type ?? ''}
+                    placeholder="нет"
+                    data={[
+                      { value: '', label: 'Нет' },
+                      { value: 'fixed', label: 'Фикс ₽' },
+                      { value: 'percent', label: 'Скидка %' },
+                    ]}
+                    onChange={(v) =>
+                      setPriceDraft((d) => {
+                        const next = { ...d };
+                        if (!v) delete next[t.code];
+                        else next[t.code] = { type: v as 'fixed' | 'percent', value: ov?.value ?? 0 };
+                        return next;
+                      })
+                    }
+                  />
+                  <NumberInput
+                    w={110}
+                    disabled={!ov}
+                    value={ov?.value ?? ''}
+                    min={0}
+                    max={ov?.type === 'percent' ? 100 : undefined}
+                    onChange={(v) =>
+                      setPriceDraft((d) => ({
+                        ...d,
+                        [t.code]: { type: ov?.type ?? 'fixed', value: Number(v) || 0 },
+                      }))
+                    }
+                  />
+                </Group>
+              );
+            })}
+            <Button variant="light" onClick={savePrices} mt="xs">Сохранить цены</Button>
+          </Stack>
+        </Card>
+        <Card withBorder>
+          <Text fw={600} mb="sm">API-ключи (§8.8)</Text>
+          <ShellTable
+            headers={['Название', 'Prefix', 'Активен', '']}
+            rows={
+              apiKeys.length
+                ? apiKeys.map((k) => [
+                    k.name,
+                    <Code key={`c${k.id}`}>{k.key_prefix}</Code>,
+                    <StateBadge key={`a${k.id}`} value={k.is_active ? 'да' : 'нет'} color={k.is_active ? 'teal' : 'red'} />,
+                    k.is_active ? (
+                      <ActionIcon key={`rk${k.id}`} color="red" variant="light" onClick={() => revokeKey(k.id)}>
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    ) : (
+                      <span key={`e${k.id}`}>—</span>
+                    ),
+                  ])
+                : [['—', 'Нет ключей', '—', '—']]
+            }
+          />
+        </Card>
+      </SimpleGrid>
+
+      <SimpleGrid cols={{ base: 1, md: 2 }} mb="md">
+        <Card withBorder>
+          <Text fw={600} mb="sm">Приглашения (§11.6)</Text>
+          <ShellTable
+            headers={['Email', 'Роль', 'Статус', '']}
+            rows={
+              invites.length
+                ? invites.map((inv) => [
+                    inv.email,
+                    inv.role,
+                    <StateBadge
+                      key={`is${inv.id}`}
+                      value={inv.status}
+                      color={inv.status === 'pending' ? 'brand' : inv.status === 'accepted' ? 'teal' : 'red'}
+                    />,
+                    inv.status === 'pending' ? (
+                      <ActionIcon key={`ri${inv.id}`} color="red" variant="light" onClick={() => revokeInvite(inv.id)}>
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    ) : (
+                      <span key={`ei${inv.id}`}>—</span>
+                    ),
+                  ])
+                : [['—', '—', 'Нет приглашений', '—']]
+            }
+          />
+        </Card>
+        <Card withBorder>
+          <Text fw={600} mb="sm">Аудит (§10.7.7)</Text>
+          <ShellTable
+            headers={['Действие', 'User', 'Когда']}
+            rows={
+              logs.length
+                ? logs.slice(0, 20).map((r) => [
+                    r.action,
+                    r.user_id != null ? String(r.user_id) : '—',
+                    r.created_at?.slice(0, 19) ?? '—',
+                  ])
+                : [['Нет событий', '—', '—']]
+            }
+          />
+        </Card>
+      </SimpleGrid>
+
+      <Modal opened={!!editMember} onClose={() => setEditMember(null)} title={`Лимиты сотрудника #${editMember?.user_id ?? ''}`}>
+        <Stack>
+          <NumberInput
+            label="Макс. одновременных заказов"
+            placeholder="без лимита"
+            min={0}
+            value={limitDraft.mco}
+            onChange={(v) => setLimitDraft((d) => ({ ...d, mco: v === '' ? '' : Number(v) }))}
+          />
+          <NumberInput
+            label="Месячный лимит трат, ₽"
+            placeholder="без лимита"
+            min={0}
+            value={limitDraft.msl}
+            onChange={(v) => setLimitDraft((d) => ({ ...d, msl: v === '' ? '' : Number(v) }))}
+          />
+          <Button onClick={saveMemberLimits}>Сохранить</Button>
+        </Stack>
+      </Modal>
       <PageHeader title="Shoot-links (§3.15.4)" description="Созданные / истёкшие / успешные съёмки" />
       <MetricGrid
         items={[
@@ -726,24 +980,99 @@ export function CompanyDetailPage() {
   );
 }
 
+type Invitation = {
+  id: number;
+  email: string;
+  company_id: number | null;
+  company_name: string | null;
+  role: string;
+  status: string;
+  expires_at: string | null;
+  created_at: string | null;
+};
+
 export function InvitationsPage() {
+  const [items, setItems] = useState<Invitation[]>([]);
+  const [status, setStatus] = useState<string>('pending');
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get<{ items: Invitation[] }>('/admin/invitations', {
+        params: { status },
+      });
+      setItems(data.items ?? []);
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setLoading(false);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function revoke(id: number) {
+    if (!confirm('Отозвать приглашение?')) return;
+    try {
+      await api.post(`/admin/invitations/${id}/revoke`);
+      notifications.show({ color: 'teal', message: 'Приглашение отозвано' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
   return (
     <>
-      <PageHeader title="Приглашения" description="Активные приглашения сотрудников в B2B-компании" />
-      <ShellTable
-        headers={['Email', 'Компания', 'Роль', 'Срок', '']}
-        rows={[
-          [
-            'designer@mercury.ru',
-            'ООО «Меркурий»',
-            'Дизайнер',
-            '13.07.2026',
-            <ActionIcon key="1" color="red" variant="light">
-              <IconTrash size={16} />
-            </ActionIcon>,
-          ],
-        ]}
+      <PageHeader
+        title="Приглашения"
+        description="Активные приглашения сотрудников в B2B-компании (§11.6)"
+        action={
+          <Select
+            value={status}
+            onChange={(v) => setStatus(v || 'pending')}
+            data={[
+              { value: 'pending', label: 'Активные' },
+              { value: 'accepted', label: 'Принятые' },
+              { value: 'revoked', label: 'Отозванные' },
+              { value: 'all', label: 'Все' },
+            ]}
+            w={180}
+          />
+        }
       />
+      {loading ? (
+        <Center py="xl"><Loader color="brand" /></Center>
+      ) : (
+        <ShellTable
+          headers={['Email', 'Компания', 'Роль', 'Статус', 'Срок', '']}
+          rows={
+            items.length
+              ? items.map((inv) => [
+                  inv.email,
+                  inv.company_name || (inv.company_id ? `#${inv.company_id}` : '—'),
+                  inv.role,
+                  <StateBadge
+                    key={`s${inv.id}`}
+                    value={inv.status}
+                    color={inv.status === 'pending' ? 'brand' : inv.status === 'accepted' ? 'teal' : 'red'}
+                  />,
+                  inv.expires_at ? new Date(inv.expires_at).toLocaleDateString('ru-RU') : '—',
+                  inv.status === 'pending' ? (
+                    <ActionIcon key={`r${inv.id}`} color="red" variant="light" onClick={() => revoke(inv.id)}>
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  ) : (
+                    <span key={`e${inv.id}`}>—</span>
+                  ),
+                ])
+              : [['—', 'Нет приглашений', '—', '—', '—', '—']]
+          }
+        />
+      )}
     </>
   );
 }

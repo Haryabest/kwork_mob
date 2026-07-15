@@ -34,6 +34,39 @@ async def get_amount(db: AsyncSession, tier: str) -> int:
     return int(row.amount_rub)
 
 
+def apply_company_override(base: int, override: dict | None) -> int:
+    """Индивидуальная цена B2B (§11.4): fixed | percent."""
+    if not isinstance(override, dict):
+        return base
+    typ = str(override.get("type") or "").lower()
+    val = override.get("value")
+    if not isinstance(val, (int, float)):
+        return base
+    if typ == "fixed" and val >= 0:
+        return int(val)
+    if typ == "percent" and 0 <= val <= 100:
+        return max(0, int(round(base * (1 - val / 100))))
+    return base
+
+
+async def get_amount_for_company(
+    db: AsyncSession, tier: str, company=None
+) -> int:
+    """Цена тарифа с учётом индивидуальных цен компании (§11.4).
+
+    company — объект Company или None. Переопределения хранятся в
+    company.settings["price_overrides"][tier] = {"type": "fixed|percent", "value": N}.
+    """
+    base = await get_amount(db, tier)
+    if company is None:
+        return base
+    settings = getattr(company, "settings", None) or {}
+    overrides = settings.get("price_overrides")
+    if not isinstance(overrides, dict):
+        return base
+    return apply_company_override(base, overrides.get(tier))
+
+
 async def list_tariffs(db: AsyncSession) -> list[dict]:
     await ensure_defaults(db)
     rows = (await db.scalars(select(Tariff).order_by(Tariff.code))).all()

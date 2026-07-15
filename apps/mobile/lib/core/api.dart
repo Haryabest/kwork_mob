@@ -847,6 +847,26 @@ class ApiClient {
     await _dio.delete('/user/notifications');
   }
 
+  Future<Map<String, dynamic>> listApiKeys() async {
+    final res = await _dio.get('/company/api_keys');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createApiKey({
+    required String name,
+    List<String>? scopes,
+  }) async {
+    final res = await _dio.post('/company/api_keys', data: {
+      'name': name,
+      if (scopes != null) 'scopes': scopes,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> revokeApiKey(int keyId) async {
+    await _dio.delete('/company/api_keys/$keyId');
+  }
+
   Future<List<int>> exportUserTransactionsCsv({
     String? dateFrom,
     String? dateTo,
@@ -1015,5 +1035,26 @@ class ApiClient {
 
   Future<void> closeSupport(int id) async {
     await _dio.post('/support/questions/$id/close');
+  }
+
+  Future<Map<String, dynamic>> validatePromocode({
+    required String code,
+    String? tier,
+  }) async {
+    final res = await _dio.post('/promocodes/validate', data: {
+      'code': code,
+      if (tier != null) 'tier': tier,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listCampaignBanners() async {
+    final res = await _dio.get('/user/campaign_banners');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<void> postAnalyticsEvents(List<Map<String, dynamic>> events) async {
+    await _dio.post('/user/analytics/events', data: {'events': events});
   }
 }

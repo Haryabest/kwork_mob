@@ -10,6 +10,9 @@ from pathlib import Path
 MAX_BYTES = 15 * 1024 * 1024
 QUALITY_THRESHOLD = float(os.getenv("QUALITY_THRESHOLD", "0.7"))
 SEG_AVG_MIN = float(os.getenv("SEGMENTATION_AVG_MIN", "0.85"))
+# Минимальная геометрия валидной модели (§5.4): пустой/битый GLB отклоняем.
+MIN_FACES = int(os.getenv("VALIDATE_MIN_FACES", "200"))
+MIN_VERTICES = int(os.getenv("VALIDATE_MIN_VERTICES", "100"))
 
 
 def _seg_score(root: Path) -> tuple[float, dict]:
@@ -55,23 +58,80 @@ def _pbr_score(root: Path) -> float:
     return 0.75
 
 
+def _geometry_score(model_path: Path) -> tuple[float, dict]:
+    """Реальная проверка геометрии GLB через trimesh (§5.4).
+
+    Возвращает (score, meta). При недоступности парсера — мягкий fallback,
+    но НЕ маскирует пустую модель: `faces=0` трактуется как провал.
+    """
+    try:
+        import trimesh  # type: ignore
+    except Exception:
+        return 0.75, {"parsed": False, "reason": "trimesh_unavailable"}
+
+    try:
+        loaded = trimesh.load(str(model_path), force="scene")
+    except Exception as exc:  # noqa: BLE001
+        return 0.0, {"parsed": False, "reason": f"load_error: {exc}"}
+
+    geometry_map = getattr(loaded, "geometry", None)
+    if geometry_map:
+        geometries = list(geometry_map.values())
+    elif loaded is not None:
+        geometries = [loaded]
+    else:
+        geometries = []
+
+    def _count(obj, attr: str) -> int:
+        arr = getattr(obj, attr, None)
+        if arr is None:
+            return 0
+        try:
+            return int(len(arr))
+        except TypeError:
+            return 0
+
+    faces = sum(_count(g, "faces") for g in geometries)
+    vertices = sum(_count(g, "vertices") for g in geometries)
+
+    meta = {
+        "parsed": True,
+        "mesh_count": len(geometries),
+        "faces": faces,
+        "vertices": vertices,
+        "min_faces": MIN_FACES,
+        "min_vertices": MIN_VERTICES,
+    }
+    if faces == 0 or vertices == 0:
+        return 0.0, {**meta, "reason": "empty_geometry"}
+    if faces >= MIN_FACES and vertices >= MIN_VERTICES:
+        return 1.0, meta
+    # есть геометрия, но подозрительно мало полигонов
+    return 0.5, {**meta, "reason": "low_poly"}
+
+
 def compute_quality(root: Path, size: int) -> dict:
     seg_s, seg_meta = _seg_score(root)
     size_s = _size_score(size)
     pbr_s = _pbr_score(root)
-    # веса: сегментация критична (§6.12), размер и PBR — технические
-    score = round(0.5 * seg_s + 0.25 * size_s + 0.25 * pbr_s, 4)
+    geom_s, geom_meta = _geometry_score(root / "model.glb")
+    # веса: сегментация и геометрия критичны (§5.4/§6.12), размер и PBR — технические
+    score = round(0.4 * seg_s + 0.3 * geom_s + 0.15 * size_s + 0.15 * pbr_s, 4)
+    # пустая/битая геометрия — жёсткий провал независимо от прочих компонент
+    passed = score >= QUALITY_THRESHOLD and geom_s > 0.0
     return {
         "quality_score": score,
         "threshold": QUALITY_THRESHOLD,
         "components": {
             "segmentation": seg_s,
+            "geometry": geom_s,
             "size": size_s,
             "pbr": pbr_s,
         },
         "segmentation": seg_meta,
+        "geometry": geom_meta,
         "size_bytes": size,
-        "passed": score >= QUALITY_THRESHOLD,
+        "passed": passed,
     }
 
 

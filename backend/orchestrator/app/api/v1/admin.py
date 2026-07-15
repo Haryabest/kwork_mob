@@ -165,6 +165,346 @@ async def company_logs(company_id: int, _: dict = Depends(require_admin), db: As
     }
 
 
+@router.get("/companies/{company_id}/invitations")
+async def company_invitations(
+    company_id: int, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)
+):
+    """Активные/все приглашения сотрудников компании (§11.6)."""
+    from app.models import CompanyInvitation
+
+    rows = (
+        await db.scalars(
+            select(CompanyInvitation)
+            .where(CompanyInvitation.company_id == company_id)
+            .order_by(CompanyInvitation.id.desc())
+            .limit(200)
+        )
+    ).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "email": r.email,
+                "role": r.role,
+                "status": r.status,
+                "max_concurrent_orders": r.max_concurrent_orders,
+                "monthly_spending_limit": r.monthly_spending_limit,
+                "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/invitations")
+async def all_invitations(
+    status: str | None = Query(default="pending"),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список приглашений по всем компаниям (§11.6, страница «Приглашения»)."""
+    from app.models import CompanyInvitation
+
+    q = (
+        select(CompanyInvitation, Company.name)
+        .join(Company, Company.id == CompanyInvitation.company_id, isouter=True)
+        .order_by(CompanyInvitation.id.desc())
+        .limit(300)
+    )
+    if status and status != "all":
+        q = q.where(CompanyInvitation.status == status)
+    rows = (await db.execute(q)).all()
+    return {
+        "items": [
+            {
+                "id": inv.id,
+                "email": inv.email,
+                "company_id": inv.company_id,
+                "company_name": cname,
+                "role": inv.role,
+                "status": inv.status,
+                "expires_at": inv.expires_at.isoformat() if inv.expires_at else None,
+                "created_at": inv.created_at.isoformat() if inv.created_at else None,
+            }
+            for inv, cname in rows
+        ]
+    }
+
+
+@router.post("/invitations/{invitation_id}/revoke")
+async def revoke_invitation(
+    invitation_id: int,
+    admin: User = Depends(get_current_db_user),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отозвать приглашение (§2.5.2 / §11.6)."""
+    from app.models import AuditLog, CompanyInvitation
+
+    inv = await db.get(CompanyInvitation, invitation_id)
+    if not inv:
+        raise HTTPException(404, "Приглашение не найдено")
+    if inv.status == "accepted":
+        raise HTTPException(400, "Приглашение уже принято")
+    inv.status = "revoked"
+    db.add(
+        AuditLog(
+            company_id=inv.company_id,
+            user_id=admin.id,
+            action="invitation_revoked",
+            details={"invitation_id": inv.id, "email": inv.email, "by": "admin"},
+        )
+    )
+    await db.commit()
+    return {"message": "ok", "status": inv.status}
+
+
+@router.get("/companies/{company_id}/api-keys")
+async def company_api_keys(
+    company_id: int, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)
+):
+    """API-ключи компании (§11.6)."""
+    from app.models import CompanyApiKey
+
+    rows = (
+        await db.scalars(
+            select(CompanyApiKey)
+            .where(CompanyApiKey.company_id == company_id)
+            .order_by(CompanyApiKey.id.desc())
+        )
+    ).all()
+    return {
+        "items": [
+            {
+                "id": k.id,
+                "name": k.name,
+                "key_prefix": k.key_prefix,
+                "scopes": k.scopes,
+                "is_active": k.is_active,
+                "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
+                "created_at": k.created_at.isoformat() if k.created_at else None,
+                "revoked_at": k.revoked_at.isoformat() if k.revoked_at else None,
+            }
+            for k in rows
+        ]
+    }
+
+
+@router.post("/companies/{company_id}/api-keys/{key_id}/revoke")
+async def revoke_company_api_key(
+    company_id: int,
+    key_id: int,
+    admin: User = Depends(get_current_db_user),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отозвать API-ключ компании (§8.8 / §11.6)."""
+    from app.models import AuditLog, CompanyApiKey
+
+    row = await db.get(CompanyApiKey, key_id)
+    if not row or row.company_id != company_id:
+        raise HTTPException(404, "Ключ не найден")
+    row.is_active = False
+    row.revoked_at = datetime.now(timezone.utc)
+    db.add(
+        AuditLog(
+            company_id=company_id,
+            user_id=admin.id,
+            action="api_key_revoked",
+            details={"key_id": key_id, "key_prefix": row.key_prefix, "by": "admin"},
+        )
+    )
+    await db.commit()
+    return {"message": "ok"}
+
+
+class MemberLimitsBody(BaseModel):
+    max_concurrent_orders: int | None = Field(default=None, ge=0, le=1000)
+    monthly_spending_limit: int | None = Field(default=None, ge=0)
+
+
+@router.patch("/companies/{company_id}/members/{user_id}/limits")
+async def set_member_limits(
+    company_id: int,
+    user_id: int,
+    body: MemberLimitsBody,
+    admin: User = Depends(get_current_db_user),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Лимиты сотрудника: max_concurrent_orders, monthly_spending_limit (§11.6)."""
+    from app.models import AuditLog
+
+    member = await db.scalar(
+        select(CompanyMember).where(
+            CompanyMember.company_id == company_id, CompanyMember.user_id == user_id
+        )
+    )
+    if not member:
+        raise HTTPException(404, "Сотрудник не найден")
+    member.max_concurrent_orders = body.max_concurrent_orders
+    member.monthly_spending_limit = body.monthly_spending_limit
+    db.add(
+        AuditLog(
+            company_id=company_id,
+            user_id=admin.id,
+            action="member_limits_changed",
+            details={
+                "member_user_id": user_id,
+                "max_concurrent_orders": body.max_concurrent_orders,
+                "monthly_spending_limit": body.monthly_spending_limit,
+            },
+        )
+    )
+    await db.commit()
+    return {
+        "message": "ok",
+        "user_id": user_id,
+        "max_concurrent_orders": member.max_concurrent_orders,
+        "monthly_spending_limit": member.monthly_spending_limit,
+    }
+
+
+class PriceOverridesBody(BaseModel):
+    price_overrides: dict = Field(default_factory=dict)
+
+
+@router.get("/companies/{company_id}/price-overrides")
+async def get_company_price_overrides(
+    company_id: int, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)
+):
+    """Индивидуальные цены компании (§11.4)."""
+    from app.services import tariffs as tariff_svc
+
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(404, "Компания не найдена")
+    settings = company.settings or {}
+    overrides = settings.get("price_overrides") if isinstance(settings.get("price_overrides"), dict) else {}
+    base = {t: await tariff_svc.get_amount(db, t) for t in ("small", "large", "import_glb")}
+    effective = {
+        t: tariff_svc.apply_company_override(base[t], overrides.get(t)) for t in base
+    }
+    return {"base": base, "overrides": overrides, "effective": effective}
+
+
+@router.put("/companies/{company_id}/price-overrides")
+async def set_company_price_overrides(
+    company_id: int,
+    body: PriceOverridesBody,
+    admin: User = Depends(get_current_db_user),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Задать индивидуальные цены B2B: {tier: {type: fixed|percent, value: N}} (§11.4)."""
+    from app.models import AuditLog
+
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(404, "Компания не найдена")
+    clean: dict = {}
+    for tier, ov in (body.price_overrides or {}).items():
+        if tier not in ("small", "large", "import_glb"):
+            continue
+        if not isinstance(ov, dict):
+            continue
+        typ = str(ov.get("type") or "").lower()
+        val = ov.get("value")
+        if typ not in ("fixed", "percent") or not isinstance(val, (int, float)):
+            continue
+        if typ == "percent" and not (0 <= val <= 100):
+            continue
+        if val < 0:
+            continue
+        clean[tier] = {"type": typ, "value": int(val)}
+    settings = dict(company.settings or {})
+    if clean:
+        settings["price_overrides"] = clean
+    else:
+        settings.pop("price_overrides", None)
+    company.settings = settings
+    db.add(
+        AuditLog(
+            company_id=company_id,
+            user_id=admin.id,
+            action="company_price_overrides_changed",
+            details={"price_overrides": clean},
+        )
+    )
+    await db.commit()
+    return {"message": "ok", "price_overrides": clean}
+
+
+@router.get("/support/stats")
+async def admin_support_stats(_: dict = Depends(require_staff), db: AsyncSession = Depends(get_db)):
+    """Статистика поддержки: SLA, первый ответ, нагрузка агентов (§11.9)."""
+    from datetime import timedelta
+
+    now = datetime.now(timezone.utc)
+    week_ago = now - timedelta(days=7)
+
+    total = await db.scalar(select(func.count()).select_from(SupportRequest)) or 0
+    open_cnt = await db.scalar(
+        select(func.count()).select_from(SupportRequest).where(
+            SupportRequest.status.in_(("new", "in_progress"))
+        )
+    ) or 0
+    answered_cnt = await db.scalar(
+        select(func.count()).select_from(SupportRequest).where(SupportRequest.status == "answered")
+    ) or 0
+    week_cnt = await db.scalar(
+        select(func.count()).select_from(SupportRequest).where(SupportRequest.created_at >= week_ago)
+    ) or 0
+
+    # среднее время первого ответа (первый staff-ответ - создание обращения)
+    first_replies = (
+        await db.execute(
+            select(
+                SupportRequest.id,
+                SupportRequest.created_at,
+                func.min(SupportMessage.created_at),
+            )
+            .join(SupportMessage, SupportMessage.request_id == SupportRequest.id)
+            .where(SupportMessage.is_staff.is_(True))
+            .group_by(SupportRequest.id, SupportRequest.created_at)
+        )
+    ).all()
+    deltas = [
+        (reply - created).total_seconds()
+        for _rid, created, reply in first_replies
+        if created and reply
+    ]
+    avg_first_response_sec = int(sum(deltas) / len(deltas)) if deltas else None
+
+    # нагрузка по агентам (staff-сообщения)
+    agent_rows = (
+        await db.execute(
+            select(SupportMessage.author_id, func.count())
+            .where(SupportMessage.is_staff.is_(True))
+            .group_by(SupportMessage.author_id)
+            .order_by(func.count().desc())
+            .limit(20)
+        )
+    ).all()
+    agents = []
+    for author_id, cnt in agent_rows:
+        email = None
+        if author_id:
+            u = await db.get(User, author_id)
+            email = u.email if u else None
+        agents.append({"agent_id": author_id, "email": email, "replies": int(cnt)})
+
+    return {
+        "total_tickets": int(total),
+        "open_tickets": int(open_cnt),
+        "answered_tickets": int(answered_cnt),
+        "tickets_7d": int(week_cnt),
+        "avg_first_response_sec": avg_first_response_sec,
+        "agents": agents,
+    }
+
+
 @router.post("/companies/{company_id}/block")
 async def block_company(company_id: int, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     company = await db.get(Company, company_id)

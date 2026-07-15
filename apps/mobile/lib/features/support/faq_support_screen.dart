@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
 
@@ -66,23 +67,25 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка загрузки: $e')),
+        SnackBar(content: Text(l10n.faqLoadError('$e'))),
       );
     }
   }
 
   Future<void> _ask() async {
+    final l10n = AppLocalizations.of(context)!;
     if (_message.text.trim().length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Вопрос: минимум 10 символов')),
+        SnackBar(content: Text(l10n.faqQuestionMin)),
       );
       return;
     }
     setState(() => _sending = true);
     try {
       await widget.api.askSupport(
-        subject: _subject.text.trim().isEmpty ? 'Вопрос из приложения' : _subject.text.trim(),
+        subject: _subject.text.trim().isEmpty ? l10n.faqDefaultSubject : _subject.text.trim(),
         message: _message.text.trim(),
       );
       _subject.clear();
@@ -90,7 +93,7 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Вопрос отправлен')),
+        SnackBar(content: Text(l10n.faqQuestionSent)),
       );
       _tabs.animateTo(1);
     } catch (e) {
@@ -105,9 +108,10 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return FScaffold(
       header: FHeader(
-        title: const Text('FAQ / Поддержка'),
+        title: Text(l10n.faqSupportTitle),
         suffixes: [
           FHeaderAction(
             icon: const Icon(FIcons.refreshCw),
@@ -122,7 +126,7 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
               control: FTabControl.managed(controller: _tabs),
               children: [
                 FTabEntry(
-                  label: const Text('FAQ'),
+                  label: Text(l10n.faqTab),
                   child: _FaqTab(
                     items: _faq,
                     subject: _subject,
@@ -132,7 +136,7 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
                   ),
                 ),
                 FTabEntry(
-                  label: const Text('Мои обращения'),
+                  label: Text(l10n.faqMyTickets),
                   child: _TicketsTab(items: _tickets, api: widget.api),
                 ),
               ],
@@ -158,11 +162,12 @@ class _FaqTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         if (items.isEmpty)
-          const Text('Пока нет вопросов в FAQ')
+          Text(l10n.faqEmpty)
         else
           FAccordion(
             children: [
@@ -178,7 +183,7 @@ class _FaqTab extends StatelessWidget {
           ),
         const SizedBox(height: 24),
         Text(
-          'Не нашли ответ? Задайте вопрос',
+          l10n.faqAskPrompt,
           style: context.theme.typography.sm.copyWith(
             color: context.theme.colors.mutedForeground,
           ),
@@ -186,18 +191,18 @@ class _FaqTab extends StatelessWidget {
         const SizedBox(height: 8),
         FTextField(
           control: FTextFieldControl.managed(controller: subject),
-          label: const Text('Тема (опционально)'),
+          label: Text(l10n.faqSubjectOptional),
         ),
         const SizedBox(height: 8),
         FTextField(
           control: FTextFieldControl.managed(controller: message),
-          label: const Text('Ваш вопрос'),
+          label: Text(l10n.faqYourQuestion),
           maxLines: 4,
         ),
         const SizedBox(height: 12),
         FButton(
           onPress: sending ? null : onAsk,
-          child: Text(sending ? 'Отправка…' : 'Отправить'),
+          child: Text(sending ? l10n.faqSending : l10n.faqSend),
         ),
       ],
     );
@@ -212,8 +217,9 @@ class _TicketsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     if (items.isEmpty) {
-      return const Center(child: Text('Нет обращений'));
+      return Center(child: Text(l10n.faqNoTickets));
     }
     return ListView.separated(
       padding: const EdgeInsets.all(16),
@@ -222,7 +228,7 @@ class _TicketsTab extends StatelessWidget {
       itemBuilder: (ctx, i) {
         final t = items[i];
         return FTile(
-          title: Text(t['subject']?.toString() ?? 'Обращение #${t['id']}'),
+          title: Text(t['subject']?.toString() ?? l10n.faqTicketDefault('${t['id']}')),
           subtitle: Text('${t['status']} · ${t['created_at'] ?? ''}'),
           onPress: () async {
             await showModalBottomSheet<void>(
@@ -295,6 +301,7 @@ class _TicketThreadSheetState extends State<_TicketThreadSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final msgs = (_detail?['messages'] as List?) ?? [];
     return Padding(
       padding: EdgeInsets.only(
@@ -309,7 +316,7 @@ class _TicketThreadSheetState extends State<_TicketThreadSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Статус: ${_detail?['status'] ?? '…'}',
+              l10n.queueStatus('${_detail?['status'] ?? '…'}'),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
@@ -329,7 +336,7 @@ class _TicketThreadSheetState extends State<_TicketThreadSheet> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              '${m['is_staff'] == true ? 'Поддержка' : 'Вы'}: ${m['body']}',
+                              '${m['is_staff'] == true ? l10n.faqSupportRole : l10n.faqYouRole}: ${m['body']}',
                             ),
                           ),
                         ),
@@ -339,7 +346,7 @@ class _TicketThreadSheetState extends State<_TicketThreadSheet> {
             if (!_closed) ...[
               FTextField(
                 control: FTextFieldControl.managed(controller: _reply),
-                hint: 'Уточняющий вопрос…',
+                hint: l10n.faqClarifyHint,
               ),
               const SizedBox(height: 8),
               Row(
@@ -347,7 +354,7 @@ class _TicketThreadSheetState extends State<_TicketThreadSheet> {
                   Expanded(
                     child: FButton(
                       onPress: _busy ? null : _send,
-                      child: const Text('Ответить'),
+                      child: Text(l10n.faqReply),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -359,12 +366,12 @@ class _TicketThreadSheetState extends State<_TicketThreadSheet> {
                             await widget.api.closeSupport(widget.ticketId);
                             await _load();
                           },
-                    child: const Text('Закрыть'),
+                    child: Text(l10n.faqClose),
                   ),
                 ],
               ),
             ] else
-              const Text('Обращение закрыто'),
+              Text(l10n.faqTicketClosed),
           ],
         ),
       ),

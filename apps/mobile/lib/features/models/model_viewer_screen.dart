@@ -6,6 +6,7 @@ import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
@@ -83,19 +84,20 @@ class _ModelsScreenState extends State<ModelsScreen> {
   }
 
   String _publishLabel(String? status) {
+    final l = AppLocalizations.of(context)!;
     final s = status?.toLowerCase() ?? '';
     switch (s) {
       case 'import_validating':
-        return 'Проверка импорта';
+        return l.mvPublishValidating;
       case 'imported':
-        return 'Импортировано';
+        return l.mvPublishImported;
       case 'import_failed':
-        return 'Ошибка импорта';
+        return l.mvPublishImportFailed;
       case 'not_published':
-        return 'Не опубликовано';
+        return l.mvPublishNotPublished;
       default:
-        if (s.contains('verified')) return 'Проверено';
-        if (s.contains('published')) return 'Опубликовано';
+        if (s.contains('verified')) return l.mvPublishVerified;
+        if (s.contains('published')) return l.mvPublishPublished;
         return status ?? '—';
     }
   }
@@ -109,7 +111,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
       m['order_status']?.toString() == 'blocked_nsfw';
 
   String _listStatusLabel(Map<String, dynamic> m) {
-    if (_isNsfwBlocked(m)) return 'NSFW блок';
+    if (_isNsfwBlocked(m)) return AppLocalizations.of(context)!.orderStatusBlockedNsfw;
     return _publishLabel(m['publish_status']?.toString());
   }
 
@@ -147,18 +149,19 @@ class _ModelsScreenState extends State<ModelsScreen> {
   Future<void> _renameModel(Map<String, dynamic> m) async {
     final uuid = m['uuid']?.toString();
     if (uuid == null) return;
+    final l = AppLocalizations.of(context)!;
     final ctrl = TextEditingController(text: m['display_name']?.toString() ?? '');
     final ok = await showFDialog<bool>(
       context: context,
       builder: (ctx, style, animation) => FDialog(
-        title: const Text('Переименовать модель'),
+        title: Text(l.mvRenameTitle),
         body: FTextField(
           control: FTextFieldControl.managed(controller: ctrl),
-          label: const Text('Название'),
+          label: Text(l.mvNameLabel),
         ),
         actions: [
-          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FButton(onPress: () => Navigator.pop(ctx, true), child: const Text('Сохранить')),
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l.cancel)),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: Text(l.save)),
         ],
       ),
     );
@@ -197,7 +200,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
           if (link != null && mounted) {
             await Clipboard.setData(ClipboardData(text: link));
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Ссылка скопирована')),
+              SnackBar(content: Text(AppLocalizations.of(context)!.mvLinkCopied)),
             );
           }
         case 'rate':
@@ -213,7 +216,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
           await _load();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Модель перемещена в корзину')),
+              SnackBar(content: Text(AppLocalizations.of(context)!.mvMovedToTrash)),
             );
           }
       }
@@ -286,6 +289,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Center(
@@ -293,13 +297,13 @@ class _ModelsScreenState extends State<ModelsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(_error!, style: const TextStyle(color: AppColors.error)),
-            FButton(onPress: _load, child: const Text('Повторить')),
+            FButton(onPress: _load, child: Text(l.mvRetry)),
           ],
         ),
       );
     }
     if (_items.isEmpty) {
-      return const Center(child: Text('Пока нет моделей'));
+      return Center(child: Text(l.mvNoModels));
     }
     final visible = _filtered;
     return RefreshIndicator(
@@ -313,7 +317,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Модели',
+                      l.mvTitle,
                       style: context.theme.typography.xl.copyWith(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -329,7 +333,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
                   FButton(
                     variant: .outline,
                     onPress: () => context.push('/home/models/trash'),
-                    child: const Text('Корзина'),
+                    child: Text(l.mvTrash),
                   ),
                 ],
               ),
@@ -343,27 +347,27 @@ class _ModelsScreenState extends State<ModelsScreen> {
                 runSpacing: 8,
                 children: [
                   FilterChip(
-                    label: const Text('Все'),
+                    label: Text(l.mvFilterAll),
                     selected: _statusFilter == 'all',
                     onSelected: (_) => setState(() => _statusFilter = 'all'),
                   ),
                   FilterChip(
-                    label: const Text('Опубликовано'),
+                    label: Text(l.mvPublishPublished),
                     selected: _statusFilter == 'published',
                     onSelected: (_) => setState(() => _statusFilter = 'published'),
                   ),
                   FilterChip(
-                    label: const Text('Не опубликовано'),
+                    label: Text(l.mvPublishNotPublished),
                     selected: _statusFilter == 'draft',
                     onSelected: (_) => setState(() => _statusFilter = 'draft'),
                   ),
                   FilterChip(
-                    label: const Text('Избранное'),
+                    label: Text(l.mvFilterFavorites),
                     selected: _favoritesOnly,
                     onSelected: (_) => setState(() => _favoritesOnly = !_favoritesOnly),
                   ),
                   FilterChip(
-                    label: Text(_sortNewest ? 'Сначала новые' : 'Сначала старые'),
+                    label: Text(_sortNewest ? l.mvSortNewest : l.mvSortOldest),
                     selected: true,
                     onSelected: (_) => setState(() => _sortNewest = !_sortNewest),
                   ),
@@ -379,8 +383,8 @@ class _ModelsScreenState extends State<ModelsScreen> {
             ),
           ),
           if (visible.isEmpty)
-            const SliverFillRemaining(
-              child: Center(child: Text('Нет моделей по фильтру')),
+            SliverFillRemaining(
+              child: Center(child: Text(l.mvNoModelsFilter)),
             )
           else
             SliverList.separated(
@@ -447,7 +451,6 @@ class _ModelsScreenState extends State<ModelsScreen> {
                                       const SizedBox(width: 4),
                                       if (_showListBadge(m))
                                         FBadge(
-                                          style: FBadgeStyle.primary(),
                                           child: Text(
                                             _listStatusLabel(m),
                                             style: const TextStyle(fontSize: 10),
@@ -472,30 +475,30 @@ class _ModelsScreenState extends State<ModelsScreen> {
                             PopupMenuButton<String>(
                               enabled: !busy,
                               onSelected: (v) => _onMenu(v, m),
-                              itemBuilder: (_) => const [
+                              itemBuilder: (_) => [
                                 PopupMenuItem(
                                   value: 'glb_ozon',
                                   child: Text(
-                                    'Скачать .glb (Ozon)',
-                                    style: TextStyle(color: AppColors.ozonPrimary),
+                                    l.mvDownloadGlbOzon,
+                                    style: const TextStyle(color: AppColors.ozonPrimary),
                                   ),
                                 ),
                                 PopupMenuItem(
                                   value: 'usdz_wb',
                                   child: Text(
-                                    'Скачать .usdz (Wildberries)',
-                                    style: TextStyle(color: AppColors.accentPurple),
+                                    l.mvDownloadUsdzWb,
+                                    style: const TextStyle(color: AppColors.accentPurple),
                                   ),
                                 ),
-                                PopupMenuItem(value: 'share', child: Text('Поделиться')),
-                                PopupMenuItem(value: 'rate', child: Text('Оценить модель')),
+                                PopupMenuItem(value: 'share', child: Text(l.mvShare)),
+                                PopupMenuItem(value: 'rate', child: Text(l.mvRate)),
                                 PopupMenuItem(
                                   value: 'pub_link',
-                                  child: Text('Ссылка для верификации'),
+                                  child: Text(l.mvVerifyLink),
                                 ),
-                                PopupMenuItem(value: 'regen', child: Text('Редактировать')),
-                                PopupMenuItem(value: 'rename', child: Text('Переименовать')),
-                                PopupMenuItem(value: 'trash', child: Text('Удалить')),
+                                PopupMenuItem(value: 'regen', child: Text(l.mvEdit)),
+                                PopupMenuItem(value: 'rename', child: Text(l.mvRename)),
+                                PopupMenuItem(value: 'trash', child: Text(l.mvDelete)),
                               ],
                               icon: busy
                                   ? const SizedBox(
@@ -552,13 +555,23 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
   bool _favorite = false;
   bool _hasLocalGlb = false;
 
-  static const _reasons = [
-    'размытые текстуры',
-    'дыры или артефакты',
-    'неправильный масштаб',
-    'не тот цвет / освещение',
-    'другое',
-  ];
+  static const _reasons = ['blurry', 'holes', 'scale', 'color', 'other'];
+
+  String _reasonLabel(String code) {
+    final l = AppLocalizations.of(context)!;
+    switch (code) {
+      case 'blurry':
+        return l.mvReasonBlurry;
+      case 'holes':
+        return l.mvReasonHoles;
+      case 'scale':
+        return l.mvReasonScale;
+      case 'color':
+        return l.mvReasonColor;
+      default:
+        return l.mvReasonOther;
+    }
+  }
 
   @override
   void initState() {
@@ -631,7 +644,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
         await Clipboard.setData(ClipboardData(text: url));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ссылка ${marketplace.toUpperCase()} скопирована')),
+            SnackBar(content: Text(AppLocalizations.of(context)!.mvLinkCopiedMarketplace(marketplace.toUpperCase()))),
           );
         }
         final uri = Uri.tryParse(url);
@@ -663,7 +676,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
           _glbUrl = file.uri.toString();
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('GLB сохранён: ${file.path}')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.mvGlbSaved(file.path))),
         );
       }
     } catch (e) {
@@ -687,7 +700,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Публичная ссылка §3.12'),
+          title: Text(AppLocalizations.of(ctx)!.mvPublicLinkTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -695,11 +708,11 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
               const SizedBox(height: 8),
               SelectableText(url, style: const TextStyle(fontSize: 12)),
               if (res['expires_at'] != null)
-                Text('До: ${res['expires_at']}', style: const TextStyle(fontSize: 11)),
+                Text(AppLocalizations.of(ctx)!.mvUntil('${res['expires_at']}'), style: const TextStyle(fontSize: 11)),
             ],
           ),
           actions: [
-            FButton(onPress: () => Navigator.pop(ctx), child: const Text('Закрыть')),
+            FButton(onPress: () => Navigator.pop(ctx), child: Text(AppLocalizations.of(ctx)!.faqClose)),
           ],
         ),
       );
@@ -727,14 +740,11 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
       final restore = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Нет локальных фото'),
-          content: const Text(
-            'Для перегенерации нужны 12 исходников на устройстве. '
-            'Восстановить из облака или снять заново?',
-          ),
+          title: Text(AppLocalizations.of(ctx)!.mvNoLocalPhotosTitle),
+          content: Text(AppLocalizations.of(ctx)!.mvNoLocalPhotosBody),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Восстановить')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(AppLocalizations.of(ctx)!.cancel)),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(AppLocalizations.of(ctx)!.mvRestore)),
           ],
         ),
       );
@@ -749,7 +759,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
     if (categoryApi == null || tierApi == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось определить категорию/тариф')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.mvCantDetectCategory)),
         );
       }
       return;
@@ -794,7 +804,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['message']?.toString() ?? 'Хранение продлено')),
+          SnackBar(content: Text(res['message']?.toString() ?? AppLocalizations.of(context)!.mvStorageExtended)),
         );
       }
     } catch (e) {
@@ -812,16 +822,14 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Удалить модель?'),
-        content: const Text(
-          'Исходные фото и модель будут перемещены в корзину на 30 дней. Продолжить?',
-        ),
+        title: Text(AppLocalizations.of(ctx)!.mvDeleteTitle),
+        content: Text(AppLocalizations.of(ctx)!.mvDeleteBody),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(AppLocalizations.of(ctx)!.cancel)),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Да'),
+            child: Text(AppLocalizations.of(ctx)!.yes),
           ),
         ],
       ),
@@ -832,7 +840,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
       final res = await widget.api.trashModel(modelUuid: widget.modelUuid);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['message']?.toString() ?? 'В корзине')),
+          SnackBar(content: Text(res['message']?.toString() ?? AppLocalizations.of(context)!.mvInTrash)),
         );
         context.go('/home/models/trash');
       }
@@ -861,7 +869,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res['message']?.toString() ?? 'Исходники восстановлены')),
+          SnackBar(content: Text(res['message']?.toString() ?? AppLocalizations.of(context)!.mvSourcesRestored)),
         );
       }
     } catch (e) {
@@ -899,14 +907,14 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ссылка на карточку'),
+        title: Text(AppLocalizations.of(ctx)!.mvCardLinkTitle),
         content: FTextField(
           control: FTextFieldControl.managed(controller: ctrl),
-          hint: 'https://www.wildberries.ru/... или ozon.ru/...',
+          hint: AppLocalizations.of(ctx)!.mvCardLinkHint,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Добавить')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(AppLocalizations.of(ctx)!.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(AppLocalizations.of(ctx)!.mvAdd)),
         ],
       ),
     );
@@ -925,7 +933,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ссылка: ${res['status'] ?? 'ok'}')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.mvLinkStatus('${res['status'] ?? 'ok'}'))),
         );
       }
     } catch (e) {
@@ -958,7 +966,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Оцените качество модели от 1 до 5', style: Theme.of(ctx).textTheme.titleMedium),
+              Text(AppLocalizations.of(ctx)!.mvRateTitle, style: Theme.of(ctx).textTheme.titleMedium),
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -976,12 +984,12 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
               ),
               TextButton(
                 onPressed: () => setLocal(() {}),
-                child: const Text('Что не так?'),
+                child: Text(AppLocalizations.of(ctx)!.mvWhatsWrong),
               ),
               ..._reasons.map(
                 (r) => CheckboxListTile(
                   value: selected.contains(r),
-                  title: Text(r),
+                  title: Text(_reasonLabel(r)),
                   onChanged: (v) => setLocal(() {
                     if (v == true) {
                       selected.add(r);
@@ -991,19 +999,19 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                   }),
                 ),
               ),
-              if (selected.contains('другое'))
+              if (selected.contains('other'))
                 FTextField(
                   control: FTextFieldControl.managed(controller: other),
-                  label: const Text('Комментарий'),
+                  label: Text(AppLocalizations.of(ctx)!.mvComment),
                 ),
               const SizedBox(height: 8),
               FButton(
                 onPress: () => Navigator.pop(ctx, true),
-                child: const Text('Отправить'),
+                child: Text(AppLocalizations.of(ctx)!.faqSend),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Позже'),
+                child: Text(AppLocalizations.of(ctx)!.mvLater),
               ),
             ],
           ),
@@ -1012,8 +1020,8 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
     );
     if (ok == true) {
       final reasons = [
-        ...selected.where((e) => e != 'другое'),
-        if (selected.contains('другое') && other.text.trim().isNotEmpty) other.text.trim(),
+        ...selected.where((e) => e != 'other'),
+        if (selected.contains('other') && other.text.trim().isNotEmpty) other.text.trim(),
       ];
       await widget.api.rateModel(
         modelUuid: widget.modelUuid,
@@ -1033,9 +1041,10 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
         _glbUrl!.isNotEmpty &&
         !_glbUrl!.startsWith('s3://');
 
+    final l = AppLocalizations.of(context)!;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('3D-модель'),
+        title: Text(l.mvModelTitle),
         prefixes: [FHeaderAction.back(onPress: () => context.pop())],
         suffixes: [
           FHeaderAction(
@@ -1053,7 +1062,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
         children: [
           Expanded(
             child: !canPreview
-                ? const Center(child: Text('GLB ещё не готов'))
+                ? Center(child: Text(l.mvGlbNotReady))
                 : ModelViewer(
                     src: _glbUrl!,
                     alt: '3D model',
@@ -1071,24 +1080,27 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Статус: ${_publishStatus ?? '—'}',
+                  l.queueStatus(_publishStatus ?? '—'),
                   style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
                 if (_storage != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      'Облако: ${_storage!['days_left'] ?? '—'} дн. · продлений '
-                      '${_storage!['extends_remaining'] ?? '—'}/${_storage!['max_extends'] ?? 3}',
+                      l.mvCloud(
+                        '${_storage!['days_left'] ?? '—'}',
+                        '${_storage!['extends_remaining'] ?? '—'}',
+                        '${_storage!['max_extends'] ?? 3}',
+                      ),
                       style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                     ),
                   ),
                 if (_hasLocalGlb)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      'Локальный GLB сохранён',
-                      style: TextStyle(fontSize: 11, color: AppColors.success),
+                      l.mvLocalGlbSaved,
+                      style: const TextStyle(fontSize: 11, color: AppColors.success),
                     ),
                   ),
                 const SizedBox(height: 8),
@@ -1099,30 +1111,30 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                     FButton(
                       variant: .outline,
                       onPress: _busy ? null : _regenerate,
-                      child: const Text('Перегенерировать'),
+                      child: Text(l.mvRegenerate),
                     ),
                     FButton(
                       variant: .outline,
                       onPress: _busy ? null : _sharePublic,
-                      child: const Text('Share'),
+                      child: Text(l.mvShare),
                     ),
                     FButton(
                       variant: .outline,
                       onPress: _busy ? null : _downloadLocalGlb,
-                      child: Text(_hasLocalGlb ? 'Обновить GLB' : 'GLB локально'),
+                      child: Text(_hasLocalGlb ? l.mvUpdateGlb : l.mvGlbLocal),
                     ),
                     FButton(
                       onPress: _busy ? null : () => _download('wb'),
-                      child: const Text('Скачать WB'),
+                      child: Text(l.mvDownloadWb),
                     ),
                     FButton(
                       onPress: _busy ? null : () => _download('ozon'),
-                      child: const Text('Скачать Ozon'),
+                      child: Text(l.mvDownloadOzon),
                     ),
                     FButton(
                       variant: .outline,
                       onPress: _busy ? null : _restoreSources,
-                      child: const Text('Исходники'),
+                      child: Text(l.mvSources),
                     ),
                     FButton(
                       variant: .outline,
@@ -1130,27 +1142,27 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                               ((_storage?['extends_remaining'] as num?)?.toInt() ?? 0) <= 0
                           ? null
                           : _extendStorage,
-                      child: const Text('+30 дн.'),
+                      child: Text(l.mvExtend30),
                     ),
                     FButton(
                       variant: .outline,
                       onPress: _busy ? null : _moveToTrash,
-                      child: const Text('В корзину'),
+                      child: Text(l.mvToTrash),
                     ),
                     FButton(
                       variant: .outline,
                       onPress: _busy ? null : _addLink,
-                      child: const Text('Ссылка'),
+                      child: Text(l.mvLink),
                     ),
                     FButton(
                       variant: .outline,
                       onPress: _busy ? null : () => _markPublished('wildberries'),
-                      child: const Text('Я на WB'),
+                      child: Text(l.mvImOnWb),
                     ),
                     FButton(
                       variant: .outline,
                       onPress: _busy ? null : () => _markPublished('ozon'),
-                      child: const Text('Я на Ozon'),
+                      child: Text(l.mvImOnOzon),
                     ),
                     FButton(
                       variant: .outline,
@@ -1199,7 +1211,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                                     _busy = false;
                                   });
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('API: ${res['publish_status'] ?? 'ok'}')),
+                                    SnackBar(content: Text(AppLocalizations.of(context)!.mvApiResult('${res['publish_status'] ?? 'ok'}'))),
                                   );
                                 }
                               } catch (e) {

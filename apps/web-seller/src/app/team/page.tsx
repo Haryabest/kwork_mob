@@ -18,6 +18,7 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { IconCheck, IconCopy, IconLink, IconUserPlus } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
+import { QRCodeCanvas } from 'qrcode.react';
 import { useCallback, useEffect, useState } from 'react';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, SubNav, Surface } from '../../components/ui';
@@ -478,6 +479,14 @@ export default function TeamPage() {
           </Button>
           {shootUrl && (
             <Textarea label="Ссылка" value={shootUrl} readOnly minRows={2} />
+          )}
+          {shootUrl && (
+            <Stack align="center" gap={4}>
+              <QRCodeCanvas value={shootUrl} size={180} includeMargin />
+              <Text size="xs" c="#6d6c77">
+                Наведите камеру телефона, чтобы открыть съёмку
+              </Text>
+            </Stack>
           )}
           {shootUrl && (
             <CopyButton value={shootUrl}>

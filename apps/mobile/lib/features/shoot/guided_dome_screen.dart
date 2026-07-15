@@ -11,6 +11,7 @@ import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/l10n/guided_dome_l10n.dart';
 import 'package:kwork_mobile/core/ar/ar.dart';
 import 'package:kwork_mobile/core/ar/native_ar_bridge.dart';
 import 'package:kwork_mobile/services/ar_tariff.dart';
@@ -119,7 +120,9 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   Future<void> _boot() async {
     final cam = await Permission.camera.request();
     if (!cam.isGranted) {
-      setState(() => _error = 'Нужен доступ к камере');
+      if (mounted) {
+        setState(() => _error = AppLocalizations.of(context)!.gdCameraRequired);
+      }
       return;
     }
     try {
@@ -197,6 +200,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
 
   void _onArUpdate() {
     if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
     final angle = kGuidedDomeAngles[_index];
     if (_usesNativeAr) {
       final ok = _ar!.isAligned(
@@ -207,8 +211,10 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         _gyroOk = ok;
         _yawOffsetDeg = 0;
         if (!ok) {
-          _gateMsg =
-              'Поверните к AR-метке ${angle.azimuthDeg.round()}° / ${angle.elevationDeg.round()}°';
+          _gateMsg = l10n.gdTurnToMarker(
+            '${angle.azimuthDeg.round()}',
+            '${angle.elevationDeg.round()}',
+          );
         } else {
           _gateMsg = null;
         }
@@ -217,7 +223,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
       return;
     }
     if (_gyro == null) return;
-    final check = _gyro!.check(angle);
+    final check = _gyro!.check(angle, l10n);
     setState(() {
       _gyroOk = check.ok;
       _yawOffsetDeg = check.deltaYawDeg;
@@ -343,10 +349,11 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
     if (!_canShoot) return;
     if (!_nativeCamera && _cam == null) return;
     if (!_bypassGyroGate && !_usesNativeAr && _gyro == null) return;
+    final l10n = AppLocalizations.of(context)!;
     final minGap = Duration(milliseconds: (1000 / _thermal.targetFps).round());
     final last = _lastShutterAt;
     if (last != null && DateTime.now().difference(last) < minGap) {
-      setState(() => _gateMsg = 'Подождите (${_thermal.targetFps} FPS, энергосбережение)');
+      setState(() => _gateMsg = l10n.gdFpsWait('${_thermal.targetFps}'));
       return;
     }
     if (!_bypassGyroGate) {
@@ -356,11 +363,11 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
           targetYawDeg: angle.azimuthDeg,
           targetPitchDeg: angle.elevationDeg,
         )) {
-          setState(() => _gateMsg = 'Совместите камеру с AR-меткой');
+          setState(() => _gateMsg = l10n.gdAlignMarker);
           return;
         }
       } else {
-        final gyro = _gyro?.check(kGuidedDomeAngles[_index]);
+        final gyro = _gyro?.check(kGuidedDomeAngles[_index], l10n);
         if (gyro != null && !gyro.ok) {
           setState(() => _gateMsg = gyro.hint);
           return;
@@ -380,7 +387,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         bytes = await File(shot.path).readAsBytes();
         await File(shot.path).delete().catchError((_) => File(shot.path));
       }
-      final gate = QualityAnalyzer.instance.liveGate(bytes);
+      final gate = QualityAnalyzer.instance.liveGate(bytes, l10n);
       if (!_bypassQualityGate && (!gate.centered || !gate.fillOk)) {
         setState(() {
           _busy = false;
@@ -499,7 +506,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final angle = kGuidedDomeAngles[_index];
-    final gyro = _gyro?.check(angle);
+    final gyro = _gyro?.check(angle, l10n);
     final backendLabel = switch (_arBackend) {
       ArBackend.nativeArKit => 'ARKit',
       ArBackend.nativeArCore => 'ARCore',
@@ -585,7 +592,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
               child: Column(
                 children: [
                   Text(
-                    '${l10n.shootAngleLine('${_index + 1}', '$kGuidedDomeCount', angle.label, backendLabel)}'
+                    '${l10n.shootAngleLine('${_index + 1}', '$kGuidedDomeCount', domeAngleLabel(l10n, _index), backendLabel)}'
                     '${_thermal.powerSave ? ' · FPS ${_thermal.targetFps}' : ''}'
                     '${_thermal.celsius != null ? ' · ${_thermal.celsius!.toStringAsFixed(0)}°C' : ''}'
                     '${_bypassQualityGate ? ' · DEV' : ''}'

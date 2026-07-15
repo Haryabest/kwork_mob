@@ -98,10 +98,11 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
   }
 
   Future<void> _topup({String method = 'redirect'}) async {
+    final l10n = AppLocalizations.of(context)!;
     final amount = int.tryParse(_amount.text.trim());
     if (amount == null || amount < 100) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Минимум 100 ₽')),
+        SnackBar(content: Text(l10n.topupMinAmount)),
       );
       return;
     }
@@ -116,7 +117,7 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
           await showFDialog<void>(
             context: context,
             builder: (ctx, style, animation) => FDialog(
-              title: const Text('СБП — отсканируйте QR'),
+              title: Text(l10n.sbpQrTitle),
               body: SizedBox(
                 width: 260,
                 child: Column(
@@ -129,7 +130,7 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
                 ),
               ),
               actions: [
-                FButton(onPress: () => Navigator.pop(ctx), child: const Text('Готово')),
+                FButton(onPress: () => Navigator.pop(ctx), child: Text(l10n.done)),
               ],
             ),
           );
@@ -179,7 +180,7 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  widget.session.companyName ?? 'Компания',
+                  widget.session.companyName ?? l10n.companyDefaultName,
                   style: TextStyle(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 12),

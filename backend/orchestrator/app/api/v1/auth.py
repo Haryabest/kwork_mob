@@ -1,14 +1,21 @@
 """Аутентификация: регистрация, вход, JWT, 2FA Owner (§10)."""
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_current_db_user, verify_password
+from app.core.security import (
+    TokenType,
+    decode_token,
+    get_current_db_user,
+    verify_password,
+)
 from app.core.vpn import client_ip
-from app.models import User
+from app.models import RefreshToken, User
 from app.schemas.auth import (
     AccountTypeRequest,
     LoginRequest,
@@ -231,3 +238,102 @@ async def password_change(
     user.password_hash = hash_password(body.new_password)
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/2fa/disable")
+async def two_fa_disable(
+    body: TwoFACodeBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отключение TOTP (§20.8). Для Owner компании 2FA обязательна — запрещаем."""
+    if not user.totp_enabled or not user.totp_secret:
+        raise HTTPException(400, "2FA не включена")
+    if await user_is_company_owner(db, user):
+        raise HTTPException(403, "Для владельца компании 2FA обязательна")
+    if not totp_svc.verify_totp(user.totp_secret, body.code):
+        raise HTTPException(400, "Неверный код подтверждения")
+    user.totp_enabled = False
+    user.totp_secret = None
+    await db.commit()
+    return {"ok": True, "totp_enabled": False}
+
+
+@router.get("/sessions")
+async def list_sessions(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Активные сессии (refresh-токены) пользователя (§20.8)."""
+    now = datetime.now(timezone.utc)
+    rows = (
+        await db.scalars(
+            select(RefreshToken)
+            .where(
+                RefreshToken.user_id == user.id,
+                RefreshToken.revoked.is_(False),
+                RefreshToken.expires_at > now,
+            )
+            .order_by(RefreshToken.created_at.desc())
+        )
+    ).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.delete("/sessions/{session_id}")
+async def revoke_session(
+    session_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Завершить конкретную сессию пользователя (§20.8)."""
+    row = await db.scalar(
+        select(RefreshToken).where(
+            RefreshToken.id == session_id, RefreshToken.user_id == user.id
+        )
+    )
+    if not row:
+        raise HTTPException(404, "Сессия не найдена")
+    row.revoked = True
+    await db.commit()
+    return {"ok": True}
+
+
+class RevokeOthersBody(BaseModel):
+    refresh_token: str
+
+
+@router.post("/sessions/revoke-others")
+async def revoke_other_sessions(
+    body: RevokeOthersBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Завершить все сессии, кроме текущей (§20.8)."""
+    try:
+        payload = decode_token(body.refresh_token, TokenType.REFRESH)
+        current_jti = payload.get("jti")
+    except Exception:
+        raise HTTPException(400, "Неверный refresh-токен")
+    rows = (
+        await db.scalars(
+            select(RefreshToken).where(
+                RefreshToken.user_id == user.id,
+                RefreshToken.revoked.is_(False),
+                RefreshToken.jti != current_jti,
+            )
+        )
+    ).all()
+    for r in rows:
+        r.revoked = True
+    await db.commit()
+    return {"ok": True, "revoked": len(rows)}

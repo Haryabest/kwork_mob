@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Group, Table, Text, Title } from '@mantine/core';
+import { Button, Table, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconRefresh } from '@tabler/icons-react';
 import { api, getApiError } from '../services/api';

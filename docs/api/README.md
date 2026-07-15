@@ -1,6 +1,19 @@
 # API-документация
 
-OpenAPI-спецификация доступна по адресу: `http://localhost:8000/api/docs`
+OpenAPI-спецификация:
+
+- Интерактивно (Swagger UI): `http://localhost:8000/api/docs`
+- Версионированный контракт в git: [`openapi.json`](./openapi.json) и [`openapi.yaml`](./openapi.yaml) (270+ путей)
+
+Перегенерация спеки после изменения API:
+
+```bash
+cd backend/orchestrator
+python scripts/export_openapi.py           # запись docs/api/openapi.json (+.yaml)
+python scripts/export_openapi.py --check    # CI-проверка актуальности
+```
+
+Из `openapi.json` генерируются клиенты (openapi-generator / orval) без запуска сервера.
 
 ## Группы эндпоинтов
 

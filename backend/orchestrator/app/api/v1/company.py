@@ -1337,7 +1337,7 @@ async def bulk_orders(
             except HTTPException:
                 errors.append({"task_uuid": item.task_uuid, "error": "Нужны 12 фото в MinIO"})
                 continue
-            base = await tariff_svc.get_amount(db, item.tier)
+            base = await tariff_svc.get_amount_for_company(db, item.tier, company)
             codes, upsell_amt = await upsell_svc.calc_upsell_amount(db, item.upsell_options)
             if "real_scale" in codes and not item.scale_calibration:
                 errors.append({"task_uuid": item.task_uuid, "error": "scale_calibration required"})

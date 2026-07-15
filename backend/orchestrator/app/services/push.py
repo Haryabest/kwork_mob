@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -115,15 +116,28 @@ async def send_to_user(
     data: dict[str, str] | None = None,
     email_fallback: bool = True,
     record_inbox: bool = True,
+    respect_prefs: bool = True,
+    fallback_delay_sec: int = 300,
 ) -> dict[str, Any]:
-    """Push на все устройства пользователя; при неудаче — email (§3.4.3)."""
+    """Push на все устройства пользователя; при неудаче — email (§3.4.3).
+
+    respect_prefs=True учитывает master-переключатели push_enabled/email_enabled.
+    Если push доставлен — планируется отложенный email-fallback (5 мин), который
+    сработает, только если пользователь не открыл уведомление в приложении.
+    """
     data = data or {}
+    user = await db.get(User, user_id)
+    prefs = dict(user.notification_prefs or {}) if user else {}
+    push_allowed = (not respect_prefs) or prefs.get("push_enabled") is not False
+    email_allowed = (not respect_prefs) or prefs.get("email_enabled") is not False
+
+    notif_id: int | None = None
     if record_inbox:
         try:
             from app.services import notification_inbox as inbox_svc
 
             oid = data.get("order_id")
-            await inbox_svc.record(
+            notif = await inbox_svc.record(
                 db,
                 user_id=user_id,
                 title=title,
@@ -133,39 +147,54 @@ async def send_to_user(
                 model_uuid=data.get("model_uuid"),
                 dedup_key=data.get("dedup_key") or data.get("message_id"),
             )
+            notif_id = getattr(notif, "id", None)
         except Exception as exc:  # noqa: BLE001
             logger.warning("inbox record user=%s: %s", user_id, exc)
 
-    tokens = (
-        await db.scalars(select(DeviceToken).where(DeviceToken.user_id == user_id))
-    ).all()
     results: list[dict] = []
     delivered = False
-    for t in tokens:
-        res = send_fcm_to_token(t.token, title, body, data)
-        results.append({"token_suffix": t.token[-8:], "platform": t.platform, **res})
-        if res.get("ok"):
-            delivered = True
+    if push_allowed:
+        tokens = (
+            await db.scalars(select(DeviceToken).where(DeviceToken.user_id == user_id))
+        ).all()
+        for t in tokens:
+            res = send_fcm_to_token(t.token, title, body, data)
+            results.append({"token_suffix": t.token[-8:], "platform": t.platform, **res})
+            if res.get("ok"):
+                delivered = True
+    else:
+        tokens = []
 
     email_sent = False
-    if not delivered and email_fallback:
-        user = await db.get(User, user_id)
-        if user and user.email:
-            try:
-                from app.core.config import settings
-                from app.services import email as email_svc
+    fallback_scheduled = False
+    can_email = email_fallback and email_allowed and bool(user and user.email)
 
-                event_type = str(data.get("type") or "")
-                if event_type == "topup_failed":
-                    balance_url = f"{settings.SELLER_PUBLIC_URL.rstrip('/')}/balance"
-                    await email_svc.send_topup_failed_email(
-                        user.email, title, body, balance_url
-                    )
-                else:
-                    await email_svc.send_marketing_email(user.email, title, body)
-                email_sent = True
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("email fallback user=%s: %s", user_id, exc)
+    if not delivered and can_email:
+        # push не доставлен → сразу email
+        email_sent = await _send_fallback_email(user, title, body, data)
+    elif delivered and can_email and fallback_delay_sec > 0:
+        # push доставлен → отложенный email, если не открыто за 5 мин (§3.4.3)
+        try:
+            from app.core.redis import get_redis
+            from app.services import push_fallback
+
+            redis = await get_redis()
+            key = data.get("dedup_key") or data.get("message_id") or (
+                f"{user_id}:{notif_id}" if notif_id else f"{user_id}:{int(time.time() * 1000)}"
+            )
+            await push_fallback.schedule(
+                redis,
+                key=str(key),
+                notif_id=notif_id,
+                user_id=user_id,
+                email=user.email,  # type: ignore[union-attr]
+                title=title,
+                body=body,
+                delay=fallback_delay_sec,
+            )
+            fallback_scheduled = True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("schedule fallback user=%s: %s", user_id, exc)
 
     return {
         "user_id": user_id,
@@ -173,8 +202,33 @@ async def send_to_user(
         "devices": len(tokens),
         "delivered_push": delivered,
         "email_fallback": email_sent,
+        "fallback_scheduled": fallback_scheduled,
+        "push_allowed": push_allowed,
+        "email_allowed": email_allowed,
         "results": results,
     }
+
+
+async def _send_fallback_email(
+    user: User | None, title: str, body: str, data: dict[str, str]
+) -> bool:
+    """Немедленный email-fallback (push не доставлен)."""
+    if not user or not user.email:
+        return False
+    try:
+        from app.core.config import settings
+        from app.services import email as email_svc
+
+        event_type = str(data.get("type") or "")
+        if event_type == "topup_failed":
+            balance_url = f"{settings.SELLER_PUBLIC_URL.rstrip('/')}/balance"
+            await email_svc.send_topup_failed_email(user.email, title, body, balance_url)
+        else:
+            await email_svc.send_notification_email(user.email, title, body)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("email fallback user=%s: %s", user.id, exc)
+        return False
 
 
 async def send_to_users(

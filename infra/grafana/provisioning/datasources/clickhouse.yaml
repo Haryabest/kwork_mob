@@ -12,4 +12,4 @@ datasources:
       server: clickhouse
       username: default
     secureJsonData:
-      password: ""
+      password: $CLICKHOUSE_PASSWORD

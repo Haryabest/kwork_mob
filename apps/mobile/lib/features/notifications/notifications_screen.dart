@@ -6,6 +6,8 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
+import 'package:kwork_mobile/core/locale_format.dart';
+import 'package:kwork_mobile/services/notification_text.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key, required this.api, required this.session});
@@ -78,6 +80,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return FIcons.users;
       case 'cancelled':
         return FIcons.hourglass;
+      case 'topup_failed':
+        return FIcons.creditCard;
+      case 'support_reply':
+        return FIcons.messageCircle;
       default:
         return FIcons.bell;
     }
@@ -90,6 +96,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'nsfw_blocked':
         return AppColors.error;
       case 'generation_done':
+        return AppColors.accent;
+      case 'topup_failed':
+        return AppColors.error;
+      case 'support_reply':
         return AppColors.accent;
       default:
         return AppColors.textSecondary;
@@ -153,13 +163,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         child: FTile(
                           prefix: Icon(_iconFor(n.type), color: _iconColor(n.type)),
                           title: Text(
-                            n.title,
+                            NotificationText.title(l10n, n),
                             style: TextStyle(
                               fontWeight: n.read ? FontWeight.normal : FontWeight.w600,
                             ),
                           ),
                           subtitle: Text(
-                            '${n.body}\n${_fmt(n.createdAt)}',
+                            '${NotificationText.body(l10n, n)}\n${_fmt(n.createdAt)}',
                             style: const TextStyle(fontSize: 12),
                           ),
                           details: n.read ? null : const Icon(FIcons.circle, size: 10, color: AppColors.accent),
@@ -173,8 +183,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   String _fmt(DateTime d) {
-    final l = d.toLocal();
-    return '${l.day.toString().padLeft(2, '0')}.${l.month.toString().padLeft(2, '0')} '
-        '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+    final lang = Localizations.localeOf(context).languageCode;
+    return formatDateTimeLocal(d, lang);
   }
 }

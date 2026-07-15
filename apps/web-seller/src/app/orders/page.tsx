@@ -66,6 +66,16 @@ const STATUS_COLOR: Record<string, string> = {
 
 const MANAGE_ROLES = new Set(['owner', 'manager']);
 
+// Незавершённые статусы — пока есть такие заказы, список опрашивается вживую.
+const ACTIVE_STATUSES = new Set([
+  'pending',
+  'awaiting_payment',
+  'paid',
+  'queued',
+  'processing',
+]);
+const LIVE_POLL_MS = 15000;
+
 /** §20.6 Заказы · §3.16.2 фильтр исполнитель */
 export default function OrdersPage() {
   const [items, setItems] = useState<OrderItem[]>([]);
@@ -75,23 +85,28 @@ export default function OrdersPage() {
   const [authorId, setAuthorId] = useState<string | null>(null);
   const [company, setCompany] = useState<CompanyCtx | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const canFilterAuthors = company != null && MANAGE_ROLES.has(company.role);
 
-  const loadOrders = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params: Record<string, string | number> = {};
-      if (company) params.company_id = company.id;
-      if (authorId) params.user_id = Number(authorId);
-      const { data } = await api.get<{ items: OrderItem[] }>('/orders', { params });
-      setItems(data.items ?? []);
-    } catch (e) {
-      notifications.show({ color: 'red', message: apiMessage(e) });
-    } finally {
-      setLoading(false);
-    }
-  }, [company, authorId]);
+  const loadOrders = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const params: Record<string, string | number> = {};
+        if (company) params.company_id = company.id;
+        if (authorId) params.user_id = Number(authorId);
+        const { data } = await api.get<{ items: OrderItem[] }>('/orders', { params });
+        setItems(data.items ?? []);
+        setUpdatedAt(new Date());
+      } catch (e) {
+        if (!silent) notifications.show({ color: 'red', message: apiMessage(e) });
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [company, authorId],
+  );
 
   useEffect(() => {
     api
@@ -116,6 +131,23 @@ export default function OrdersPage() {
   useEffect(() => {
     void loadOrders();
   }, [loadOrders]);
+
+  const hasActive = useMemo(
+    () => items.some((o) => ACTIVE_STATUSES.has(o.status)),
+    [items],
+  );
+
+  // §20.6 живые статусы: пока есть незавершённые заказы — тихий поллинг.
+  useEffect(() => {
+    if (!hasActive) return;
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        void loadOrders(true);
+      }
+    };
+    const timer = window.setInterval(tick, LIVE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [hasActive, loadOrders]);
 
   const memberLabel = useMemo(() => {
     const map = new Map<number, string>();
@@ -151,6 +183,16 @@ export default function OrdersPage() {
       />
 
       <Surface>
+        {updatedAt && (
+          <Group gap={6} mb="xs">
+            <Badge color={hasActive ? 'teal' : 'gray'} variant="dot" size="sm">
+              {hasActive ? 'Обновляется автоматически' : 'Актуально'}
+            </Badge>
+            <Text size="xs" c="dimmed">
+              обновлено {updatedAt.toLocaleTimeString('ru-RU')}
+            </Text>
+          </Group>
+        )}
         <FilterRow>
           <TextInput
             label="Поиск"

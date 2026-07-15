@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 /// Ориентация телефона для Guided Dome (§3.2.2): допуск ±15°.
@@ -18,7 +19,6 @@ class GyroGuide extends ChangeNotifier {
 
   void start() {
     _accelSub = accelerometerEventStream().listen((e) {
-      // pitch: наклон вперёд/назад; roll: боковой
       pitchDeg = math.atan2(-e.x, math.sqrt(e.y * e.y + e.z * e.z)) * 180 / math.pi;
       rollDeg = math.atan2(e.y, e.z) * 180 / math.pi;
       ready = true;
@@ -53,9 +53,8 @@ class GyroGuide extends ChangeNotifier {
     return d;
   }
 
-  /// Цель: pitch по elevation; yaw относительно калибровки = azimuth.
-  ({bool ok, String? hint, double deltaYawDeg}) check(DomeAngle angle) {
-    final targetPitch = -angle.elevationDeg; // верхнее кольцо — наклон вниз
+  ({bool ok, String? hint, double deltaYawDeg}) check(DomeAngle angle, AppLocalizations l) {
+    final targetPitch = -angle.elevationDeg;
     final pitchErr = (pitchDeg - targetPitch).abs();
     final rel = relativeYaw();
     final delta = angle.azimuthDeg - rel;
@@ -63,18 +62,18 @@ class GyroGuide extends ChangeNotifier {
     final yawWrapped = math.min(yawErr, 360 - yawErr);
 
     if (pitchErr > kGyroToleranceDeg) {
-      final dir = pitchDeg > targetPitch ? 'наклоните телефон вниз' : 'поднимите телефон';
+      final dir = pitchDeg > targetPitch ? l.gyroTiltDown : l.gyroTiltUp;
       return (
         ok: false,
-        hint: 'Поверните телефон: $dir (~${targetPitch.toStringAsFixed(0)}°)',
+        hint: l.gyroTurnPitch(dir, targetPitch.toStringAsFixed(0)),
         deltaYawDeg: delta,
       );
     }
     if (_refYaw != null && yawWrapped > kGyroToleranceDeg) {
-      final dir = delta > 0 ? 'влево' : 'вправо';
+      final dir = delta > 0 ? l.gyroLeft : l.gyroRight;
       return (
         ok: false,
-        hint: 'Поверните телефон примерно на ${delta.abs().toStringAsFixed(0)}° $dir',
+        hint: l.gyroTurnDegrees(delta.abs().toStringAsFixed(0), dir),
         deltaYawDeg: delta,
       );
     }

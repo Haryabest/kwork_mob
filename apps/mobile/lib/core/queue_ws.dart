@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:kwork_mobile/core/ws_errors.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// WebSocket `/ws/queue/{user_id}` — §3.4.1.
@@ -16,7 +15,7 @@ class QueueWsClient extends ChangeNotifier {
   Timer? _ping;
   Map<String, dynamic>? lastEvent;
   bool connected = false;
-  String? error;
+  Object? lastError;
 
   Future<void> connect({required int userId, required String token}) async {
     await disconnect();
@@ -24,7 +23,7 @@ class QueueWsClient extends ChangeNotifier {
     try {
       _channel = WebSocketChannel.connect(uri);
       connected = true;
-      error = null;
+      lastError = null;
       notifyListeners();
       _sub = _channel!.stream.listen(
         (raw) {
@@ -35,7 +34,7 @@ class QueueWsClient extends ChangeNotifier {
           } catch (_) {}
         },
         onError: (e) {
-          error = formatWsError(e);
+          lastError = e;
           connected = false;
           notifyListeners();
         },
@@ -48,7 +47,7 @@ class QueueWsClient extends ChangeNotifier {
         _channel?.sink.add(jsonEncode({'type': 'ping'}));
       });
     } catch (e) {
-      error = formatWsError(e);
+      lastError = e;
       connected = false;
       notifyListeners();
     }
