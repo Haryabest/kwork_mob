@@ -731,6 +731,17 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> topupCompanyBalance({
+    required int amount,
+    String paymentMethod = 'redirect',
+  }) async {
+    final res = await _dio.post('/company/balance/topup', data: {
+      'amount': amount,
+      'payment_method': paymentMethod,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> topupBalance({
     required int amount,
     String paymentMethod = 'redirect',

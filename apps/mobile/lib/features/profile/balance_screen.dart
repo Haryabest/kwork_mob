@@ -117,6 +117,22 @@ class _BalanceScreenState extends State<BalanceScreen> {
     _load();
   }
 
+  Future<void> _pickDate(TextEditingController ctrl) async {
+    final now = DateTime.now();
+    final initial = DateTime.tryParse(ctrl.text.trim()) ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isAfter(now) ? now : initial,
+      firstDate: DateTime(2020),
+      lastDate: now,
+    );
+    if (picked == null) return;
+    ctrl.text =
+        '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+  }
+
+  bool get _canTopup => !_corporateFinance || widget.session.isOwner;
+
   void _startPaymentPoll(String paymentId, {required bool company}) {
     _pollTimer?.cancel();
     _pollPaymentId = paymentId;
@@ -161,7 +177,10 @@ class _BalanceScreenState extends State<BalanceScreen> {
     }
     setState(() => _busy = true);
     try {
-      final res = await widget.api.topupBalance(amount: amount, paymentMethod: method);
+      final companyTopup = _corporateFinance && widget.session.isOwner;
+      final res = companyTopup
+          ? await widget.api.topupCompanyBalance(amount: amount, paymentMethod: method)
+          : await widget.api.topupBalance(amount: amount, paymentMethod: method);
       if (res['dev_mock'] == true) {
         await _load();
         if (mounted) {
@@ -176,7 +195,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
         final paymentId = res['payment_id']?.toString() ?? res['id']?.toString();
         if (qrData != null && qrData.isNotEmpty && mounted) {
           if (paymentId != null) {
-            _startPaymentPoll(paymentId, company: false);
+            _startPaymentPoll(paymentId, company: companyTopup);
           }
           await showFDialog<void>(
             context: context,
@@ -262,11 +281,11 @@ class _BalanceScreenState extends State<BalanceScreen> {
                       style: TextStyle(color: AppColors.textSecondary),
                     ),
                   ],
-                  if (!_corporateFinance) ...[
+                  if (_canTopup) ...[
                     const SizedBox(height: 16),
                     FTextField(
                       control: FTextFieldControl.managed(controller: _amount),
-                      label: const Text('Сумма пополнения'),
+                      label: Text(_corporateFinance ? 'Пополнение компании §19.14.2' : 'Сумма пополнения'),
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
@@ -283,14 +302,24 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     ),
                   ],
                   const SizedBox(height: 16),
-                  FTextField(
-                    control: FTextFieldControl.managed(controller: _dateFrom),
-                    label: const Text('Дата от (ГГГГ-ММ-ДД)'),
+                  GestureDetector(
+                    onTap: () => _pickDate(_dateFrom),
+                    child: AbsorbPointer(
+                      child: FTextField(
+                        control: FTextFieldControl.managed(controller: _dateFrom),
+                        label: const Text('Дата от'),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 8),
-                  FTextField(
-                    control: FTextFieldControl.managed(controller: _dateTo),
-                    label: const Text('Дата до'),
+                  GestureDetector(
+                    onTap: () => _pickDate(_dateTo),
+                    child: AbsorbPointer(
+                      child: FTextField(
+                        control: FTextFieldControl.managed(controller: _dateTo),
+                        label: const Text('Дата до'),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   FSelect<String>(
@@ -364,7 +393,12 @@ class _BalanceScreenState extends State<BalanceScreen> {
                         for (final t in _tx)
                           FTile(
                             title: Text('${t['type']} · ${t['amount']} ₽'),
-                            subtitle: Text(t['description']?.toString() ?? ''),
+                            subtitle: Text(
+                              [
+                                t['status_label']?.toString() ?? 'Успешно',
+                                t['description']?.toString() ?? '',
+                              ].where((s) => s.isNotEmpty).join(' · '),
+                            ),
                             details: Text(
                               [
                                 if (_corporateFinance && t['user_id'] != null)

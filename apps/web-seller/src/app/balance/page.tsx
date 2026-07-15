@@ -31,6 +31,8 @@ type Tx = {
   type: string;
   description?: string;
   created_at?: string;
+  status?: string;
+  status_label?: string;
 };
 
 type Member = {
@@ -48,6 +50,12 @@ const TX_TYPE_OPTIONS = [
   { value: 'charge', label: 'Списания' },
   { value: 'refund', label: 'Возвраты' },
 ];
+
+function txStatusColor(status?: string) {
+  if (status === 'failed') return 'red';
+  if (status === 'pending') return 'orange';
+  return 'teal';
+}
 
 /** §20.3 / §8 — баланс и транзакции (личный или компания) */
 export default function BalancePage() {
@@ -280,13 +288,14 @@ export default function BalancePage() {
       }
     }
     const rows = [
-      ['id', 'user_id', 'date', 'type', 'amount', 'description'],
+      ['id', 'user_id', 'date', 'type', 'amount', 'status', 'description'],
       ...items.map((t) => [
         String(t.id),
         t.user_id != null ? String(t.user_id) : '',
         t.created_at ?? '',
         t.type,
         String(t.amount),
+        t.status_label ?? t.status ?? 'Успешно',
         t.description ?? '',
       ]),
     ];
@@ -433,6 +442,7 @@ export default function BalancePage() {
                     {corporate && canFilterAuthors && <Table.Th>Сотрудник</Table.Th>}
                     <Table.Th>Тип</Table.Th>
                     <Table.Th>Сумма</Table.Th>
+                    <Table.Th>Статус §20.3.4</Table.Th>
                     <Table.Th>Описание</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -453,6 +463,11 @@ export default function BalancePage() {
                       <Table.Td fw={700} c={t.amount >= 0 ? 'teal' : 'red'}>
                         {t.amount >= 0 ? '+' : ''}
                         {t.amount.toLocaleString('ru-RU')} ₽
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge variant="light" color={txStatusColor(t.status)}>
+                          {t.status_label ?? 'Успешно'}
+                        </Badge>
                       </Table.Td>
                       <Table.Td>{t.description || '—'}</Table.Td>
                     </Table.Tr>

@@ -149,14 +149,22 @@ class PushService {
       return routeFromDeepLinkUri(Uri.tryParse(deeplink));
     }
     final orderId = data['order_id']?.toString();
+    final modelUuid = data['model_uuid']?.toString();
+    final type = data['type']?.toString() ?? data['event']?.toString();
+
     if (orderId != null && orderId.isNotEmpty) {
       return '/home/queue/$orderId';
     }
-    final modelUuid = data['model_uuid']?.toString();
     if (modelUuid != null && modelUuid.isNotEmpty) {
       return '/home/models/$modelUuid';
     }
-    final type = data['type']?.toString() ?? data['event']?.toString();
+    if (type == 'nsfw_blocked' ||
+        type == 'refund' ||
+        type == 'generation_done' ||
+        type == 'generation_failed' ||
+        type == 'cancelled') {
+      return '/home/notifications';
+    }
     if (type == 'support' || type == 'support_reply') {
       return '/home';
     }
@@ -198,6 +206,7 @@ class PushService {
       return;
     }
 
+    // Cold start / background tap — сразу на экран заказа / модели / inbox §19.16
     final r = router;
     if (r != null) {
       r.go(route);

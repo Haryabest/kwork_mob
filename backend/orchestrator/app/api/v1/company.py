@@ -833,17 +833,7 @@ async def company_transactions(
     rows = (await db.scalars(stmt.offset(offset).limit(limit))).all()
     return {
         "company_id": company.id,
-        "items": [
-            {
-                "id": t.id,
-                "user_id": t.user_id,
-                "amount": t.amount,
-                "type": t.tx_type,
-                "description": t.description,
-                "created_at": t.created_at.isoformat() if t.created_at else None,
-            }
-            for t in rows
-        ],
+        "items": [bal.transaction_to_dict(t, include_user=True) for t in rows],
         "total": total,
         "limit": limit,
         "offset": offset,

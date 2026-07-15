@@ -13,6 +13,7 @@ import {
   ThemeIcon,
   ActionIcon,
   Avatar,
+  Indicator,
   Menu,
   UnstyledButton,
 } from '@mantine/core';
@@ -53,6 +54,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [opened, { toggle, close }] = useDisclosure();
   const [balance, setBalance] = useState<number | null>(null);
+  const [unread, setUnread] = useState(0);
   const isMobile = useMediaQuery('(max-width: 767px)');
 
   useEffect(() => {
@@ -60,6 +62,10 @@ export function SellerShell({ children }: { children: ReactNode }) {
       .get<{ balance: number }>('/user/me')
       .then(({ data }) => setBalance(data.balance ?? 0))
       .catch(() => setBalance(null));
+    api
+      .get<{ unread?: number }>('/user/notifications', { params: { limit: 1, offset: 0 } })
+      .then(({ data }) => setUnread(data.unread ?? 0))
+      .catch(() => setUnread(0));
   }, [pathname]);
 
   return (
@@ -96,9 +102,23 @@ export function SellerShell({ children }: { children: ReactNode }) {
               >
                 {balance == null ? '…' : `${balance.toLocaleString('ru-RU')} ₽`}
               </Badge>
-              <ActionIcon variant="subtle" aria-label="Уведомления" size="lg" visibleFrom="sm">
-                <IconBell size={19} />
-              </ActionIcon>
+              <Indicator
+                inline
+                disabled={unread === 0}
+                label={unread > 99 ? '99+' : unread}
+                size={18}
+                color="red"
+              >
+                <ActionIcon
+                  component={Link}
+                  href="/notifications"
+                  variant="subtle"
+                  aria-label="Уведомления"
+                  size="lg"
+                >
+                  <IconBell size={19} />
+                </ActionIcon>
+              </Indicator>
               <Menu shadow="md" width={190}>
                 <Menu.Target>
                   <UnstyledButton style={{ minHeight: 44 }}>

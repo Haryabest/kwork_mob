@@ -17,6 +17,38 @@ from app.services.company_members import MANAGE_ROLES, audit, get_membership, ge
 DEFAULT_LOW_BALANCE = 5000
 MAX_EXPORT_ROWS = 10_000
 
+TX_STATUS_LABELS = {
+    "succeeded": "Успешно",
+    "pending": "В обработке",
+    "failed": "Ошибка",
+}
+
+
+def transaction_status(t: Transaction) -> str:
+    """§20.3.4 — статус операции для UI."""
+    desc = (t.description or "").lower()
+    if any(k in desc for k in ("ошибка", "fail", "отклон", "canceled", "отмен")):
+        return "failed"
+    if any(k in desc for k in ("ожидан", "pending", "processing")):
+        return "pending"
+    return "succeeded"
+
+
+def transaction_to_dict(t: Transaction, *, include_user: bool = False) -> dict:
+    st = transaction_status(t)
+    out = {
+        "id": t.id,
+        "amount": t.amount,
+        "type": t.tx_type,
+        "description": t.description,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+        "status": st,
+        "status_label": TX_STATUS_LABELS.get(st, st),
+    }
+    if include_user:
+        out["user_id"] = t.user_id
+    return out
+
 
 async def validate_company_tx_user_filter(
     db: AsyncSession,
@@ -118,8 +150,9 @@ async def count_company_transactions(
 def transactions_to_csv(rows: list[Transaction]) -> str:
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["id", "user_id", "date", "type", "amount", "description"])
+    w.writerow(["id", "user_id", "date", "type", "amount", "status", "description"])
     for t in rows:
+        st = transaction_status(t)
         w.writerow(
             [
                 t.id,
@@ -127,6 +160,7 @@ def transactions_to_csv(rows: list[Transaction]) -> str:
                 t.created_at.isoformat() if t.created_at else "",
                 t.tx_type,
                 t.amount,
+                TX_STATUS_LABELS.get(st, st),
                 t.description or "",
             ]
         )

@@ -10,6 +10,9 @@ String? routeFromDeepLinkUri(Uri? uri) {
     if (segs.first == 'models' && segs.length >= 2) {
       return '/home/models/${segs[1]}';
     }
+    if (segs.first == 'notifications') {
+      return '/home/notifications';
+    }
     if (segs.first == 'shoot' && segs.length >= 2) {
       return '/shoot/${segs[1]}';
     }

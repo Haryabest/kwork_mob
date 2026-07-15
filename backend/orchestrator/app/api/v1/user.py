@@ -154,16 +154,7 @@ async def get_transactions(
     )
     rows = (await db.scalars(stmt.offset(offset).limit(limit))).all()
     return {
-        "items": [
-            {
-                "id": t.id,
-                "amount": t.amount,
-                "type": t.tx_type,
-                "description": t.description,
-                "created_at": t.created_at.isoformat() if t.created_at else None,
-            }
-            for t in rows
-        ],
+        "items": [bal.transaction_to_dict(t) for t in rows],
         "total": int(total),
         "limit": limit,
         "offset": offset,
