@@ -86,6 +86,7 @@ async def update_me(
             "email_enabled",
             "email_orders",
             "email_balance",
+            "nsfw_blocked",
             "export_format",
         }
         cur = dict(user.notification_prefs or {})

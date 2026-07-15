@@ -82,14 +82,16 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 try:
                     from app.services import push as push_svc
 
-                    await push_svc.send_to_user(
-                        db,
-                        user_id,
-                        "Возврат средств",
-                        f"Возврат {amount} ₽ через ЮKassa подтверждён.",
-                        data={"refund_id": refund_id, "payment_id": pay_id},
-                        email_fallback=True,
-                    )
+                    user = await db.get(User, user_id)
+                    if user and push_svc.user_wants_notification(user, "refund"):
+                        await push_svc.send_to_user(
+                            db,
+                            user_id,
+                            "Возврат средств",
+                            f"Возврат {amount} ₽ через ЮKassa подтверждён.",
+                            data={"refund_id": refund_id, "payment_id": pay_id},
+                            email_fallback=True,
+                        )
                 except Exception:  # noqa: BLE001
                     pass
             await yk_wh.record_webhook_success(order_hint or pay_id or refund_id)

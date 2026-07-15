@@ -49,6 +49,7 @@ export default function BalancePage() {
   const [paying, setPaying] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [corporate, setCorporate] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const [canFilterAuthors, setCanFilterAuthors] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [authorId, setAuthorId] = useState<string | null>(null);
@@ -64,13 +65,14 @@ export default function BalancePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const mine = await api.get<{ items: Array<{ id: number; role?: string; balance?: number | null }> }>(
-        '/company/mine',
-      );
+      const mine = await api.get<{
+        items: Array<{ id: number; role?: string; balance?: number | null; is_owner?: boolean }>;
+      }>('/company/mine');
       const company = mine.data.items?.[0];
       const role = company?.role ?? '';
       const useCorporate = Boolean(company?.id && company.balance != null);
       setCorporate(useCorporate);
+      setIsOwner(role === 'owner' || company?.is_owner === true);
       setCanFilterAuthors(MANAGE_ROLES.has(role));
 
       if (useCorporate && company) {
@@ -111,12 +113,13 @@ export default function BalancePage() {
     }
     setPaying(true);
     try {
+      const endpoint = corporate && isOwner ? '/company/balance/topup' : '/user/balance/topup';
       const { data } = await api.post<{
         confirmation_url?: string;
         status?: string;
         dev_mock?: boolean;
         balance?: number;
-      }>('/user/balance/topup', {
+      }>(endpoint, {
         amount: value,
       });
       if (data.confirmation_url) {
@@ -138,7 +141,26 @@ export default function BalancePage() {
     }
   }
 
-  function exportCsv() {
+  async function exportCsv() {
+    if (corporate && isOwner) {
+      try {
+        const params: Record<string, string | number> = {};
+        if (authorId) params.user_id = Number(authorId);
+        const res = await api.get('/company/transactions/export', {
+          params,
+          responseType: 'blob',
+        });
+        const blob = new Blob([res.data as BlobPart], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'company_transactions.csv';
+        a.click();
+        return;
+      } catch (e) {
+        notifications.show({ color: 'red', message: apiMessage(e, 'Не удалось выгрузить CSV') });
+        return;
+      }
+    }
     const rows = [
       ['id', 'user_id', 'date', 'type', 'amount', 'description'],
       ...items.map((t) => [
@@ -170,7 +192,11 @@ export default function BalancePage() {
             : 'ЮKassa · СБП и карта · история операций'
         }
         action={
-          !corporate ? (
+          corporate && isOwner ? (
+            <Button leftSection={<IconPlus size={16} />} onClick={open}>
+              Пополнить баланс компании
+            </Button>
+          ) : !corporate ? (
             <Button leftSection={<IconPlus size={16} />} onClick={open}>
               Пополнить баланс
             </Button>
@@ -205,7 +231,7 @@ export default function BalancePage() {
                   : '—'}
               </Text>
             </div>
-            <Button variant="light" leftSection={<IconDownload size={16} />} onClick={exportCsv}>
+            <Button variant="light" leftSection={<IconDownload size={16} />} onClick={() => void exportCsv()}>
               Экспорт CSV
             </Button>
           </Group>
@@ -273,7 +299,14 @@ export default function BalancePage() {
         </Surface>
       )}
 
-      <Modal opened={opened} onClose={close} title="Пополнить баланс" centered radius="lg" padding="lg">
+      <Modal
+        opened={opened}
+        onClose={close}
+        title={corporate && isOwner ? 'Пополнить баланс компании' : 'Пополнить баланс'}
+        centered
+        radius="lg"
+        padding="lg"
+      >
         <Stack gap="md">
           <Text size="sm" c="#6d6c77">
             Оплата через ЮKassa (карта / СБП). После оплаты вернётесь на эту страницу.

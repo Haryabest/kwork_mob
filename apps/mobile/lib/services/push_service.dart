@@ -245,6 +245,7 @@ class PushService {
     final defaults = {
       'generation_done': true,
       'refund': true,
+      'nsfw_blocked': true,
       'source_expire': true,
       'cleanup': false,
       'publish_reminder': true,

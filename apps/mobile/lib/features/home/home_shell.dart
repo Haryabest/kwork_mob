@@ -563,6 +563,7 @@ class _ProfileTabState extends State<_ProfileTab> {
   static const _prefLabels = {
     'generation_done': 'Генерация готова',
     'refund': 'Возврат средств',
+    'nsfw_blocked': 'NSFW-блокировка',
     'source_expire': 'Истечение исходников',
     'cleanup': 'Очистка хранилища',
     'publish_reminder': 'Напоминание опубликовать',

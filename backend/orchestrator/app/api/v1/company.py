@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field
@@ -731,7 +731,7 @@ async def company_topup(
     payment = await yookassa_service.create_payment(
         body.amount,
         description,
-        return_url=f"{settings.SELLER_PUBLIC_URL}/company/finance",
+        return_url=f"{settings.SELLER_PUBLIC_URL}/balance",
         metadata={
             "purpose": "company_topup",
             "user_id": str(user.id),
@@ -762,22 +762,13 @@ async def company_transactions(
     db: AsyncSession = Depends(get_db),
     user_id: int | None = Query(default=None, description="Фильтр по сотруднику §8"),
 ):
+    from app.services import company_balance as bal
     from app.services.access import company_for_permission
-    from app.services.company_members import MANAGE_ROLES, get_membership
 
     company = await company_for_permission(db, user, "can_view_finance")
-    stmt = select(Transaction).where(Transaction.company_id == company.id)
-    if user_id is not None:
-        membership = await get_membership(db, company.id, user.id)
-        role = "owner" if company.owner_id == user.id else (membership.role if membership else None)
-        if role not in MANAGE_ROLES and company.owner_id != user.id:
-            raise HTTPException(403, "Фильтр user_id доступен Owner/Manager")
-        if user_id != company.owner_id:
-            author = await get_membership(db, company.id, user_id)
-            if not author:
-                raise HTTPException(400, "user_id не является сотрудником компании")
-        stmt = stmt.where(Transaction.user_id == user_id)
-    rows = (await db.scalars(stmt.order_by(Transaction.id.desc()).limit(200))).all()
+    await bal.validate_company_tx_user_filter(db, company=company, actor=user, user_id=user_id)
+    stmt = bal.build_company_tx_stmt(company.id, user_id=user_id)
+    rows = (await db.scalars(stmt.limit(200))).all()
     return {
         "company_id": company.id,
         "items": [
@@ -792,6 +783,38 @@ async def company_transactions(
             for t in rows
         ],
     }
+
+
+@router.get("/transactions/export")
+async def export_company_transactions(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+    user_id: int | None = Query(default=None, description="Фильтр по сотруднику §8"),
+    date_from: date | None = Query(default=None, alias="from"),
+    date_to: date | None = Query(default=None, alias="to"),
+    tx_type: str = Query(default="all", pattern=r"^(all|topup|charge|refund)$"),
+):
+    """CSV выгрузка операций компании за период (Owner §8)."""
+    from fastapi.responses import Response
+
+    from app.services import company_balance as bal
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    await bal.validate_company_tx_user_filter(db, company=company, actor=user, user_id=user_id)
+    csv_body = await bal.export_company_transactions_csv(
+        db,
+        company=company,
+        user_id=user_id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    return Response(
+        content=csv_body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="company_transactions.csv"'},
+    )
 
 
 class WebhookCreate(BaseModel):

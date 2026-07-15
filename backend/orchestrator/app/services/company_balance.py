@@ -2,14 +2,100 @@
 
 from __future__ import annotations
 
+import csv
+import io
+from datetime import date, datetime, time, timezone
+
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Company, Transaction, User
 from app.services.access import company_for_permission
-from app.services.company_members import audit, get_owned_company
+from app.services.company_members import MANAGE_ROLES, audit, get_membership, get_owned_company
 
 DEFAULT_LOW_BALANCE = 5000
+MAX_EXPORT_ROWS = 10_000
+
+
+async def validate_company_tx_user_filter(
+    db: AsyncSession,
+    *,
+    company: Company,
+    actor: User,
+    user_id: int | None,
+) -> None:
+    """Owner/Manager могут фильтровать транзакции по сотруднику §8."""
+    if user_id is None:
+        return
+    membership = await get_membership(db, company.id, actor.id)
+    role = "owner" if company.owner_id == actor.id else (membership.role if membership else None)
+    if role not in MANAGE_ROLES and company.owner_id != actor.id:
+        raise HTTPException(403, "Фильтр user_id доступен Owner/Manager")
+    if user_id != company.owner_id:
+        author = await get_membership(db, company.id, user_id)
+        if not author:
+            raise HTTPException(400, "user_id не является сотрудником компании")
+
+
+def build_company_tx_stmt(
+    company_id: int,
+    *,
+    user_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    tx_type: str | None = None,
+):
+    stmt = select(Transaction).where(Transaction.company_id == company_id)
+    if user_id is not None:
+        stmt = stmt.where(Transaction.user_id == user_id)
+    if tx_type and tx_type != "all":
+        stmt = stmt.where(Transaction.tx_type == tx_type)
+    if date_from is not None:
+        start = datetime.combine(date_from, time.min, tzinfo=timezone.utc)
+        stmt = stmt.where(Transaction.created_at >= start)
+    if date_to is not None:
+        end = datetime.combine(date_to, time.max, tzinfo=timezone.utc)
+        stmt = stmt.where(Transaction.created_at <= end)
+    return stmt.order_by(Transaction.id.desc())
+
+
+def transactions_to_csv(rows: list[Transaction]) -> str:
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["id", "user_id", "date", "type", "amount", "description"])
+    for t in rows:
+        w.writerow(
+            [
+                t.id,
+                t.user_id or "",
+                t.created_at.isoformat() if t.created_at else "",
+                t.tx_type,
+                t.amount,
+                t.description or "",
+            ]
+        )
+    return buf.getvalue()
+
+
+async def export_company_transactions_csv(
+    db: AsyncSession,
+    *,
+    company: Company,
+    user_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    tx_type: str = "all",
+) -> str:
+    stmt = build_company_tx_stmt(
+        company.id,
+        user_id=user_id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    ).limit(MAX_EXPORT_ROWS)
+    rows = (await db.scalars(stmt)).all()
+    return transactions_to_csv(rows)
 
 
 async def maybe_emit_balance_low(db: AsyncSession, company: Company) -> None:

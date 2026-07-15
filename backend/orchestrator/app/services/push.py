@@ -96,6 +96,16 @@ def send_fcm_to_token(token: str, title: str, body: str, data: dict[str, str] | 
     return {"ok": ok, "channel": "fcm_legacy", "status": r.status_code, "detail": r.text[:500]}
 
 
+def user_wants_notification(user: User, event_key: str | None = None) -> bool:
+    """§3.4.3 / §20.8.3 — учёт push/email master + event toggles."""
+    prefs = dict(user.notification_prefs or {})
+    if prefs.get("push_enabled") is False and prefs.get("email_enabled") is False:
+        return False
+    if event_key and prefs.get(event_key) is False:
+        return False
+    return True
+
+
 async def send_to_user(
     db: AsyncSession,
     user_id: int,

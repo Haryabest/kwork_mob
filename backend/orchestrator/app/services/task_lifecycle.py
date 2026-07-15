@@ -246,6 +246,7 @@ async def mark_failed(db: AsyncSession, task_id: str, error: str) -> Order | Non
     row.status = "failed"
     order = await db.get(Order, row.order_id)
     refund_meta: dict | None = None
+    nsfw_blocked = False
     if order and order.status not in ("cancelled", "completed"):
         order.status = "failed"
         payload = dict(row.payload_json or {})
@@ -254,7 +255,6 @@ async def mark_failed(db: AsyncSession, task_id: str, error: str) -> Order | Non
             model = await db.scalar(select(Model3D).where(Model3D.order_id == order.id))
             if model:
                 model.publish_status = "import_failed"
-        nsfw_blocked = False
         if is_import and "import_nsfw_detected" in error:
             try:
                 from app.models import User as UserModel
@@ -313,19 +313,29 @@ async def mark_failed(db: AsyncSession, task_id: str, error: str) -> Order | Non
         pass
     if order:
         try:
-            refunded = bool(refund_meta and refund_meta.get("refunded"))
-            await _notify_order_user_push(
-                db,
-                order,
-                pref_key="refund" if refunded else "generation_done",
-                event_type="generation_failed",
-                title="Возврат средств" if refunded else "Ошибка генерации",
-                body=(
-                    f"Заказ #{order.id} не выполнен. Средства возвращены."
-                    if refunded
-                    else f"Заказ #{order.id} не выполнен."
-                ),
-            )
+            if nsfw_blocked:
+                await _notify_order_user_push(
+                    db,
+                    order,
+                    pref_key="nsfw_blocked",
+                    event_type="nsfw_blocked",
+                    title="NSFW-блокировка",
+                    body=f"Импорт заказа #{order.id} отклонён из-за запрещённого контента.",
+                )
+            else:
+                refunded = bool(refund_meta and refund_meta.get("refunded"))
+                await _notify_order_user_push(
+                    db,
+                    order,
+                    pref_key="refund" if refunded else "generation_done",
+                    event_type="generation_failed",
+                    title="Возврат средств" if refunded else "Ошибка генерации",
+                    body=(
+                        f"Заказ #{order.id} не выполнен. Средства возвращены."
+                        if refunded
+                        else f"Заказ #{order.id} не выполнен."
+                    ),
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning("user push generation_failed: %s", exc)
     await db.commit()

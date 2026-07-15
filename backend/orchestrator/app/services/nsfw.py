@@ -265,6 +265,32 @@ class NsfwService:
             result.get("method"),
         )
         try:
+            from app.services.task_lifecycle import _notify_order_user_push
+
+            refund_note = " Средства возвращены." if refunded else ""
+            await _notify_order_user_push(
+                db,
+                order,
+                pref_key="nsfw_blocked",
+                event_type="nsfw_blocked",
+                title="NSFW-блокировка",
+                body=(
+                    f"Заказ #{order.id} отклонён.{refund_note} "
+                    "Аккаунт на проверке до 24 ч."
+                ),
+            )
+            if refunded and order.amount > 0:
+                await _notify_order_user_push(
+                    db,
+                    order,
+                    pref_key="refund",
+                    event_type="refund",
+                    title="Возврат средств",
+                    body=f"По заказу #{order.id} средства возвращены.",
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("NSFW user push failed: %s", exc)
+        try:
             from app.services.alerts import notify_nsfw_block
 
             await notify_nsfw_block(
