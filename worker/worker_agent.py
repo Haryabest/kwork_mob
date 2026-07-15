@@ -61,6 +61,11 @@ WS_CONNECT_TIMEOUT = float(os.getenv("WORKER_WS_CONNECT_TIMEOUT", "10"))
 TASK_DRAIN_TIMEOUT_SEC = int(os.getenv("WORKER_TASK_DRAIN_TIMEOUT_SEC", "3600"))
 SUBPROCESS_STREAM = os.getenv("WORKER_SUBPROCESS_STREAM", "1").lower() in ("1", "true", "yes")
 
+IMPORT_PIPELINE = [
+    "validate_import_glb.py",
+    "compress_draco.py",
+]
+
 PIPELINE_STEPS = [
     "remove_background.py",
     "trellis_generate.py",
@@ -200,6 +205,11 @@ class WorkerAgent:
                 count += 1
                 logger.info("Downloaded s3://%s/%s", bucket, key)
         return count
+
+    def download_object(self, bucket: str, key: str, dest: Path) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        self.minio.download_file(bucket, key, str(dest))
+        logger.info("Downloaded s3://%s/%s → %s", bucket, key, dest)
 
     def upload_model(self, bucket: str, key: str, local_path: Path) -> str:
         self.minio.upload_file(
@@ -376,6 +386,7 @@ class WorkerAgent:
             shutil.rmtree(task_dir, ignore_errors=True)
         task_dir.mkdir(parents=True, exist_ok=True)
         photos_dir = task_dir / "photos"
+        is_import = payload.get("pipeline") == "import_validate"
 
         completed: list[str] = []
         try:
@@ -388,7 +399,15 @@ class WorkerAgent:
                 )
                 logger.info("Resume task %s from steps=%s", task_id, completed)
 
-            if not (photos_dir.exists() and any(photos_dir.iterdir())):
+            if is_import:
+                import_key = payload.get("import_glb_key")
+                if not import_key:
+                    raise RuntimeError("import_glb_key missing for import_validate")
+                models_bucket = payload.get("models_bucket") or "models"
+                raw = task_dir / "model_raw.glb"
+                await asyncio.to_thread(self.download_object, models_bucket, import_key, raw)
+                (task_dir / "model.glb").write_bytes(raw.read_bytes())
+            elif not (photos_dir.exists() and any(photos_dir.iterdir())):
                 bucket = payload.get("photos_bucket") or "photos"
                 prefix = payload.get("photos_prefix") or f"photos/{task_id}/"
                 n = await asyncio.to_thread(self.download_photos, bucket, prefix, photos_dir)
@@ -421,7 +440,7 @@ class WorkerAgent:
             )
 
             models_bucket = payload.get("models_bucket") or "models"
-            pipeline = build_pipeline(payload.get("upsell_options"))
+            pipeline = IMPORT_PIPELINE if is_import else build_pipeline(payload.get("upsell_options"))
             t0 = time.monotonic()
 
             for step in pipeline:
@@ -502,7 +521,7 @@ class WorkerAgent:
                 except Exception:  # noqa: BLE001
                     quality_score = None
             threshold = float(self.config.get("quality_threshold", 0.7))
-            if quality_score is not None and quality_score < threshold:
+            if not is_import and quality_score is not None and quality_score < threshold:
                 raise RuntimeError(
                     f"quality_gate_failed score={quality_score} < {threshold}"
                 )

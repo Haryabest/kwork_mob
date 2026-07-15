@@ -589,14 +589,18 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<List<Map<String, dynamic>>> listOrders() async {
-    final res = await _dio.get('/orders');
+  Future<List<Map<String, dynamic>>> listOrders({int? companyId}) async {
+    final res = await _dio.get('/orders', queryParameters: {
+      if (companyId != null) 'company_id': companyId,
+    });
     final items = (res.data as Map)['items'] as List? ?? [];
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
-  Future<List<Map<String, dynamic>>> listModels() async {
-    final res = await _dio.get('/user/models');
+  Future<List<Map<String, dynamic>>> listModels({int? companyId}) async {
+    final res = await _dio.get('/user/models', queryParameters: {
+      if (companyId != null) 'company_id': companyId,
+    });
     final items = (res.data as Map)['items'] as List? ?? [];
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }

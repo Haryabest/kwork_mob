@@ -134,6 +134,7 @@ async def mark_completed(
         await db.commit()
         return None
 
+    is_import = (row.payload_json or {}).get("pipeline") == "import_validate"
     order.status = "completed"
     existing = await db.scalar(select(Model3D).where(Model3D.order_id == order.id))
     model_uuid: str | None = None
@@ -143,6 +144,8 @@ async def mark_completed(
             existing.usdz_url = usdz_url
         if watermark_hmac:
             existing.watermark_hmac = watermark_hmac
+        if is_import:
+            existing.publish_status = "imported"
         model_uuid = existing.uuid
     else:
         from app.services.model_storage import default_expires_at
@@ -245,6 +248,11 @@ async def mark_failed(db: AsyncSession, task_id: str, error: str) -> Order | Non
     refund_meta: dict | None = None
     if order and order.status not in ("cancelled", "completed"):
         order.status = "failed"
+        payload = dict(row.payload_json or {})
+        if payload.get("pipeline") == "import_validate":
+            model = await db.scalar(select(Model3D).where(Model3D.order_id == order.id))
+            if model:
+                model.publish_status = "import_failed"
         # §6.12: quality gate / фатальный fail → полный возврат
         if order.amount > 0:
             try:

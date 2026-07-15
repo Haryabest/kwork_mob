@@ -65,14 +65,22 @@ export default function ImportModelPage() {
       });
       setProgress(85);
 
-      const { data: imported } = await api.post<{ uuid: string }>('/models/import', {
-        glb_key: prep.key,
-        company_id: prep.company_id,
-        model_uuid: prep.model_uuid,
-        category,
-        display_name: displayName.trim() || undefined,
-      });
+      const { data: imported } = await api.post<{ uuid: string; order_id: number; status: string }>(
+        '/models/import',
+        {
+          glb_key: prep.key,
+          company_id: prep.company_id,
+          model_uuid: prep.model_uuid,
+          category,
+          display_name: displayName.trim() || undefined,
+        },
+      );
       setProgress(100);
+      if (imported.status === 'import_validating') {
+        notifications.show({ color: 'blue', message: 'Модель на проверке (GLB / PBR / Draco)…' });
+        router.push(`/orders/${imported.order_id}`);
+        return;
+      }
       notifications.show({ color: 'teal', message: 'Модель импортирована' });
       router.push(`/models/${imported.uuid}`);
     } catch (e) {

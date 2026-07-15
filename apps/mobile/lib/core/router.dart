@@ -299,7 +299,10 @@ class _SplashScreenState extends State<_SplashScreen> {
       if (cloudRestored) return;
       // §3.5.3 — auto-download GLB после потери связи
       // ignore: unawaited_futures
-      LocalModelLibrary.instance.syncPendingDownloads(widget.api);
+      LocalModelLibrary.instance.syncPendingDownloads(
+        widget.api,
+        companyId: widget.session.corporate ? widget.session.companyId : null,
+      );
       await _goAuthenticatedHome();
     }
   }

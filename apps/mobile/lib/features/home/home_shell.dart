@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/locale_controller.dart';
 import 'package:kwork_mobile/core/session.dart';
@@ -43,7 +45,10 @@ class _HomeShellState extends State<HomeShell> {
     _refresh();
     _loadUnread();
     LocalModelLibrary.instance.runAutoCleanup();
-    LocalModelLibrary.instance.syncPendingDownloads(widget.api);
+    LocalModelLibrary.instance.syncPendingDownloads(
+      widget.api,
+      companyId: widget.session.corporate ? widget.session.companyId : null,
+    );
   }
 
   Future<void> _loadUnread() async {
@@ -143,6 +148,7 @@ class _HomeShellState extends State<HomeShell> {
       ),
       ModelsScreen(
         api: widget.api,
+        companyId: session.corporate ? session.companyId : null,
         onNotifications: () async {
           await context.push('/home/notifications');
           await _loadUnread();
@@ -174,7 +180,12 @@ class _HomeShellState extends State<HomeShell> {
             onChange: (i) {
               setState(() => _index = i);
               if (i == 0) _homeTabKey.currentState?.refreshPending();
-              if (i == 1) LocalModelLibrary.instance.syncPendingDownloads(widget.api);
+              if (i == 1) {
+                LocalModelLibrary.instance.syncPendingDownloads(
+                  widget.api,
+                  companyId: widget.session.corporate ? widget.session.companyId : null,
+                );
+              }
             },
             children: [
               FBottomNavigationBarItem(
@@ -445,6 +456,7 @@ class _ProfileTabState extends State<_ProfileTab> {
   bool _loading2fa = false;
   String? _setupSecret;
   String? _setupChallenge;
+  String? _setupUri;
   final _code = TextEditingController();
   final _oldPass = TextEditingController();
   final _newPass = TextEditingController();
@@ -507,6 +519,7 @@ class _ProfileTabState extends State<_ProfileTab> {
       setState(() {
         _setupSecret = data['secret']?.toString();
         _setupChallenge = data['challenge_token']?.toString();
+        _setupUri = data['otpauth_uri']?.toString();
       });
     } catch (e) {
       if (mounted) {
@@ -529,6 +542,7 @@ class _ProfileTabState extends State<_ProfileTab> {
         _totpEnabled = true;
         _setupSecret = null;
         _setupChallenge = null;
+        _setupUri = null;
         _ownerRequired = false;
       });
       if (mounted) {
@@ -843,40 +857,106 @@ class _ProfileTabState extends State<_ProfileTab> {
           onPress: _changingPass ? null : _changePassword,
         ),
         const SizedBox(height: 16),
-        Text('Двухфакторная аутентификация', style: context.theme.typography.sm),
-        if (_ownerRequired)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'Для Owner 2FA обязательна (§10.7.5)',
-              style: TextStyle(color: AppColors.warning),
+        Text('Двухфакторная аутентификация §19.14.4', style: context.theme.typography.sm),
+        const SizedBox(height: 8),
+        Material(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      _totpEnabled ? FIcons.shieldCheck : FIcons.shield,
+                      color: _totpEnabled ? AppColors.success : AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _totpEnabled ? '2FA включена' : '2FA выключена',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_ownerRequired) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Для Owner 2FA обязательна (§10.7.5)',
+                    style: TextStyle(color: AppColors.warning, fontSize: 13),
+                  ),
+                ],
+                if (_totpEnabled) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'TOTP активен — Google Authenticator, 1Password или аналог.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                ] else if (_setupSecret != null) ...[
+                  const SizedBox(height: 12),
+                  const Text('1. Отсканируйте QR в приложении-аутентификаторе'),
+                  const SizedBox(height: 12),
+                  if (_setupUri != null)
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: QrImageView(data: _setupUri!, size: 200),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  const Text('2. Или введите секрет вручную'),
+                  const SizedBox(height: 6),
+                  SelectableText(_setupSecret!, style: const TextStyle(fontSize: 12)),
+                  const SizedBox(height: 8),
+                  FButton(
+                    variant: .outline,
+                    onPress: () async {
+                      await Clipboard.setData(ClipboardData(text: _setupSecret!));
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Секрет скопирован')),
+                        );
+                      }
+                    },
+                    child: const Text('Скопировать секрет'),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('3. Введите 6-значный код'),
+                  const SizedBox(height: 8),
+                  FTextField(
+                    control: FTextFieldControl.managed(controller: _code),
+                    label: const Text('Код подтверждения'),
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                  ),
+                  const SizedBox(height: 8),
+                  FButton(
+                    onPress: _loading2fa ? null : _confirm2fa,
+                    child: Text(_loading2fa ? '…' : 'Подтвердить 2FA'),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Защитите аккаунт одноразовыми кодами при входе.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  FButton(
+                    onPress: _loading2fa ? null : _start2fa,
+                    child: Text(_loading2fa ? '…' : 'Настроить 2FA'),
+                  ),
+                ],
+              ],
             ),
           ),
-        FTile(
-          title: Text(_totpEnabled ? '2FA включена' : '2FA выключена'),
-          subtitle: Text(_totpEnabled ? 'TOTP активен' : 'Google Authenticator / аналог'),
-          details: _totpEnabled
-              ? const Icon(FIcons.shieldCheck, color: AppColors.success)
-              : FButton(
-                  onPress: _loading2fa ? null : _start2fa,
-                  child: Text(_loading2fa ? '…' : 'Включить'),
-                ),
         ),
-        if (_setupSecret != null) ...[
-          SelectableText('Секрет: $_setupSecret', style: const TextStyle(fontSize: 12)),
-          const SizedBox(height: 8),
-          FTextField(
-            control: FTextFieldControl.managed(controller: _code),
-            label: const Text('Код подтверждения'),
-            keyboardType: TextInputType.number,
-            maxLength: 6,
-          ),
-          const SizedBox(height: 8),
-          FButton(
-            onPress: _loading2fa ? null : _confirm2fa,
-            child: const Text('Подтвердить 2FA'),
-          ),
-        ],
         const SizedBox(height: 24),
         FButton(
           variant: .destructive,

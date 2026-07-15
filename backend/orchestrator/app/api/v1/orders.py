@@ -597,10 +597,17 @@ async def cancel_order(
 async def list_orders(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
+    company_id: int | None = Query(default=None),
 ):
-    rows = (
-        await db.scalars(select(Order).where(Order.user_id == user.id).order_by(Order.id.desc()).limit(100))
-    ).all()
+    """§3.5.3 — личные заказы или заказы компании в корпоративном режиме."""
+    from app.services.access import assert_company_access
+
+    if company_id is not None:
+        await assert_company_access(db, user, company_id)
+        stmt = select(Order).where(Order.company_id == company_id)
+    else:
+        stmt = select(Order).where(Order.user_id == user.id)
+    rows = (await db.scalars(stmt.order_by(Order.id.desc()).limit(100))).all()
     return {
         "items": [
             {
@@ -610,8 +617,10 @@ async def list_orders(
                 "tier": o.tier,
                 "status": o.status,
                 "amount": o.amount,
+                "company_id": o.company_id,
                 "created_at": o.created_at.isoformat() if o.created_at else None,
             }
             for o in rows
-        ]
+        ],
+        "scope": "company" if company_id else "personal",
     }

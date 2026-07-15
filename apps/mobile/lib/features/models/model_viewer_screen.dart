@@ -20,11 +20,13 @@ class ModelsScreen extends StatefulWidget {
   const ModelsScreen({
     super.key,
     required this.api,
+    this.companyId,
     this.onNotifications,
     this.unread = 0,
   });
 
   final ApiClient api;
+  final int? companyId;
   final VoidCallback? onNotifications;
   final int unread;
 
@@ -214,11 +216,14 @@ class _ModelsScreenState extends State<ModelsScreen> {
       _error = null;
     });
     try {
-      _items = await widget.api.listModels();
+      _items = await widget.api.listModels(companyId: widget.companyId);
       _favorites = await LocalModelLibrary.instance.favorites();
       // §3.5.3 — фоновая синхронизация GLB для completed заказов
       // ignore: unawaited_futures
-      LocalModelLibrary.instance.syncPendingDownloads(widget.api);
+      LocalModelLibrary.instance.syncPendingDownloads(
+        widget.api,
+        companyId: widget.companyId,
+      );
       for (final m in _items) {
         final uuid = m['uuid']?.toString();
         if (uuid != null) _loadThumb(uuid);

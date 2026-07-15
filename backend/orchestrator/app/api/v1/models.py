@@ -180,7 +180,7 @@ async def import_model(
         company_id=company.id,
         glb_url=glb_url,
         display_name=(body.display_name or "").strip() or None,
-        publish_status="imported",
+        publish_status="import_validating",
     )
     order = Order(
         user_id=user.id,
@@ -188,7 +188,7 @@ async def import_model(
         task_uuid=model_uuid,
         category=body.category,
         tier="small",
-        status="completed",
+        status="processing",
         amount=0,
         amount_original=0,
         discount_amount=0,
@@ -200,11 +200,16 @@ async def import_model(
     await db.flush()
     row.order_id = order.id
     db.add(row)
+    from app.services import import_validation as iv
+
+    await iv.enqueue_import_validation(
+        db, model=row, order=order, glb_key=body.glb_key, user=user
+    )
     db.add(
         AuditLog(
             company_id=company.id,
             user_id=user.id,
-            action="model_imported",
+            action="model_import_queued",
             details={"model_uuid": model_uuid, "category": body.category, "source": "external"},
         )
     )
@@ -223,7 +228,7 @@ async def import_model(
         "uuid": row.uuid,
         "glb_url": row.glb_url,
         "order_id": order.id,
-        "status": "imported",
+        "status": "import_validating",
         "display_name": row.display_name,
         "source": "external",
     }

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -246,17 +246,26 @@ async def request_account_deletion(
 async def list_user_models(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
+    company_id: int | None = Query(default=None),
 ):
+    from app.services import model_storage as ms
+    from app.services.access import assert_company_access
+
+    if company_id is not None:
+        await assert_company_access(db, user, company_id)
+        where = (Model3D.company_id == company_id, Model3D.trashed_at.is_(None))
+    else:
+        where = (Model3D.user_id == user.id, Model3D.trashed_at.is_(None))
+
     rows = (
         await db.execute(
             select(Model3D, Order.category, Order.tier)
             .outerjoin(Order, Model3D.order_id == Order.id)
-            .where(Model3D.user_id == user.id, Model3D.trashed_at.is_(None))
+            .where(*where)
             .order_by(Model3D.id.desc())
             .limit(100)
         )
     ).all()
-    from app.services import model_storage as ms
 
     return {
         "items": [
@@ -273,7 +282,8 @@ async def list_user_models(
                 "storage": ms.storage_meta(m),
             }
             for m, category, tier in rows
-        ]
+        ],
+        "scope": "company" if company_id else "personal",
     }
 
 

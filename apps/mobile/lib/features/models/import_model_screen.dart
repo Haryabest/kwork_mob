@@ -109,6 +109,17 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
       );
       setState(() => _progress = 1);
 
+      final status = imported['status']?.toString();
+      final orderId = (imported['order_id'] as num?)?.toInt();
+      if (!mounted) return;
+      if (status == 'import_validating' && orderId != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Модель на проверке (GLB 2.0 / PBR / Draco)…')),
+        );
+        context.go('/home/queue/$orderId');
+        return;
+      }
+
       final uuid = imported['uuid']?.toString() ?? modelUuid;
       await LocalModelLibrary.instance.downloadGlb(api: widget.api, modelUuid: uuid);
 

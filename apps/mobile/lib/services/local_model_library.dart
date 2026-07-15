@@ -164,13 +164,14 @@ class LocalModelLibrary {
   }
 
   /// §3.5.3 — при запуске / «Мои модели»: скачать GLB для completed без локальной копии.
-  Future<int> syncPendingDownloads(ApiClient api) async {
+  /// [companyId] — корпоративный режим: заказы и модели компании (§3.5.3).
+  Future<int> syncPendingDownloads(ApiClient api, {int? companyId}) async {
     if (!await loadAutoDownloadEnabled()) return 0;
     var count = 0;
     final seen = <String>{};
 
     try {
-      final orders = await api.listOrders();
+      final orders = await api.listOrders(companyId: companyId);
       for (final o in orders) {
         final status = o['status']?.toString().toLowerCase() ?? '';
         if (status != 'completed') continue;
@@ -186,10 +187,12 @@ class LocalModelLibrary {
     } catch (_) {}
 
     try {
-      final models = await api.listModels();
+      final models = await api.listModels(companyId: companyId);
       for (final m in models) {
         final uuid = m['uuid']?.toString();
         if (uuid == null || seen.contains(uuid)) continue;
+        final pub = m['publish_status']?.toString() ?? '';
+        if (pub == 'import_validating' || pub == 'import_failed') continue;
         final glbUrl = m['glb_url']?.toString();
         if (glbUrl == null || glbUrl.isEmpty) continue;
         seen.add(uuid);
