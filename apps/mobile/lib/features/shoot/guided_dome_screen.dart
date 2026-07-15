@@ -134,12 +134,15 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         _ar = await ArSessionFactory.create(preferNative: true);
         _arBackend = _ar!.backend;
         await _ar!.start();
-        _ar!.addListener(_onGyro);
+        _ar!.addListener(_onArUpdate);
         if (_ar is GyroArSession) {
           _gyro = (_ar as GyroArSession).guide;
+        } else if (_ar is NativeArBridge) {
+          _gyro = GyroGuide()..start()..calibrateYaw();
+          _gyro!.addListener(_onArUpdate);
         } else {
           _gyro = GyroGuide()..start()..calibrateYaw();
-          _gyro!.addListener(_onGyro);
+          _gyro!.addListener(_onArUpdate);
         }
       } catch (_) {
         _ensureGyro();
@@ -161,8 +164,42 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   void _ensureGyro() {
     if (_gyro != null) return;
     _gyro = GyroGuide()..start()..calibrateYaw();
-    _gyro!.addListener(_onGyro);
+    _gyro!.addListener(_onArUpdate);
     _arBackend = ArBackend.gyroFallback;
+  }
+
+  bool get _usesNativeAr =>
+      _ar != null && _ar!.backend != ArBackend.gyroFallback;
+
+  void _onArUpdate() {
+    if (!mounted) return;
+    final angle = kGuidedDomeAngles[_index];
+    if (_usesNativeAr) {
+      final ok = _ar!.isAligned(
+        targetYawDeg: angle.azimuthDeg,
+        targetPitchDeg: angle.elevationDeg,
+      );
+      setState(() {
+        _gyroOk = ok;
+        _yawOffsetDeg = 0;
+        if (!ok) {
+          _gateMsg =
+              'Поверните к AR-метке ${angle.azimuthDeg.round()}° / ${angle.elevationDeg.round()}°';
+        } else {
+          _gateMsg = null;
+        }
+      });
+      _maybeApplyArTariff();
+      return;
+    }
+    if (_gyro == null) return;
+    final check = _gyro!.check(angle);
+    setState(() {
+      _gyroOk = check.ok;
+      _yawOffsetDeg = check.deltaYawDeg;
+      if (!check.ok) _gateMsg = check.hint;
+    });
+    _maybeApplyArTariff();
   }
 
   Future<void> _openCamera(CameraDescription desc, ResolutionPreset preset) async {
@@ -254,17 +291,6 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
     }
   }
 
-  void _onGyro() {
-    if (!mounted || _gyro == null) return;
-    final check = _gyro!.check(kGuidedDomeAngles[_index]);
-    setState(() {
-      _gyroOk = check.ok;
-      _yawOffsetDeg = check.deltaYawDeg;
-      if (!check.ok) _gateMsg = check.hint;
-    });
-    _maybeApplyArTariff();
-  }
-
   Future<void> _maybeApplyArTariff() async {
     if (_arTariffApplied) return;
     final pose = _ar?.pose;
@@ -281,22 +307,42 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   bool get _canShoot {
     if (!_ready || _busy || _cam == null) return false;
     if (_bypassGyroGate) return true;
+    if (_usesNativeAr) {
+      final angle = kGuidedDomeAngles[_index];
+      return _ar!.isAligned(
+        targetYawDeg: angle.azimuthDeg,
+        targetPitchDeg: angle.elevationDeg,
+      );
+    }
     return _gyroOk && _gyro != null;
   }
 
   Future<void> _shutter() async {
     if (!_canShoot || _cam == null) return;
-    if (!_bypassGyroGate && _gyro == null) return;
+    if (!_bypassGyroGate && !_usesNativeAr && _gyro == null) return;
     final minGap = Duration(milliseconds: (1000 / _thermal.targetFps).round());
     final last = _lastShutterAt;
     if (last != null && DateTime.now().difference(last) < minGap) {
       setState(() => _gateMsg = 'Подождите (${_thermal.targetFps} FPS, энергосбережение)');
       return;
     }
-    final gyro = _gyro?.check(kGuidedDomeAngles[_index]);
-    if (!_bypassGyroGate && gyro != null && !gyro.ok) {
-      setState(() => _gateMsg = gyro.hint);
-      return;
+    if (!_bypassGyroGate) {
+      if (_usesNativeAr) {
+        final angle = kGuidedDomeAngles[_index];
+        if (!_ar!.isAligned(
+          targetYawDeg: angle.azimuthDeg,
+          targetPitchDeg: angle.elevationDeg,
+        )) {
+          setState(() => _gateMsg = 'Совместите камеру с AR-меткой');
+          return;
+        }
+      } else {
+        final gyro = _gyro?.check(kGuidedDomeAngles[_index]);
+        if (gyro != null && !gyro.ok) {
+          setState(() => _gateMsg = gyro.hint);
+          return;
+        }
+      }
     }
     setState(() => _busy = true);
     try {
@@ -406,9 +452,9 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   void dispose() {
     _thermal.removeListener(_onThermal);
     _thermal.dispose();
-    _ar?.removeListener(_onGyro);
+    _ar?.removeListener(_onArUpdate);
     _ar?.dispose();
-    _gyro?.removeListener(_onGyro);
+    _gyro?.removeListener(_onArUpdate);
     _gyro?.dispose();
     _cam?.dispose();
     super.dispose();

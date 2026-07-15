@@ -39,6 +39,19 @@ class PhotoEncryptionKeyBody(BaseModel):
     algorithm: str = "aes-256-gcm"
 
 
+class OrderPayRequest(BaseModel):
+    payment_method: str = "redirect"
+    customer_name: str | None = None
+
+
+@router.get("/tariffs")
+async def list_tariffs(
+    db: AsyncSession = Depends(get_db),
+):
+    """Публичные тарифы для checkout §19.8."""
+    return {"items": await tariff_svc.list_tariffs(db)}
+
+
 async def _task_payload(
     db: AsyncSession,
     order: Order,
@@ -369,14 +382,19 @@ async def create_order(
 @router.post("/{order_id}/pay")
 async def pay_order(
     order_id: int,
+    body: OrderPayRequest | None = None,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
+    body = body or OrderPayRequest()
     order = await db.get(Order, order_id)
     if not order or order.user_id != user.id:
         raise HTTPException(404, "Заказ не найден")
     if order.status not in ("awaiting_payment", "pending"):
         raise HTTPException(400, f"Заказ в статусе {order.status}, оплата не нужна")
+
+    if body.customer_name and body.customer_name.strip():
+        order.customer_name = body.customer_name.strip()
 
     from app.services import photo_encryption as photo_enc
 
@@ -391,7 +409,13 @@ async def pay_order(
         await db.commit()
         raise HTTPException(403, detail=_nsfw_http_detail(block.id, nsfw))
 
-    if user.balance >= order.amount:
+    method = body.payment_method or "redirect"
+    if method == "card":
+        method = "redirect"
+    if method == "sbp":
+        method = "sbp_qr"
+
+    if method != "sbp_qr" and user.balance >= order.amount:
         user.balance -= order.amount
         db.add(
             Transaction(
@@ -439,16 +463,20 @@ async def pay_order(
             "user_id": user.id,
             "order_id": order.id,
             "amount": order.amount,
-            "payment_method": "redirect",
+            "payment_method": method,
         },
-        idempotence_key=f"order-{order.id}-{order.task_uuid}",
+        idempotence_key=f"order-{order.id}-{order.task_uuid}-{method}",
         receipt=receipt,
+        payment_method=method,  # type: ignore[arg-type]
     )
     return {
         "id": order.id,
         "status": order.status,
         "payment_id": payment["id"],
-        "confirmation_url": payment["confirmation_url"],
+        "confirmation_url": payment.get("confirmation_url"),
+        "confirmation_data": payment.get("confirmation_data"),
+        "confirmation_type": payment.get("confirmation_type"),
+        "payment_method": method,
         "amount": order.amount,
     }
 

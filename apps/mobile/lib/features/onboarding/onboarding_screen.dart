@@ -34,7 +34,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       _OnboardPage(
         title: l10n.onboarding2,
-        subtitle: 'ARKit / ARCore или гироскоп подскажут угол ±15°',
+        subtitle: 'ARKit / ARCore или гироскоп подскажут угол ±15°. '
+            'Для масштаба 1:1 — калибровка по карте или A4 в профиле.',
         icon: Icons.threed_rotation,
       ),
       _OnboardPage(

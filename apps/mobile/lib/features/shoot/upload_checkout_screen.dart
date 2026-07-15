@@ -1,6 +1,4 @@
-import 'dart:io' show Platform;
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
@@ -9,9 +7,8 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/services/photo_encryption.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
-import 'package:kwork_mobile/widgets/order_limit_dialog.dart';
 
-/// ZIP/SHA-256 + prepare + presigned upload + create order (§3.4 / §3.6.3).
+/// Загрузка 12 JPEG + ZIP SHA-256 → checkout §3.6.3.
 class UploadCheckoutScreen extends StatefulWidget {
   const UploadCheckoutScreen({
     super.key,
@@ -33,13 +30,6 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
   String _status = 'Подготовка…';
   String? _error;
   bool _running = false;
-  final _promo = TextEditingController();
-
-  @override
-  void dispose() {
-    _promo.dispose();
-    super.dispose();
-  }
 
   Future<void> _run() async {
     if (_running) return;
@@ -62,6 +52,8 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
 
       setState(() => _status = 'Сборка ZIP + SHA-256…');
       final zip = await ShootStorage.instance.buildZip(draft);
+      draft.zipSha256 = zip.sha256;
+      await ShootStorage.instance.writeMetadata(draft);
       setState(() {
         _status = 'SHA-256: ${zip.sha256.substring(0, 12)}…';
         _progress = 0.1;
@@ -97,16 +89,13 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
           _status = encryptionRequired
               ? 'Шифрование и загрузка ${i + 1}/12…'
               : 'Загрузка ${i + 1}/12…';
-          _progress = 0.1 + (i / 12) * 0.7;
+          _progress = 0.1 + (i / 12) * 0.85;
         });
         Uint8List? payload;
         var contentType = uploads[i]['content_type'] as String? ?? 'image/jpeg';
         if (encryptionRequired && encKeyB64 != null) {
           final raw = await file.readAsBytes();
-          payload = PhotoEncryptionService.instance.encryptJpeg(
-            raw,
-            encKeyB64,
-          );
+          payload = PhotoEncryptionService.instance.encryptJpeg(raw, encKeyB64);
           contentType = 'application/octet-stream';
         }
         await widget.api.uploadPhotoPresigned(
@@ -117,40 +106,15 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         );
       }
 
-      setState(() {
-        _status = widget.session.hidePrices
-            ? 'Отправка на генерацию…'
-            : 'Создание заказа…';
-        _progress = 0.9;
-      });
+      draft.photosPrefix = prepared['photos_prefix'] as String?;
+      draft.photosUploaded = true;
+      await ShootStorage.instance.writeMetadata(draft);
 
-      final order = await widget.api.createOrder(
-        taskUuid: taskUuid,
-        category: draft.category,
-        tier: draft.tier,
-        companyId: widget.session.companyId,
-        promocode: _promo.text.trim().isEmpty ? null : _promo.text.trim(),
-        forbidden: draft.forbidden,
-        birthDate: draft.birthDate,
-        scaleCalibration: draft.scaleCalibration,
-        photosPrefix: prepared['photos_prefix'] as String?,
-        deviceModel: Platform.isIOS
-            ? 'iOS'
-            : (Platform.isAndroid ? 'Android' : Platform.operatingSystem),
-        osVersion: Platform.operatingSystemVersion,
-      );
-
-      await ShootStorage.instance.clearActiveDraft();
       if (!mounted) return;
-      final orderId = order['id'] as int;
-      context.go('/home/queue/$orderId');
+      context.pushReplacement('/home/shoot/checkout', extra: widget.modelUuid);
     } catch (e) {
-      final msg = formatApiError(e);
-      if (isOrderLimitError(msg) && mounted) {
-        await showOrderLimitDialog(context);
-      }
       setState(() {
-        _error = msg;
+        _error = formatApiError(e);
         _running = false;
       });
     }
@@ -158,10 +122,9 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hidePrices = widget.session.hidePrices;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Загрузка и заказ'),
+        title: const Text('Загрузка фото'),
         prefixes: [FHeaderAction.back(onPress: _running ? null : () => context.pop())],
       ),
       child: Padding(
@@ -169,14 +132,6 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (!hidePrices) ...[
-              FTextField(
-                control: FTextFieldControl.managed(controller: _promo),
-                label: const Text('Промокод'),
-                enabled: !_running,
-              ),
-              const SizedBox(height: 16),
-            ],
             Text(_status),
             const SizedBox(height: 12),
             LinearProgressIndicator(
@@ -191,9 +146,7 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
             const Spacer(),
             FButton(
               onPress: _running ? null : _run,
-              child: Text(
-                hidePrices ? 'Отправить на генерацию' : 'Оплатить и загрузить',
-              ),
+              child: Text(_running ? 'Загрузка…' : 'Загрузить 12 фото'),
             ),
           ],
         ),

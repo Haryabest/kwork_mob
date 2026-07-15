@@ -485,6 +485,12 @@ class _ProfileTabState extends State<_ProfileTab> {
               onPress: () => context.push('/home/storage'),
             ),
             FTile(
+              title: const Text('Калибровка масштаба'),
+              subtitle: const Text('Карта / A4 / QR · §3.7'),
+              prefix: const Icon(FIcons.ruler),
+              onPress: () => context.push('/home/calibration'),
+            ),
+            FTile(
               title: const Text('Язык'),
               prefix: const Icon(FIcons.languages),
             ),

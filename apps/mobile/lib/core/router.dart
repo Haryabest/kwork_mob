@@ -19,6 +19,8 @@ import 'package:kwork_mobile/features/shoot/guided_dome_screen.dart';
 import 'package:kwork_mobile/features/shoot/guest_shoot_screen.dart';
 import 'package:kwork_mobile/features/shoot/quality_review_screen.dart';
 import 'package:kwork_mobile/features/shoot/upload_checkout_screen.dart';
+import 'package:kwork_mobile/features/shoot/order_checkout_screen.dart';
+import 'package:kwork_mobile/features/calibration/calibration_wizard_screen.dart';
 import 'package:kwork_mobile/features/notifications/notifications_screen.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
@@ -141,6 +143,20 @@ GoRouter createRouter({
               api: api,
               session: session,
               modelUuid: state.extra as String,
+            ),
+          ),
+          GoRoute(
+            path: 'shoot/checkout',
+            builder: (context, state) => OrderCheckoutScreen(
+              api: api,
+              session: session,
+              modelUuid: state.extra as String,
+            ),
+          ),
+          GoRoute(
+            path: 'calibration',
+            builder: (context, state) => CalibrationWizardScreen(
+              returnTo: state.extra as String?,
             ),
           ),
           GoRoute(

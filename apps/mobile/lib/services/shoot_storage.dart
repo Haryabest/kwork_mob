@@ -22,6 +22,9 @@ class ShootDraft {
     this.reshootCounts = const {},
     this.birthDate,
     this.ghostScale = 1.0,
+    this.zipSha256,
+    this.photosPrefix,
+    this.photosUploaded = false,
   });
 
   final String modelUuid;
@@ -34,6 +37,9 @@ class ShootDraft {
   Map<int, int> reshootCounts;
   String? birthDate;
   double ghostScale;
+  String? zipSha256;
+  String? photosPrefix;
+  bool photosUploaded;
 
   Map<String, dynamic> toJson() => {
         'model_uuid': modelUuid,
@@ -46,6 +52,9 @@ class ShootDraft {
         'reshoot_counts': reshootCounts.map((k, v) => MapEntry('$k', v)),
         if (birthDate != null) 'birth_date': birthDate,
         'ghost_scale': ghostScale,
+        if (zipSha256 != null) 'zip_sha256': zipSha256,
+        if (photosPrefix != null) 'photos_prefix': photosPrefix,
+        'photos_uploaded': photosUploaded,
       };
 
   static ShootDraft fromJson(Map<String, dynamic> j) {
@@ -76,6 +85,9 @@ class ShootDraft {
       },
       birthDate: j['birth_date']?.toString(),
       ghostScale: (j['ghost_scale'] as num?)?.toDouble() ?? 1.0,
+      zipSha256: j['zip_sha256']?.toString(),
+      photosPrefix: j['photos_prefix']?.toString(),
+      photosUploaded: j['photos_uploaded'] == true,
     );
   }
 }

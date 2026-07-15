@@ -7,6 +7,7 @@ import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/storage_space.dart';
+import 'package:kwork_mobile/services/scale_calibration_service.dart';
 import 'package:kwork_mobile/widgets/ghost_mesh.dart';
 import 'package:kwork_mobile/widgets/order_limit_dialog.dart';
 
@@ -226,16 +227,27 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
     Map<String, dynamic>? scale;
     if (_category!.requiresScaleCalibration) {
-      final w = double.tryParse(_scaleW.text.replaceAll(',', '.'));
-      final h = double.tryParse(_scaleH.text.replaceAll(',', '.'));
-      final d = double.tryParse(_scaleD.text.replaceAll(',', '.'));
-      if (w == null || h == null || d == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Для мебели укажите длину, ширину и высоту (м)')),
-        );
-        return;
+      final saved = await ScaleCalibrationService.instance.scaleForOrder();
+      if (saved != null) {
+        scale = saved;
+      } else {
+        final w = double.tryParse(_scaleW.text.replaceAll(',', '.'));
+        final h = double.tryParse(_scaleH.text.replaceAll(',', '.'));
+        final d = double.tryParse(_scaleD.text.replaceAll(',', '.'));
+        if (w == null || h == null || d == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Для мебели укажите размеры или выполните калибровку в профиле',
+              ),
+            ),
+          );
+          return;
+        }
+        scale = {'width': w, 'height': h, 'depth': d};
       }
-      scale = {'width': w, 'height': h, 'depth': d};
+    } else {
+      scale = await ScaleCalibrationService.instance.scaleForOrder();
     }
 
     final uuid = ShootStorage.instance.newUuid();
@@ -328,6 +340,21 @@ class _CategoryScreenState extends State<CategoryScreen> {
           if (_category?.requiresScaleCalibration == true) ...[
             const SizedBox(height: 12),
             Text('Масштаб (м) — обязательно для мебели', style: context.theme.typography.sm),
+            const SizedBox(height: 8),
+            FButton(
+              variant: .outline,
+              onPress: () async {
+                await context.push<bool>('/home/calibration');
+                final cal = await ScaleCalibrationService.instance.scaleForOrder();
+                if (!mounted || cal == null) return;
+                setState(() {
+                  _scaleW.text = cal['width']?.toString() ?? '';
+                  _scaleH.text = cal['height']?.toString() ?? '';
+                  _scaleD.text = cal['depth']?.toString() ?? '';
+                });
+              },
+              child: const Text('Калибровка: карта / A4 / QR (§3.7)'),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [

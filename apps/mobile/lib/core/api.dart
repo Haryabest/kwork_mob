@@ -462,6 +462,8 @@ class ApiClient {
     Map<String, dynamic>? scaleCalibration,
     List<String> upsells = const [],
     String? photosPrefix,
+    String? zipSha256,
+    String? customerName,
     String? deviceModel,
     String? osVersion,
   }) async {
@@ -476,8 +478,34 @@ class ApiClient {
       if (scaleCalibration != null) 'scale_calibration': scaleCalibration,
       'upsell_options': upsells,
       if (photosPrefix != null) 'photos_prefix': photosPrefix,
+      if (zipSha256 != null) 'zip_sha256': zipSha256,
+      if (customerName != null && customerName.isNotEmpty) 'customer_name': customerName,
       if (deviceModel != null) 'device_model': deviceModel,
       if (osVersion != null) 'os_version': osVersion,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listUpsells() async {
+    final res = await _dio.get('/orders/upsells');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listTariffs() async {
+    final res = await _dio.get('/orders/tariffs');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> payOrder({
+    required int orderId,
+    String paymentMethod = 'redirect',
+    String? customerName,
+  }) async {
+    final res = await _dio.post('/orders/$orderId/pay', data: {
+      'payment_method': paymentMethod,
+      if (customerName != null && customerName.isNotEmpty) 'customer_name': customerName,
     });
     return Map<String, dynamic>.from(res.data as Map);
   }
