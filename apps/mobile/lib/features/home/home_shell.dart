@@ -866,48 +866,57 @@ class _ProfileTabState extends State<_ProfileTab> {
           children: [
             FTile(
               title: Text(widget.session.email ?? '—'),
-              subtitle: const Text('Аккаунт'),
+              subtitle: Text(l10n.account),
             ),
             if (widget.session.isOwner && widget.session.corporate)
               FTile(
-                title: const Text('Баланс компании'),
-                subtitle: const Text('Пополнение счёта · §19.14.2'),
+                title: Text(l10n.companyTopupTitle),
+                subtitle: Text(l10n.companyTopupSubtitle),
                 prefix: const Icon(FIcons.wallet),
                 onPress: () => context.push('/home/company-topup'),
               ),
+            if (widget.session.isOwner && widget.session.corporate)
+              FTile(
+                title: Text(l10n.companyPoliciesTitle),
+                subtitle: Text(l10n.companyPoliciesSubtitle),
+                prefix: const Icon(FIcons.shield),
+                onPress: () => context.push('/home/company-policies'),
+              ),
             if (!widget.session.hidePrices)
               FTile(
-                title: Text('Баланс: ${widget.session.balance?.toStringAsFixed(0) ?? '—'} ₽'),
+                title: Text(l10n.balanceLabel(
+                  widget.session.balance?.toStringAsFixed(0) ?? '—',
+                )),
                 prefix: const Icon(FIcons.wallet),
                 onPress: () => context.push('/home/balance'),
               ),
             if (widget.session.canManageTeam)
               FTile(
-                title: const Text('Команда'),
+                title: Text(l10n.team),
                 prefix: const Icon(FIcons.users),
                 onPress: () => context.push('/home/team'),
               ),
             if (widget.session.isOwner)
               FTile(
-                title: const Text('Импорт модели'),
-                subtitle: const Text('Готовый GLB · §6.10'),
+                title: Text(l10n.importModel),
+                subtitle: Text(l10n.importModelSub),
                 prefix: const Icon(FIcons.upload),
                 onPress: () => context.push('/home/import-model'),
               ),
             FTile(
-              title: const Text('Режим Личный / Компания'),
+              title: Text(l10n.switchMode),
               prefix: const Icon(FIcons.arrowLeftRight),
               onPress: widget.onSwitchMode,
             ),
             FTile(
-              title: const Text('Локальное хранилище'),
-              subtitle: const Text('GLB, автоочистка, экспорт ZIP'),
+              title: Text(l10n.localStorage),
+              subtitle: Text(l10n.localStorageSub),
               prefix: const Icon(FIcons.hardDrive),
               onPress: () => context.push('/home/storage'),
             ),
             FTile(
-              title: const Text('Калибровка масштаба'),
-              subtitle: const Text('Карта / A4 / QR · §3.7'),
+              title: Text(l10n.calibration),
+              subtitle: Text(l10n.calibrationSub),
               prefix: const Icon(FIcons.ruler),
               onPress: () => context.push('/home/calibration'),
             ),
@@ -935,7 +944,7 @@ class _ProfileTabState extends State<_ProfileTab> {
           keyboardType: TextInputType.phone,
         ),
         const SizedBox(height: 8),
-        FButton(onPress: _saveProfile, child: const Text('Сохранить профиль')),
+        FButton(onPress: _saveProfile, child: Text(l10n.saveProfile)),
         const SizedBox(height: 16),
         FSelect<String>(
           label: const Text('Формат экспорта §19.14.3'),
@@ -980,7 +989,7 @@ class _ProfileTabState extends State<_ProfileTab> {
         ),
         const SizedBox(height: 8),
         FSelect<String>(
-          label: const Text('Язык интерфейса'),
+          label: Text(l10n.languageInterface),
           control: FSelectControl.managed(
             initial: AppLocaleController.instance.locale.languageCode,
             onChange: (v) async {
@@ -989,9 +998,11 @@ class _ProfileTabState extends State<_ProfileTab> {
               if (mounted) setState(() {});
             },
           ),
-          items: const {
-            'Русский': 'ru',
-            'English': 'en',
+          items: {
+            l10n.langRu: 'ru',
+            l10n.langEn: 'en',
+            l10n.langKk: 'kk',
+            l10n.langZh: 'zh',
           },
         ),
         const SizedBox(height: 16),

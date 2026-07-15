@@ -481,3 +481,26 @@ celery_app.conf.beat_schedule["pending-payments-purge-daily"] = {
     "schedule": crontab(hour=4, minute=20),
 }
 
+
+@celery_app.task(name="app.tasks.celery_app.poll_waiting_capture_pending")
+def poll_waiting_capture_pending():
+    """Re-check waiting_for_capture pending payments > 5 min §8."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services import pending_payments as pend
+
+    async def _run():
+        async with async_session() as db:
+            result = await pend.refresh_stale_waiting_capture(db, min_age_minutes=5)
+            await db.commit()
+            return result
+
+    return asyncio.run(_run())
+
+
+celery_app.conf.beat_schedule["pending-payments-poll-waiting-capture"] = {
+    "task": "app.tasks.celery_app.poll_waiting_capture_pending",
+    "schedule": crontab(minute="*/5"),
+}
+

@@ -29,23 +29,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final pages = <_OnboardPage>[
       _OnboardPage(
         title: l10n.onboarding1,
-        subtitle: '12 ракурсов Guided Dome → 3D-модель для маркетплейса',
+        subtitle: l10n.onboardingSub1,
         icon: Icons.view_in_ar,
       ),
       _OnboardPage(
         title: l10n.onboarding2,
-        subtitle: 'ARKit / ARCore или гироскоп подскажут угол ±15°. '
-            'Для масштаба 1:1 — калибровка по карте или A4 в профиле.',
+        subtitle: l10n.onboardingSub2,
         icon: Icons.threed_rotation,
       ),
       _OnboardPage(
         title: l10n.onboarding3,
-        subtitle: 'Скачайте GLB/USDZ и опубликуйте на Wildberries или Ozon',
+        subtitle: l10n.onboardingSub3,
         icon: Icons.storefront,
       ),
       _OnboardPage(
         title: l10n.onboarding4,
-        subtitle: 'При нагреве >40°C съёмка перейдёт в энергосбережение (FPS 15)',
+        subtitle: l10n.onboardingSub4,
         icon: Icons.device_thermostat,
       ),
     ];
@@ -60,7 +59,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: FButton(
                 variant: .ghost,
                 onPress: () => _finish(),
-                child: const Text('Пропустить'),
+                child: Text(l10n.skip),
               ),
             ),
             Expanded(
@@ -139,7 +138,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     FButton(
                       variant: .ghost,
                       onPress: () => _finish(),
-                      child: const Text('Уже есть аккаунт? Войти'),
+                      child: Text(l10n.alreadyHaveAccount),
                     ),
                   ],
                 ],

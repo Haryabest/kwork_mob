@@ -161,6 +161,165 @@ def merge_transaction_page(
     return page, total
 
 
+async def notify_topup_failed(db: AsyncSession, payment_id: str) -> None:
+    """Push Owner при payment.failed для пополнения §8."""
+    from app.models import Company
+    from app.services import push as push_svc
+
+    row = await db.scalar(
+        select(BalancePendingPayment).where(BalancePendingPayment.payment_id == payment_id)
+    )
+    if not row:
+        return
+    owner_id = row.user_id
+    if row.company_id:
+        company = await db.get(Company, row.company_id)
+        if company:
+            owner_id = company.owner_id
+        title = "Ошибка пополнения компании"
+        body = (
+            f"Платёж на {row.amount} ₽ не прошёл. "
+            "Попробуйте снова или обратитесь в поддержку."
+        )
+    else:
+        title = "Ошибка пополнения"
+        body = f"Платёж на {row.amount} ₽ не прошёл."
+    await push_svc.send_to_user(
+        db,
+        owner_id,
+        title,
+        body,
+        data={
+            "type": "topup_failed",
+            "payment_id": payment_id,
+            "company_id": row.company_id,
+        },
+    )
+
+
+async def settle_succeeded_topup(db: AsyncSession, payment: dict) -> str:
+    """Зачислить succeeded topup из ответа YooKassa (poll / Celery §8)."""
+    from app.models import Company, Transaction, User
+    from app.services.task_lifecycle import try_queue_awaiting_orders
+
+    payment_id = str(payment.get("id") or "")
+    if not payment_id:
+        return "skipped"
+    meta = payment.get("metadata") or {}
+    purpose = str(meta.get("purpose") or "topup")
+    if purpose not in ("topup", "company_topup"):
+        return "skipped"
+    user_id = int(meta.get("user_id") or 0)
+    amount = int(float((payment.get("amount") or {}).get("value") or 0))
+    if not user_id or amount <= 0:
+        return "skipped"
+
+    existing = await db.scalar(select(Transaction).where(Transaction.external_id == payment_id))
+    if existing:
+        await mark_status(db, payment_id, "succeeded")
+        return "exists"
+
+    user = await db.get(User, user_id)
+    if not user:
+        return "skipped"
+
+    method = str(meta.get("payment_method") or "redirect")
+    channel = _channel_label(method)
+
+    if purpose == "company_topup":
+        company_id = int(meta.get("company_id") or 0)
+        company = await db.get(Company, company_id) if company_id else None
+        if not company:
+            return "skipped"
+        company.balance += amount
+        db.add(
+            Transaction(
+                user_id=user.id,
+                company_id=company.id,
+                amount=amount,
+                tx_type="topup",
+                description=f"Пополнение баланса компании через {channel}",
+                external_id=payment_id,
+            )
+        )
+    else:
+        user.balance += amount
+        db.add(
+            Transaction(
+                user_id=user.id,
+                amount=amount,
+                tx_type="topup",
+                description=f"Пополнение через {channel}",
+                external_id=payment_id,
+            )
+        )
+        await db.flush()
+        await try_queue_awaiting_orders(db, user.id)
+
+    await mark_status(db, payment_id, "succeeded")
+    return "settled"
+
+
+async def refresh_stale_waiting_capture(
+    db: AsyncSession,
+    *,
+    min_age_minutes: int = 5,
+) -> dict[str, int]:
+    """Celery: re-check pending payments старше N минут через YooKassa API §8."""
+    from datetime import timedelta
+
+    from app.services.yookassa import yookassa_service
+
+    if not yookassa_service.configured:
+        return {"checked": 0, "settled": 0, "failed": 0, "still_pending": 0, "skipped": 0}
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=min_age_minutes)
+    rows = (
+        await db.scalars(
+            select(BalancePendingPayment)
+            .where(
+                BalancePendingPayment.status == "pending",
+                BalancePendingPayment.created_at <= cutoff,
+            )
+            .order_by(BalancePendingPayment.id.asc())
+            .limit(50)
+        )
+    ).all()
+
+    checked = settled = failed = still_pending = skipped = 0
+    for row in rows:
+        checked += 1
+        try:
+            payment = await yookassa_service.get_payment(row.payment_id)
+        except Exception:  # noqa: BLE001
+            skipped += 1
+            continue
+        status = str(payment.get("status") or "pending")
+        if status == "succeeded":
+            result = await settle_succeeded_topup(db, payment)
+            if result in ("settled", "exists"):
+                settled += 1
+            else:
+                skipped += 1
+        elif status in ("canceled", "failed"):
+            await mark_status(db, row.payment_id, "failed" if status == "failed" else "canceled")
+            failed += 1
+        elif status == "waiting_for_capture":
+            still_pending += 1
+            row.updated_at = datetime.now(timezone.utc)
+            await db.flush()
+        else:
+            still_pending += 1
+
+    return {
+        "checked": checked,
+        "settled": settled,
+        "failed": failed,
+        "still_pending": still_pending,
+        "skipped": skipped,
+    }
+
+
 async def purge_old_settled(db: AsyncSession, *, days: int = 30) -> int:
     """Удалить settled pending payments старше N дней (Celery §20.3.4)."""
     from datetime import timedelta

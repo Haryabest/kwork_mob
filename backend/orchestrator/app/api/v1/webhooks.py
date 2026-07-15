@@ -130,6 +130,7 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
 
     if event == "payment.failed":
         await pend_svc.mark_status(db, payment_id, "failed")
+        await pend_svc.notify_topup_failed(db, payment_id)
         await db.commit()
         return {"ok": True, "failed": True, "payment_id": payment_id}
 

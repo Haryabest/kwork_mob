@@ -6,6 +6,7 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/features/auth/auth_screen.dart';
 import 'package:kwork_mobile/features/company/shoot_link_screen.dart';
 import 'package:kwork_mobile/features/company/team_screen.dart';
+import 'package:kwork_mobile/features/profile/company_policies_screen.dart';
 import 'package:kwork_mobile/features/profile/company_topup_screen.dart';
 import 'package:kwork_mobile/features/profile/balance_screen.dart';
 import 'package:kwork_mobile/features/profile/storage_settings_screen.dart';
@@ -204,6 +205,10 @@ GoRouter createRouter({
           GoRoute(
             path: 'company-topup',
             builder: (context, state) => CompanyTopupScreen(api: api, session: session),
+          ),
+          GoRoute(
+            path: 'company-policies',
+            builder: (context, state) => CompanyPoliciesScreen(api: api, session: session),
           ),
           GoRoute(
             path: 'support/ticket/:ticketId',

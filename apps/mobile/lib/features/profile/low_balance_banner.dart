@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 
 /// Баннер низкого баланса компании §20.3.5.
 class LowBalanceBanner extends StatelessWidget {
@@ -18,6 +19,7 @@ class LowBalanceBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (balance >= threshold) return const SizedBox.shrink();
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -35,8 +37,10 @@ class LowBalanceBanner extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Низкий баланс компании: ${balance.toStringAsFixed(0)} ₽ '
-                  '(порог $threshold ₽). Пополните счёт §20.3.5',
+                  l10n.lowBalanceBanner(
+                    balance.toStringAsFixed(0),
+                    threshold.toString(),
+                  ),
                   style: const TextStyle(fontSize: 13),
                 ),
               ),
@@ -44,7 +48,7 @@ class LowBalanceBanner extends StatelessWidget {
           ),
           if (onTopup != null) ...[
             const SizedBox(height: 8),
-            FButton(onPress: onTopup, child: const Text('Пополнить')),
+            FButton(onPress: onTopup, child: Text(l10n.topup)),
           ],
         ],
       ),

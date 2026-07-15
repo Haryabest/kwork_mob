@@ -9,10 +9,19 @@ class AppLocaleController extends ChangeNotifier {
 
   Locale get locale => _locale;
 
+  static Locale _localeFromCode(String code) {
+    return switch (code) {
+      'en' => const Locale('en'),
+      'kk' => const Locale('kk'),
+      'zh' => const Locale('zh'),
+      _ => const Locale('ru'),
+    };
+  }
+
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     final code = prefs.getString('app_locale') ?? 'ru';
-    _locale = Locale(code == 'en' ? 'en' : 'ru');
+    _locale = _localeFromCode(code);
     notifyListeners();
   }
 

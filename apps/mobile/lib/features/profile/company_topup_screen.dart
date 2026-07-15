@@ -8,6 +8,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/features/profile/low_balance_banner.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -79,7 +80,7 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
           _pollPaymentId = null;
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Баланс компании пополнен')),
+              SnackBar(content: Text(AppLocalizations.of(context)!.companyTopupSuccess)),
             );
             await _load();
           }
@@ -88,7 +89,7 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
           _pollPaymentId = null;
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Платёж отменён')),
+              SnackBar(content: Text(AppLocalizations.of(context)!.paymentCanceled)),
             );
           }
         }
@@ -150,20 +151,21 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     if (!widget.session.isOwner) {
       return FScaffold(
         header: FHeader.nested(
-          title: const Text('Баланс компании'),
+          title: Text(l10n.companyTopupTitle),
           prefixes: [FHeaderAction.back(onPress: () => context.pop())],
         ),
-        child: const Center(child: Text('Доступно только Owner')),
+        child: Center(child: Text(l10n.balanceUnavailable)),
       );
     }
 
     final balance = _companyBalance ?? 0;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Баланс компании §19.14.2'),
+        title: Text(l10n.companyTopupScreenTitle),
         prefixes: [FHeaderAction.back(onPress: () => context.pop())],
       ),
       child: _loading
@@ -188,24 +190,24 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
                 const SizedBox(height: 12),
                 FTextField(
                   control: FTextFieldControl.managed(controller: _amount),
-                  label: const Text('Сумма пополнения, ₽'),
+                  label: Text(l10n.topupAmount),
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
                 const SizedBox(height: 16),
                 FButton(
                   onPress: _busy ? null : () => _topup(method: 'redirect'),
-                  child: Text(_busy ? '…' : 'Пополнить'),
+                  child: Text(_busy ? '…' : l10n.topup),
                 ),
                 const SizedBox(height: 8),
                 FButton(
                   variant: .outline,
                   onPress: _busy ? null : () => _topup(method: 'sbp_qr'),
-                  child: Text(_busy ? '…' : 'СБП QR'),
+                  child: Text(_busy ? '…' : l10n.topupSbpQr),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Оплата через ЮKassa. После подтверждения баланс обновится автоматически.',
+                  l10n.companyTopupScreenHint,
                   style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],

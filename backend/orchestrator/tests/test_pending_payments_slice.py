@@ -44,3 +44,34 @@ def test_merge_transaction_page_prepends_pending():
 
 
 def test_purge_old_settled_smoke():
+    from app.services.pending_payments import purge_old_settled
+
+    assert callable(purge_old_settled)
+
+
+def test_refresh_stale_waiting_capture_smoke():
+    from app.services.pending_payments import refresh_stale_waiting_capture
+
+    assert callable(refresh_stale_waiting_capture)
+
+
+def test_notify_topup_failed_smoke():
+    from app.services.pending_payments import notify_topup_failed
+
+    assert callable(notify_topup_failed)
+
+
+def test_settle_succeeded_topup_skips_bad_meta():
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.pending_payments import settle_succeeded_topup
+
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=None)
+    db.get = AsyncMock(return_value=None)
+    db.add = MagicMock()
+    db.flush = AsyncMock()
+
+    result = asyncio.run(settle_succeeded_topup(db, {"id": "p1", "metadata": {}}))
+    assert result == "skipped"

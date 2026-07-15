@@ -74,6 +74,7 @@ export default function BalancePage() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [corporate, setCorporate] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [canFinance, setCanFinance] = useState(false);
   const [canFilterAuthors, setCanFilterAuthors] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [authorId, setAuthorId] = useState<string | null>(null);
@@ -121,6 +122,7 @@ export default function BalancePage() {
       const useCorporate = Boolean(company?.id && company.balance != null);
       setCorporate(useCorporate);
       setIsOwner(role === 'owner' || company?.is_owner === true);
+      setCanFinance(useCorporate && company?.balance != null);
       setCanFilterAuthors(MANAGE_ROLES.has(role));
 
       const params = txParams();
@@ -275,13 +277,13 @@ export default function BalancePage() {
   }
 
   async function exportCsv() {
-    const canServerExport = !corporate || isOwner;
+    const canServerExport = !corporate || canFinance;
     if (!canServerExport) {
-      notifications.show({ color: 'orange', message: 'Экспорт доступен Owner или в личном режиме' });
+      notifications.show({ color: 'orange', message: 'Экспорт недоступен для вашей роли' });
       return;
     }
     const endpoint =
-      corporate && isOwner ? '/company/transactions/export' : '/user/transactions/export';
+      corporate && canFinance ? '/company/transactions/export' : '/user/transactions/export';
     try {
       const res = await api.get(endpoint, {
         params: txParams(),
@@ -290,7 +292,7 @@ export default function BalancePage() {
       const blob = new Blob([res.data as BlobPart], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = corporate && isOwner ? 'company_transactions.csv' : 'transactions.csv';
+      a.download = corporate && canFinance ? 'company_transactions.csv' : 'transactions.csv';
       a.click();
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e, 'Не удалось выгрузить CSV') });

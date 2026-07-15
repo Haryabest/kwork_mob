@@ -894,13 +894,13 @@ async def export_company_transactions(
     date_to: date | None = Query(default=None, alias="to"),
     tx_type: str = Query(default="all", alias="type", pattern=r"^(all|topup|charge|refund)$"),
 ):
-    """CSV выгрузка операций компании за период (Owner §8)."""
+    """CSV выгрузка операций компании за период (can_view_finance §8)."""
     from fastapi.responses import Response
 
     from app.services import company_balance as bal
-    from app.services.company_members import get_owned_company
+    from app.services.access import company_for_permission
 
-    company = await get_owned_company(db, user)
+    company = await company_for_permission(db, user, "can_view_finance")
     await bal.validate_company_tx_user_filter(db, company=company, actor=user, user_id=user_id)
     csv_body = await bal.export_company_transactions_csv(
         db,

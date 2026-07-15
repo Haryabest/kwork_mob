@@ -7,9 +7,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
+import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
+import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/features/profile/low_balance_banner.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -173,7 +176,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
           _pollPaymentId = null;
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Баланс пополнен')),
+              SnackBar(content: Text(AppLocalizations.of(context)!.balanceTopupSuccess)),
             );
             await _load();
           }
@@ -182,7 +185,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
           _pollPaymentId = null;
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Платёж отменён')),
+              SnackBar(content: Text(AppLocalizations.of(context)!.paymentCanceled)),
             );
           }
         }
@@ -194,7 +197,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
     final amount = int.tryParse(_amount.text.trim());
     if (amount == null || amount < 100) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Минимум 100 ₽')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.topupMinAmount)),
       );
       return;
     }
@@ -282,7 +285,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
       _lowBalanceThreshold = value;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Порог низкого баланса сохранён §20.3.5')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.thresholdSaved)),
         );
       }
     } catch (e) {
@@ -296,7 +299,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
 
   Future<void> _exportCsv() async {
     if (widget.session.hidePrices) return;
-    if (_corporateFinance && !widget.session.isOwner) return;
+    if (_corporateFinance && !widget.session.canViewFinance) return;
     setState(() => _exporting = true);
     try {
       final bytes = _corporateFinance
@@ -329,10 +332,11 @@ class _BalanceScreenState extends State<BalanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     if (widget.session.hidePrices) {
-      return const FScaffold(
-        header: FHeader(title: Text('Баланс')),
-        child: Center(child: Text('Баланс недоступен для вашей роли')),
+      return FScaffold(
+        header: FHeader(title: Text(l10n.balanceTitle)),
+        child: Center(child: Text(l10n.balanceUnavailable)),
       );
     }
     final balance = _corporateFinance
@@ -340,7 +344,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
         : (widget.session.balance ?? 0);
     return FScaffold(
       header: FHeader(
-        title: Text(_corporateFinance ? 'Баланс компании' : 'Баланс'),
+        title: Text(_corporateFinance ? l10n.balanceCompanyTitle : l10n.balanceTitle),
       ),
       child: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -363,14 +367,14 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     const SizedBox(height: 12),
                     FTextField(
                       control: FTextFieldControl.managed(controller: _thresholdCtrl),
-                      label: const Text('Порог низкого баланса, ₽ §20.3.5'),
+                      label: Text(l10n.lowBalanceThreshold),
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                     const SizedBox(height: 8),
                     FButton(
                       onPress: _savingThreshold ? null : _saveLowBalanceThreshold,
-                      child: Text(_savingThreshold ? '…' : 'Сохранить порог'),
+                      child: Text(_savingThreshold ? '…' : l10n.saveThreshold),
                     ),
                   ],
                   if (_corporateFinance) ...[
@@ -385,27 +389,27 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     FButton(
                       variant: .outline,
                       onPress: () => context.push('/home/company-topup'),
-                      child: const Text('Пополнить баланс компании §19.14.2'),
+                      child: Text(l10n.topupCompanyBtn),
                     ),
                   ],
                   if (_canTopup) ...[
                     const SizedBox(height: 16),
                     FTextField(
                       control: FTextFieldControl.managed(controller: _amount),
-                      label: Text(_corporateFinance ? 'Пополнение компании §19.14.2' : 'Сумма пополнения'),
+                      label: Text(_corporateFinance ? l10n.topupCompanyAmount : l10n.topupAmount),
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                     const SizedBox(height: 12),
                     FButton(
                       onPress: _busy ? null : () => _topup(method: 'redirect'),
-                      child: Text(_busy ? '…' : 'Пополнить картой'),
+                      child: Text(_busy ? '…' : l10n.topupCard),
                     ),
                     const SizedBox(height: 8),
                     FButton(
                       variant: .outline,
                       onPress: _busy ? null : () => _topup(method: 'sbp_qr'),
-                      child: Text(_busy ? '…' : 'СБП QR'),
+                      child: Text(_busy ? '…' : l10n.topupSbpQr),
                     ),
                   ],
                   const SizedBox(height: 16),
@@ -414,7 +418,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     child: AbsorbPointer(
                       child: FTextField(
                         control: FTextFieldControl.managed(controller: _dateFrom),
-                        label: const Text('Дата от'),
+                        label: Text(l10n.dateFrom),
                       ),
                     ),
                   ),
@@ -424,13 +428,13 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     child: AbsorbPointer(
                       child: FTextField(
                         control: FTextFieldControl.managed(controller: _dateTo),
-                        label: const Text('Дата до'),
+                        label: Text(l10n.dateTo),
                       ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   FSelect<String>(
-                    label: const Text('Тип операции'),
+                    label: Text(l10n.txTypeLabel),
                     control: FSelectControl.managed(
                       initial: _txType,
                       onChange: (v) {
@@ -439,16 +443,16 @@ class _BalanceScreenState extends State<BalanceScreen> {
                         _resetPageAndLoad();
                       },
                     ),
-                    items: const {
-                      'Все': 'all',
-                      'Пополнения': 'topup',
-                      'Списания': 'charge',
-                      'Возвраты': 'refund',
+                    items: {
+                      l10n.txTypeAll: 'all',
+                      l10n.txTypeTopup: 'topup',
+                      l10n.txTypeCharge: 'charge',
+                      l10n.txTypeRefund: 'refund',
                     },
                   ),
                   const SizedBox(height: 8),
                   FSelect<int>(
-                    label: const Text('На странице §20.3.4'),
+                    label: Text(l10n.perPage),
                     control: FSelectControl.managed(
                       initial: _pageSize,
                       onChange: (v) {
@@ -463,14 +467,14 @@ class _BalanceScreenState extends State<BalanceScreen> {
                   FButton(
                     variant: .outline,
                     onPress: _resetPageAndLoad,
-                    child: const Text('Применить фильтры'),
+                    child: Text(l10n.applyFilters),
                   ),
-                  if (!_corporateFinance || widget.session.isOwner) ...[
+                  if (!_corporateFinance || widget.session.canViewFinance) ...[
                     const SizedBox(height: 8),
                     FButton(
                       variant: .outline,
                       onPress: _exporting ? null : _exportCsv,
-                      child: Text(_exporting ? 'Экспорт…' : 'Экспорт CSV §20.3.4'),
+                      child: Text(_exporting ? l10n.exporting : l10n.exportCsv),
                     ),
                   ],
                   const SizedBox(height: 16),

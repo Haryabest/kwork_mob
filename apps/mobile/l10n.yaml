@@ -3,5 +3,5 @@
   "template-arb-file": "app_ru.arb",
   "output-localization-file": "app_localizations.dart",
   "output-class": "AppLocalizations",
-  "preferred-supported-locales": ["ru"]
+  "preferred-supported-locales": ["ru", "en", "kk", "zh"]
 }
