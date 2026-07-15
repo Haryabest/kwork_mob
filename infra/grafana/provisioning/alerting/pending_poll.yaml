@@ -1,0 +1,52 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: kwork-payments
+    folder: KWork Mob
+    interval: 1m
+    rules:
+      - uid: pending-poll-failed-15m
+        title: Pending YooKassa poll failures (15m) §11
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: sum(increase(kwork_pending_payment_poll_total{outcome="failed"}[15m]))
+              instant: true
+              refId: A
+          - refId: C
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: [3]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "Pending payment poll: >3 failed outcomes in 15 minutes"
+          description: "Celery poll_waiting_capture_pending — проверьте YooKassa и pending_payments §8"

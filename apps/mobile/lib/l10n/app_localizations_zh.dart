@@ -615,4 +615,169 @@ class AppLocalizationsZh extends AppLocalizations {
   ) {
     return '角度 $current/$total · $label · $backend';
   }
+
+  @override
+  String get uploadPhotoTitle => '上传照片';
+
+  @override
+  String get uploadPreparing => '准备中…';
+
+  @override
+  String uploadResumeFound(String done) {
+    return '发现未完成的上传 ($done/12)';
+  }
+
+  @override
+  String get uploadResumeHint => '§3.4.1：进度已本地保存。断线后将从最后一张照片继续。';
+
+  @override
+  String get uploadBuildingZip => '打包 ZIP + SHA-256…';
+
+  @override
+  String uploadSha256(String hash) {
+    return 'SHA-256: $hash…';
+  }
+
+  @override
+  String get uploadPresigned => '获取 presigned URL…';
+
+  @override
+  String get uploadEncrypting => 'E2E 照片加密…';
+
+  @override
+  String uploadProgress(String current, String total) {
+    return '上传 $current/$total…';
+  }
+
+  @override
+  String uploadUploaded(String done) {
+    return '已上传 $done/12';
+  }
+
+  @override
+  String get uploadInterrupted => '上传中断 — 可继续';
+
+  @override
+  String get uploadUploading => '上传中…';
+
+  @override
+  String get uploadContinue => '继续上传';
+
+  @override
+  String get upload12Photos => '上传 12 张照片';
+
+  @override
+  String get checkoutTitle => '支付';
+
+  @override
+  String get checkoutPayTitle => '订单支付';
+
+  @override
+  String get checkoutSubmitGeneration => '提交生成';
+
+  @override
+  String get checkoutNeedCalibration => '需要校准';
+
+  @override
+  String get checkoutCalibrationBody => '1:1 比例请用银行卡、A4 或 QR 校准 (§3.7)。';
+
+  @override
+  String get checkoutCalibrate => '校准';
+
+  @override
+  String checkoutCategory(String label) {
+    return '类别：$label';
+  }
+
+  @override
+  String checkoutTier(String label) {
+    return '套餐：$label';
+  }
+
+  @override
+  String checkoutBasePrice(String amount) {
+    return '基础价格：$amount ₽';
+  }
+
+  @override
+  String get checkoutUpsells => '附加服务';
+
+  @override
+  String checkoutTotal(String amount) {
+    return '合计：$amount ₽';
+  }
+
+  @override
+  String get checkoutPromo => '优惠码';
+
+  @override
+  String get checkoutFioOptional => '姓名（可选）';
+
+  @override
+  String get checkoutFioHint => '可跳过';
+
+  @override
+  String get checkoutFioTaxHint => '姓名用于 My Tax 收据 (§19.8.1)';
+
+  @override
+  String get checkoutPayCard => '银行卡支付';
+
+  @override
+  String get checkoutPaySbp => 'SBP 二维码支付';
+
+  @override
+  String get checkoutSbpOrderTitle => 'SBP — 订单支付';
+
+  @override
+  String get guestShootTitle => '链接拍摄';
+
+  @override
+  String guestTask(String id) {
+    return '任务 $id…';
+  }
+
+  @override
+  String guestMeta(String category, String tier) {
+    return '类别：$category · 套餐：$tier';
+  }
+
+  @override
+  String get guestHint => '访客模式：通过 AR 或相册拍摄 12 个角度 (§3.15)。';
+
+  @override
+  String get guestStartAr => '开始 AR 拍摄';
+
+  @override
+  String get guestGallery12 => '从相册选 12 张';
+
+  @override
+  String guestPhotosRequired(String need, String selected) {
+    return '需要恰好 $need 张照片（已选 $selected）';
+  }
+
+  @override
+  String get guestUploadTitle => '通过链接发送';
+
+  @override
+  String get guestReadyToSend => '准备发送';
+
+  @override
+  String get guestGettingUrls => '获取 upload URL…';
+
+  @override
+  String guestUploading(String current) {
+    return '上传 $current/12…';
+  }
+
+  @override
+  String get guestConfirming => '确认中…';
+
+  @override
+  String get guestSentToOwner => '照片已发送给所有者';
+
+  @override
+  String get guestSend12Photos => '发送 12 张照片';
+
+  @override
+  String get guestLinkUsed => '链接已使用。企业所有者将收到通知。';
 }

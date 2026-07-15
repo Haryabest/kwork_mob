@@ -9,6 +9,7 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/services/photo_encryption.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
 import 'package:kwork_mobile/services/upload_progress_service.dart';
 
@@ -32,7 +33,8 @@ class UploadCheckoutScreen extends StatefulWidget {
 class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
   final _progressSvc = UploadProgressService.instance;
   double _progress = 0;
-  String _status = 'Подготовка…';
+  String _statusKey = 'preparing';
+  String _statusExtra = '';
   String? _error;
   bool _running = false;
   bool _hasResume = false;
@@ -43,14 +45,30 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
     _checkResume();
   }
 
+  String _statusText(AppLocalizations l10n) {
+    return switch (_statusKey) {
+      'preparing' => l10n.uploadPreparing,
+      'resume' => l10n.uploadResumeFound(_statusExtra),
+      'building' => l10n.uploadBuildingZip,
+      'sha256' => l10n.uploadSha256(_statusExtra),
+      'presigned' => l10n.uploadPresigned,
+      'encrypting' => l10n.uploadEncrypting,
+      'progress' => l10n.uploadProgress(_statusExtra.split('/').first, _statusExtra.split('/').last),
+      'uploaded' => l10n.uploadUploaded(_statusExtra),
+      'interrupted' => l10n.uploadInterrupted,
+      'retry' => l10n.uploadProgress(_statusExtra.split('/').first, _statusExtra.split('/').last),
+      _ => _statusExtra.isNotEmpty ? _statusExtra : l10n.uploadPreparing,
+    };
+  }
+
   Future<void> _checkResume() async {
     final saved = await _progressSvc.load(widget.modelUuid);
     if (saved != null && saved['completed'] != true) {
       if (mounted) {
         setState(() {
           _hasResume = true;
-          _status =
-              'Найдена незавершённая загрузка (${_progressSvc.uploadedIndices(saved).length}/12)';
+          _statusKey = 'resume';
+          _statusExtra = '${_progressSvc.uploadedIndices(saved).length}';
         });
       }
     }
@@ -83,7 +101,10 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
       var uploaded = _progressSvc.uploadedIndices(progress).toSet();
 
       if (!resume || progress == null) {
-        setState(() => _status = 'Сборка ZIP + SHA-256…');
+        setState(() {
+          _statusKey = 'building';
+          _statusExtra = '';
+        });
         final zip = await ShootStorage.instance.buildZip(draft);
         draft.zipSha256 = zip.sha256;
         await ShootStorage.instance.writeMetadata(draft);
@@ -95,7 +116,8 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         };
         await _progressSvc.save(draft.modelUuid, progress);
         setState(() {
-          _status = 'SHA-256: ${zip.sha256.substring(0, 12)}…';
+          _statusKey = 'sha256';
+          _statusExtra = zip.sha256.substring(0, 12);
           _progress = 0.05;
         });
       } else {
@@ -107,7 +129,10 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
       var encryptionRequired = progress['encryption_required'] == true;
 
       if (progress['prepared'] != true) {
-        setState(() => _status = 'Получение presigned URL…');
+        setState(() {
+          _statusKey = 'presigned';
+          _statusExtra = '';
+        });
         final prepared = await widget.api.preparePhotos(
           taskUuid: draft.modelUuid,
           companyId: widget.session.companyId,
@@ -147,7 +172,10 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
           progress['enc_registered'] = true;
           await _progressSvc.save(draft.modelUuid, progress);
         }
-        setState(() => _status = 'E2E шифрование фото…');
+        setState(() {
+          _statusKey = 'encrypting';
+          _statusExtra = '';
+        });
       }
 
       final photos = await ShootStorage.instance.listPhotos(draft.modelUuid);
@@ -172,7 +200,8 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         await _progressSvc.save(draft.modelUuid, progress);
         if (mounted) {
           setState(() {
-            _status = 'Загружено ${uploaded.length}/12';
+            _statusKey = 'uploaded';
+            _statusExtra = '${uploaded.length}';
             _progress = 0.1 + (uploaded.length / 12) * 0.85;
           });
         }
@@ -194,7 +223,8 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
           _error = formatApiError(e);
           _running = false;
           _hasResume = true;
-          _status = 'Загрузка прервана — можно продолжить';
+          _statusKey = 'interrupted';
+          _statusExtra = '';
         });
       }
     }
@@ -213,7 +243,10 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
       if (attempt > 0) {
         await Future<void>.delayed(Duration(seconds: attempt * 2));
         if (mounted) {
-          setState(() => _status = 'Повтор ${index + 1}/$total (попытка ${attempt + 1})…');
+          setState(() {
+            _statusKey = 'retry';
+            _statusExtra = '${index + 1}/$total';
+          });
         }
       }
       try {
@@ -240,9 +273,10 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Загрузка фото'),
+        title: Text(l10n.uploadPhotoTitle),
         prefixes: [FHeaderAction.back(onPress: _running ? null : () => context.pop())],
       ),
       child: Padding(
@@ -251,12 +285,12 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (_hasResume && !_running)
-              const Text(
-                '§3.4.1: прогресс сохранён локально. При обрыве связи загрузка продолжится с последнего фото.',
+              Text(
+                l10n.uploadResumeHint,
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
             const SizedBox(height: 8),
-            Text(_status),
+            Text(_statusText(l10n)),
             const SizedBox(height: 12),
             LinearProgressIndicator(
               value: _progress > 0 ? _progress : null,
@@ -274,8 +308,8 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
                   : () => _run(resume: _hasResume),
               child: Text(
                 _running
-                    ? 'Загрузка…'
-                    : (_hasResume ? 'Продолжить загрузку' : 'Загрузить 12 фото'),
+                    ? l10n.uploadUploading
+                    : (_hasResume ? l10n.uploadContinue : l10n.upload12Photos),
               ),
             ),
           ],

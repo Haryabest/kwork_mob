@@ -152,9 +152,17 @@ async def send_to_user(
         user = await db.get(User, user_id)
         if user and user.email:
             try:
+                from app.core.config import settings
                 from app.services import email as email_svc
 
-                await email_svc.send_marketing_email(user.email, title, body)
+                event_type = str(data.get("type") or "")
+                if event_type == "topup_failed":
+                    balance_url = f"{settings.SELLER_PUBLIC_URL.rstrip('/')}/balance"
+                    await email_svc.send_topup_failed_email(
+                        user.email, title, body, balance_url
+                    )
+                else:
+                    await email_svc.send_marketing_email(user.email, title, body)
                 email_sent = True
             except Exception as exc:  # noqa: BLE001
                 logger.warning("email fallback user=%s: %s", user_id, exc)

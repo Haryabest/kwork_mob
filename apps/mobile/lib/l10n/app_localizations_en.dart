@@ -626,4 +626,171 @@ class AppLocalizationsEn extends AppLocalizations {
   ) {
     return 'Angle $current/$total · $label · $backend';
   }
+
+  @override
+  String get uploadPhotoTitle => 'Photo upload';
+
+  @override
+  String get uploadPreparing => 'Preparing…';
+
+  @override
+  String uploadResumeFound(String done) {
+    return 'Incomplete upload found ($done/12)';
+  }
+
+  @override
+  String get uploadResumeHint =>
+      '§3.4.1: progress saved locally. Upload resumes from the last photo after disconnect.';
+
+  @override
+  String get uploadBuildingZip => 'Building ZIP + SHA-256…';
+
+  @override
+  String uploadSha256(String hash) {
+    return 'SHA-256: $hash…';
+  }
+
+  @override
+  String get uploadPresigned => 'Getting presigned URLs…';
+
+  @override
+  String get uploadEncrypting => 'E2E photo encryption…';
+
+  @override
+  String uploadProgress(String current, String total) {
+    return 'Uploading $current/$total…';
+  }
+
+  @override
+  String uploadUploaded(String done) {
+    return 'Uploaded $done/12';
+  }
+
+  @override
+  String get uploadInterrupted => 'Upload interrupted — you can continue';
+
+  @override
+  String get uploadUploading => 'Uploading…';
+
+  @override
+  String get uploadContinue => 'Continue upload';
+
+  @override
+  String get upload12Photos => 'Upload 12 photos';
+
+  @override
+  String get checkoutTitle => 'Payment';
+
+  @override
+  String get checkoutPayTitle => 'Order payment';
+
+  @override
+  String get checkoutSubmitGeneration => 'Submit for generation';
+
+  @override
+  String get checkoutNeedCalibration => 'Calibration required';
+
+  @override
+  String get checkoutCalibrationBody =>
+      'For 1:1 scale, calibrate with card, A4 or QR (§3.7).';
+
+  @override
+  String get checkoutCalibrate => 'Calibrate';
+
+  @override
+  String checkoutCategory(String label) {
+    return 'Category: $label';
+  }
+
+  @override
+  String checkoutTier(String label) {
+    return 'Tariff: $label';
+  }
+
+  @override
+  String checkoutBasePrice(String amount) {
+    return 'Base price: $amount ₽';
+  }
+
+  @override
+  String get checkoutUpsells => 'Add-on services';
+
+  @override
+  String checkoutTotal(String amount) {
+    return 'Total: $amount ₽';
+  }
+
+  @override
+  String get checkoutPromo => 'Promo code';
+
+  @override
+  String get checkoutFioOptional => 'Full name (optional)';
+
+  @override
+  String get checkoutFioHint => 'Can be skipped';
+
+  @override
+  String get checkoutFioTaxHint => 'Name is used for My Tax receipt (§19.8.1)';
+
+  @override
+  String get checkoutPayCard => 'Pay by card';
+
+  @override
+  String get checkoutPaySbp => 'Pay via SBP (QR)';
+
+  @override
+  String get checkoutSbpOrderTitle => 'SBP — order payment';
+
+  @override
+  String get guestShootTitle => 'Shoot via link';
+
+  @override
+  String guestTask(String id) {
+    return 'Task $id…';
+  }
+
+  @override
+  String guestMeta(String category, String tier) {
+    return 'Category: $category · tariff: $tier';
+  }
+
+  @override
+  String get guestHint => 'Guest mode: 12 angles via AR or gallery (§3.15).';
+
+  @override
+  String get guestStartAr => 'Start AR shoot';
+
+  @override
+  String get guestGallery12 => '12 photos from gallery';
+
+  @override
+  String guestPhotosRequired(String need, String selected) {
+    return 'Exactly $need photos required (selected $selected)';
+  }
+
+  @override
+  String get guestUploadTitle => 'Send via link';
+
+  @override
+  String get guestReadyToSend => 'Ready to send';
+
+  @override
+  String get guestGettingUrls => 'Getting upload URLs…';
+
+  @override
+  String guestUploading(String current) {
+    return 'Uploading $current/12…';
+  }
+
+  @override
+  String get guestConfirming => 'Confirming…';
+
+  @override
+  String get guestSentToOwner => 'Photos sent to owner';
+
+  @override
+  String get guestSend12Photos => 'Send 12 photos';
+
+  @override
+  String get guestLinkUsed => 'Link used. Company owner will be notified.';
 }

@@ -41,6 +41,18 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "title": "Pending payment poll (15m increase)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(increase(kwork_pending_payment_poll_total[15m])) by (outcome)",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "schemaVersion": 39,

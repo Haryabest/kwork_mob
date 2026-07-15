@@ -6,6 +6,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 /// Гостевой вход по shoot-link (§3.15) — deep link `/shoot/{token}`.
 class GuestShootGateScreen extends StatefulWidget {
@@ -87,7 +88,12 @@ class _GuestShootGateScreenState extends State<GuestShootGateScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Нужно ровно $kGuidedDomeCount фото (выбрано ${images.length})'),
+          content: Text(
+            AppLocalizations.of(context)!.guestPhotosRequired(
+              '$kGuidedDomeCount',
+              '${images.length}',
+            ),
+          ),
         ),
       );
       return;
@@ -102,9 +108,10 @@ class _GuestShootGateScreenState extends State<GuestShootGateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Съёмка по ссылке'),
+        title: Text(l10n.guestShootTitle),
         prefixes: [
           FHeaderAction.back(
             onPress: () {
@@ -130,29 +137,32 @@ class _GuestShootGateScreenState extends State<GuestShootGateScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Задача ${_meta?['task_uuid']?.toString().substring(0, 8) ?? ''}…',
+                        l10n.guestTask(_meta?['task_uuid']?.toString().substring(0, 8) ?? ''),
                         style: context.theme.typography.lg,
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Категория: ${_meta?['category'] ?? '—'} · тариф: ${_meta?['tier'] ?? '—'}',
+                        l10n.guestMeta(
+                          _meta?['category']?.toString() ?? '—',
+                          _meta?['tier']?.toString() ?? '—',
+                        ),
                         style: const TextStyle(color: AppColors.textSecondary),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Гостевой режим: 12 ракурсов через AR или галерею (§3.15).',
+                        l10n.guestHint,
                         style: const TextStyle(color: AppColors.textSecondary),
                       ),
                       const Spacer(),
                       FButton(
                         onPress: _startAr,
-                        child: const Text('Начать AR-съёмку'),
+                        child: Text(l10n.guestStartAr),
                       ),
                       const SizedBox(height: 12),
                       FButton(
                         variant: .outline,
                         onPress: _pickGallery,
-                        child: const Text('12 фото из галереи'),
+                        child: Text(l10n.guestGallery12),
                       ),
                     ],
                   ),
@@ -179,7 +189,8 @@ class GuestShootUploadScreen extends StatefulWidget {
 
 class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
   double _progress = 0;
-  String _status = 'Готово к отправке';
+  String _statusKey = 'ready';
+  int _uploadIndex = 0;
   String? _error;
   bool _running = false;
   bool _done = false;
@@ -190,7 +201,7 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
       _running = true;
       _error = null;
       _progress = 0;
-      _status = 'Получение upload URL…';
+      _statusKey = 'getting';
     });
     try {
       final meta = await widget.api.getShootByToken(widget.token);
@@ -202,7 +213,8 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
         final file = photos[i];
         if (file == null) throw StateError('Нет файла ракурса $i');
         setState(() {
-          _status = 'Загрузка ${i + 1}/12…';
+          _statusKey = 'uploading';
+          _uploadIndex = i + 1;
           _progress = (i / 12);
         });
         await widget.api.uploadPhotoPresigned(
@@ -212,7 +224,7 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
         );
       }
       setState(() {
-        _status = 'Подтверждение…';
+        _statusKey = 'confirming';
         _progress = 0.95;
       });
       await widget.api.completeShootByToken(widget.token);
@@ -222,7 +234,7 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
         _done = true;
         _running = false;
         _progress = 1;
-        _status = 'Фото отправлены владельцу';
+        _statusKey = 'sent';
       });
     } catch (e) {
       setState(() {
@@ -232,11 +244,24 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
     }
   }
 
+  String _guestStatus(AppLocalizations l10n, int uploadingIndex) {
+    return switch (_statusKey) {
+      'ready' => l10n.guestReadyToSend,
+      'getting' => l10n.guestGettingUrls,
+      'uploading' => l10n.guestUploading('$uploadingIndex'),
+      'confirming' => l10n.guestConfirming,
+      'sent' => l10n.guestSentToOwner,
+      _ => l10n.guestReadyToSend,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final uploadIdx = _uploadIndex > 0 ? _uploadIndex : 1;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Отправка по ссылке'),
+        title: Text(l10n.guestUploadTitle),
         prefixes: [
           FHeaderAction.back(onPress: _running ? null : () => context.pop()),
         ],
@@ -246,7 +271,7 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(_status),
+            Text(_guestStatus(l10n, uploadIdx)),
             const SizedBox(height: 12),
             LinearProgressIndicator(
               value: _progress,
@@ -259,15 +284,13 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
             ],
             if (_done) ...[
               const SizedBox(height: 16),
-              const Text(
-                'Ссылка использована. Владелец компании получит уведомление.',
-              ),
+              Text(l10n.guestLinkUsed),
             ],
             const Spacer(),
             if (!_done)
               FButton(
                 onPress: _running ? null : _run,
-                child: const Text('Отправить 12 фото'),
+                child: Text(l10n.guestSend12Photos),
               ),
           ],
         ),

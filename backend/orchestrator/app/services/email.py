@@ -38,6 +38,16 @@ async def send_password_reset_email(email: str, reset_token: str) -> str | None:
     return None
 
 
+async def send_topup_failed_email(email: str, title: str, body: str, balance_url: str) -> None:
+    """HTML fallback при payment.failed §3.4.3."""
+    html = _topup_failed_html(title=title, body=body, balance_url=balance_url)
+    plain = f"{body}\n\nОткрыть баланс: {balance_url}"
+    if settings.is_development and not settings.SMTP_HOST:
+        logger.info("DEV topup failed email → %s | %s | %s", email, title, balance_url)
+        return
+    await _send_email(email, title, plain, html_body=html)
+
+
 async def send_marketing_email(email: str, subject: str, body: str) -> None:
     """Маркетинговое письмо; в dev без SMTP — только лог."""
     footer = "\n\n---\nОтписаться от маркетинга: настройки профиля (marketing_opt_in)."
@@ -56,7 +66,7 @@ async def send_alert_email(email: str, subject: str, body: str) -> None:
     await _send_email(email, subject, body)
 
 
-async def _send_email(to: str, subject: str, body: str) -> None:
+async def _send_email(to: str, subject: str, body: str, *, html_body: str | None = None) -> None:
     if not settings.SMTP_HOST:
         raise RuntimeError("SMTP не настроен")
 
@@ -65,9 +75,30 @@ async def _send_email(to: str, subject: str, body: str) -> None:
     message["From"] = settings.SMTP_FROM
     message["To"] = to
     message.set_content(body)
+    if html_body:
+        message.add_alternative(html_body, subtype="html")
 
     with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
         server.starttls()
         if settings.SMTP_USER:
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         server.send_message(message)
+
+
+def _topup_failed_html(*, title: str, body: str, balance_url: str) -> str:
+    safe_title = title.replace("&", "&amp;").replace("<", "&lt;")
+    safe_body = body.replace("&", "&amp;").replace("<", "&lt;").replace("\n", "<br/>")
+    safe_url = balance_url.replace('"', "%22")
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"/><title>{safe_title}</title></head>
+<body style="font-family:system-ui,sans-serif;line-height:1.5;color:#1a1a1a;max-width:520px;margin:0 auto;padding:24px">
+  <h2 style="margin:0 0 12px">{safe_title}</h2>
+  <p style="margin:0 0 20px">{safe_body}</p>
+  <p style="margin:0 0 24px">
+    <a href="{safe_url}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;
+      padding:12px 20px;border-radius:8px;font-weight:600">Открыть баланс</a>
+  </p>
+  <p style="font-size:12px;color:#666;margin:0">KWork Mob · §20.3.4</p>
+</body>
+</html>"""

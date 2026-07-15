@@ -23,6 +23,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
 import { api, apiMessage } from '../../services/api';
+import { loadBalanceFilters, saveBalanceFilters } from '../../lib/balanceFilters';
 
 type Tx = {
   id: number | string;
@@ -90,6 +91,28 @@ export default function BalancePage() {
   const [total, setTotal] = useState(0);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [pollStatus, setPollStatus] = useState<string | null>(null);
+  const [filtersReady, setFiltersReady] = useState(false);
+
+  useEffect(() => {
+    const saved = loadBalanceFilters();
+    if (saved.authorId != null) setAuthorId(saved.authorId);
+    if (saved.dateFrom) setDateFrom(saved.dateFrom);
+    if (saved.dateTo) setDateTo(saved.dateTo);
+    if (saved.txType) setTxType(saved.txType);
+    if (saved.pageSize) setPageSize(saved.pageSize);
+    setFiltersReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    saveBalanceFilters({
+      authorId,
+      dateFrom,
+      dateTo,
+      txType,
+      pageSize,
+    });
+  }, [filtersReady, authorId, dateFrom, dateTo, txType, pageSize]);
 
   const memberLabel = useMemo(() => {
     const map = new Map<number, string>();
@@ -161,8 +184,9 @@ export default function BalancePage() {
   }, [txParams]);
 
   useEffect(() => {
+    if (!filtersReady) return;
     void load();
-  }, [load]);
+  }, [load, filtersReady]);
 
   useEffect(() => {
     setPage(1);

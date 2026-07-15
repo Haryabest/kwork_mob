@@ -13,6 +13,7 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/features/profile/low_balance_banner.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/balance_filters_prefs.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -65,7 +66,29 @@ class _BalanceScreenState extends State<BalanceScreen> {
   void initState() {
     super.initState();
     _thresholdCtrl.text = '5000';
-    _load();
+    _restoreFilters();
+  }
+
+  Future<void> _restoreFilters() async {
+    final saved = await BalanceFiltersPrefs.instance.load();
+    if (saved.isNotEmpty) {
+      _dateFrom.text = saved['date_from']?.toString() ?? '';
+      _dateTo.text = saved['date_to']?.toString() ?? '';
+      _txType = saved['tx_type']?.toString() ?? 'all';
+      _pageSize = (saved['page_size'] as num?)?.toInt() ?? 20;
+      _authorFilter = (saved['author_filter'] as num?)?.toInt() ?? -1;
+    }
+    await _load();
+  }
+
+  Future<void> _persistFilters() async {
+    await BalanceFiltersPrefs.instance.save(
+      dateFrom: _dateFrom.text.trim(),
+      dateTo: _dateTo.text.trim(),
+      txType: _txType,
+      pageSize: _pageSize,
+      authorFilter: _authorFilter,
+    );
   }
 
   String _authorLabel(int? userId) {
@@ -140,6 +163,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
 
   void _resetPageAndLoad() {
     _page = 1;
+    _persistFilters();
     _load();
   }
 
@@ -301,6 +325,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
     final l10n = AppLocalizations.of(context)!;
     if (widget.session.hidePrices) return;
     if (_corporateFinance && !widget.session.canViewFinance) return;
+    await _persistFilters();
     setState(() => _exporting = true);
     try {
       final bytes = _corporateFinance

@@ -630,4 +630,173 @@ class AppLocalizationsKk extends AppLocalizations {
   ) {
     return 'Бұрыш $current/$total · $label · $backend';
   }
+
+  @override
+  String get uploadPhotoTitle => 'Фото жүктеу';
+
+  @override
+  String get uploadPreparing => 'Дайындалуда…';
+
+  @override
+  String uploadResumeFound(String done) {
+    return 'Аяқталмаған жүктеу ($done/12)';
+  }
+
+  @override
+  String get uploadResumeHint =>
+      '§3.4.1: прогресс жергілікті сақталды. Байланыс үзілсе, соңғы фотодан жалғасады.';
+
+  @override
+  String get uploadBuildingZip => 'ZIP + SHA-256 жинау…';
+
+  @override
+  String uploadSha256(String hash) {
+    return 'SHA-256: $hash…';
+  }
+
+  @override
+  String get uploadPresigned => 'Presigned URL алу…';
+
+  @override
+  String get uploadEncrypting => 'E2E фото шифрлеу…';
+
+  @override
+  String uploadProgress(String current, String total) {
+    return 'Жүктеу $current/$total…';
+  }
+
+  @override
+  String uploadUploaded(String done) {
+    return 'Жүктелді $done/12';
+  }
+
+  @override
+  String get uploadInterrupted => 'Жүктеу үзildi — жалғастыруға болады';
+
+  @override
+  String get uploadUploading => 'Жүктелуде…';
+
+  @override
+  String get uploadContinue => 'Жүктеуді жалғастыру';
+
+  @override
+  String get upload12Photos => '12 фото жүктеу';
+
+  @override
+  String get checkoutTitle => 'Төлем';
+
+  @override
+  String get checkoutPayTitle => 'Тапсырыс төлемі';
+
+  @override
+  String get checkoutSubmitGeneration => 'Генерацияға жіберу';
+
+  @override
+  String get checkoutNeedCalibration => 'Калибрлеу қажет';
+
+  @override
+  String get checkoutCalibrationBody =>
+      '«1:1 масштаб» үшін карта, A4 немесе QR арқылы калибрлеңіз (§3.7).';
+
+  @override
+  String get checkoutCalibrate => 'Калибрлеу';
+
+  @override
+  String checkoutCategory(String label) {
+    return 'Категория: $label';
+  }
+
+  @override
+  String checkoutTier(String label) {
+    return 'Тариф: $label';
+  }
+
+  @override
+  String checkoutBasePrice(String amount) {
+    return 'Негізгі баға: $amount ₽';
+  }
+
+  @override
+  String get checkoutUpsells => 'Қосымша қызметтер';
+
+  @override
+  String checkoutTotal(String amount) {
+    return 'Барлығы: $amount ₽';
+  }
+
+  @override
+  String get checkoutPromo => 'Промокод';
+
+  @override
+  String get checkoutFioOptional => 'ТАӘ (міндетті емес)';
+
+  @override
+  String get checkoutFioHint => 'Өткізуге болады';
+
+  @override
+  String get checkoutFioTaxHint => 'ТАӘ «Мой налог» чекі үшін (§19.8.1)';
+
+  @override
+  String get checkoutPayCard => 'Картамен төлеу';
+
+  @override
+  String get checkoutPaySbp => 'СБП (QR) арқылы төлеу';
+
+  @override
+  String get checkoutSbpOrderTitle => 'СБП — тапсырыс төлемі';
+
+  @override
+  String get guestShootTitle => 'Сілтеме арқылы түсіру';
+
+  @override
+  String guestTask(String id) {
+    return 'Тапсырма $id…';
+  }
+
+  @override
+  String guestMeta(String category, String tier) {
+    return 'Категория: $category · тариф: $tier';
+  }
+
+  @override
+  String get guestHint =>
+      'Қонақ режимі: AR немесе галерея арқылы 12 бұрыш (§3.15).';
+
+  @override
+  String get guestStartAr => 'AR түсіруді бастау';
+
+  @override
+  String get guestGallery12 => 'Галереядан 12 фото';
+
+  @override
+  String guestPhotosRequired(String need, String selected) {
+    return 'Дәл $need фото керек (таңдалды $selected)';
+  }
+
+  @override
+  String get guestUploadTitle => 'Сілтеме арқылы жіберу';
+
+  @override
+  String get guestReadyToSend => 'Жіберуге дайын';
+
+  @override
+  String get guestGettingUrls => 'Upload URL алу…';
+
+  @override
+  String guestUploading(String current) {
+    return 'Жүктеу $current/12…';
+  }
+
+  @override
+  String get guestConfirming => 'Растау…';
+
+  @override
+  String get guestSentToOwner => 'Фото иесіне жіберildi';
+
+  @override
+  String get guestSend12Photos => '12 фото жіберу';
+
+  @override
+  String get guestLinkUsed =>
+      'Сілтеме пайдаланылды. Компания иесіне хабарланады.';
 }

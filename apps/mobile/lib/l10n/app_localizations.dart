@@ -1270,6 +1270,288 @@ abstract class AppLocalizations {
     String label,
     String backend,
   );
+
+  /// No description provided for @uploadPhotoTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузка фото'**
+  String get uploadPhotoTitle;
+
+  /// No description provided for @uploadPreparing.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подготовка…'**
+  String get uploadPreparing;
+
+  /// No description provided for @uploadResumeFound.
+  ///
+  /// In ru, this message translates to:
+  /// **'Найдена незавершённая загрузка ({done}/12)'**
+  String uploadResumeFound(String done);
+
+  /// No description provided for @uploadResumeHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'§3.4.1: прогресс сохранён локально. При обрыве связи загрузка продолжится с последнего фото.'**
+  String get uploadResumeHint;
+
+  /// No description provided for @uploadBuildingZip.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сборка ZIP + SHA-256…'**
+  String get uploadBuildingZip;
+
+  /// No description provided for @uploadSha256.
+  ///
+  /// In ru, this message translates to:
+  /// **'SHA-256: {hash}…'**
+  String uploadSha256(String hash);
+
+  /// No description provided for @uploadPresigned.
+  ///
+  /// In ru, this message translates to:
+  /// **'Получение presigned URL…'**
+  String get uploadPresigned;
+
+  /// No description provided for @uploadEncrypting.
+  ///
+  /// In ru, this message translates to:
+  /// **'E2E шифрование фото…'**
+  String get uploadEncrypting;
+
+  /// No description provided for @uploadProgress.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузка {current}/{total}…'**
+  String uploadProgress(String current, String total);
+
+  /// No description provided for @uploadUploaded.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загружено {done}/12'**
+  String uploadUploaded(String done);
+
+  /// No description provided for @uploadInterrupted.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузка прервана — можно продолжить'**
+  String get uploadInterrupted;
+
+  /// No description provided for @uploadUploading.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузка…'**
+  String get uploadUploading;
+
+  /// No description provided for @uploadContinue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продолжить загрузку'**
+  String get uploadContinue;
+
+  /// No description provided for @upload12Photos.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузить 12 фото'**
+  String get upload12Photos;
+
+  /// No description provided for @checkoutTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Оплата'**
+  String get checkoutTitle;
+
+  /// No description provided for @checkoutPayTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Оплата заказа'**
+  String get checkoutPayTitle;
+
+  /// No description provided for @checkoutSubmitGeneration.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отправка на генерацию'**
+  String get checkoutSubmitGeneration;
+
+  /// No description provided for @checkoutNeedCalibration.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нужна калибровка'**
+  String get checkoutNeedCalibration;
+
+  /// No description provided for @checkoutCalibrationBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Для «Масштаб 1:1» выполните калибровку по карте, A4 или QR (§3.7).'**
+  String get checkoutCalibrationBody;
+
+  /// No description provided for @checkoutCalibrate.
+  ///
+  /// In ru, this message translates to:
+  /// **'Калибровать'**
+  String get checkoutCalibrate;
+
+  /// No description provided for @checkoutCategory.
+  ///
+  /// In ru, this message translates to:
+  /// **'Категория: {label}'**
+  String checkoutCategory(String label);
+
+  /// No description provided for @checkoutTier.
+  ///
+  /// In ru, this message translates to:
+  /// **'Тариф: {label}'**
+  String checkoutTier(String label);
+
+  /// No description provided for @checkoutBasePrice.
+  ///
+  /// In ru, this message translates to:
+  /// **'Базовая цена: {amount} ₽'**
+  String checkoutBasePrice(String amount);
+
+  /// No description provided for @checkoutUpsells.
+  ///
+  /// In ru, this message translates to:
+  /// **'Дополнительные услуги'**
+  String get checkoutUpsells;
+
+  /// No description provided for @checkoutTotal.
+  ///
+  /// In ru, this message translates to:
+  /// **'Итого: {amount} ₽'**
+  String checkoutTotal(String amount);
+
+  /// No description provided for @checkoutPromo.
+  ///
+  /// In ru, this message translates to:
+  /// **'Промокод'**
+  String get checkoutPromo;
+
+  /// No description provided for @checkoutFioOptional.
+  ///
+  /// In ru, this message translates to:
+  /// **'ФИО (необязательно)'**
+  String get checkoutFioOptional;
+
+  /// No description provided for @checkoutFioHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Можно пропустить'**
+  String get checkoutFioHint;
+
+  /// No description provided for @checkoutFioTaxHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'ФИО используется для чека «Мой налог» (§19.8.1)'**
+  String get checkoutFioTaxHint;
+
+  /// No description provided for @checkoutPayCard.
+  ///
+  /// In ru, this message translates to:
+  /// **'Оплатить картой'**
+  String get checkoutPayCard;
+
+  /// No description provided for @checkoutPaySbp.
+  ///
+  /// In ru, this message translates to:
+  /// **'Оплатить СБП (QR)'**
+  String get checkoutPaySbp;
+
+  /// No description provided for @checkoutSbpOrderTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'СБП — оплата заказа'**
+  String get checkoutSbpOrderTitle;
+
+  /// No description provided for @guestShootTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Съёмка по ссылке'**
+  String get guestShootTitle;
+
+  /// No description provided for @guestTask.
+  ///
+  /// In ru, this message translates to:
+  /// **'Задача {id}…'**
+  String guestTask(String id);
+
+  /// No description provided for @guestMeta.
+  ///
+  /// In ru, this message translates to:
+  /// **'Категория: {category} · тариф: {tier}'**
+  String guestMeta(String category, String tier);
+
+  /// No description provided for @guestHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Гостевой режим: 12 ракурсов через AR или галерею (§3.15).'**
+  String get guestHint;
+
+  /// No description provided for @guestStartAr.
+  ///
+  /// In ru, this message translates to:
+  /// **'Начать AR-съёмку'**
+  String get guestStartAr;
+
+  /// No description provided for @guestGallery12.
+  ///
+  /// In ru, this message translates to:
+  /// **'12 фото из галереи'**
+  String get guestGallery12;
+
+  /// No description provided for @guestPhotosRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нужно ровно {need} фото (выбрано {selected})'**
+  String guestPhotosRequired(String need, String selected);
+
+  /// No description provided for @guestUploadTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отправка по ссылке'**
+  String get guestUploadTitle;
+
+  /// No description provided for @guestReadyToSend.
+  ///
+  /// In ru, this message translates to:
+  /// **'Готово к отправке'**
+  String get guestReadyToSend;
+
+  /// No description provided for @guestGettingUrls.
+  ///
+  /// In ru, this message translates to:
+  /// **'Получение upload URL…'**
+  String get guestGettingUrls;
+
+  /// No description provided for @guestUploading.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузка {current}/12…'**
+  String guestUploading(String current);
+
+  /// No description provided for @guestConfirming.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подтверждение…'**
+  String get guestConfirming;
+
+  /// No description provided for @guestSentToOwner.
+  ///
+  /// In ru, this message translates to:
+  /// **'Фото отправлены владельцу'**
+  String get guestSentToOwner;
+
+  /// No description provided for @guestSend12Photos.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отправить 12 фото'**
+  String get guestSend12Photos;
+
+  /// No description provided for @guestLinkUsed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ссылка использована. Владелец компании получит уведомление.'**
+  String get guestLinkUsed;
 }
 
 class _AppLocalizationsDelegate

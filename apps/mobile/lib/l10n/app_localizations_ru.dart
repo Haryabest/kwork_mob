@@ -628,4 +628,174 @@ class AppLocalizationsRu extends AppLocalizations {
   ) {
     return 'Ракурс $current/$total · $label · $backend';
   }
+
+  @override
+  String get uploadPhotoTitle => 'Загрузка фото';
+
+  @override
+  String get uploadPreparing => 'Подготовка…';
+
+  @override
+  String uploadResumeFound(String done) {
+    return 'Найдена незавершённая загрузка ($done/12)';
+  }
+
+  @override
+  String get uploadResumeHint =>
+      '§3.4.1: прогресс сохранён локально. При обрыве связи загрузка продолжится с последнего фото.';
+
+  @override
+  String get uploadBuildingZip => 'Сборка ZIP + SHA-256…';
+
+  @override
+  String uploadSha256(String hash) {
+    return 'SHA-256: $hash…';
+  }
+
+  @override
+  String get uploadPresigned => 'Получение presigned URL…';
+
+  @override
+  String get uploadEncrypting => 'E2E шифрование фото…';
+
+  @override
+  String uploadProgress(String current, String total) {
+    return 'Загрузка $current/$total…';
+  }
+
+  @override
+  String uploadUploaded(String done) {
+    return 'Загружено $done/12';
+  }
+
+  @override
+  String get uploadInterrupted => 'Загрузка прервана — можно продолжить';
+
+  @override
+  String get uploadUploading => 'Загрузка…';
+
+  @override
+  String get uploadContinue => 'Продолжить загрузку';
+
+  @override
+  String get upload12Photos => 'Загрузить 12 фото';
+
+  @override
+  String get checkoutTitle => 'Оплата';
+
+  @override
+  String get checkoutPayTitle => 'Оплата заказа';
+
+  @override
+  String get checkoutSubmitGeneration => 'Отправка на генерацию';
+
+  @override
+  String get checkoutNeedCalibration => 'Нужна калибровка';
+
+  @override
+  String get checkoutCalibrationBody =>
+      'Для «Масштаб 1:1» выполните калибровку по карте, A4 или QR (§3.7).';
+
+  @override
+  String get checkoutCalibrate => 'Калибровать';
+
+  @override
+  String checkoutCategory(String label) {
+    return 'Категория: $label';
+  }
+
+  @override
+  String checkoutTier(String label) {
+    return 'Тариф: $label';
+  }
+
+  @override
+  String checkoutBasePrice(String amount) {
+    return 'Базовая цена: $amount ₽';
+  }
+
+  @override
+  String get checkoutUpsells => 'Дополнительные услуги';
+
+  @override
+  String checkoutTotal(String amount) {
+    return 'Итого: $amount ₽';
+  }
+
+  @override
+  String get checkoutPromo => 'Промокод';
+
+  @override
+  String get checkoutFioOptional => 'ФИО (необязательно)';
+
+  @override
+  String get checkoutFioHint => 'Можно пропустить';
+
+  @override
+  String get checkoutFioTaxHint =>
+      'ФИО используется для чека «Мой налог» (§19.8.1)';
+
+  @override
+  String get checkoutPayCard => 'Оплатить картой';
+
+  @override
+  String get checkoutPaySbp => 'Оплатить СБП (QR)';
+
+  @override
+  String get checkoutSbpOrderTitle => 'СБП — оплата заказа';
+
+  @override
+  String get guestShootTitle => 'Съёмка по ссылке';
+
+  @override
+  String guestTask(String id) {
+    return 'Задача $id…';
+  }
+
+  @override
+  String guestMeta(String category, String tier) {
+    return 'Категория: $category · тариф: $tier';
+  }
+
+  @override
+  String get guestHint =>
+      'Гостевой режим: 12 ракурсов через AR или галерею (§3.15).';
+
+  @override
+  String get guestStartAr => 'Начать AR-съёмку';
+
+  @override
+  String get guestGallery12 => '12 фото из галереи';
+
+  @override
+  String guestPhotosRequired(String need, String selected) {
+    return 'Нужно ровно $need фото (выбрано $selected)';
+  }
+
+  @override
+  String get guestUploadTitle => 'Отправка по ссылке';
+
+  @override
+  String get guestReadyToSend => 'Готово к отправке';
+
+  @override
+  String get guestGettingUrls => 'Получение upload URL…';
+
+  @override
+  String guestUploading(String current) {
+    return 'Загрузка $current/12…';
+  }
+
+  @override
+  String get guestConfirming => 'Подтверждение…';
+
+  @override
+  String get guestSentToOwner => 'Фото отправлены владельцу';
+
+  @override
+  String get guestSend12Photos => 'Отправить 12 фото';
+
+  @override
+  String get guestLinkUsed =>
+      'Ссылка использована. Владелец компании получит уведомление.';
 }

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/scale_calibration_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/widgets/order_limit_dialog.dart';
@@ -115,18 +116,17 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
       final cal = draft.scaleCalibration ??
           await ScaleCalibrationService.instance.scaleForOrder();
       if (cal == null) {
+        final l10n = AppLocalizations.of(context)!;
         final ok = await showFDialog<bool>(
           context: context,
           builder: (ctx, style, animation) => FDialog(
-            title: const Text('Нужна калибровка'),
-            body: const Text(
-              'Для «Масштаб 1:1» выполните калибровку по карте, A4 или QR (§3.7).',
-            ),
+            title: Text(l10n.checkoutNeedCalibration),
+            body: Text(l10n.checkoutCalibrationBody),
             actions: [
-              FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+              FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
               FButton(
                 onPress: () => Navigator.pop(ctx, true),
-                child: const Text('Калибровать'),
+                child: Text(l10n.checkoutCalibrate),
               ),
             ],
           ),
@@ -202,7 +202,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
           await showFDialog<void>(
             context: context,
             builder: (ctx, style, animation) => FDialog(
-              title: const Text('СБП — оплата заказа'),
+              title: Text(AppLocalizations.of(context)!.checkoutSbpOrderTitle),
               body: SizedBox(
                 width: 260,
                 child: Column(
@@ -215,7 +215,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                 ),
               ),
               actions: [
-                FButton(onPress: () => Navigator.pop(ctx), child: const Text('Готово')),
+                FButton(onPress: () => Navigator.pop(ctx), child: Text(AppLocalizations.of(context)!.done)),
               ],
             ),
           );
@@ -243,32 +243,33 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final hidePrices = widget.session.hidePrices;
     if (_loading) {
       return const FScaffold(child: Center(child: CircularProgressIndicator()));
     }
     if (_error != null && _draft == null) {
       return FScaffold(
-        header: FHeader.nested(title: const Text('Оплата')),
+        header: FHeader.nested(title: Text(l10n.checkoutTitle)),
         child: Center(child: Text(_error!)),
       );
     }
     final draft = _draft!;
     return FScaffold(
       header: FHeader.nested(
-        title: Text(hidePrices ? 'Отправка на генерацию' : 'Оплата заказа'),
+        title: Text(hidePrices ? l10n.checkoutSubmitGeneration : l10n.checkoutPayTitle),
         prefixes: [FHeaderAction.back(onPress: _busy ? null : () => context.pop())],
       ),
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text('Категория: ${draft.category.label}', style: context.theme.typography.sm),
-          Text('Тариф: ${draft.tier.label}', style: context.theme.typography.sm),
+          Text(l10n.checkoutCategory(draft.category.label), style: context.theme.typography.sm),
+          Text(l10n.checkoutTier(draft.tier.label), style: context.theme.typography.sm),
           if (!hidePrices) ...[
             const SizedBox(height: 12),
-            Text('Базовая цена: $_baseAmount ₽'),
+            Text(l10n.checkoutBasePrice('$_baseAmount')),
             const SizedBox(height: 16),
-            Text('Дополнительные услуги', style: context.theme.typography.sm),
+            Text(l10n.checkoutUpsells, style: context.theme.typography.sm),
             ..._upsells.map((u) {
               final code = u['code']?.toString() ?? '';
               return Padding(
@@ -290,25 +291,25 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
             }),
             const Divider(height: 24),
             Text(
-              'Итого: $_total ₽',
+              l10n.checkoutTotal('$_total'),
               style: context.theme.typography.lg.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             FTextField(
               control: FTextFieldControl.managed(controller: _promo),
-              label: const Text('Промокод'),
+              label: Text(l10n.checkoutPromo),
               enabled: !_busy,
             ),
             const SizedBox(height: 12),
             FTextField(
               control: FTextFieldControl.managed(controller: _fio),
-              label: const Text('ФИО (необязательно)'),
-              hint: 'Можно пропустить',
+              label: Text(l10n.checkoutFioOptional),
+              hint: l10n.checkoutFioHint,
               enabled: !_busy,
             ),
             const SizedBox(height: 8),
             Text(
-              'ФИО используется для чека «Мой налог» (§19.8.1)',
+              l10n.checkoutFioTaxHint,
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
           ],
@@ -320,18 +321,18 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
           if (hidePrices)
             FButton(
               onPress: _busy ? null : () => _submit(payMethod: 'redirect'),
-              child: Text(_busy ? '…' : 'Отправить на генерацию'),
+              child: Text(_busy ? '…' : l10n.checkoutSubmitGeneration),
             )
           else ...[
             FButton(
               onPress: _busy ? null : () => _submit(payMethod: 'redirect'),
-              child: Text(_busy ? '…' : 'Оплатить картой'),
+              child: Text(_busy ? '…' : l10n.checkoutPayCard),
             ),
             const SizedBox(height: 8),
             FButton(
               variant: .outline,
               onPress: _busy ? null : () => _submit(payMethod: 'sbp_qr'),
-              child: Text(_busy ? '…' : 'Оплатить СБП (QR)'),
+              child: Text(_busy ? '…' : l10n.checkoutPaySbp),
             ),
           ],
         ],
