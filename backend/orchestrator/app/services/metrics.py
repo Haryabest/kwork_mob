@@ -14,6 +14,11 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 ORDERS_TOTAL = Counter("kwork_orders_total", "Orders by status", ["status"])
+PENDING_POLL_TOTAL = Counter(
+    "kwork_pending_payment_poll_total",
+    "Pending YooKassa poll outcomes §8",
+    ["outcome"],
+)
 QUEUE_LENGTH = Gauge("kwork_queue_length", "Queue length", ["queue"])
 WORKER_GPU_TEMP = Gauge("kwork_worker_gpu_temp", "Worker GPU temp C", ["worker_id"])
 WORKER_GPU_UTIL = Gauge("kwork_worker_gpu_util", "Worker GPU util %", ["worker_id"])
@@ -28,6 +33,14 @@ _ch_client = None
 
 def prometheus_metrics() -> tuple[bytes, str]:
     return generate_latest(), CONTENT_TYPE_LATEST
+
+
+def record_pending_poll(stats: dict[str, int]) -> None:
+    """Prometheus: исходы Celery poll_waiting_capture_pending §8."""
+    for outcome, count in stats.items():
+        n = int(count or 0)
+        if n > 0:
+            PENDING_POLL_TOTAL.labels(outcome=outcome).inc(n)
 
 
 def _ch():

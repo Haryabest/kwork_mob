@@ -773,6 +773,503 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Баланс: {amount} ₽'**
   String balanceLabel(String amount);
+
+  /// No description provided for @exportShareText.
+  ///
+  /// In ru, this message translates to:
+  /// **'Транзакции §20.3.4'**
+  String get exportShareText;
+
+  /// No description provided for @exportSuccess.
+  ///
+  /// In ru, this message translates to:
+  /// **'CSV экспортирован'**
+  String get exportSuccess;
+
+  /// No description provided for @open.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть'**
+  String get open;
+
+  /// No description provided for @notificationDefault.
+  ///
+  /// In ru, this message translates to:
+  /// **'Уведомление'**
+  String get notificationDefault;
+
+  /// No description provided for @authCreateAccount.
+  ///
+  /// In ru, this message translates to:
+  /// **'Создайте аккаунт'**
+  String get authCreateAccount;
+
+  /// No description provided for @authVerifyEmail.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подтверждение email'**
+  String get authVerifyEmail;
+
+  /// No description provided for @authAccountType.
+  ///
+  /// In ru, this message translates to:
+  /// **'Тип аккаунта'**
+  String get authAccountType;
+
+  /// No description provided for @authForgotPasswordTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Восстановление пароля'**
+  String get authForgotPasswordTitle;
+
+  /// No description provided for @authNewPasswordTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новый пароль'**
+  String get authNewPasswordTitle;
+
+  /// No description provided for @authTwoFaTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Введите код 2FA'**
+  String get authTwoFaTitle;
+
+  /// No description provided for @authSendLink.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отправить ссылку'**
+  String get authSendLink;
+
+  /// No description provided for @authSavePassword.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сохранить пароль'**
+  String get authSavePassword;
+
+  /// No description provided for @authRememberMe.
+  ///
+  /// In ru, this message translates to:
+  /// **'Запомнить меня'**
+  String get authRememberMe;
+
+  /// No description provided for @authPasswordConfirm.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подтверждение пароля'**
+  String get authPasswordConfirm;
+
+  /// No description provided for @authConsents.
+  ///
+  /// In ru, this message translates to:
+  /// **'Принимаю соглашение, политику ПДн, оферту, подтверждение прав и правила запрещённого контента'**
+  String get authConsents;
+
+  /// No description provided for @authEmailCode.
+  ///
+  /// In ru, this message translates to:
+  /// **'Код из письма (6 цифр)'**
+  String get authEmailCode;
+
+  /// No description provided for @authIndividual.
+  ///
+  /// In ru, this message translates to:
+  /// **'Физ. лицо'**
+  String get authIndividual;
+
+  /// No description provided for @authLegal.
+  ///
+  /// In ru, this message translates to:
+  /// **'Юр. лицо / ИП'**
+  String get authLegal;
+
+  /// No description provided for @authFullNameOptional.
+  ///
+  /// In ru, this message translates to:
+  /// **'ФИО (необязательно)'**
+  String get authFullNameOptional;
+
+  /// No description provided for @authOrgName.
+  ///
+  /// In ru, this message translates to:
+  /// **'Наименование организации'**
+  String get authOrgName;
+
+  /// No description provided for @authInn.
+  ///
+  /// In ru, this message translates to:
+  /// **'ИНН'**
+  String get authInn;
+
+  /// No description provided for @authOgrn.
+  ///
+  /// In ru, this message translates to:
+  /// **'ОГРН / ОГРНИП'**
+  String get authOgrn;
+
+  /// No description provided for @authLegalAddress.
+  ///
+  /// In ru, this message translates to:
+  /// **'Юридический адрес'**
+  String get authLegalAddress;
+
+  /// No description provided for @authDirectorName.
+  ///
+  /// In ru, this message translates to:
+  /// **'ФИО руководителя'**
+  String get authDirectorName;
+
+  /// No description provided for @authBankName.
+  ///
+  /// In ru, this message translates to:
+  /// **'Банк'**
+  String get authBankName;
+
+  /// No description provided for @authBik.
+  ///
+  /// In ru, this message translates to:
+  /// **'БИК'**
+  String get authBik;
+
+  /// No description provided for @authCheckingAccount.
+  ///
+  /// In ru, this message translates to:
+  /// **'Расчётный счёт'**
+  String get authCheckingAccount;
+
+  /// No description provided for @authResetToken.
+  ///
+  /// In ru, this message translates to:
+  /// **'Токен из письма'**
+  String get authResetToken;
+
+  /// No description provided for @authNewPasswordField.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новый пароль'**
+  String get authNewPasswordField;
+
+  /// No description provided for @authAuthenticatorCode.
+  ///
+  /// In ru, this message translates to:
+  /// **'Код из Authenticator'**
+  String get authAuthenticatorCode;
+
+  /// No description provided for @authBack.
+  ///
+  /// In ru, this message translates to:
+  /// **'Назад'**
+  String get authBack;
+
+  /// No description provided for @authBackToLogin.
+  ///
+  /// In ru, this message translates to:
+  /// **'Назад ко входу'**
+  String get authBackToLogin;
+
+  /// No description provided for @authAcceptTerms.
+  ///
+  /// In ru, this message translates to:
+  /// **'Примите условия сервиса'**
+  String get authAcceptTerms;
+
+  /// No description provided for @authPasswordUpdated.
+  ///
+  /// In ru, this message translates to:
+  /// **'Пароль обновлён. Войдите с новым паролем'**
+  String get authPasswordUpdated;
+
+  /// No description provided for @authDevCode.
+  ///
+  /// In ru, this message translates to:
+  /// **'Dev-код: {code}'**
+  String authDevCode(String code);
+
+  /// No description provided for @authDevToken.
+  ///
+  /// In ru, this message translates to:
+  /// **'Dev-токен: {token}'**
+  String authDevToken(String token);
+
+  /// No description provided for @shootCategoryTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Категория товара'**
+  String get shootCategoryTitle;
+
+  /// No description provided for @shootCategoryLabel.
+  ///
+  /// In ru, this message translates to:
+  /// **'Категория'**
+  String get shootCategoryLabel;
+
+  /// No description provided for @shootForbiddenCategories.
+  ///
+  /// In ru, this message translates to:
+  /// **'Запрещённые категории'**
+  String get shootForbiddenCategories;
+
+  /// No description provided for @shootForbiddenHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Если отметите — заказ не создаётся, средства не списываются'**
+  String get shootForbiddenHint;
+
+  /// No description provided for @shootAgeConfirmed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Возраст подтверждён'**
+  String get shootAgeConfirmed;
+
+  /// No description provided for @shootAgeConfirmedSub.
+  ///
+  /// In ru, this message translates to:
+  /// **'Повторный ввод даты не требуется'**
+  String get shootAgeConfirmedSub;
+
+  /// No description provided for @shootBirthDate.
+  ///
+  /// In ru, this message translates to:
+  /// **'Дата рождения (YYYY-MM-DD)'**
+  String get shootBirthDate;
+
+  /// No description provided for @shootBirthDateHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сохраняется в профиле после успешной проверки'**
+  String get shootBirthDateHint;
+
+  /// No description provided for @shootScaleRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Масштаб (м) — обязательно для мебели'**
+  String get shootScaleRequired;
+
+  /// No description provided for @shootCalibrationBtn.
+  ///
+  /// In ru, this message translates to:
+  /// **'Калибровка: карта / A4 / QR (§3.7)'**
+  String get shootCalibrationBtn;
+
+  /// No description provided for @shootLength.
+  ///
+  /// In ru, this message translates to:
+  /// **'Длина'**
+  String get shootLength;
+
+  /// No description provided for @shootWidth.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ширина'**
+  String get shootWidth;
+
+  /// No description provided for @shootHeight.
+  ///
+  /// In ru, this message translates to:
+  /// **'Высота'**
+  String get shootHeight;
+
+  /// No description provided for @shootModelName.
+  ///
+  /// In ru, this message translates to:
+  /// **'Название модели (необязательно)'**
+  String get shootModelName;
+
+  /// No description provided for @shootModelNameHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Например: Кроссовки Nike Air'**
+  String get shootModelNameHint;
+
+  /// No description provided for @shootTier.
+  ///
+  /// In ru, this message translates to:
+  /// **'Тариф'**
+  String get shootTier;
+
+  /// No description provided for @shootGhostMeshHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ghost Mesh — масштаб двумя пальцами'**
+  String get shootGhostMeshHint;
+
+  /// No description provided for @shootNext.
+  ///
+  /// In ru, this message translates to:
+  /// **'Далее к съёмке'**
+  String get shootNext;
+
+  /// No description provided for @shootAgeConfirmTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подтвердите, что вам 18 лет'**
+  String get shootAgeConfirmTitle;
+
+  /// No description provided for @shootAgeConfirmBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Введите дату рождения (YYYY-MM-DD).'**
+  String get shootAgeConfirmBody;
+
+  /// No description provided for @shootInvalidDate.
+  ///
+  /// In ru, this message translates to:
+  /// **'Некорректная дата (YYYY-MM-DD)'**
+  String get shootInvalidDate;
+
+  /// No description provided for @shootAgeOnly18.
+  ///
+  /// In ru, this message translates to:
+  /// **'Создание модели доступно только с 18 лет'**
+  String get shootAgeOnly18;
+
+  /// No description provided for @shootBirthRequired.
+  ///
+  /// In ru, this message translates to:
+  /// **'Укажите дату рождения для 18+'**
+  String get shootBirthRequired;
+
+  /// No description provided for @shootForbiddenTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Запрещённая категория'**
+  String get shootForbiddenTitle;
+
+  /// No description provided for @shootForbiddenBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Вы выбрали запрещённую категорию. Заказ будет отклонён без возврата средств. Продолжить?'**
+  String get shootForbiddenBody;
+
+  /// No description provided for @shootOrderBlocked.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заказ не будет создан — смените категорию'**
+  String get shootOrderBlocked;
+
+  /// No description provided for @shootStorageFree.
+  ///
+  /// In ru, this message translates to:
+  /// **'Освободите место на телефоне (нужно {need} МБ, доступно ~{free} МБ)'**
+  String shootStorageFree(String need, String free);
+
+  /// No description provided for @shootStorageFreeUnknown.
+  ///
+  /// In ru, this message translates to:
+  /// **'Освободите место на телефоне (нужно {need} МБ)'**
+  String shootStorageFreeUnknown(String need);
+
+  /// No description provided for @shootQualityTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Проверка качества'**
+  String get shootQualityTitle;
+
+  /// No description provided for @shootQualityLow.
+  ///
+  /// In ru, this message translates to:
+  /// **'Низкое качество фото. Постарайтесь улучшить условия съемки'**
+  String get shootQualityLow;
+
+  /// No description provided for @shootQualityLowTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Низкое качество'**
+  String get shootQualityLowTitle;
+
+  /// No description provided for @shootQualityLowDialog.
+  ///
+  /// In ru, this message translates to:
+  /// **'Некоторые кадры имеют низкое качество, это может привести к браку модели. Продолжить?'**
+  String get shootQualityLowDialog;
+
+  /// No description provided for @yes.
+  ///
+  /// In ru, this message translates to:
+  /// **'Да'**
+  String get yes;
+
+  /// No description provided for @no.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет'**
+  String get no;
+
+  /// No description provided for @shootQualityContinue.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продолжить к загрузке'**
+  String get shootQualityContinue;
+
+  /// No description provided for @shootQualityContinueForce.
+  ///
+  /// In ru, this message translates to:
+  /// **'Продолжить, несмотря на ошибки'**
+  String get shootQualityContinueForce;
+
+  /// No description provided for @shootQualityRestart.
+  ///
+  /// In ru, this message translates to:
+  /// **'Начать съёмку с начала'**
+  String get shootQualityRestart;
+
+  /// No description provided for @shootArHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'AR: тариф «{tier}», габариты {scale}'**
+  String shootArHint(String tier, String scale);
+
+  /// No description provided for @shootTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Съёмка'**
+  String get shootTitle;
+
+  /// No description provided for @shootOverheatTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Перегрев телефона'**
+  String get shootOverheatTitle;
+
+  /// No description provided for @shootOverheatBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Температура батареи ≈ {temp}°C (>45°C). Рекомендуем прервать съёмку до охлаждения. При продолжении включится энергосбережение (FPS 15).'**
+  String shootOverheatBody(String temp);
+
+  /// No description provided for @shootAbort.
+  ///
+  /// In ru, this message translates to:
+  /// **'Прервать'**
+  String get shootAbort;
+
+  /// No description provided for @shootExit.
+  ///
+  /// In ru, this message translates to:
+  /// **'Выход'**
+  String get shootExit;
+
+  /// No description provided for @shootCalibrateShort.
+  ///
+  /// In ru, this message translates to:
+  /// **'Калибр.'**
+  String get shootCalibrateShort;
+
+  /// No description provided for @shootArCameraActive.
+  ///
+  /// In ru, this message translates to:
+  /// **'AR-камера активна'**
+  String get shootArCameraActive;
+
+  /// No description provided for @shootAngleLine.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ракурс {current}/{total} · {label} · {backend}'**
+  String shootAngleLine(
+    String current,
+    String total,
+    String label,
+    String backend,
+  );
 }
 
 class _AppLocalizationsDelegate

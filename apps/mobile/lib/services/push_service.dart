@@ -170,6 +170,9 @@ class PushService {
         type == 'cancelled') {
       return '/home/notifications';
     }
+    if (type == 'topup_failed') {
+      return '/home/balance';
+    }
     final ticketId = data['ticket_id']?.toString() ?? data['support_id']?.toString();
     if (type == 'support' || type == 'support_reply') {
       if (ticketId != null && ticketId.isNotEmpty) {

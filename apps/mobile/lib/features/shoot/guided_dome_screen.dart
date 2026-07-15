@@ -7,10 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
-import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/core/ar/ar.dart';
 import 'package:kwork_mobile/core/ar/native_ar_bridge.dart';
 import 'package:kwork_mobile/services/ar_tariff.dart';
@@ -284,24 +284,21 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   Future<void> _showCriticalThermalDialog() async {
     _criticalDialogOpen = true;
     final temp = _thermal.celsius?.toStringAsFixed(0) ?? '45+';
+    final l10n = AppLocalizations.of(context)!;
     final cont = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: const Text('Перегрев телефона'),
-        content: Text(
-          'Температура батареи ≈ $temp°C (>45°C). '
-          'Рекомендуем прервать съёмку до охлаждения. '
-          'При продолжении включится энергосбережение (FPS 15).',
-        ),
+        title: Text(l10n.shootOverheatTitle),
+        content: Text(l10n.shootOverheatBody(temp)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Прервать'),
+            child: Text(l10n.shootAbort),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Продолжить'),
+            child: Text(l10n.continueBtn),
           ),
         ],
       ),
@@ -500,6 +497,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final angle = kGuidedDomeAngles[_index];
     final gyro = _gyro?.check(angle);
     final backendLabel = switch (_arBackend) {
@@ -510,7 +508,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
 
     if (_error != null) {
       return FScaffold(
-        header: FHeader.nested(title: const Text('Съёмка'), prefixes: [
+        header: FHeader.nested(title: Text(l10n.shootTitle), prefixes: [
           FHeaderAction.back(onPress: () => context.pop()),
         ]),
         child: Center(child: Text(_error!)),
@@ -526,9 +524,9 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
             if (_arTextureId != null)
               Center(child: NativeArPreview(textureId: _arTextureId!))
             else if (_nativeCamera)
-              const Center(
+              Center(
                 child: Text(
-                  'AR-камера активна',
+                  l10n.shootArCameraActive,
                   style: TextStyle(color: Colors.white70),
                 ),
               )
@@ -587,11 +585,11 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
               child: Column(
                 children: [
                   Text(
-                    'Ракурс ${_index + 1}/$kGuidedDomeCount · ${angle.label} · $backendLabel'
-                    '${_thermal.powerSave ? ' · FPS ${_thermal.targetFps} (тепло)' : ''}'
+                    '${l10n.shootAngleLine('${_index + 1}', '$kGuidedDomeCount', angle.label, backendLabel)}'
+                    '${_thermal.powerSave ? ' · FPS ${_thermal.targetFps}' : ''}'
                     '${_thermal.celsius != null ? ' · ${_thermal.celsius!.toStringAsFixed(0)}°C' : ''}'
-                    '${_bypassQualityGate ? ' · DEV: без проверки кадра' : ''}'
-                    '${_bypassGyroGate ? ' · DEV: без гиро' : ''}',
+                    '${_bypassQualityGate ? ' · DEV' : ''}'
+                    '${_bypassGyroGate ? '' : ''}',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),
@@ -631,7 +629,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
                   FButton(
                     variant: .outline,
                     onPress: () => context.pop(),
-                    child: const Text('Выход'),
+                    child: Text(l10n.shootExit),
                   ),
                   GestureDetector(
                     onTap: _canShoot ? _shutter : null,
@@ -659,7 +657,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
                       _ar?.calibrate();
                       _gyro?.calibrateYaw();
                     },
-                    child: const Text('Калибр.'),
+                    child: Text(l10n.shootCalibrateShort),
                   ),
                   if (kDebugMode)
                     FButton(

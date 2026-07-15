@@ -5,6 +5,7 @@ import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/quality_analyzer.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 
@@ -41,9 +42,10 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
     final draft = await ShootStorage.instance.loadDraft(widget.modelUuid);
     _reshoots = Map.of(draft?.reshootCounts ?? {});
     if (draft?.scaleCalibration != null) {
+      if (!mounted) return;
       final t = draft!.tier;
-      _arHint =
-          'AR: тариф «${t.label}», габариты ${draft.scaleCalibration}';
+      final l10n = AppLocalizations.of(context)!;
+      _arHint = l10n.shootArHint(t.label, draft.scaleCalibration.toString());
     }
     final photos = await ShootStorage.instance.listPhotos(widget.modelUuid);
     final results = <FrameQuality>[];
@@ -66,9 +68,7 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
     final count = _reshoots[index] ?? 0;
     if (count >= kMaxReshootIterations) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Низкое качество фото. Постарайтесь улучшить условия съемки'),
-        ),
+        SnackBar(content: Text(AppLocalizations.of(context)!.shootQualityLow)),
       );
       return;
     }
@@ -90,16 +90,15 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
   Future<void> _continue({required bool force}) async {
     final fails = _results.where((e) => e.verdict == FrameVerdict.fail).length;
     if (fails > 0 && !force) {
+      final l10n = AppLocalizations.of(context)!;
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Низкое качество'),
-          content: const Text(
-            'Некоторые кадры имеют низкое качество, это может привести к браку модели. Продолжить?',
-          ),
+          title: Text(l10n.shootQualityLowTitle),
+          content: Text(l10n.shootQualityLowDialog),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Нет')),
-            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Да')),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l10n.no)),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(l10n.yes)),
           ],
         ),
       );
@@ -112,9 +111,7 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
     });
     if (blocked && !force) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Низкое качество фото. Постарайтесь улучшить условия съемки'),
-        ),
+        SnackBar(content: Text(AppLocalizations.of(context)!.shootQualityLow)),
       );
       return;
     }
@@ -125,9 +122,10 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Проверка качества'),
+        title: Text(l10n.shootQualityTitle),
         prefixes: [FHeaderAction.back(onPress: () => context.pop())],
       ),
       child: _loading
@@ -219,13 +217,13 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
                     children: [
                       FButton(
                         onPress: () => _continue(force: false),
-                        child: const Text('Продолжить к загрузке'),
+                        child: Text(l10n.shootQualityContinue),
                       ),
                       const SizedBox(height: 8),
                       FButton(
                         variant: .outline,
                         onPress: () => _continue(force: true),
-                        child: const Text('Продолжить, несмотря на ошибки'),
+                        child: Text(l10n.shootQualityContinueForce),
                       ),
                       const SizedBox(height: 8),
                       FButton(
@@ -234,7 +232,7 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
                           '${widget.flowBase}/dome',
                           extra: widget.modelUuid,
                         ),
-                        child: const Text('Начать съёмку с начала'),
+                        child: Text(l10n.shootQualityRestart),
                       ),
                     ],
                   ),

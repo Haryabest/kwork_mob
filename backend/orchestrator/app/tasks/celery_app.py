@@ -496,7 +496,11 @@ def poll_waiting_capture_pending():
             await db.commit()
             return result
 
-    return asyncio.run(_run())
+    from app.services.metrics import record_pending_poll
+
+    result = asyncio.run(_run())
+    record_pending_poll(result)
+    return result
 
 
 celery_app.conf.beat_schedule["pending-payments-poll-waiting-capture"] = {

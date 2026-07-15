@@ -9,6 +9,7 @@ import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/storage_space.dart';
 import 'package:kwork_mobile/services/scale_calibration_service.dart';
 import 'package:kwork_mobile/widgets/ghost_mesh.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/widgets/order_limit_dialog.dart';
 
 /// Выбор категории + чек-лист запрещённых (§3.5.4) + age-gate 18+ (§10.8.3).
@@ -77,37 +78,38 @@ class _CategoryScreenState extends State<CategoryScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx, style, animation) {
+        final dlg = AppLocalizations.of(ctx)!;
         final ctrl = TextEditingController(text: _birth.text);
         return FDialog(
-          title: const Text('Подтвердите, что вам 18 лет'),
+          title: Text(dlg.shootAgeConfirmTitle),
           body: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Введите дату рождения (YYYY-MM-DD).'),
+              Text(dlg.shootAgeConfirmBody),
               const SizedBox(height: 12),
               FTextField(
                 control: FTextFieldControl.managed(controller: ctrl),
-                label: const Text('Дата рождения'),
+                label: Text(dlg.shootBirthDate),
                 hint: '1990-01-15',
                 keyboardType: TextInputType.datetime,
               ),
             ],
           ),
           actions: [
-            FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+            FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(dlg.cancel)),
             FButton(
               onPress: () {
                 final years = _ageYears(ctrl.text);
                 if (years == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Некорректная дата (YYYY-MM-DD)')),
+                    SnackBar(content: Text(dlg.shootInvalidDate)),
                   );
                   return;
                 }
                 if (years < 18) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Создание модели доступно только с 18 лет')),
+                    SnackBar(content: Text(dlg.shootAgeOnly18)),
                   );
                   Navigator.pop(ctx, false);
                   return;
@@ -115,7 +117,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 _birth.text = ctrl.text.trim();
                 Navigator.pop(ctx, true);
               },
-              child: const Text('Подтвердить'),
+              child: Text(dlg.confirm),
             ),
           ],
         );
@@ -175,12 +177,13 @@ class _CategoryScreenState extends State<CategoryScreen> {
     if (!okSpace) {
       final mb = await StorageSpaceGuard.instance.freeMb();
       if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             mb != null
-                ? 'Освободите место на телефоне (нужно ${StorageSpaceGuard.minFreeMb} МБ, доступно ~$mb МБ)'
-                : 'Освободите место на телефоне (нужно ${StorageSpaceGuard.minFreeMb} МБ)',
+                ? l10n.shootStorageFree('${StorageSpaceGuard.minFreeMb}', '$mb')
+                : l10n.shootStorageFreeUnknown('${StorageSpaceGuard.minFreeMb}'),
           ),
         ),
       );
@@ -188,19 +191,18 @@ class _CategoryScreenState extends State<CategoryScreen> {
     }
 
     if (_forbidden.isNotEmpty) {
+      final l10n = AppLocalizations.of(context)!;
       final ok = await showFDialog<bool>(
         context: context,
         builder: (ctx, style, animation) => FDialog(
-          title: const Text('Запрещённая категория'),
-          body: const Text(
-            'Вы выбрали запрещённую категорию. Заказ будет отклонён без возврата средств. Продолжить?',
-          ),
+          title: Text(l10n.shootForbiddenTitle),
+          body: Text(l10n.shootForbiddenBody),
           actions: [
-            FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+            FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
             FButton(
               variant: .destructive,
               onPress: () => Navigator.pop(ctx, true),
-              child: const Text('Продолжить'),
+              child: Text(l10n.continueBtn),
             ),
           ],
         ),
@@ -208,7 +210,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
       if (ok != true) return;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Заказ не будет создан — смените категорию')),
+        SnackBar(content: Text(l10n.shootOrderBlocked)),
       );
       return;
     }
@@ -220,7 +222,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
         if (_birth.text.trim().isEmpty) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Укажите дату рождения для 18+')),
+            SnackBar(content: Text(AppLocalizations.of(context)!.shootBirthRequired)),
           );
           return;
         }
@@ -282,18 +284,19 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final hidePrices = widget.session.hidePrices;
     final ageOk = widget.session.ageVerified;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Категория товара'),
+        title: Text(l10n.shootCategoryTitle),
         prefixes: [FHeaderAction.back(onPress: () => context.pop())],
       ),
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           FSelect<ProductCategory>(
-            label: const Text('Категория'),
+            label: Text(l10n.shootCategoryLabel),
             control: FSelectControl.managed(
               initial: _category,
               onChange: (v) => _onCategoryChange(v),
@@ -301,10 +304,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
             items: _categoryItems,
           ),
           const SizedBox(height: 20),
-          Text('Запрещённые категории', style: context.theme.typography.lg),
+          Text(l10n.shootForbiddenCategories, style: context.theme.typography.lg),
           const SizedBox(height: 4),
           Text(
-            'Если отметите — заказ не создаётся, средства не списываются',
+            l10n.shootForbiddenHint,
             style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -329,20 +332,20 @@ class _CategoryScreenState extends State<CategoryScreen> {
             const SizedBox(height: 8),
             if (ageOk)
               FTile(
-                title: const Text('Возраст подтверждён'),
-                subtitle: const Text('Повторный ввод даты не требуется'),
+                title: Text(l10n.shootAgeConfirmed),
+                subtitle: Text(l10n.shootAgeConfirmedSub),
                 prefix: const Icon(FIcons.shieldCheck, color: AppColors.success),
               )
             else
               FTextField(
                 control: FTextFieldControl.managed(controller: _birth),
-                label: const Text('Дата рождения (YYYY-MM-DD)'),
-                description: const Text('Сохраняется в профиле после успешной проверки'),
+                label: Text(l10n.shootBirthDate),
+                description: Text(l10n.shootBirthDateHint),
               ),
           ],
           if (_category?.requiresScaleCalibration == true) ...[
             const SizedBox(height: 12),
-            Text('Масштаб (м) — обязательно для мебели', style: context.theme.typography.sm),
+            Text(l10n.shootScaleRequired, style: context.theme.typography.sm),
             const SizedBox(height: 8),
             FButton(
               variant: .outline,
@@ -356,27 +359,27 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   _scaleD.text = cal['depth']?.toString() ?? '';
                 });
               },
-              child: const Text('Калибровка: карта / A4 / QR (§3.7)'),
+              child: Text(l10n.shootCalibrationBtn),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                Expanded(child: FTextField(control: FTextFieldControl.managed(controller: _scaleW), label: const Text('Длина'))),
+                Expanded(child: FTextField(control: FTextFieldControl.managed(controller: _scaleW), label: Text(l10n.shootLength))),
                 const SizedBox(width: 8),
-                Expanded(child: FTextField(control: FTextFieldControl.managed(controller: _scaleH), label: const Text('Ширина'))),
+                Expanded(child: FTextField(control: FTextFieldControl.managed(controller: _scaleH), label: Text(l10n.shootWidth))),
                 const SizedBox(width: 8),
-                Expanded(child: FTextField(control: FTextFieldControl.managed(controller: _scaleD), label: const Text('Высота'))),
+                Expanded(child: FTextField(control: FTextFieldControl.managed(controller: _scaleD), label: Text(l10n.shootHeight))),
               ],
             ),
           ],
           const SizedBox(height: 16),
           FTextField(
             control: FTextFieldControl.managed(controller: _modelName),
-            label: const Text('Название модели (необязательно)'),
-            hint: 'Например: Кроссовки Nike Air',
+            label: Text(l10n.shootModelName),
+            hint: l10n.shootModelNameHint,
           ),
           const SizedBox(height: 16),
-          Text('Тариф', style: context.theme.typography.lg),
+          Text(l10n.shootTier, style: context.theme.typography.lg),
           const SizedBox(height: 8),
           FSelectGroup<Tier>(
             control: FMultiValueControl.managedRadio(
@@ -395,7 +398,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           ),
           if (_category != null) ...[
             const SizedBox(height: 16),
-            Text('Ghost Mesh — масштаб двумя пальцами', style: context.theme.typography.sm),
+            Text(l10n.shootGhostMeshHint, style: context.theme.typography.sm),
             const SizedBox(height: 8),
             SizedBox(
               height: 180,
@@ -416,7 +419,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
           const SizedBox(height: 16),
           FButton(
             onPress: _category == null ? null : _next,
-            child: const Text('Далее к съёмке'),
+            child: Text(l10n.shootNext),
           ),
         ],
       ),

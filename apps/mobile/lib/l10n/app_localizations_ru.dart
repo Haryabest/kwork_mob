@@ -357,4 +357,275 @@ class AppLocalizationsRu extends AppLocalizations {
   String balanceLabel(String amount) {
     return 'Баланс: $amount ₽';
   }
+
+  @override
+  String get exportShareText => 'Транзакции §20.3.4';
+
+  @override
+  String get exportSuccess => 'CSV экспортирован';
+
+  @override
+  String get open => 'Открыть';
+
+  @override
+  String get notificationDefault => 'Уведомление';
+
+  @override
+  String get authCreateAccount => 'Создайте аккаунт';
+
+  @override
+  String get authVerifyEmail => 'Подтверждение email';
+
+  @override
+  String get authAccountType => 'Тип аккаунта';
+
+  @override
+  String get authForgotPasswordTitle => 'Восстановление пароля';
+
+  @override
+  String get authNewPasswordTitle => 'Новый пароль';
+
+  @override
+  String get authTwoFaTitle => 'Введите код 2FA';
+
+  @override
+  String get authSendLink => 'Отправить ссылку';
+
+  @override
+  String get authSavePassword => 'Сохранить пароль';
+
+  @override
+  String get authRememberMe => 'Запомнить меня';
+
+  @override
+  String get authPasswordConfirm => 'Подтверждение пароля';
+
+  @override
+  String get authConsents =>
+      'Принимаю соглашение, политику ПДн, оферту, подтверждение прав и правила запрещённого контента';
+
+  @override
+  String get authEmailCode => 'Код из письма (6 цифр)';
+
+  @override
+  String get authIndividual => 'Физ. лицо';
+
+  @override
+  String get authLegal => 'Юр. лицо / ИП';
+
+  @override
+  String get authFullNameOptional => 'ФИО (необязательно)';
+
+  @override
+  String get authOrgName => 'Наименование организации';
+
+  @override
+  String get authInn => 'ИНН';
+
+  @override
+  String get authOgrn => 'ОГРН / ОГРНИП';
+
+  @override
+  String get authLegalAddress => 'Юридический адрес';
+
+  @override
+  String get authDirectorName => 'ФИО руководителя';
+
+  @override
+  String get authBankName => 'Банк';
+
+  @override
+  String get authBik => 'БИК';
+
+  @override
+  String get authCheckingAccount => 'Расчётный счёт';
+
+  @override
+  String get authResetToken => 'Токен из письма';
+
+  @override
+  String get authNewPasswordField => 'Новый пароль';
+
+  @override
+  String get authAuthenticatorCode => 'Код из Authenticator';
+
+  @override
+  String get authBack => 'Назад';
+
+  @override
+  String get authBackToLogin => 'Назад ко входу';
+
+  @override
+  String get authAcceptTerms => 'Примите условия сервиса';
+
+  @override
+  String get authPasswordUpdated => 'Пароль обновлён. Войдите с новым паролем';
+
+  @override
+  String authDevCode(String code) {
+    return 'Dev-код: $code';
+  }
+
+  @override
+  String authDevToken(String token) {
+    return 'Dev-токен: $token';
+  }
+
+  @override
+  String get shootCategoryTitle => 'Категория товара';
+
+  @override
+  String get shootCategoryLabel => 'Категория';
+
+  @override
+  String get shootForbiddenCategories => 'Запрещённые категории';
+
+  @override
+  String get shootForbiddenHint =>
+      'Если отметите — заказ не создаётся, средства не списываются';
+
+  @override
+  String get shootAgeConfirmed => 'Возраст подтверждён';
+
+  @override
+  String get shootAgeConfirmedSub => 'Повторный ввод даты не требуется';
+
+  @override
+  String get shootBirthDate => 'Дата рождения (YYYY-MM-DD)';
+
+  @override
+  String get shootBirthDateHint =>
+      'Сохраняется в профиле после успешной проверки';
+
+  @override
+  String get shootScaleRequired => 'Масштаб (м) — обязательно для мебели';
+
+  @override
+  String get shootCalibrationBtn => 'Калибровка: карта / A4 / QR (§3.7)';
+
+  @override
+  String get shootLength => 'Длина';
+
+  @override
+  String get shootWidth => 'Ширина';
+
+  @override
+  String get shootHeight => 'Высота';
+
+  @override
+  String get shootModelName => 'Название модели (необязательно)';
+
+  @override
+  String get shootModelNameHint => 'Например: Кроссовки Nike Air';
+
+  @override
+  String get shootTier => 'Тариф';
+
+  @override
+  String get shootGhostMeshHint => 'Ghost Mesh — масштаб двумя пальцами';
+
+  @override
+  String get shootNext => 'Далее к съёмке';
+
+  @override
+  String get shootAgeConfirmTitle => 'Подтвердите, что вам 18 лет';
+
+  @override
+  String get shootAgeConfirmBody => 'Введите дату рождения (YYYY-MM-DD).';
+
+  @override
+  String get shootInvalidDate => 'Некорректная дата (YYYY-MM-DD)';
+
+  @override
+  String get shootAgeOnly18 => 'Создание модели доступно только с 18 лет';
+
+  @override
+  String get shootBirthRequired => 'Укажите дату рождения для 18+';
+
+  @override
+  String get shootForbiddenTitle => 'Запрещённая категория';
+
+  @override
+  String get shootForbiddenBody =>
+      'Вы выбрали запрещённую категорию. Заказ будет отклонён без возврата средств. Продолжить?';
+
+  @override
+  String get shootOrderBlocked => 'Заказ не будет создан — смените категорию';
+
+  @override
+  String shootStorageFree(String need, String free) {
+    return 'Освободите место на телефоне (нужно $need МБ, доступно ~$free МБ)';
+  }
+
+  @override
+  String shootStorageFreeUnknown(String need) {
+    return 'Освободите место на телефоне (нужно $need МБ)';
+  }
+
+  @override
+  String get shootQualityTitle => 'Проверка качества';
+
+  @override
+  String get shootQualityLow =>
+      'Низкое качество фото. Постарайтесь улучшить условия съемки';
+
+  @override
+  String get shootQualityLowTitle => 'Низкое качество';
+
+  @override
+  String get shootQualityLowDialog =>
+      'Некоторые кадры имеют низкое качество, это может привести к браку модели. Продолжить?';
+
+  @override
+  String get yes => 'Да';
+
+  @override
+  String get no => 'Нет';
+
+  @override
+  String get shootQualityContinue => 'Продолжить к загрузке';
+
+  @override
+  String get shootQualityContinueForce => 'Продолжить, несмотря на ошибки';
+
+  @override
+  String get shootQualityRestart => 'Начать съёмку с начала';
+
+  @override
+  String shootArHint(String tier, String scale) {
+    return 'AR: тариф «$tier», габариты $scale';
+  }
+
+  @override
+  String get shootTitle => 'Съёмка';
+
+  @override
+  String get shootOverheatTitle => 'Перегрев телефона';
+
+  @override
+  String shootOverheatBody(String temp) {
+    return 'Температура батареи ≈ $temp°C (>45°C). Рекомендуем прервать съёмку до охлаждения. При продолжении включится энергосбережение (FPS 15).';
+  }
+
+  @override
+  String get shootAbort => 'Прервать';
+
+  @override
+  String get shootExit => 'Выход';
+
+  @override
+  String get shootCalibrateShort => 'Калибр.';
+
+  @override
+  String get shootArCameraActive => 'AR-камера активна';
+
+  @override
+  String shootAngleLine(
+    String current,
+    String total,
+    String label,
+    String backend,
+  ) {
+    return 'Ракурс $current/$total · $label · $backend';
+  }
 }

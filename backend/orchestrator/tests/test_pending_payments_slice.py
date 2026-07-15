@@ -61,6 +61,15 @@ def test_notify_topup_failed_smoke():
     assert callable(notify_topup_failed)
 
 
+def test_record_pending_poll_metrics():
+    from app.services.metrics import PENDING_POLL_TOTAL, record_pending_poll
+
+    before = PENDING_POLL_TOTAL.labels(outcome="settled")._value.get()  # noqa: SLF001
+    record_pending_poll({"settled": 2, "failed": 1, "checked": 0})
+    after = PENDING_POLL_TOTAL.labels(outcome="settled")._value.get()  # noqa: SLF001
+    assert after >= before + 2
+
+
 def test_settle_succeeded_topup_skips_bad_meta():
     import asyncio
     from unittest.mock import AsyncMock, MagicMock

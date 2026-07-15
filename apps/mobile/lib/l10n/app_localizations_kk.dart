@@ -358,4 +358,276 @@ class AppLocalizationsKk extends AppLocalizations {
   String balanceLabel(String amount) {
     return 'Баланс: $amount ₽';
   }
+
+  @override
+  String get exportShareText => 'Транзакциялар §20.3.4';
+
+  @override
+  String get exportSuccess => 'CSV экспортталды';
+
+  @override
+  String get open => 'Ашу';
+
+  @override
+  String get notificationDefault => 'Хабарландыру';
+
+  @override
+  String get authCreateAccount => 'Аккаунт жасау';
+
+  @override
+  String get authVerifyEmail => 'Email растау';
+
+  @override
+  String get authAccountType => 'Аккаунт түрі';
+
+  @override
+  String get authForgotPasswordTitle => 'Құпия сөзді қалпына келтіру';
+
+  @override
+  String get authNewPasswordTitle => 'Жаңа құпия сөз';
+
+  @override
+  String get authTwoFaTitle => '2FA кодын енгізіңіз';
+
+  @override
+  String get authSendLink => 'Сілтеме жіберу';
+
+  @override
+  String get authSavePassword => 'Құпия сөзді сақтау';
+
+  @override
+  String get authRememberMe => 'Мені есте сақта';
+
+  @override
+  String get authPasswordConfirm => 'Құпия сөзді растау';
+
+  @override
+  String get authConsents =>
+      'Келісім, ДҚ саясаты, оферта, құқықтар растауы және тыйым салынған контент ережелерін қабылдаймын';
+
+  @override
+  String get authEmailCode => 'Хаттағы код (6 цифр)';
+
+  @override
+  String get authIndividual => 'Жеке тұлға';
+
+  @override
+  String get authLegal => 'ЗТ / ЖК';
+
+  @override
+  String get authFullNameOptional => 'ТАӘ (міндетті емес)';
+
+  @override
+  String get authOrgName => 'Ұйым атауы';
+
+  @override
+  String get authInn => 'ЖСН';
+
+  @override
+  String get authOgrn => 'БСН / ЖКБСН';
+
+  @override
+  String get authLegalAddress => 'Заңды мекенжай';
+
+  @override
+  String get authDirectorName => 'Басшының ТАӘ';
+
+  @override
+  String get authBankName => 'Банк';
+
+  @override
+  String get authBik => 'БСК';
+
+  @override
+  String get authCheckingAccount => 'Есеп шоты';
+
+  @override
+  String get authResetToken => 'Хаттағы токен';
+
+  @override
+  String get authNewPasswordField => 'Жаңа құпия сөз';
+
+  @override
+  String get authAuthenticatorCode => 'Authenticator коды';
+
+  @override
+  String get authBack => 'Артқа';
+
+  @override
+  String get authBackToLogin => 'Кіруге оралу';
+
+  @override
+  String get authAcceptTerms => 'Қызмет шарттарын қабылдаңыз';
+
+  @override
+  String get authPasswordUpdated =>
+      'Құпия сөз жаңартылды. Жаңа құпия сөзбен кіріңіз';
+
+  @override
+  String authDevCode(String code) {
+    return 'Dev-код: $code';
+  }
+
+  @override
+  String authDevToken(String token) {
+    return 'Dev-токен: $token';
+  }
+
+  @override
+  String get shootCategoryTitle => 'Тауар категориясы';
+
+  @override
+  String get shootCategoryLabel => 'Категория';
+
+  @override
+  String get shootForbiddenCategories => 'Тыйым салынған категориялар';
+
+  @override
+  String get shootForbiddenHint =>
+      'Белgilenseniz — тапсырыс жасалмайды, қаражат алынбайды';
+
+  @override
+  String get shootAgeConfirmed => 'Жас расталды';
+
+  @override
+  String get shootAgeConfirmedSub => 'Күнді қайта енгізу қажет емес';
+
+  @override
+  String get shootBirthDate => 'Туған күні (YYYY-MM-DD)';
+
+  @override
+  String get shootBirthDateHint => 'Сәтті тексеруден кейін профильде сақталады';
+
+  @override
+  String get shootScaleRequired => 'Масштаб (м) — жиһаз үшін міндетті';
+
+  @override
+  String get shootCalibrationBtn => 'Калибрлеу: карта / A4 / QR (§3.7)';
+
+  @override
+  String get shootLength => 'Ұзындығы';
+
+  @override
+  String get shootWidth => 'Ені';
+
+  @override
+  String get shootHeight => 'Биіктігі';
+
+  @override
+  String get shootModelName => 'Модель атауы (міндетті емес)';
+
+  @override
+  String get shootModelNameHint => 'Мысалы: Nike Air кроссовкалары';
+
+  @override
+  String get shootTier => 'Тариф';
+
+  @override
+  String get shootGhostMeshHint => 'Ghost Mesh — екі саусақпен масштаб';
+
+  @override
+  String get shootNext => 'Түсіруге өту';
+
+  @override
+  String get shootAgeConfirmTitle => '18 жасқа толғаныңызды растаңыз';
+
+  @override
+  String get shootAgeConfirmBody => 'Туған күнді енгізіңіз (YYYY-MM-DD).';
+
+  @override
+  String get shootInvalidDate => 'Дұрыс емес күн (YYYY-MM-DD)';
+
+  @override
+  String get shootAgeOnly18 => 'Модель жасау тек 18 жастан бастап';
+
+  @override
+  String get shootBirthRequired => '18+ үшін туған күнді көрсетіңіз';
+
+  @override
+  String get shootForbiddenTitle => 'Тыйым салынған категория';
+
+  @override
+  String get shootForbiddenBody =>
+      'Тыйым салынған категория таңдалды. Тапсырыс қайтарусыз қабылданбайды. Жалғастыру?';
+
+  @override
+  String get shootOrderBlocked =>
+      'Тапсырыс жасалмайды — категорияны өзгертіңіз';
+
+  @override
+  String shootStorageFree(String need, String free) {
+    return 'Телефонда орын босатыңыз (керек $need МБ, ~$free МБ бар)';
+  }
+
+  @override
+  String shootStorageFreeUnknown(String need) {
+    return 'Телефонда орын босатыңыз (керек $need МБ)';
+  }
+
+  @override
+  String get shootQualityTitle => 'Сапаны тексеру';
+
+  @override
+  String get shootQualityLow =>
+      'Фото сапасы төмен. Түсіру жағдайларын жақсартып көріңіз';
+
+  @override
+  String get shootQualityLowTitle => 'Төмен сапа';
+
+  @override
+  String get shootQualityLowDialog =>
+      'Кейбір кадрлардың сапасы төмен, бұл модель брагіне әкелуі мүмкін. Жалғастыру?';
+
+  @override
+  String get yes => 'Иә';
+
+  @override
+  String get no => 'Жоқ';
+
+  @override
+  String get shootQualityContinue => 'Жүктеуге өту';
+
+  @override
+  String get shootQualityContinueForce => 'Қателерге қарамастан жалғастыру';
+
+  @override
+  String get shootQualityRestart => 'Түсіруді басынан бастау';
+
+  @override
+  String shootArHint(String tier, String scale) {
+    return 'AR: тариф «$tier», өлшемдер $scale';
+  }
+
+  @override
+  String get shootTitle => 'Түсіру';
+
+  @override
+  String get shootOverheatTitle => 'Телефон қызу';
+
+  @override
+  String shootOverheatBody(String temp) {
+    return 'Батарея температуры ≈ $temp°C (>45°C). Суытуға дейін тоқтату ұсынылады. Жалғастырсаңыз — энергия үнемдеу (15 FPS).';
+  }
+
+  @override
+  String get shootAbort => 'Тоқтату';
+
+  @override
+  String get shootExit => 'Шығу';
+
+  @override
+  String get shootCalibrateShort => 'Кalib.';
+
+  @override
+  String get shootArCameraActive => 'AR-кamera белсенді';
+
+  @override
+  String shootAngleLine(
+    String current,
+    String total,
+    String label,
+    String backend,
+  ) {
+    return 'Бұрыш $current/$total · $label · $backend';
+  }
 }

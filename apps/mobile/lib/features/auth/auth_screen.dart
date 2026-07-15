@@ -144,8 +144,9 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _submitRegister() async {
+    final l10n = AppLocalizations.of(context)!;
     if (!_consents) {
-      setState(() => _error = 'Примите условия сервиса');
+      setState(() => _error = l10n.authAcceptTerms);
       return;
     }
     setState(() {
@@ -246,7 +247,7 @@ class _AuthScreenState extends State<AuthScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пароль обновлён. Войдите с новым паролем')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.authPasswordUpdated)),
       );
       _password.clear();
       _newPassword.clear();
@@ -302,17 +303,17 @@ class _AuthScreenState extends State<AuthScreen> {
       case _AuthStep.login:
         return l10n.authTitle;
       case _AuthStep.register:
-        return 'Создайте аккаунт';
+        return l10n.authCreateAccount;
       case _AuthStep.verifyEmail:
-        return 'Подтверждение email';
+        return l10n.authVerifyEmail;
       case _AuthStep.accountType:
-        return 'Тип аккаунта';
+        return l10n.authAccountType;
       case _AuthStep.forgot:
-        return 'Восстановление пароля';
+        return l10n.authForgotPasswordTitle;
       case _AuthStep.resetConfirm:
-        return 'Новый пароль';
+        return l10n.authNewPasswordTitle;
       case _AuthStep.twoFa:
-        return 'Введите код 2FA';
+        return l10n.authTwoFaTitle;
     }
   }
 
@@ -324,15 +325,15 @@ class _AuthScreenState extends State<AuthScreen> {
       case _AuthStep.register:
         return l10n.register;
       case _AuthStep.verifyEmail:
-        return 'Подтвердить';
+        return l10n.confirm;
       case _AuthStep.accountType:
-        return 'Продолжить';
+        return l10n.continueBtn;
       case _AuthStep.forgot:
-        return 'Отправить ссылку';
+        return l10n.authSendLink;
       case _AuthStep.resetConfirm:
-        return 'Сохранить пароль';
+        return l10n.authSavePassword;
       case _AuthStep.twoFa:
-        return 'Подтвердить';
+        return l10n.confirm;
     }
   }
 
@@ -366,11 +367,11 @@ class _AuthScreenState extends State<AuthScreen> {
                   ],
                   if (_devCode != null && _step == _AuthStep.verifyEmail) ...[
                     const SizedBox(height: 8),
-                    Text('Dev-код: $_devCode', style: const TextStyle(color: AppColors.ozonPrimary)),
+                    Text(l10n.authDevCode(_devCode!), style: const TextStyle(color: AppColors.ozonPrimary)),
                   ],
                   if (_devResetToken != null && _step == _AuthStep.resetConfirm) ...[
                     const SizedBox(height: 8),
-                    Text('Dev-токен: $_devResetToken', style: const TextStyle(color: AppColors.ozonPrimary)),
+                    Text(l10n.authDevToken(_devResetToken!), style: const TextStyle(color: AppColors.ozonPrimary)),
                   ],
                   const SizedBox(height: 24),
                   ..._fields(l10n),
@@ -416,7 +417,7 @@ class _AuthScreenState extends State<AuthScreen> {
           FCheckbox(
             value: _rememberMe,
             onChange: (v) => setState(() => _rememberMe = v),
-            label: const Text('Запомнить меня'),
+            label: Text(l10n.authRememberMe),
           ),
         ];
       case _AuthStep.register:
@@ -437,7 +438,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 12),
           FTextField.password(
             control: FTextFieldControl.managed(controller: _passwordConfirm),
-            label: const Text('Подтверждение пароля'),
+            label: Text(l10n.authPasswordConfirm),
             autofillHints: const [AutofillHints.newPassword],
             textInputAction: TextInputAction.done,
           ),
@@ -445,16 +446,14 @@ class _AuthScreenState extends State<AuthScreen> {
           FCheckbox(
             value: _consents,
             onChange: (v) => setState(() => _consents = v),
-            label: const Text(
-              'Принимаю соглашение, политику ПДн, оферту, подтверждение прав и правила запрещённого контента',
-            ),
+            label: Text(l10n.authConsents),
           ),
         ];
       case _AuthStep.verifyEmail:
         return [
           FTextField(
             control: FTextFieldControl.managed(controller: _code),
-            label: const Text('Код из письма (6 цифр)'),
+            label: Text(l10n.authEmailCode),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             maxLength: 6,
@@ -469,7 +468,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: FButton(
                   variant: _accountType == 'individual' ? .primary : .outline,
                   onPress: () => setState(() => _accountType = 'individual'),
-                  child: const Text('Физ. лицо'),
+                  child: Text(l10n.authIndividual),
                 ),
               ),
               const SizedBox(width: 8),
@@ -477,7 +476,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: FButton(
                   variant: _accountType == 'legal' ? .primary : .outline,
                   onPress: () => setState(() => _accountType = 'legal'),
-                  child: const Text('Юр. лицо / ИП'),
+                  child: Text(l10n.authLegal),
                 ),
               ),
             ],
@@ -486,18 +485,18 @@ class _AuthScreenState extends State<AuthScreen> {
           if (_accountType == 'individual')
             FTextField(
               control: FTextFieldControl.managed(controller: _fullName),
-              label: const Text('ФИО (необязательно)'),
+              label: Text(l10n.authFullNameOptional),
               textInputAction: TextInputAction.done,
             )
           else ...[
-            _legalField(_companyName, 'Наименование организации'),
-            _legalField(_inn, 'ИНН', digits: true),
-            _legalField(_ogrn, 'ОГРН / ОГРНИП', digits: true),
-            _legalField(_legalAddress, 'Юридический адрес'),
-            _legalField(_directorName, 'ФИО руководителя'),
-            _legalField(_bankName, 'Банк'),
-            _legalField(_bik, 'БИК', digits: true),
-            _legalField(_checkingAccount, 'Расчётный счёт', digits: true),
+            _legalField(_companyName, l10n.authOrgName),
+            _legalField(_inn, l10n.authInn, digits: true),
+            _legalField(_ogrn, l10n.authOgrn, digits: true),
+            _legalField(_legalAddress, l10n.authLegalAddress),
+            _legalField(_directorName, l10n.authDirectorName),
+            _legalField(_bankName, l10n.authBankName),
+            _legalField(_bik, l10n.authBik, digits: true),
+            _legalField(_checkingAccount, l10n.authCheckingAccount, digits: true),
           ],
         ];
       case _AuthStep.forgot:
@@ -513,20 +512,20 @@ class _AuthScreenState extends State<AuthScreen> {
         return [
           FTextField(
             control: FTextFieldControl.managed(controller: _resetToken),
-            label: const Text('Токен из письма'),
+            label: Text(l10n.authResetToken),
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 12),
           FTextField.password(
             control: FTextFieldControl.managed(controller: _newPassword),
-            label: const Text('Новый пароль'),
+            label: Text(l10n.authNewPasswordField),
             autofillHints: const [AutofillHints.newPassword],
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 12),
           FTextField.password(
             control: FTextFieldControl.managed(controller: _newPasswordConfirm),
-            label: const Text('Подтверждение пароля'),
+            label: Text(l10n.authPasswordConfirm),
             autofillHints: const [AutofillHints.newPassword],
             textInputAction: TextInputAction.done,
           ),
@@ -535,7 +534,7 @@ class _AuthScreenState extends State<AuthScreen> {
         return [
           FTextField(
             control: FTextFieldControl.managed(controller: _totp),
-            label: const Text('Код из Authenticator'),
+            label: Text(l10n.authAuthenticatorCode),
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             maxLength: 6,
@@ -578,7 +577,7 @@ class _AuthScreenState extends State<AuthScreen> {
           FButton(
             variant: .ghost,
             onPress: () => _setStep(_AuthStep.login),
-            child: const Text('Уже есть аккаунт? Войти'),
+            child: Text(l10n.alreadyHaveAccount),
           ),
         ];
       case _AuthStep.verifyEmail:
@@ -586,7 +585,7 @@ class _AuthScreenState extends State<AuthScreen> {
           FButton(
             variant: .ghost,
             onPress: () => _setStep(_AuthStep.register),
-            child: const Text('Назад'),
+            child: Text(l10n.authBack),
           ),
         ];
       case _AuthStep.accountType:
@@ -594,7 +593,7 @@ class _AuthScreenState extends State<AuthScreen> {
           FButton(
             variant: .ghost,
             onPress: () => _setStep(_AuthStep.verifyEmail),
-            child: const Text('Назад'),
+            child: Text(l10n.authBack),
           ),
         ];
       case _AuthStep.forgot:
@@ -602,7 +601,7 @@ class _AuthScreenState extends State<AuthScreen> {
           FButton(
             variant: .ghost,
             onPress: () => _setStep(_AuthStep.login),
-            child: const Text('Назад ко входу'),
+            child: Text(l10n.authBackToLogin),
           ),
         ];
       case _AuthStep.resetConfirm:
@@ -610,7 +609,7 @@ class _AuthScreenState extends State<AuthScreen> {
           FButton(
             variant: .ghost,
             onPress: () => _setStep(_AuthStep.login),
-            child: const Text('Назад ко входу'),
+            child: Text(l10n.authBackToLogin),
           ),
         ];
       case _AuthStep.twoFa:
@@ -623,7 +622,7 @@ class _AuthScreenState extends State<AuthScreen> {
               _step = _AuthStep.login;
               _error = null;
             }),
-            child: const Text('Назад'),
+            child: Text(l10n.authBack),
           ),
         ];
     }

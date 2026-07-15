@@ -350,4 +350,269 @@ class AppLocalizationsZh extends AppLocalizations {
   String balanceLabel(String amount) {
     return '余额：$amount ₽';
   }
+
+  @override
+  String get exportShareText => '交易 §20.3.4';
+
+  @override
+  String get exportSuccess => 'CSV 已导出';
+
+  @override
+  String get open => '打开';
+
+  @override
+  String get notificationDefault => '通知';
+
+  @override
+  String get authCreateAccount => '创建账户';
+
+  @override
+  String get authVerifyEmail => '邮箱验证';
+
+  @override
+  String get authAccountType => '账户类型';
+
+  @override
+  String get authForgotPasswordTitle => '密码恢复';
+
+  @override
+  String get authNewPasswordTitle => '新密码';
+
+  @override
+  String get authTwoFaTitle => '输入 2FA 验证码';
+
+  @override
+  String get authSendLink => '发送链接';
+
+  @override
+  String get authSavePassword => '保存密码';
+
+  @override
+  String get authRememberMe => '记住我';
+
+  @override
+  String get authPasswordConfirm => '确认密码';
+
+  @override
+  String get authConsents => '我接受用户协议、隐私政策、要约、权利确认及禁止内容规则';
+
+  @override
+  String get authEmailCode => '邮件验证码（6 位）';
+
+  @override
+  String get authIndividual => '个人';
+
+  @override
+  String get authLegal => '法人 / 个体工商户';
+
+  @override
+  String get authFullNameOptional => '姓名（可选）';
+
+  @override
+  String get authOrgName => '组织名称';
+
+  @override
+  String get authInn => '税号';
+
+  @override
+  String get authOgrn => 'OGRN / OGRNIP';
+
+  @override
+  String get authLegalAddress => '法定地址';
+
+  @override
+  String get authDirectorName => '负责人姓名';
+
+  @override
+  String get authBankName => '银行';
+
+  @override
+  String get authBik => 'BIC';
+
+  @override
+  String get authCheckingAccount => '结算账户';
+
+  @override
+  String get authResetToken => '邮件中的令牌';
+
+  @override
+  String get authNewPasswordField => '新密码';
+
+  @override
+  String get authAuthenticatorCode => '验证器代码';
+
+  @override
+  String get authBack => '返回';
+
+  @override
+  String get authBackToLogin => '返回登录';
+
+  @override
+  String get authAcceptTerms => '请接受服务条款';
+
+  @override
+  String get authPasswordUpdated => '密码已更新，请用新密码登录';
+
+  @override
+  String authDevCode(String code) {
+    return 'Dev 码：$code';
+  }
+
+  @override
+  String authDevToken(String token) {
+    return 'Dev 令牌：$token';
+  }
+
+  @override
+  String get shootCategoryTitle => '商品类别';
+
+  @override
+  String get shootCategoryLabel => '类别';
+
+  @override
+  String get shootForbiddenCategories => '禁止类别';
+
+  @override
+  String get shootForbiddenHint => '若勾选 — 不会创建订单，不会扣款';
+
+  @override
+  String get shootAgeConfirmed => '年龄已验证';
+
+  @override
+  String get shootAgeConfirmedSub => '无需再次输入日期';
+
+  @override
+  String get shootBirthDate => '出生日期 (YYYY-MM-DD)';
+
+  @override
+  String get shootBirthDateHint => '验证成功后保存到个人资料';
+
+  @override
+  String get shootScaleRequired => '比例 (m) — 家具必填';
+
+  @override
+  String get shootCalibrationBtn => '校准：银行卡 / A4 / QR (§3.7)';
+
+  @override
+  String get shootLength => '长';
+
+  @override
+  String get shootWidth => '宽';
+
+  @override
+  String get shootHeight => '高';
+
+  @override
+  String get shootModelName => '模型名称（可选）';
+
+  @override
+  String get shootModelNameHint => '例如：Nike Air 运动鞋';
+
+  @override
+  String get shootTier => '套餐';
+
+  @override
+  String get shootGhostMeshHint => 'Ghost Mesh — 双指缩放';
+
+  @override
+  String get shootNext => '继续拍摄';
+
+  @override
+  String get shootAgeConfirmTitle => '确认您已满 18 岁';
+
+  @override
+  String get shootAgeConfirmBody => '请输入出生日期 (YYYY-MM-DD)。';
+
+  @override
+  String get shootInvalidDate => '日期无效 (YYYY-MM-DD)';
+
+  @override
+  String get shootAgeOnly18 => '仅 18 岁及以上可创建模型';
+
+  @override
+  String get shootBirthRequired => '请填写 18+ 出生日期';
+
+  @override
+  String get shootForbiddenTitle => '禁止类别';
+
+  @override
+  String get shootForbiddenBody => '您选择了禁止类别，订单将被拒绝且不退款。是否继续？';
+
+  @override
+  String get shootOrderBlocked => '不会创建订单 — 请更换类别';
+
+  @override
+  String shootStorageFree(String need, String free) {
+    return '请释放手机存储空间（需要 $need MB，可用约 $free MB）';
+  }
+
+  @override
+  String shootStorageFreeUnknown(String need) {
+    return '请释放手机存储空间（需要 $need MB）';
+  }
+
+  @override
+  String get shootQualityTitle => '质量检查';
+
+  @override
+  String get shootQualityLow => '照片质量较低，请改善拍摄条件';
+
+  @override
+  String get shootQualityLowTitle => '质量较低';
+
+  @override
+  String get shootQualityLowDialog => '部分帧质量较低，可能导致模型缺陷。是否继续？';
+
+  @override
+  String get yes => '是';
+
+  @override
+  String get no => '否';
+
+  @override
+  String get shootQualityContinue => '继续上传';
+
+  @override
+  String get shootQualityContinueForce => '忽略错误继续';
+
+  @override
+  String get shootQualityRestart => '从头重新拍摄';
+
+  @override
+  String shootArHint(String tier, String scale) {
+    return 'AR：套餐「$tier」，尺寸 $scale';
+  }
+
+  @override
+  String get shootTitle => '拍摄';
+
+  @override
+  String get shootOverheatTitle => '手机过热';
+
+  @override
+  String shootOverheatBody(String temp) {
+    return '电池温度 ≈ $temp°C（>45°C）。建议暂停直至冷却。继续将启用节能模式（15 FPS）。';
+  }
+
+  @override
+  String get shootAbort => '停止';
+
+  @override
+  String get shootExit => '退出';
+
+  @override
+  String get shootCalibrateShort => '校准';
+
+  @override
+  String get shootArCameraActive => 'AR 相机已激活';
+
+  @override
+  String shootAngleLine(
+    String current,
+    String total,
+    String label,
+    String backend,
+  ) {
+    return '角度 $current/$total · $label · $backend';
+  }
 }

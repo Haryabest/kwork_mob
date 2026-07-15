@@ -192,7 +192,9 @@ async def notify_topup_failed(db: AsyncSession, payment_id: str) -> None:
         data={
             "type": "topup_failed",
             "payment_id": payment_id,
-            "company_id": row.company_id,
+            "company_id": str(row.company_id) if row.company_id else "",
+            "dedup_key": f"topup_failed:{payment_id}",
+            "deeplink": "/home/balance",
         },
     )
 

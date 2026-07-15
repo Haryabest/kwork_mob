@@ -298,6 +298,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
   }
 
   Future<void> _exportCsv() async {
+    final l10n = AppLocalizations.of(context)!;
     if (widget.session.hidePrices) return;
     if (_corporateFinance && !widget.session.canViewFinance) return;
     setState(() => _exporting = true);
@@ -318,7 +319,12 @@ class _BalanceScreenState extends State<BalanceScreen> {
       final name = _corporateFinance ? 'company_transactions.csv' : 'transactions.csv';
       final file = File('${dir.path}/$name');
       await file.writeAsBytes(bytes);
-      await Share.shareXFiles([XFile(file.path)], text: 'Транзакции §20.3.4');
+      await Share.shareXFiles([XFile(file.path)], text: l10n.exportShareText);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.exportSuccess)),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
