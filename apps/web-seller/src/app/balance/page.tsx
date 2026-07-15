@@ -23,7 +23,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
 import { api, apiMessage } from '../../services/api';
-import { loadBalanceFilters, saveBalanceFilters } from '../../lib/balanceFilters';
+import { loadBalanceFilters, loadBalanceFiltersSynced, saveBalanceFiltersSynced } from '../../lib/balanceFilters';
 
 type Tx = {
   id: number | string;
@@ -94,25 +94,39 @@ export default function BalancePage() {
   const [filtersReady, setFiltersReady] = useState(false);
 
   useEffect(() => {
-    const saved = loadBalanceFilters();
-    if (saved.authorId != null) setAuthorId(saved.authorId);
-    if (saved.dateFrom) setDateFrom(saved.dateFrom);
-    if (saved.dateTo) setDateTo(saved.dateTo);
-    if (saved.txType) setTxType(saved.txType);
-    if (saved.pageSize) setPageSize(saved.pageSize);
-    setFiltersReady(true);
-  }, []);
+    let cancelled = false;
+    (async () => {
+      const saved = await loadBalanceFiltersSynced(
+        (path) => api.get(path),
+        corporate && canFinance,
+      );
+      if (cancelled) return;
+      if (saved.authorId != null) setAuthorId(saved.authorId);
+      if (saved.dateFrom) setDateFrom(saved.dateFrom);
+      if (saved.dateTo) setDateTo(saved.dateTo);
+      if (saved.txType) setTxType(saved.txType);
+      if (saved.pageSize) setPageSize(saved.pageSize);
+      setFiltersReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [corporate, canFinance]);
 
   useEffect(() => {
     if (!filtersReady) return;
-    saveBalanceFilters({
-      authorId,
-      dateFrom,
-      dateTo,
-      txType,
-      pageSize,
-    });
-  }, [filtersReady, authorId, dateFrom, dateTo, txType, pageSize]);
+    saveBalanceFiltersSynced(
+      (path, body) => api.put(path, body),
+      corporate && canFinance,
+      {
+        authorId,
+        dateFrom,
+        dateTo,
+        txType,
+        pageSize,
+      },
+    );
+  }, [filtersReady, corporate, canFinance, authorId, dateFrom, dateTo, txType, pageSize]);
 
   const memberLabel = useMemo(() => {
     const map = new Map<number, string>();

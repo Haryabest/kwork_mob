@@ -793,4 +793,75 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get guestLinkUsed => 'Link used. Company owner will be notified.';
+
+  @override
+  String get prefTopupFailed => 'Top-up failed';
+
+  @override
+  String homePendingUploadTitle(String uploaded, String total) {
+    return 'Incomplete photo upload ($uploaded/$total)';
+  }
+
+  @override
+  String get homePendingUploadHint =>
+      'Upload was interrupted. You can continue from the last frame.';
+
+  @override
+  String homeModePrefix(String mode) {
+    return 'Mode: $mode';
+  }
+
+  @override
+  String get homeNoCompanies => 'No linked companies';
+
+  @override
+  String get homeSwitchModeTitle => 'Switch mode?';
+
+  @override
+  String get homeSwitchModeBody => 'Confirm switching Personal / Company';
+
+  @override
+  String get homeShootLinkQr => 'Shoot via link (QR)';
+
+  @override
+  String get ordersExecutorFilter => 'Assignee §3.16.2';
+
+  @override
+  String get ordersAllMembers => 'All team members';
+
+  @override
+  String get ordersEmpty => 'No orders';
+
+  @override
+  String get orderStatusPending => 'New';
+
+  @override
+  String get orderStatusAwaitingPayment => 'Awaiting payment';
+
+  @override
+  String get orderStatusQueued => 'Queued';
+
+  @override
+  String get orderStatusProcessing => 'Processing';
+
+  @override
+  String get orderStatusCompleted => 'Ready';
+
+  @override
+  String get orderStatusFailed => 'Error';
+
+  @override
+  String get orderStatusCancelled => 'Cancelled';
+
+  @override
+  String get orderStatusPaid => 'Paid';
+
+  @override
+  String get orderStatusBlockedNsfw => 'NSFW block';
+
+  @override
+  String get notificationsTitle => 'Notifications';
+
+  @override
+  String get notificationsEmpty => 'No notifications';
 }

@@ -44,6 +44,7 @@ const PREF_LABELS: Record<string, string> = {
   source_expire: 'Истечение исходников',
   cleanup: 'Очистка хранилища',
   publish_reminder: 'Напоминание опубликовать',
+  topup_failed: 'Ошибка пополнения',
   email_orders: 'Email о заказах',
   email_balance: 'Email о балансе',
 };
@@ -81,6 +82,7 @@ export default function SettingsPage() {
       source_expire: true,
       cleanup: false,
       publish_reminder: true,
+      topup_failed: true,
       email_orders: true,
       email_balance: true,
       ...(m.data.notification_prefs || {}),

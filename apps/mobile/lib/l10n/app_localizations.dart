@@ -1552,6 +1552,138 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Ссылка использована. Владелец компании получит уведомление.'**
   String get guestLinkUsed;
+
+  /// No description provided for @prefTopupFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ошибка пополнения'**
+  String get prefTopupFailed;
+
+  /// No description provided for @homePendingUploadTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Незавершённая загрузка фото ({uploaded}/{total})'**
+  String homePendingUploadTitle(String uploaded, String total);
+
+  /// No description provided for @homePendingUploadHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузка прервалась. Можно продолжить с последнего кадра.'**
+  String get homePendingUploadHint;
+
+  /// No description provided for @homeModePrefix.
+  ///
+  /// In ru, this message translates to:
+  /// **'Режим: {mode}'**
+  String homeModePrefix(String mode);
+
+  /// No description provided for @homeNoCompanies.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет привязанных компаний'**
+  String get homeNoCompanies;
+
+  /// No description provided for @homeSwitchModeTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сменить режим?'**
+  String get homeSwitchModeTitle;
+
+  /// No description provided for @homeSwitchModeBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подтвердите переключение Личный / Компания'**
+  String get homeSwitchModeBody;
+
+  /// No description provided for @homeShootLinkQr.
+  ///
+  /// In ru, this message translates to:
+  /// **'Съёмка по ссылке (QR)'**
+  String get homeShootLinkQr;
+
+  /// No description provided for @ordersExecutorFilter.
+  ///
+  /// In ru, this message translates to:
+  /// **'Исполнитель §3.16.2'**
+  String get ordersExecutorFilter;
+
+  /// No description provided for @ordersAllMembers.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все сотрудники'**
+  String get ordersAllMembers;
+
+  /// No description provided for @ordersEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет заказов'**
+  String get ordersEmpty;
+
+  /// No description provided for @orderStatusPending.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новый'**
+  String get orderStatusPending;
+
+  /// No description provided for @orderStatusAwaitingPayment.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ожидает оплаты'**
+  String get orderStatusAwaitingPayment;
+
+  /// No description provided for @orderStatusQueued.
+  ///
+  /// In ru, this message translates to:
+  /// **'В очереди'**
+  String get orderStatusQueued;
+
+  /// No description provided for @orderStatusProcessing.
+  ///
+  /// In ru, this message translates to:
+  /// **'В обработке'**
+  String get orderStatusProcessing;
+
+  /// No description provided for @orderStatusCompleted.
+  ///
+  /// In ru, this message translates to:
+  /// **'Готов'**
+  String get orderStatusCompleted;
+
+  /// No description provided for @orderStatusFailed.
+  ///
+  /// In ru, this message translates to:
+  /// **'Ошибка'**
+  String get orderStatusFailed;
+
+  /// No description provided for @orderStatusCancelled.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отменён'**
+  String get orderStatusCancelled;
+
+  /// No description provided for @orderStatusPaid.
+  ///
+  /// In ru, this message translates to:
+  /// **'Оплачен'**
+  String get orderStatusPaid;
+
+  /// No description provided for @orderStatusBlockedNsfw.
+  ///
+  /// In ru, this message translates to:
+  /// **'NSFW блок'**
+  String get orderStatusBlockedNsfw;
+
+  /// No description provided for @notificationsTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Уведомления'**
+  String get notificationsTitle;
+
+  /// No description provided for @notificationsEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет уведомлений'**
+  String get notificationsEmpty;
 }
 
 class _AppLocalizationsDelegate

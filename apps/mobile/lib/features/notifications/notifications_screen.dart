@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -97,9 +98,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Уведомления §19.16'),
+        title: Text(l10n.notificationsTitle),
         prefixes: [FHeaderAction.back(onPress: () => context.pop())],
         suffixes: [
           FHeaderAction(
@@ -131,7 +133,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _items.isEmpty
-              ? const Center(child: Text('Нет уведомлений'))
+              ? Center(child: Text(l10n.notificationsEmpty))
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView.separated(

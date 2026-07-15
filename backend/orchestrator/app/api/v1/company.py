@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_db_user, get_current_db_user_optional, get_current_user
 from app.models import Company, CompanyInvitation, CompanyMember, Order, ShootLink, Transaction, User
+from app.schemas.balance_filters import CompanyBalanceFiltersBody
 from app.services import api_keys as api_keys_svc
 from app.services import photos as photos_service
 from app.services import tariffs as tariff_svc
@@ -915,6 +916,39 @@ async def export_company_transactions(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="company_transactions.csv"'},
     )
+
+
+@router.get("/balance-filters")
+async def get_company_balance_filters(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Saved company transaction filters for Manager/Owner §8 / §20.3.4."""
+    from app.services import balance_filters as bf
+    from app.services.access import company_for_permission
+
+    company = await company_for_permission(db, user, "can_view_finance")
+    return {
+        "scope": "company",
+        "company_id": company.id,
+        "filters": bf.get_company_filters(user, company.id),
+    }
+
+
+@router.put("/balance-filters")
+async def put_company_balance_filters(
+    body: CompanyBalanceFiltersBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist company transaction filters §8 / §20.3.4."""
+    from app.services import balance_filters as bf
+    from app.services.access import company_for_permission
+
+    company = await company_for_permission(db, user, "can_view_finance")
+    saved = await bf.save_company_filters(db, user, company.id, body.model_dump())
+    await db.commit()
+    return {"scope": "company", "company_id": company.id, "filters": saved}
 
 
 class WebhookCreate(BaseModel):

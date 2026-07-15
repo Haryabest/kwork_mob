@@ -184,6 +184,11 @@ async def notify_topup_failed(db: AsyncSession, payment_id: str) -> None:
     else:
         title = "Ошибка пополнения"
         body = f"Платёж на {row.amount} ₽ не прошёл."
+    from app.models import User
+
+    owner = await db.get(User, owner_id)
+    if owner and not push_svc.user_wants_notification(owner, "topup_failed"):
+        return
     await push_svc.send_to_user(
         db,
         owner_id,

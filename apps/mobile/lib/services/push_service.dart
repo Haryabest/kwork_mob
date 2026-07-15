@@ -277,6 +277,7 @@ class PushService {
       'source_expire': true,
       'cleanup': false,
       'publish_reminder': true,
+      'topup_failed': true,
     };
     try {
       final me = await _api.me();

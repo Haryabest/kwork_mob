@@ -798,4 +798,75 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get guestLinkUsed =>
       'Ссылка использована. Владелец компании получит уведомление.';
+
+  @override
+  String get prefTopupFailed => 'Ошибка пополнения';
+
+  @override
+  String homePendingUploadTitle(String uploaded, String total) {
+    return 'Незавершённая загрузка фото ($uploaded/$total)';
+  }
+
+  @override
+  String get homePendingUploadHint =>
+      'Загрузка прервалась. Можно продолжить с последнего кадра.';
+
+  @override
+  String homeModePrefix(String mode) {
+    return 'Режим: $mode';
+  }
+
+  @override
+  String get homeNoCompanies => 'Нет привязанных компаний';
+
+  @override
+  String get homeSwitchModeTitle => 'Сменить режим?';
+
+  @override
+  String get homeSwitchModeBody => 'Подтвердите переключение Личный / Компания';
+
+  @override
+  String get homeShootLinkQr => 'Съёмка по ссылке (QR)';
+
+  @override
+  String get ordersExecutorFilter => 'Исполнитель §3.16.2';
+
+  @override
+  String get ordersAllMembers => 'Все сотрудники';
+
+  @override
+  String get ordersEmpty => 'Нет заказов';
+
+  @override
+  String get orderStatusPending => 'Новый';
+
+  @override
+  String get orderStatusAwaitingPayment => 'Ожидает оплаты';
+
+  @override
+  String get orderStatusQueued => 'В очереди';
+
+  @override
+  String get orderStatusProcessing => 'В обработке';
+
+  @override
+  String get orderStatusCompleted => 'Готов';
+
+  @override
+  String get orderStatusFailed => 'Ошибка';
+
+  @override
+  String get orderStatusCancelled => 'Отменён';
+
+  @override
+  String get orderStatusPaid => 'Оплачен';
+
+  @override
+  String get orderStatusBlockedNsfw => 'NSFW блок';
+
+  @override
+  String get notificationsTitle => 'Уведомления';
+
+  @override
+  String get notificationsEmpty => 'Нет уведомлений';
 }

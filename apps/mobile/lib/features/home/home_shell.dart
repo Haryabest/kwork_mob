@@ -125,10 +125,11 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _switchMode() async {
+    final l10n = AppLocalizations.of(context)!;
     final session = widget.session;
     if (session.companies.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Нет привязанных компаний')),
+        SnackBar(content: Text(l10n.homeNoCompanies)),
       );
       return;
     }
@@ -139,13 +140,13 @@ class _HomeShellState extends State<HomeShell> {
         child: FTileGroup(
           children: [
             FTile(
-              title: const Text('Личный'),
+              title: Text(l10n.personalMode),
               selected: !session.corporate,
               onPress: () => Navigator.pop(ctx, 'personal'),
             ),
             ...session.companies.map(
               (c) => FTile(
-                title: Text(c['name']?.toString() ?? 'Компания'),
+                title: Text(c['name']?.toString() ?? l10n.corporateMode),
                 subtitle: Text(c['role']?.toString() ?? ''),
                 selected: session.corporate && session.companyId == c['id'],
                 onPress: () => Navigator.pop(ctx, c),
@@ -159,11 +160,11 @@ class _HomeShellState extends State<HomeShell> {
     final confirmed = await showFDialog<bool>(
       context: context,
       builder: (ctx, style, animation) => FDialog(
-        title: const Text('Сменить режим?'),
-        body: const Text('Подтвердите переключение Личный / Компания'),
+        title: Text(l10n.homeSwitchModeTitle),
+        body: Text(l10n.homeSwitchModeBody),
         actions: [
-          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
-          FButton(onPress: () => Navigator.pop(ctx, true), child: const Text('Подтвердить')),
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: Text(l10n.confirm)),
         ],
       ),
     );
@@ -372,8 +373,10 @@ class _HomeTabState extends State<_HomeTab> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Незавершённая загрузка фото '
-                          '(${_pendingUpload!.uploaded}/${_pendingUpload!.total})',
+                          l10n.homePendingUploadTitle(
+                            '${_pendingUpload!.uploaded}',
+                            '${_pendingUpload!.total}',
+                          ),
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
                             color: AppColors.ozonPrimary,
@@ -384,7 +387,7 @@ class _HomeTabState extends State<_HomeTab> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Загрузка прервалась. Можно продолжить с последнего кадра.',
+                    l10n.homePendingUploadHint,
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
                   const SizedBox(height: 10),
@@ -396,7 +399,7 @@ class _HomeTabState extends State<_HomeTab> {
                       );
                       await refreshPending();
                     },
-                    child: const Text('Продолжить загрузку'),
+                    child: Text(l10n.uploadContinue),
                   ),
                 ],
               ),
@@ -408,7 +411,7 @@ class _HomeTabState extends State<_HomeTab> {
         if (!session.hidePrices && session.balance != null) ...[
           const SizedBox(height: 4),
           Text(
-            'Баланс: ${session.balance!.toStringAsFixed(0)} ₽',
+            l10n.balanceLabel(session.balance!.toStringAsFixed(0)),
             style: const TextStyle(color: AppColors.ozonPrimary, fontWeight: FontWeight.w600),
           ),
         ],
@@ -416,7 +419,7 @@ class _HomeTabState extends State<_HomeTab> {
         FButton(
           variant: .outline,
           onPress: widget.onSwitchMode,
-          child: Text('Режим: $modeLabel'),
+          child: Text(l10n.homeModePrefix(modeLabel)),
         ),
         const SizedBox(height: 24),
         FButton(
@@ -431,7 +434,7 @@ class _HomeTabState extends State<_HomeTab> {
             variant: .outline,
             onPress: widget.onShootLink,
             prefix: const Icon(FIcons.qrCode),
-            child: const Text('Съёмка по ссылке (QR)'),
+            child: Text(l10n.homeShootLinkQr),
           ),
         ],
       ],
@@ -454,16 +457,16 @@ class _OrdersTabState extends State<_OrdersTab> {
   int _authorFilter = -1;
   bool _loading = true;
 
-  static const _statusLabel = {
-    'pending': 'Новый',
-    'awaiting_payment': 'Ожидает оплаты',
-    'queued': 'В очереди',
-    'processing': 'В обработке',
-    'completed': 'Готов',
-    'failed': 'Ошибка',
-    'cancelled': 'Отменён',
-    'paid': 'Оплачен',
-    'blocked_nsfw': 'NSFW блок',
+  static Map<String, String> _statusLabels(AppLocalizations l10n) => {
+    'pending': l10n.orderStatusPending,
+    'awaiting_payment': l10n.orderStatusAwaitingPayment,
+    'queued': l10n.orderStatusQueued,
+    'processing': l10n.orderStatusProcessing,
+    'completed': l10n.orderStatusCompleted,
+    'failed': l10n.orderStatusFailed,
+    'cancelled': l10n.orderStatusCancelled,
+    'paid': l10n.orderStatusPaid,
+    'blocked_nsfw': l10n.orderStatusBlockedNsfw,
   };
 
   @override
@@ -494,7 +497,8 @@ class _OrdersTabState extends State<_OrdersTab> {
     if (mounted) setState(() => _loading = false);
   }
 
-  String _statusText(String? status) => _statusLabel[status ?? ''] ?? status ?? '—';
+  String _statusText(String? status, AppLocalizations l10n) =>
+      _statusLabels(l10n)[status ?? ''] ?? status ?? '—';
 
   Color _statusColor(String? status) {
     switch (status) {
@@ -525,6 +529,7 @@ class _OrdersTabState extends State<_OrdersTab> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     if (_loading) return const Center(child: CircularProgressIndicator());
     return Column(
       children: [
@@ -532,7 +537,7 @@ class _OrdersTabState extends State<_OrdersTab> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 48, 16, 0),
             child: FSelect<int>(
-              label: const Text('Исполнитель §3.16.2'),
+              label: Text(l10n.ordersExecutorFilter),
               control: FSelectControl.managed(
                 initial: _authorFilter,
                 onChange: (v) {
@@ -541,7 +546,7 @@ class _OrdersTabState extends State<_OrdersTab> {
                 },
               ),
               items: {
-                'Все сотрудники': -1,
+                l10n.ordersAllMembers: -1,
                 for (final m in _members)
                   _authorLabel(m['user_id'] as int?): m['user_id'] as int,
               },
@@ -549,7 +554,7 @@ class _OrdersTabState extends State<_OrdersTab> {
           ),
         Expanded(
           child: _items.isEmpty
-              ? const Center(child: Text('Нет заказов'))
+              ? Center(child: Text(l10n.ordersEmpty))
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                   itemCount: _items.length,
@@ -557,7 +562,7 @@ class _OrdersTabState extends State<_OrdersTab> {
                     final o = _items[i];
                     final status = o['status']?.toString();
                     return FTile(
-                      title: Text('#${o['id']} · ${_statusText(status)}'),
+                      title: Text('#${o['id']} · ${_statusText(status, l10n)}'),
                       subtitle: Text(
                         '${o['category']} · ${o['tier']}'
                         '${widget.session.canFilterCompanyOrders && o['user_id'] != null ? ' · ${_authorLabel(o['user_id'] as int?)}' : ''}',
@@ -625,6 +630,7 @@ class _ProfileTabState extends State<_ProfileTab> {
     'source_expire': 'Истечение исходников',
     'cleanup': 'Очистка хранилища',
     'publish_reminder': 'Напоминание опубликовать',
+    'topup_failed': 'Ошибка пополнения',
   };
 
   @override
@@ -1025,10 +1031,11 @@ class _ProfileTabState extends State<_ProfileTab> {
           (e) {
             final channelsOn =
                 (_prefs['push_enabled'] ?? true) || (_prefs['email_enabled'] ?? true);
+            final label = e.key == 'topup_failed' ? l10n.prefTopupFailed : e.value;
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: FSwitch(
-                label: Text(e.value),
+                label: Text(label),
                 value: _prefs[e.key] ?? true,
                 onChange: channelsOn ? (v) => _togglePref(e.key, v) : null,
               ),

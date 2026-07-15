@@ -70,7 +70,10 @@ class _BalanceScreenState extends State<BalanceScreen> {
   }
 
   Future<void> _restoreFilters() async {
-    final saved = await BalanceFiltersPrefs.instance.load();
+    final saved = await BalanceFiltersPrefs.instance.loadSynced(
+      widget.api,
+      company: _corporateFinance,
+    );
     if (saved.isNotEmpty) {
       _dateFrom.text = saved['date_from']?.toString() ?? '';
       _dateTo.text = saved['date_to']?.toString() ?? '';
@@ -82,7 +85,9 @@ class _BalanceScreenState extends State<BalanceScreen> {
   }
 
   Future<void> _persistFilters() async {
-    await BalanceFiltersPrefs.instance.save(
+    await BalanceFiltersPrefs.instance.saveSynced(
+      widget.api,
+      company: _corporateFinance,
       dateFrom: _dateFrom.text.trim(),
       dateTo: _dateTo.text.trim(),
       txType: _txType,

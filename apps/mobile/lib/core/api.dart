@@ -696,6 +696,26 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> getBalanceFilters() async {
+    final res = await _dio.get('/user/balance-filters');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> putBalanceFilters(Map<String, dynamic> payload) async {
+    final res = await _dio.put('/user/balance-filters', data: payload);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getCompanyBalanceFilters() async {
+    final res = await _dio.get('/company/balance-filters');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> putCompanyBalanceFilters(Map<String, dynamic> payload) async {
+    final res = await _dio.put('/company/balance-filters', data: payload);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<List<Map<String, dynamic>>> listTransactions({
     String? dateFrom,
     String? dateTo,

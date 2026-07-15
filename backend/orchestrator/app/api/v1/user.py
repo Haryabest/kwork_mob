@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.security import get_current_db_user
 from app.models import DeviceToken, Model3D, Order, Transaction, User
 from app.schemas.auth import AccountTypeRequest
+from app.schemas.balance_filters import BalanceFiltersBody, CompanyBalanceFiltersBody
 from app.services import auth as auth_service
 from app.services import pii as pii_svc
 
@@ -87,6 +88,7 @@ async def update_me(
             "email_orders",
             "email_balance",
             "nsfw_blocked",
+            "topup_failed",
             "export_format",
         }
         cur = dict(user.notification_prefs or {})
@@ -125,6 +127,28 @@ async def account_type(
 @router.get("/balance")
 async def get_balance(user: User = Depends(get_current_db_user)):
     return {"balance": user.balance, "currency": "RUB"}
+
+
+@router.get("/balance-filters")
+async def get_balance_filters(user: User = Depends(get_current_db_user)):
+    """Saved personal transaction filters §20.3.4."""
+    from app.services import balance_filters as bf
+
+    return {"scope": "personal", "filters": bf.get_personal_filters(user)}
+
+
+@router.put("/balance-filters")
+async def put_balance_filters(
+    body: BalanceFiltersBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist personal transaction filters §20.3.4."""
+    from app.services import balance_filters as bf
+
+    saved = await bf.save_personal_filters(db, user, body.model_dump())
+    await db.commit()
+    return {"scope": "personal", "filters": saved}
 
 
 @router.get("/transactions")

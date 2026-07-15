@@ -799,4 +799,75 @@ class AppLocalizationsKk extends AppLocalizations {
   @override
   String get guestLinkUsed =>
       'Сілтеме пайдаланылды. Компания иесіне хабарланады.';
+
+  @override
+  String get prefTopupFailed => 'Толықтыру қатесі';
+
+  @override
+  String homePendingUploadTitle(String uploaded, String total) {
+    return 'Аяқталмаған фото жүктеу ($uploaded/$total)';
+  }
+
+  @override
+  String get homePendingUploadHint =>
+      'Жүктеу үзілді. Соңғы кадрдан жалғастыруға болады.';
+
+  @override
+  String homeModePrefix(String mode) {
+    return 'Режим: $mode';
+  }
+
+  @override
+  String get homeNoCompanies => 'Байланған компаниялар жоқ';
+
+  @override
+  String get homeSwitchModeTitle => 'Режимді ауыстыру?';
+
+  @override
+  String get homeSwitchModeBody => 'Жеке / Компания ауыстыруды растаңыз';
+
+  @override
+  String get homeShootLinkQr => 'Ссылка бойынша түсіру (QR)';
+
+  @override
+  String get ordersExecutorFilter => 'Орындаушы §3.16.2';
+
+  @override
+  String get ordersAllMembers => 'Барлық қызметкерлер';
+
+  @override
+  String get ordersEmpty => 'Тапсырыстар жоқ';
+
+  @override
+  String get orderStatusPending => 'Жаңа';
+
+  @override
+  String get orderStatusAwaitingPayment => 'Төлем күтілуде';
+
+  @override
+  String get orderStatusQueued => 'Кезекте';
+
+  @override
+  String get orderStatusProcessing => 'Өңделуде';
+
+  @override
+  String get orderStatusCompleted => 'Дайын';
+
+  @override
+  String get orderStatusFailed => 'Қате';
+
+  @override
+  String get orderStatusCancelled => 'Бас тартылды';
+
+  @override
+  String get orderStatusPaid => 'Төленді';
+
+  @override
+  String get orderStatusBlockedNsfw => 'NSFW блок';
+
+  @override
+  String get notificationsTitle => 'Хабарландырулар';
+
+  @override
+  String get notificationsEmpty => 'Хабарландырулар жоқ';
 }

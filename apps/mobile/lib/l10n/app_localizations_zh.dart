@@ -780,4 +780,74 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get guestLinkUsed => '链接已使用。企业所有者将收到通知。';
+
+  @override
+  String get prefTopupFailed => '充值失败';
+
+  @override
+  String homePendingUploadTitle(String uploaded, String total) {
+    return '未完成的照片上传 ($uploaded/$total)';
+  }
+
+  @override
+  String get homePendingUploadHint => '上传已中断，可从最后一帧继续。';
+
+  @override
+  String homeModePrefix(String mode) {
+    return '模式：$mode';
+  }
+
+  @override
+  String get homeNoCompanies => '没有关联的公司';
+
+  @override
+  String get homeSwitchModeTitle => '切换模式？';
+
+  @override
+  String get homeSwitchModeBody => '确认切换个人 / 公司';
+
+  @override
+  String get homeShootLinkQr => '链接拍摄 (QR)';
+
+  @override
+  String get ordersExecutorFilter => '执行人 §3.16.2';
+
+  @override
+  String get ordersAllMembers => '全部员工';
+
+  @override
+  String get ordersEmpty => '暂无订单';
+
+  @override
+  String get orderStatusPending => '新建';
+
+  @override
+  String get orderStatusAwaitingPayment => '待付款';
+
+  @override
+  String get orderStatusQueued => '排队中';
+
+  @override
+  String get orderStatusProcessing => '处理中';
+
+  @override
+  String get orderStatusCompleted => '已完成';
+
+  @override
+  String get orderStatusFailed => '错误';
+
+  @override
+  String get orderStatusCancelled => '已取消';
+
+  @override
+  String get orderStatusPaid => '已付款';
+
+  @override
+  String get orderStatusBlockedNsfw => 'NSFW 拦截';
+
+  @override
+  String get notificationsTitle => '通知';
+
+  @override
+  String get notificationsEmpty => '暂无通知';
 }
