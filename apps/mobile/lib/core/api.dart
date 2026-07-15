@@ -295,6 +295,37 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
+    final res = await _dio.patch('/user/me', data: data);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listDraftBackups() async {
+    final res = await _dio.get('/user/draft-backups');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> prepareDraftBackup({
+    required String modelUuid,
+    String? category,
+    int capturedCount = 0,
+    String? tier,
+  }) async {
+    final res = await _dio.post('/user/draft-backups/prepare', data: {
+      'model_uuid': modelUuid,
+      if (category != null) 'category': category,
+      'captured_count': capturedCount,
+      if (tier != null) 'tier': tier,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> restoreDraftBackup(String modelUuid) async {
+    final res = await _dio.get('/user/draft-backups/$modelUuid/restore');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> patchMe(Map<String, dynamic> payload) async {
     final res = await _dio.patch('/user/me', data: payload);
     return Map<String, dynamic>.from(res.data as Map);

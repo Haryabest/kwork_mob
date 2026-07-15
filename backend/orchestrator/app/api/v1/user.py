@@ -36,6 +36,7 @@ def _user_payload(user: User) -> dict:
         "email": user.email,
         "full_name": pii["full_name"],
         "phone": pii["phone"],
+        "inn": pii["inn"],
         "account_type": user.account_type,
         "status": user.status,
         "email_verified": user.email_verified,
@@ -48,6 +49,7 @@ def _user_payload(user: User) -> dict:
         "date_of_birth": user.date_of_birth.isoformat() if user.date_of_birth else None,
         "age_verified": bool(user.age_verified_at),
         "created_at": user.created_at.isoformat() if user.created_at else None,
+        "export_format": (user.notification_prefs or {}).get("export_format", "glb"),
     }
 
 
@@ -66,10 +68,10 @@ async def update_me(
 ):
     """Обновление профиля (ФИО, телефон, маркетинг)."""
     changed: list[str] = []
-    if "full_name" in payload or "phone" in payload:
+    if "full_name" in payload or "phone" in payload or "inn" in payload:
         changed = pii_svc.encrypt_user_fields(
             user,
-            {k: payload[k] for k in ("full_name", "phone") if k in payload},
+            {k: payload[k] for k in ("full_name", "phone", "inn") if k in payload},
         )
     if "marketing_opt_in" in payload:
         user.marketing_opt_in = bool(payload["marketing_opt_in"])
@@ -84,11 +86,16 @@ async def update_me(
             "email_enabled",
             "email_orders",
             "email_balance",
+            "export_format",
         }
         cur = dict(user.notification_prefs or {})
         for k, v in payload["notification_prefs"].items():
             if k in allowed:
                 cur[k] = bool(v)
+        user.notification_prefs = cur
+    if "export_format" in payload and payload["export_format"] in ("glb", "usdz"):
+        cur = dict(user.notification_prefs or {})
+        cur["export_format"] = payload["export_format"]
         user.notification_prefs = cur
     if changed:
         ip = request.client.host if request.client else None
@@ -309,3 +316,48 @@ async def unregister_device(
         await db.delete(row)
         await db.commit()
     return {"ok": True}
+
+
+class DraftBackupPrepareBody(BaseModel):
+    model_uuid: str = Field(min_length=36, max_length=36)
+    category: str | None = None
+    captured_count: int = Field(default=0, ge=0, le=12)
+    tier: str | None = None
+
+
+@router.get("/draft-backups")
+async def list_draft_backups(user: User = Depends(get_current_db_user)):
+    """Список облачных черновиков TTL 7 дней §3.3.2."""
+    from app.services import draft_backup as dbk
+
+    return {"items": dbk.list_backups(user.id), "ttl_days": dbk.TTL_DAYS}
+
+
+@router.post("/draft-backups/prepare")
+async def prepare_draft_backup(
+    body: DraftBackupPrepareBody,
+    user: User = Depends(get_current_db_user),
+):
+    """Presigned upload ZIP черновика."""
+    from app.services import draft_backup as dbk
+
+    return dbk.prepare_upload(
+        user.id,
+        body.model_uuid,
+        metadata={
+            "category": body.category,
+            "captured_count": body.captured_count,
+            "tier": body.tier,
+        },
+    )
+
+
+@router.get("/draft-backups/{model_uuid}/restore")
+async def restore_draft_backup(
+    model_uuid: str,
+    user: User = Depends(get_current_db_user),
+):
+    """Presigned download для восстановления черновика §3.3.2."""
+    from app.services import draft_backup as dbk
+
+    return dbk.restore_download(user.id, model_uuid)

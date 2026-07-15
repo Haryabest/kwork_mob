@@ -196,6 +196,21 @@ class ShootStorage {
     return ShootDraft.fromJson(j);
   }
 
+  /// ZIP только загруженных ракурсов (для облачного бэкапа §3.3.2).
+  Future<List<int>> buildPartialZipBytes(ShootDraft draft) async {
+    final archive = Archive();
+    final photos = await listPhotos(draft.modelUuid);
+    for (var i = 0; i < kGuidedDomeCount; i++) {
+      final f = photos[i];
+      if (f == null) continue;
+      final bytes = await f.readAsBytes();
+      archive.addFile(ArchiveFile(kGuidedDomeAngles[i].filename, bytes.length, bytes));
+    }
+    final metaBytes = utf8.encode(jsonEncode(draft.toJson()));
+    archive.addFile(ArchiveFile('metadata.json', metaBytes.length, metaBytes));
+    return ZipEncoder().encode(archive)!;
+  }
+
   /// ZIP 12 JPEG + metadata.json, SHA-256 (§3.6.3).
   Future<({File zip, String sha256})> buildZip(ShootDraft draft) async {
     final archive = Archive();

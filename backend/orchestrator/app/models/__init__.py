@@ -17,6 +17,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str | None] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(32))
+    inn: Mapped[str | None] = mapped_column(String(255))
     account_type: Mapped[str | None] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(String(30), default="pending_email")
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)

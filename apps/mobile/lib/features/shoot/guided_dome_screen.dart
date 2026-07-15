@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
+import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
@@ -17,7 +18,9 @@ import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/services/gyro_guide.dart';
 import 'package:kwork_mobile/services/quality_analyzer.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
+import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
 import 'package:kwork_mobile/services/thermal_monitor.dart';
+import 'package:kwork_mobile/widgets/native_ar_preview.dart';
 import 'package:kwork_mobile/widgets/ar_markers_overlay.dart';
 import 'package:kwork_mobile/widgets/ghost_mesh.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -38,12 +41,14 @@ class GuidedDomeScreen extends StatefulWidget {
     required this.modelUuid,
     this.reshootIndex,
     this.flowBase = '/home/shoot',
+    this.api,
   });
 
   final String modelUuid;
   final int? reshootIndex;
   /// Префикс маршрута: `/home/shoot` или `/shoot/{token}`.
   final String flowBase;
+  final ApiClient? api;
 
   @override
   State<GuidedDomeScreen> createState() => _GuidedDomeScreenState();
@@ -71,6 +76,8 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   double _ghostScale = 1.0;
   File? _prevFrame;
   double _yawOffsetDeg = 0;
+  int? _arTextureId;
+  bool _nativeCamera = false;
 
   @override
   void initState() {
@@ -122,30 +129,47 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         orElse: () => cameras.first,
       );
       _cameraDesc = back;
-      await DeviceBenchmark.instance.loadPersisted();
-      await _openCamera(
-        back,
-        DeviceBenchmark.instance.cameraPreset,
-      );
+      final nativeFirst = await ArSessionFactory.create(preferNative: true);
+      final nativeOk = nativeFirst.backend != ArBackend.gyroFallback;
+      if (!nativeOk) {
+        await DeviceBenchmark.instance.loadPersisted();
+        await _openCamera(
+          back,
+          DeviceBenchmark.instance.cameraPreset,
+        );
+      }
       if (!mounted) return;
       await _thermal.start();
       _thermal.addListener(_onThermal);
       try {
-        _ar = await ArSessionFactory.create(preferNative: true);
+        _ar = nativeFirst;
         _arBackend = _ar!.backend;
-        await _ar!.start();
-        _ar!.addListener(_onArUpdate);
-        if (_ar is GyroArSession) {
-          _gyro = (_ar as GyroArSession).guide;
-        } else if (_ar is NativeArBridge) {
-          _gyro = GyroGuide()..start()..calibrateYaw();
-          _gyro!.addListener(_onArUpdate);
+        if (nativeOk) {
+          final started = await _ar!.start();
+          if (started) {
+            _ar!.addListener(_onArUpdate);
+            if (_ar is NativeArBridge) {
+              final bridge = _ar as NativeArBridge;
+              _arTextureId = bridge.textureId;
+              _nativeCamera = true;
+              _gyro = GyroGuide()..start()..calibrateYaw();
+              _gyro!.addListener(_onArUpdate);
+            }
+          } else {
+            _ar = null;
+            await DeviceBenchmark.instance.loadPersisted();
+            await _openCamera(back, DeviceBenchmark.instance.cameraPreset);
+          }
         } else {
-          _gyro = GyroGuide()..start()..calibrateYaw();
+          _gyro = (_ar as GyroArSession).guide;
           _gyro!.addListener(_onArUpdate);
         }
       } catch (_) {
         _ensureGyro();
+        if (_cam == null) {
+          await DeviceBenchmark.instance.loadPersisted();
+          await _openCamera(back, DeviceBenchmark.instance.cameraPreset);
+        }
       }
       _ready = true;
       setState(() {});
@@ -305,7 +329,8 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   }
 
   bool get _canShoot {
-    if (!_ready || _busy || _cam == null) return false;
+    if (!_ready || _busy) return false;
+    if (!_nativeCamera && _cam == null) return false;
     if (_bypassGyroGate) return true;
     if (_usesNativeAr) {
       final angle = kGuidedDomeAngles[_index];
@@ -318,7 +343,8 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   }
 
   Future<void> _shutter() async {
-    if (!_canShoot || _cam == null) return;
+    if (!_canShoot) return;
+    if (!_nativeCamera && _cam == null) return;
     if (!_bypassGyroGate && !_usesNativeAr && _gyro == null) return;
     final minGap = Duration(milliseconds: (1000 / _thermal.targetFps).round());
     final last = _lastShutterAt;
@@ -347,11 +373,18 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
     setState(() => _busy = true);
     try {
       _lastShutterAt = DateTime.now();
-      final shot = await _cam!.takePicture();
-      final bytes = await File(shot.path).readAsBytes();
+      late List<int> bytes;
+      if (_nativeCamera && _ar is NativeArBridge) {
+        final raw = await (_ar as NativeArBridge).capturePhoto();
+        if (raw == null) throw StateError('AR capture failed');
+        bytes = raw;
+      } else {
+        final shot = await _cam!.takePicture();
+        bytes = await File(shot.path).readAsBytes();
+        await File(shot.path).delete().catchError((_) => File(shot.path));
+      }
       final gate = QualityAnalyzer.instance.liveGate(bytes);
       if (!_bypassQualityGate && (!gate.centered || !gate.fillOk)) {
-        await File(shot.path).delete().catchError((_) => File(shot.path));
         setState(() {
           _busy = false;
           _crosshairOk = false;
@@ -360,7 +393,12 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         return;
       }
       await ShootStorage.instance.savePhoto(widget.modelUuid, _index, bytes);
-      await File(shot.path).delete().catchError((_) => File(shot.path));
+      final draft = await ShootStorage.instance.loadDraft(widget.modelUuid);
+      if (draft != null && widget.api != null) {
+        try {
+          await CloudDraftBackupService.instance.syncDraft(widget.api!, draft);
+        } catch (_) {}
+      }
 
       if (await Vibration.hasVibrator()) {
         await Vibration.vibrate(duration: 40);
@@ -485,7 +523,16 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (_cam != null && _cam!.value.isInitialized)
+            if (_arTextureId != null)
+              Center(child: NativeArPreview(textureId: _arTextureId!))
+            else if (_nativeCamera)
+              const Center(
+                child: Text(
+                  'AR-камера активна',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              )
+            else if (_cam != null && _cam!.value.isInitialized)
               Center(child: CameraPreview(_cam!))
             else
               const Center(child: CircularProgressIndicator()),

@@ -10,6 +10,7 @@ import 'package:kwork_mobile/features/models/model_viewer_screen.dart';
 import 'package:kwork_mobile/features/support/faq_support_screen.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/push_service.dart';
+import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
 
@@ -370,6 +371,8 @@ class _ProfileTabState extends State<_ProfileTab> {
   final _oldPass = TextEditingController();
   final _newPass = TextEditingController();
   final _newPass2 = TextEditingController();
+  final _fullName = TextEditingController();
+  final _inn = TextEditingController();
   bool _changingPass = false;
   bool _deleting = false;
 
@@ -393,11 +396,16 @@ class _ProfileTabState extends State<_ProfileTab> {
     _oldPass.dispose();
     _newPass.dispose();
     _newPass2.dispose();
+    _fullName.dispose();
+    _inn.dispose();
     super.dispose();
   }
 
   Future<void> _boot() async {
     final prefs = await widget.push.loadPrefs();
+    _fullName.text = widget.session.fullName ?? '';
+    _inn.text = widget.session.inn ?? '';
+    await ExportPrefsService.instance.load();
     try {
       final st = await widget.api.twoFaStatus();
       _totpEnabled = st['totp_enabled'] == true;
@@ -454,6 +462,35 @@ class _ProfileTabState extends State<_ProfileTab> {
     } finally {
       if (mounted) setState(() => _loading2fa = false);
     }
+  }
+
+  Future<void> _saveProfile() async {
+    try {
+      final me = await widget.api.updateProfile({
+        'full_name': _fullName.text.trim(),
+        'inn': _inn.text.trim(),
+      });
+      widget.session.applyMe(me);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Профиль сохранён')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveExportFormat(ExportFormat fmt) async {
+    await ExportPrefsService.instance.setFormat(fmt);
+    try {
+      await widget.api.updateProfile({'export_format': fmt == ExportFormat.usdz ? 'usdz' : 'glb'});
+    } catch (_) {}
+    if (mounted) setState(() {});
   }
 
   Future<void> _changePassword() async {
@@ -617,6 +654,34 @@ class _ProfileTabState extends State<_ProfileTab> {
               prefix: const Icon(FIcons.languages),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        FTextField(
+          control: FTextFieldControl.managed(controller: _fullName),
+          label: const Text('ФИО (необязательно) §19.14.1'),
+        ),
+        const SizedBox(height: 8),
+        FTextField(
+          control: FTextFieldControl.managed(controller: _inn),
+          label: const Text('ИНН (необязательно) §19.14.1'),
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 8),
+        FButton(onPress: _saveProfile, child: const Text('Сохранить профиль')),
+        const SizedBox(height: 16),
+        FSelect<String>(
+          label: const Text('Формат экспорта §19.14.3'),
+          control: FSelectControl.managed(
+            initial: ExportPrefsService.instance.format == ExportFormat.usdz ? 'usdz' : 'glb',
+            onChange: (v) async {
+              if (v == null) return;
+              await _saveExportFormat(v == 'usdz' ? ExportFormat.usdz : ExportFormat.glb);
+            },
+          ),
+          items: const {
+            '.glb (Ozon / универсальный)': 'glb',
+            '.usdz (Wildberries / AR)': 'usdz',
+          },
         ),
         const SizedBox(height: 8),
         FSelect<String>(

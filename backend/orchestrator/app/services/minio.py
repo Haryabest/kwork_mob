@@ -376,5 +376,13 @@ class MinioService:
             except Exception:  # noqa: BLE001
                 pass
 
+    def list_objects(self, bucket: str, prefix: str = "") -> list[str]:
+        keys: list[str] = []
+        paginator = self.client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents") or []:
+                keys.append(obj["Key"])
+        return keys
+
 
 minio_service = MinioService()

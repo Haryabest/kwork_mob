@@ -8,6 +8,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
+import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -552,8 +553,10 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
   Future<void> _download(String marketplace) async {
     setState(() => _busy = true);
     try {
+      final fmt = ExportPrefsService.instance.apiFormat;
       final res = await widget.api.downloadModel(
         modelUuid: widget.modelUuid,
+        format: fmt,
         marketplace: marketplace,
       );
       final url = res['download_url']?.toString();

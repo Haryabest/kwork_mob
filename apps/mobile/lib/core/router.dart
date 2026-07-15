@@ -24,6 +24,8 @@ import 'package:kwork_mobile/features/calibration/calibration_wizard_screen.dart
 import 'package:kwork_mobile/features/notifications/notifications_screen.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
+import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
+import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/push_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -76,11 +78,13 @@ GoRouter createRouter({
                   modelUuid: extra['uuid'] as String,
                   reshootIndex: extra['reshoot'] as int?,
                   flowBase: base,
+                  api: api,
                 );
               }
               return GuidedDomeScreen(
                 modelUuid: extra as String,
                 flowBase: base,
+                api: api,
               );
             },
           ),
@@ -127,9 +131,10 @@ GoRouter createRouter({
                 return GuidedDomeScreen(
                   modelUuid: extra['uuid'] as String,
                   reshootIndex: extra['reshoot'] as int?,
+                  api: api,
                 );
               }
-              return GuidedDomeScreen(modelUuid: extra as String);
+              return GuidedDomeScreen(modelUuid: extra as String, api: api);
             },
           ),
           GoRoute(
@@ -254,6 +259,9 @@ class _SplashScreenState extends State<_SplashScreen> {
       try {
         final me = await widget.api.me();
         widget.session.applyMe(me);
+        await ExportPrefsService.instance.load(
+          fromServer: me['export_format']?.toString(),
+        );
         await widget.session.setCompanies(await widget.api.myCompanies());
         await widget.push.init();
       } catch (_) {}
@@ -277,8 +285,67 @@ class _SplashScreenState extends State<_SplashScreen> {
       final resumed = await _maybeResumeDraft();
       if (!mounted) return;
       if (resumed) return;
+      final cloudRestored = await _maybeCloudRestore();
+      if (!mounted) return;
+      if (cloudRestored) return;
       await _goAuthenticatedHome();
     }
+  }
+
+  Future<bool> _maybeCloudRestore() async {
+    try {
+      if (!await CloudDraftBackupService.instance.shouldOfferRestore(widget.api)) {
+        return false;
+      }
+    } catch (_) {
+      return false;
+    }
+    final items = await CloudDraftBackupService.instance.listRemote(widget.api);
+    if (items.isEmpty || !mounted) return false;
+
+    final choice = await showFDialog<String>(
+      context: context,
+      builder: (ctx, style, animation) => FDialog(
+        title: const Text('Восстановить черновики?'),
+        body: Text(
+          'Найдено ${items.length} облачных бэкапов (TTL 7 дней, §3.3.2). '
+          'Восстановить незавершённые съёмки?',
+        ),
+        actions: [
+          FButton(
+            variant: .outline,
+            onPress: () => Navigator.pop(ctx, 'skip'),
+            child: const Text('Пропустить'),
+          ),
+          FButton(
+            onPress: () => Navigator.pop(ctx, 'restore'),
+            child: const Text('Восстановить'),
+          ),
+        ],
+      ),
+    );
+    await CloudDraftBackupService.instance.markPromptDone();
+    if (choice != 'restore' || !mounted) return false;
+
+    for (final item in items) {
+      final uuid = item['model_uuid']?.toString();
+      if (uuid == null) continue;
+      try {
+        await CloudDraftBackupService.instance.restore(widget.api, uuid);
+      } catch (_) {}
+    }
+    if (!mounted) return false;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Черновики восстановлены из облака')),
+    );
+    final draft = await ShootStorage.instance.loadActiveDraft();
+    if (draft != null) {
+      final idx = await ShootStorage.instance.resumeIndex(draft.modelUuid);
+      context.go('/home/shoot/dome', extra: {'uuid': draft.modelUuid, 'reshoot': idx});
+      return true;
+    }
+    context.go('/home');
+    return true;
   }
 
   Future<void> _goAuthenticatedHome() async {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +20,7 @@ class NativeArBridge extends ArSession {
   ArPose? _pose;
   bool _available = false;
   bool _started = false;
+  int? _textureId;
   StreamSubscription? _eventSub;
 
   static const _events = EventChannel('com.kwork.mob/ar_events');
@@ -32,6 +34,8 @@ class NativeArBridge extends ArSession {
 
   @override
   ArPose? get pose => _pose;
+
+  int? get textureId => _textureId;
 
   Future<bool> probe() async {
     try {
@@ -50,7 +54,12 @@ class NativeArBridge extends ArSession {
   Future<bool> start() async {
     if (!_available && !await probe()) return false;
     try {
-      await _channel.invokeMethod('startSession');
+      final raw = await _channel.invokeMethod('startSession');
+      if (raw is Map) {
+        _textureId = (raw['textureId'] as num?)?.toInt();
+      } else if (raw is int) {
+        _textureId = raw;
+      }
       _eventSub = _events.receiveBroadcastStream().listen(_onEvent);
       _started = true;
       return true;
@@ -88,6 +97,20 @@ class NativeArBridge extends ArSession {
       } catch (_) {}
     }
     _started = false;
+    _textureId = null;
+  }
+
+  /// JPEG bytes с AR-камеры (§3.1.1 fusion).
+  Future<Uint8List?> capturePhoto() async {
+    if (!_started) return null;
+    try {
+      final raw = await _channel.invokeMethod('capturePhoto');
+      if (raw is Uint8List) return raw;
+      if (raw is List) return Uint8List.fromList(raw.cast<int>());
+    } catch (e) {
+      debugPrint('NativeArBridge.capturePhoto: $e');
+    }
+    return null;
   }
 
   /// Показать AR-метку ракурса в нативной сцене (§3.1.2).

@@ -9,6 +9,7 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/services/photo_encryption.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
+import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
 import 'package:kwork_mobile/services/upload_progress_service.dart';
 
 /// Загрузка 12 JPEG + ZIP SHA-256 → checkout §3.6.3 / resumable §3.4.1.
@@ -73,6 +74,10 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
           'Вы выбрали запрещённую категорию. Заказ будет отклонён без возврата средств.',
         );
       }
+
+      try {
+        await CloudDraftBackupService.instance.syncDraft(widget.api, draft);
+      } catch (_) {}
 
       var progress = resume ? await _progressSvc.load(widget.modelUuid) : null;
       var uploaded = _progressSvc.uploadedIndices(progress).toSet();

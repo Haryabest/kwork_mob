@@ -19,9 +19,13 @@ class AppSession extends ChangeNotifier {
   bool _e2ePhotoEncryption = false;
   bool _ageVerified = false;
   String? _dateOfBirth;
+  String? _fullName;
+  String? _inn;
 
   int? get userId => _userId;
   String? get email => _email;
+  String? get fullName => _fullName;
+  String? get inn => _inn;
   double? get balance => _balance;
   bool get corporate => _corporate;
   int? get companyId => _corporate ? _companyId : null;
@@ -87,6 +91,8 @@ class AppSession extends ChangeNotifier {
     _balance = b is num ? b.toDouble() : null;
     _ageVerified = me['age_verified'] == true;
     _dateOfBirth = me['date_of_birth']?.toString();
+    _fullName = me['full_name']?.toString();
+    _inn = me['inn']?.toString();
     notifyListeners();
   }
 
