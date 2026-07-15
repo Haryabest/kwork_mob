@@ -25,6 +25,7 @@ def test_pending_to_dict_status():
 
 def test_pending_status_label_failed():
     assert pending_status_label("canceled") == "Ошибка"
+    assert pending_status_label("failed") == "Ошибка"
 
 
 def test_merge_transaction_page_prepends_pending():

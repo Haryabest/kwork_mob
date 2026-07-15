@@ -42,6 +42,8 @@ class _BalanceScreenState extends State<BalanceScreen> {
   bool _pollCompany = false;
   bool _exporting = false;
   int _lowBalanceThreshold = 5000;
+  final _thresholdCtrl = TextEditingController();
+  bool _savingThreshold = false;
 
   bool get _corporateFinance =>
       widget.session.corporate && widget.session.canViewFinance;
@@ -52,12 +54,14 @@ class _BalanceScreenState extends State<BalanceScreen> {
     _amount.dispose();
     _dateFrom.dispose();
     _dateTo.dispose();
+    _thresholdCtrl.dispose();
     super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
+    _thresholdCtrl.text = '5000';
     _load();
   }
 
@@ -94,7 +98,10 @@ class _BalanceScreenState extends State<BalanceScreen> {
             final pol = settings['policies'];
             if (pol is Map) {
               final thr = pol['low_balance_threshold'];
-              if (thr is num) _lowBalanceThreshold = thr.toInt();
+              if (thr is num) {
+                _lowBalanceThreshold = thr.toInt();
+                _thresholdCtrl.text = _lowBalanceThreshold.toString();
+              }
             }
           } catch (_) {}
         }
@@ -259,6 +266,34 @@ class _BalanceScreenState extends State<BalanceScreen> {
     }
   }
 
+  Future<void> _saveLowBalanceThreshold() async {
+    final value = int.tryParse(_thresholdCtrl.text.trim());
+    if (value == null || value < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Укажите корректный порог')),
+      );
+      return;
+    }
+    setState(() => _savingThreshold = true);
+    try {
+      await widget.api.patchCompanySettings({
+        'policies': {'low_balance_threshold': value},
+      });
+      _lowBalanceThreshold = value;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Порог низкого баланса сохранён §20.3.5')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _savingThreshold = false);
+    }
+  }
+
   Future<void> _exportCsv() async {
     if (widget.session.hidePrices) return;
     if (_corporateFinance && !widget.session.isOwner) return;
@@ -324,6 +359,20 @@ class _BalanceScreenState extends State<BalanceScreen> {
                       threshold: _lowBalanceThreshold,
                       onTopup: () => context.push('/home/company-topup'),
                     ),
+                  if (_corporateFinance && widget.session.isOwner) ...[
+                    const SizedBox(height: 12),
+                    FTextField(
+                      control: FTextFieldControl.managed(controller: _thresholdCtrl),
+                      label: const Text('Порог низкого баланса, ₽ §20.3.5'),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                    const SizedBox(height: 8),
+                    FButton(
+                      onPress: _savingThreshold ? null : _saveLowBalanceThreshold,
+                      child: Text(_savingThreshold ? '…' : 'Сохранить порог'),
+                    ),
+                  ],
                   if (_corporateFinance) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -457,22 +506,12 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     FTileGroup(
                       children: [
                         for (final t in _tx)
-                          FTile(
-                            title: Text('${t['type']} · ${t['amount']} ₽'),
-                            subtitle: Text(
-                              [
-                                t['status_label']?.toString() ?? 'Успешно',
-                                t['description']?.toString() ?? '',
-                              ].where((s) => s.isNotEmpty).join(' · '),
-                            ),
-                            details: Text(
-                              [
-                                if (_corporateFinance && t['user_id'] != null)
-                                  _authorLabel(t['user_id'] as int?),
-                                t['created_at']?.toString().substring(0, 10) ?? '',
-                              ].where((s) => s.isNotEmpty).join(' · '),
-                              style: context.theme.typography.xs,
-                            ),
+                          _TxTile(
+                            tx: t,
+                            corporate: _corporateFinance,
+                            authorLabel: _corporateFinance && t['user_id'] != null
+                                ? _authorLabel(t['user_id'] as int?)
+                                : null,
                           ),
                       ],
                     ),
@@ -511,6 +550,54 @@ class _BalanceScreenState extends State<BalanceScreen> {
                 ],
               ),
             ),
+    );
+  }
+}
+
+class _TxTile extends StatelessWidget {
+  const _TxTile({
+    required this.tx,
+    required this.corporate,
+    this.authorLabel,
+  });
+
+  final Map<String, dynamic> tx;
+  final bool corporate;
+  final String? authorLabel;
+
+  bool get _isPending =>
+      tx['pending'] == true || tx['status']?.toString() == 'pending';
+
+  @override
+  Widget build(BuildContext context) {
+    final tile = FTile(
+      title: Text('${tx['type']} · ${tx['amount']} ₽'),
+      subtitle: Text(
+        [
+          tx['status_label']?.toString() ?? 'Успешно',
+          tx['description']?.toString() ?? '',
+        ].where((s) => s.isNotEmpty).join(' · '),
+      ),
+      details: Text(
+        [
+          if (corporate && authorLabel != null && authorLabel!.isNotEmpty) authorLabel!,
+          tx['created_at']?.toString().substring(0, 10) ?? '',
+        ].where((s) => s.isNotEmpty).join(' · '),
+        style: context.theme.typography.xs.copyWith(
+          color: _isPending ? AppColors.error : null,
+          fontWeight: _isPending ? FontWeight.w600 : FontWeight.normal,
+        ),
+      ),
+    );
+    if (!_isPending) return tile;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.25)),
+      ),
+      margin: const EdgeInsets.only(bottom: 4),
+      child: tile,
     );
   }
 }

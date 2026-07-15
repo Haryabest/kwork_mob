@@ -275,43 +275,26 @@ export default function BalancePage() {
   }
 
   async function exportCsv() {
-    if (corporate && isOwner) {
-      try {
-        const res = await api.get('/company/transactions/export', {
-          params: txParams(),
-          responseType: 'blob',
-        });
-        const blob = new Blob([res.data as BlobPart], { type: 'text/csv;charset=utf-8' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'company_transactions.csv';
-        a.click();
-        return;
-      } catch (e) {
-        notifications.show({ color: 'red', message: apiMessage(e, 'Не удалось выгрузить CSV') });
-        return;
-      }
+    const canServerExport = !corporate || isOwner;
+    if (!canServerExport) {
+      notifications.show({ color: 'orange', message: 'Экспорт доступен Owner или в личном режиме' });
+      return;
     }
-    const rows = [
-      ['id', 'user_id', 'date', 'type', 'amount', 'status', 'description'],
-      ...items.map((t) => [
-        String(t.id),
-        t.user_id != null ? String(t.user_id) : '',
-        t.created_at ?? '',
-        t.type,
-        String(t.amount),
-        t.status_label ?? t.status ?? 'Успешно',
-        t.description ?? '',
-      ]),
-    ];
-    const blob = new Blob(
-      [rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')],
-      { type: 'text/csv;charset=utf-8' },
-    );
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'transactions.csv';
-    a.click();
+    const endpoint =
+      corporate && isOwner ? '/company/transactions/export' : '/user/transactions/export';
+    try {
+      const res = await api.get(endpoint, {
+        params: txParams(),
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data as BlobPart], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = corporate && isOwner ? 'company_transactions.csv' : 'transactions.csv';
+      a.click();
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e, 'Не удалось выгрузить CSV') });
+    }
   }
 
   return (

@@ -128,6 +128,36 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
         await db.commit()
         return {"ok": True, "canceled": True, "payment_id": payment_id}
 
+    if event == "payment.failed":
+        await pend_svc.mark_status(db, payment_id, "failed")
+        await db.commit()
+        return {"ok": True, "failed": True, "payment_id": payment_id}
+
+    if event == "payment.waiting_for_capture":
+        try:
+            payment = await yookassa_service.get_payment(payment_id)
+            meta = payment.get("metadata") or parsed.get("metadata") or {}
+            purpose = str(meta.get("purpose") or "topup")
+            if purpose in ("topup", "company_topup"):
+                user_id = int(meta.get("user_id") or 0)
+                amount = int(float((payment.get("amount") or {}).get("value") or parsed.get("amount") or 0))
+                if user_id and amount > 0:
+                    company_id = int(meta["company_id"]) if meta.get("company_id") else None
+                    method = str(meta.get("payment_method") or "redirect")
+                    await pend_svc.upsert_pending(
+                        db,
+                        payment_id=payment_id,
+                        user_id=user_id,
+                        amount=amount,
+                        payment_method=method,
+                        purpose=purpose,
+                        company_id=company_id,
+                    )
+            await db.commit()
+        except Exception:  # noqa: BLE001
+            pass
+        return {"ok": True, "waiting_for_capture": True, "payment_id": payment_id}
+
     try:
         if event not in ("payment.succeeded", "payment.waiting_for_capture") and parsed.get(
             "status"

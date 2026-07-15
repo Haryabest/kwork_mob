@@ -849,6 +849,11 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> patchCompanySettings(Map<String, dynamic> body) async {
+    final res = await _dio.patch('/company/settings', data: body);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<List<int>> exportCompanyTransactionsCsv({
     int? userId,
     String? dateFrom,

@@ -45,6 +45,7 @@ class PushService {
   GoRouter? router;
   GlobalKey<ScaffoldMessengerState>? messengerKey;
   Future<bool> Function()? canNavigate;
+  void Function(String route, {String? title})? onForegroundNavigate;
   AppLinks? _appLinks;
 
   void bindRouter(GoRouter router) {
@@ -57,6 +58,10 @@ class PushService {
 
   void bindNavigationGuard(Future<bool> Function() guard) {
     canNavigate = guard;
+  }
+
+  void bindForegroundNavigate(void Function(String route, {String? title})? handler) {
+    onForegroundNavigate = handler;
   }
 
   Future<void> init() async {
@@ -206,6 +211,11 @@ class PushService {
     }
 
     if (fromForeground) {
+      if (onForegroundNavigate != null &&
+          (route.startsWith('/home?') || route == '/home' || route.startsWith('/home/support'))) {
+        onForegroundNavigate!(route, title: title);
+        return;
+      }
       _showForegroundSnack(title ?? 'Уведомление', route);
       return;
     }

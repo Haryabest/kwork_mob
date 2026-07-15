@@ -56,6 +56,33 @@ class _HomeShellState extends State<HomeShell> {
       widget.api,
       companyId: widget.session.corporate ? widget.session.companyId : null,
     );
+    widget.push.bindForegroundNavigate(_handleForegroundNavigate);
+  }
+
+  @override
+  void dispose() {
+    widget.push.bindForegroundNavigate(null);
+    widget.session.removeListener(_onSession);
+    super.dispose();
+  }
+
+  void _handleForegroundNavigate(String route, {String? title}) {
+    final uri = Uri.tryParse(route);
+    if (uri == null) return;
+    if (uri.path == '/home' && uri.queryParameters['tab'] == 'support') {
+      final ticketId = int.tryParse(uri.queryParameters['supportTicket'] ?? '');
+      setState(() {
+        _index = 3;
+        if (ticketId != null) _supportTicketId = ticketId;
+      });
+      if (title != null && title.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(title), duration: const Duration(seconds: 3)),
+        );
+      }
+      return;
+    }
+    if (mounted) context.go(route);
   }
 
   Future<void> _loadUnread() async {
@@ -146,12 +173,6 @@ class _HomeShellState extends State<HomeShell> {
     } else {
       await session.setCompany(choice as Map<String, dynamic>);
     }
-  }
-
-  @override
-  void dispose() {
-    widget.session.removeListener(_onSession);
-    super.dispose();
   }
 
   @override
