@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_db_user
+from app.core.security import get_current_db_user, get_current_db_user_optional
 from app.models import Model3D, ModelPublicationLink, User
 from app.schemas.models import ModelRateRequest
 from app.services import publication as pub_svc
@@ -222,17 +222,16 @@ async def import_model(
 async def prepare_bulk_model_import(
     body: BulkImportPrepareBody,
     request: Request,
-    user: User = Depends(get_current_db_user),
+    user: User | None = Depends(get_current_db_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
-    """Presigned PUT для массового импорта до 100 GLB §6.10 / API."""
+    """Presigned PUT для массового импорта до 100 GLB §6.10 / API / X-API-Key."""
     import uuid as uuid_lib
 
     from app.services import access_log as access_svc
-    from app.services.company_members import get_owned_company
     from app.services import import_models as imp_svc
 
-    company = await get_owned_company(db, user)
+    company, actor = await imp_svc.resolve_import_actor(db, request, user)
     unit_price = await imp_svc.get_import_price(db)
     try:
         minio_service.ensure_buckets()
@@ -247,7 +246,7 @@ async def prepare_bulk_model_import(
         )
         await access_svc.log_access(
             db,
-            user_id=user.id,
+            user_id=actor.id,
             company_id=company.id,
             model_uuid=model_uuid,
             action="presign_put",
@@ -278,15 +277,14 @@ async def prepare_bulk_model_import(
 async def bulk_import_models(
     body: BulkImportBody,
     request: Request,
-    user: User = Depends(get_current_db_user),
+    user: User | None = Depends(get_current_db_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
-    """Массовый импорт GLB (>10 за раз) §6.10 — до 100 моделей."""
+    """Массовый импорт GLB (>10 за раз) §6.10 — до 100 моделей; JWT или X-API-Key."""
     from app.services import access_log as access_svc
-    from app.services.company_members import get_owned_company
     from app.services import import_models as imp_svc
 
-    company = await get_owned_company(db, user)
+    company, actor = await imp_svc.resolve_import_actor(db, request, user)
     if body.company_id != company.id:
         raise HTTPException(403, "company_id не совпадает с вашей компанией")
     unit = await imp_svc.get_import_price(db)
@@ -300,7 +298,7 @@ async def bulk_import_models(
             row = await imp_svc.queue_single_import(
                 db,
                 company=company,
-                user=user,
+                user=actor,
                 glb_key=item.glb_key,
                 category=item.category,
                 display_name=item.display_name,
@@ -308,7 +306,7 @@ async def bulk_import_models(
             )
             await access_svc.log_access(
                 db,
-                user_id=user.id,
+                user_id=actor.id,
                 company_id=company.id,
                 model_uuid=row["uuid"],
                 action="import",

@@ -153,12 +153,32 @@ class _QueueScreenState extends State<QueueScreen> {
     super.dispose();
   }
 
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'blocked_nsfw':
+        return 'NSFW блок';
+      case 'completed':
+        return 'Готов';
+      case 'failed':
+        return 'Ошибка';
+      case 'processing':
+        return 'В обработке';
+      case 'queued':
+        return 'В очереди';
+      case 'cancelled':
+        return 'Отменён';
+      default:
+        return status;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pos = _order?['queue_position'];
     final ewt = _order?['ewt_sec'];
     final status = _order?['status']?.toString() ?? '…';
     final ewtMin = ewt is num ? (ewt / 60).ceil() : null;
+    final isNsfwBlocked = status == 'blocked_nsfw';
 
     return FScaffold(
       header: FHeader.nested(
@@ -185,7 +205,23 @@ class _QueueScreenState extends State<QueueScreen> {
               ),
               const SizedBox(height: 12),
             ],
-            Text('Статус: $status', style: context.theme.typography.lg),
+            if (isNsfwBlocked) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
+                ),
+                child: const Text(
+                  'Заказ заблокирован: NSFW на текстурах импорта. Средства возвращены на баланс компании. '
+                  'Аккаунт на ручной проверке до 24 ч (§10.8).',
+                  style: TextStyle(color: AppColors.error),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Text('Статус: ${_statusLabel(status)}', style: context.theme.typography.lg),
             const SizedBox(height: 12),
             if (pos != null)
               Text(
@@ -208,7 +244,7 @@ class _QueueScreenState extends State<QueueScreen> {
             const SizedBox(height: 8),
             FButton(
               variant: .destructive,
-              onPress: widget.orderId == null ? null : _cancel,
+              onPress: widget.orderId == null || isNsfwBlocked ? null : _cancel,
               child: const Text('Отменить'),
             ),
           ],

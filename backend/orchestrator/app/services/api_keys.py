@@ -15,6 +15,7 @@ from app.models import Company, CompanyApiKey, User
 ALLOWED_SCOPES = {
     "order:create",
     "order:read",
+    "import:create",
     "balance:read",
     "member:list",
     "shoot_link:create",

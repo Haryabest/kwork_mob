@@ -713,6 +713,13 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  /// §8 — транзакции компании (Owner/Manager + can_view_finance).
+  Future<List<Map<String, dynamic>>> listCompanyMine() async {
+    final res = await _dio.get('/company/mine');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   Future<List<Map<String, dynamic>>> listCompanyTransactions({int? userId}) async {
     final res = await _dio.get('/company/transactions', queryParameters: {
       if (userId != null) 'user_id': userId,

@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Alert,
   Badge,
   Button,
   Center,
@@ -40,6 +41,7 @@ const STATUS_LABEL: Record<string, string> = {
   completed: 'Готов',
   failed: 'Ошибка',
   cancelled: 'Отменён',
+  blocked_nsfw: 'NSFW блок',
 };
 
 function wsBase(): string {
@@ -205,6 +207,13 @@ export default function OrderDetailPage() {
           </Group>
         }
       />
+
+      {order.status === 'blocked_nsfw' && (
+        <Alert color="red" title="NSFW блок" mb="md">
+          Заказ заблокирован: обнаружен запрещённый контент на текстурах импорта. Средства возвращены
+          на баланс компании. Аккаунт на ручной проверке до 24 ч (§10.8).
+        </Alert>
+      )}
 
       <div
         style={{

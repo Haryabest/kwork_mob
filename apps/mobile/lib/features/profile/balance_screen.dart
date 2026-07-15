@@ -19,9 +19,15 @@ class BalanceScreen extends StatefulWidget {
 
 class _BalanceScreenState extends State<BalanceScreen> {
   List<Map<String, dynamic>> _tx = [];
+  List<Map<String, dynamic>> _members = [];
+  double? _companyBalance;
+  int _authorFilter = -1;
   bool _loading = true;
   bool _busy = false;
   final _amount = TextEditingController(text: '1000');
+
+  bool get _corporateFinance =>
+      widget.session.corporate && widget.session.canViewFinance;
 
   @override
   void dispose() {
@@ -35,12 +41,41 @@ class _BalanceScreenState extends State<BalanceScreen> {
     _load();
   }
 
+  String _authorLabel(int? userId) {
+    if (userId == null) return '';
+    for (final m in _members) {
+      if (m['user_id'] == userId) {
+        return m['full_name']?.toString() ?? m['email']?.toString() ?? '#$userId';
+      }
+    }
+    return '#$userId';
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final me = await widget.api.me();
-      widget.session.applyMe(me);
-      _tx = await widget.api.listTransactions();
+      if (_corporateFinance) {
+        final companies = await widget.api.listCompanyMine();
+        final cid = widget.session.companyId;
+        final match = companies.where((c) => c['id'] == cid).toList();
+        if (match.isNotEmpty) {
+          final b = match.first['balance'];
+          _companyBalance = b is num ? b.toDouble() : null;
+        }
+        if (widget.session.canFilterCompanyOrders) {
+          final m = await widget.api.listCompanyMembers();
+          final raw = m['items'] as List? ?? [];
+          _members = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+        _tx = await widget.api.listCompanyTransactions(
+          userId: _authorFilter >= 0 ? _authorFilter : null,
+        );
+      } else {
+        final me = await widget.api.me();
+        widget.session.applyMe(me);
+        _tx = await widget.api.listTransactions();
+        _companyBalance = null;
+      }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
@@ -120,9 +155,13 @@ class _BalanceScreenState extends State<BalanceScreen> {
         child: Center(child: Text('Баланс недоступен для вашей роли')),
       );
     }
-    final balance = widget.session.balance ?? 0;
+    final balance = _corporateFinance
+        ? (_companyBalance ?? 0)
+        : (widget.session.balance ?? 0);
     return FScaffold(
-      header: const FHeader(title: Text('Баланс')),
+      header: FHeader(
+        title: Text(_corporateFinance ? 'Баланс компании' : 'Баланс'),
+      ),
       child: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -134,25 +173,54 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     '${balance.toStringAsFixed(0)} ₽',
                     style: context.theme.typography.xl.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 16),
-                  FTextField(
-                    control: FTextFieldControl.managed(controller: _amount),
-                    label: const Text('Сумма пополнения'),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  ),
-                  const SizedBox(height: 12),
-                  FButton(
-                    onPress: _busy ? null : () => _topup(method: 'redirect'),
-                    child: Text(_busy ? '…' : 'Пополнить картой'),
-                  ),
-                  const SizedBox(height: 8),
-                  FButton(
-                    variant: .outline,
-                    onPress: _busy ? null : () => _topup(method: 'sbp_qr'),
-                    child: Text(_busy ? '…' : 'СБП QR'),
-                  ),
+                  if (_corporateFinance) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.session.companyName ?? 'Компания',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                  ],
+                  if (!_corporateFinance) ...[
+                    const SizedBox(height: 16),
+                    FTextField(
+                      control: FTextFieldControl.managed(controller: _amount),
+                      label: const Text('Сумма пополнения'),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                    const SizedBox(height: 12),
+                    FButton(
+                      onPress: _busy ? null : () => _topup(method: 'redirect'),
+                      child: Text(_busy ? '…' : 'Пополнить картой'),
+                    ),
+                    const SizedBox(height: 8),
+                    FButton(
+                      variant: .outline,
+                      onPress: _busy ? null : () => _topup(method: 'sbp_qr'),
+                      child: Text(_busy ? '…' : 'СБП QR'),
+                    ),
+                  ],
                   const SizedBox(height: 24),
+                  if (_corporateFinance &&
+                      widget.session.canFilterCompanyOrders &&
+                      _members.isNotEmpty) ...[
+                    FSelect<int>(
+                      label: const Text('Сотрудник §8'),
+                      control: FSelectControl.managed(
+                        initial: _authorFilter,
+                        onChange: (v) {
+                          setState(() => _authorFilter = v ?? -1);
+                          _load();
+                        },
+                      ),
+                      items: {
+                        'Все': -1,
+                        for (final m in _members)
+                          _authorLabel(m['user_id'] as int?): m['user_id'] as int,
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Text('Транзакции', style: context.theme.typography.lg),
                   const SizedBox(height: 8),
                   if (_tx.isEmpty)
@@ -165,7 +233,11 @@ class _BalanceScreenState extends State<BalanceScreen> {
                             title: Text('${t['type']} · ${t['amount']} ₽'),
                             subtitle: Text(t['description']?.toString() ?? ''),
                             details: Text(
-                              t['created_at']?.toString().substring(0, 10) ?? '',
+                              [
+                                if (_corporateFinance && t['user_id'] != null)
+                                  _authorLabel(t['user_id'] as int?),
+                                t['created_at']?.toString().substring(0, 10) ?? '',
+                              ].where((s) => s.isNotEmpty).join(' · '),
                               style: context.theme.typography.xs,
                             ),
                           ),

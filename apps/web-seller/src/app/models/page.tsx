@@ -145,6 +145,9 @@ export default function ModelsPage() {
                 <Button component={Link} href="/models/import" variant="light" visibleFrom="xs">
                   Импорт GLB
                 </Button>
+                <Button component={Link} href="/models/import/bulk" variant="light" visibleFrom="xs">
+                  Массовый импорт
+                </Button>
                 <Button variant="light" loading={massBusy} onClick={() => void massExtendAll()} visibleFrom="xs">
                   Продлить все исходники
                 </Button>

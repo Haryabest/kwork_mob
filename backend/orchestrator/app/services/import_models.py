@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models import AuditLog, Model3D, Order, User
+from app.models import AuditLog, Company, Model3D, Order, User
 from app.services.company_balance import charge_company
 from app.services import import_validation as iv
 from app.services.minio import minio_service
@@ -18,6 +18,27 @@ MAX_BULK_IMPORT = 100
 
 async def get_import_price(db: AsyncSession) -> int:
     return await tariff_svc.get_amount(db, "import_glb")
+
+
+async def resolve_import_actor(
+    db: AsyncSession,
+    request,
+    user: User | None,
+) -> tuple[Company, User]:
+    """JWT Owner или X-API-Key scope import:create §6.10 / §8.8."""
+    from app.services import api_keys as api_keys_svc
+    from app.services.company_members import get_owned_company
+
+    api_key_header = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
+    if api_key_header:
+        key_row, company, owner = await api_keys_svc.authenticate_api_key(db, api_key_header)
+        if "import:create" not in (key_row.scopes or []):
+            raise HTTPException(403, "Нужен scope import:create")
+        return company, owner
+    if not user:
+        raise HTTPException(401, "Требуется JWT или X-API-Key")
+    company = await get_owned_company(db, user)
+    return company, user
 
 
 async def queue_single_import(

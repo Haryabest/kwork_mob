@@ -30,6 +30,7 @@ type KeyRow = {
 };
 
 const SCOPE_OPTIONS = [
+  { value: 'import:create', label: 'import:create' },
   { value: 'order:create', label: 'order:create' },
   { value: 'order:read', label: 'order:read' },
   { value: 'balance:read', label: 'balance:read' },

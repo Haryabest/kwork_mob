@@ -105,9 +105,14 @@ export default function ImportModelPage() {
         title="Импорт модели"
         description="Готовый GLB до 50 МБ · только Owner компании §6.10"
         action={
-          <Button component={Link} href="/models" variant="light">
-            К списку
-          </Button>
+          <Group>
+            <Button component={Link} href="/models/import/bulk" variant="light">
+              Массовый импорт (11+)
+            </Button>
+            <Button component={Link} href="/models" variant="light">
+              К списку
+            </Button>
+          </Group>
         }
       />
       <Surface>
