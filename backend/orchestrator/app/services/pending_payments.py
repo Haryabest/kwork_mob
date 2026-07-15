@@ -159,3 +159,20 @@ def merge_transaction_page(
         page = tx_items
 
     return page, total
+
+
+async def purge_old_settled(db: AsyncSession, *, days: int = 30) -> int:
+    """Удалить settled pending payments старше N дней (Celery §20.3.4)."""
+    from datetime import timedelta
+
+    from sqlalchemy import delete
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await db.execute(
+        delete(BalancePendingPayment).where(
+            BalancePendingPayment.status.in_(("succeeded", "canceled", "failed")),
+            BalancePendingPayment.updated_at < cutoff,
+        )
+    )
+    await db.flush()
+    return int(result.rowcount or 0)

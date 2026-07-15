@@ -6,6 +6,7 @@ import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
+import 'package:kwork_mobile/features/profile/low_balance_banner.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -23,6 +24,7 @@ class CompanyTopupScreen extends StatefulWidget {
 
 class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
   double? _companyBalance;
+  int _lowBalanceThreshold = 5000;
   bool _loading = true;
   bool _busy = false;
   final _amount = TextEditingController(text: '1000');
@@ -48,10 +50,18 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
       final companies = await widget.api.listCompanyMine();
       final cid = widget.session.companyId;
       final match = companies.where((c) => c['id'] == cid).toList();
-      if (match.isNotEmpty) {
-        final b = match.first['balance'];
-        _companyBalance = b is num ? b.toDouble() : null;
-      }
+        if (match.isNotEmpty) {
+          final b = match.first['balance'];
+          _companyBalance = b is num ? b.toDouble() : null;
+        }
+        try {
+          final settings = await widget.api.getCompanySettings();
+          final pol = settings['policies'];
+          if (pol is Map) {
+            final thr = pol['low_balance_threshold'];
+            if (thr is num) _lowBalanceThreshold = thr.toInt();
+          }
+        } catch (_) {}
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
@@ -170,7 +180,12 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
                   widget.session.companyName ?? 'Компания',
                   style: TextStyle(color: AppColors.textSecondary),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
+                LowBalanceBanner(
+                  balance: balance,
+                  threshold: _lowBalanceThreshold,
+                ),
+                const SizedBox(height: 12),
                 FTextField(
                   control: FTextFieldControl.managed(controller: _amount),
                   label: const Text('Сумма пополнения, ₽'),

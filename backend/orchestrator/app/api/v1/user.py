@@ -190,6 +190,33 @@ async def get_transactions(
     }
 
 
+@router.get("/transactions/export")
+async def export_user_transactions(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+    date_from: date | None = Query(default=None, alias="from"),
+    date_to: date | None = Query(default=None, alias="to"),
+    tx_type: str = Query(default="all", alias="type", pattern=r"^(all|topup|charge|refund)$"),
+):
+    """CSV выгрузка личных транзакций §20.3.4."""
+    from fastapi.responses import Response
+
+    from app.services import company_balance as bal
+
+    csv_body = await bal.export_user_transactions_csv(
+        db,
+        user_id=user.id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    return Response(
+        content=csv_body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="transactions.csv"'},
+    )
+
+
 @router.post("/balance/topup")
 async def topup_balance(
     body: TopupRequest,

@@ -15,15 +15,18 @@ String? routeFromDeepLinkUri(Uri? uri) {
     }
     if (segs.first == 'support') {
       if (segs.length >= 3 && segs[1] == 'ticket') {
-        return '/home/support/ticket/${segs[2]}';
+        return '/home?tab=support&supportTicket=${segs[2]}';
       }
-      return '/home';
+      return '/home?tab=support';
     }
     if (segs.first == 'shoot' && segs.length >= 2) {
       return '/shoot/${segs[1]}';
     }
   }
   if (uri.path.startsWith('/home/')) return uri.path;
+  if (uri.path == '/home' && uri.queryParameters.isNotEmpty) {
+    return '${uri.path}?${uri.query}';
+  }
   if (uri.path.startsWith('/shoot/')) return uri.path;
   return null;
 }

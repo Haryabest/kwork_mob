@@ -168,9 +168,9 @@ class PushService {
     final ticketId = data['ticket_id']?.toString() ?? data['support_id']?.toString();
     if (type == 'support' || type == 'support_reply') {
       if (ticketId != null && ticketId.isNotEmpty) {
-        return '/home/support/ticket/$ticketId';
+        return '/home?tab=support&supportTicket=$ticketId';
       }
-      return '/home';
+      return '/home?tab=support';
     }
     return null;
   }

@@ -25,7 +25,7 @@ import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../c
 import { api, apiMessage } from '../../services/api';
 
 type Tx = {
-  id: number;
+  id: number | string;
   user_id?: number;
   amount: number;
   type: string;
@@ -33,6 +33,7 @@ type Tx = {
   created_at?: string;
   status?: string;
   status_label?: string;
+  pending?: boolean;
 };
 
 type Member = {
@@ -55,6 +56,10 @@ function txStatusColor(status?: string) {
   if (status === 'failed') return 'red';
   if (status === 'pending') return 'orange';
   return 'teal';
+}
+
+function isPendingRow(t: Tx) {
+  return t.pending === true || t.status === 'pending';
 }
 
 /** §20.3 / §8 — баланс и транзакции (личный или компания) */
@@ -448,7 +453,14 @@ export default function BalancePage() {
                 </Table.Thead>
                 <Table.Tbody>
                   {items.map((t) => (
-                    <Table.Tr key={t.id}>
+                    <Table.Tr
+                      key={String(t.id)}
+                      style={
+                        isPendingRow(t)
+                          ? { backgroundColor: 'rgba(251, 146, 60, 0.1)' }
+                          : undefined
+                      }
+                    >
                       <Table.Td>
                         {t.created_at ? new Date(t.created_at).toLocaleString('ru-RU') : '—'}
                       </Table.Td>
@@ -465,7 +477,7 @@ export default function BalancePage() {
                         {t.amount.toLocaleString('ru-RU')} ₽
                       </Table.Td>
                       <Table.Td>
-                        <Badge variant="light" color={txStatusColor(t.status)}>
+                        <Badge variant={isPendingRow(t) ? 'filled' : 'light'} color={txStatusColor(t.status)}>
                           {t.status_label ?? 'Успешно'}
                         </Badge>
                       </Table.Td>

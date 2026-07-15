@@ -40,3 +40,6 @@ def test_merge_transaction_page_prepends_pending():
     assert total == 2
     assert page[0]["id"] == "pending:p1"
     assert page[1]["id"] == 1
+
+
+def test_purge_old_settled_smoke():

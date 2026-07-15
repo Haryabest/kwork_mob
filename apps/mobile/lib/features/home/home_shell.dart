@@ -23,24 +23,31 @@ class HomeShell extends StatefulWidget {
     required this.api,
     required this.session,
     required this.push,
+    this.initialTab,
+    this.initialSupportTicketId,
   });
 
   final ApiClient api;
   final AppSession session;
   final PushService push;
+  final int? initialTab;
+  final int? initialSupportTicketId;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
 
 class _HomeShellState extends State<HomeShell> {
-  int _index = 0;
+  late int _index;
   int _unread = 0;
+  int? _supportTicketId;
   final _homeTabKey = GlobalKey<_HomeTabState>();
 
   @override
   void initState() {
     super.initState();
+    _index = widget.initialTab ?? 0;
+    _supportTicketId = widget.initialSupportTicketId;
     widget.session.addListener(_onSession);
     _refresh();
     _loadUnread();
@@ -60,6 +67,21 @@ class _HomeShellState extends State<HomeShell> {
       n = await NotificationInbox.instance.unreadCount();
     }
     if (mounted) setState(() => _unread = n);
+  }
+
+  @override
+  void didUpdateWidget(HomeShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTab != null && widget.initialTab != oldWidget.initialTab) {
+      setState(() => _index = widget.initialTab!);
+    }
+    if (widget.initialSupportTicketId != null &&
+        widget.initialSupportTicketId != oldWidget.initialSupportTicketId) {
+      setState(() {
+        _index = widget.initialTab ?? 3;
+        _supportTicketId = widget.initialSupportTicketId;
+      });
+    }
   }
 
   void _onSession() {
@@ -162,7 +184,11 @@ class _HomeShellState extends State<HomeShell> {
         unread: _unread,
       ),
       _OrdersTab(api: widget.api, session: session),
-      FaqSupportScreen(api: widget.api),
+      FaqSupportScreen(
+        key: ValueKey('support-${_supportTicketId ?? 'list'}'),
+        api: widget.api,
+        initialTicketId: _supportTicketId,
+      ),
       _ProfileTab(
         api: widget.api,
         push: widget.push,

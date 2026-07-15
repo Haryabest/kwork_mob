@@ -167,6 +167,45 @@ def transactions_to_csv(rows: list[Transaction]) -> str:
     return buf.getvalue()
 
 
+def pending_dicts_to_csv_rows(pending_items: list[dict]) -> list[list]:
+    rows: list[list] = []
+    for p in pending_items:
+        rows.append(
+            [
+                p.get("id") or p.get("payment_id") or "",
+                p.get("user_id") or "",
+                p.get("created_at") or "",
+                p.get("type") or "topup",
+                p.get("amount") or 0,
+                p.get("status_label") or TX_STATUS_LABELS.get("pending", "pending"),
+                p.get("description") or "",
+            ]
+        )
+    return rows
+
+
+def merge_csv(transactions: list[Transaction], pending_items: list[dict]) -> str:
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["id", "user_id", "date", "type", "amount", "status", "description"])
+    for row in pending_dicts_to_csv_rows(pending_items):
+        w.writerow(row)
+    for t in transactions:
+        st = transaction_status(t)
+        w.writerow(
+            [
+                t.id,
+                t.user_id or "",
+                t.created_at.isoformat() if t.created_at else "",
+                t.tx_type,
+                t.amount,
+                TX_STATUS_LABELS.get(st, st),
+                t.description or "",
+            ]
+        )
+    return buf.getvalue()
+
+
 async def export_company_transactions_csv(
     db: AsyncSession,
     *,
@@ -184,7 +223,44 @@ async def export_company_transactions_csv(
         tx_type=tx_type,
     ).limit(MAX_EXPORT_ROWS)
     rows = (await db.scalars(stmt)).all()
-    return transactions_to_csv(rows)
+    from app.services import pending_payments as pend
+
+    pending_items = await pend.list_pending_dicts(
+        db,
+        company_id=company.id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    return merge_csv(rows, pending_items)
+
+
+async def export_user_transactions_csv(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    tx_type: str = "all",
+) -> str:
+    stmt = build_user_tx_stmt(
+        user_id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    ).limit(MAX_EXPORT_ROWS)
+    rows = (await db.scalars(stmt)).all()
+    from app.services import pending_payments as pend
+
+    pending_items = await pend.list_pending_dicts(
+        db,
+        user_id=user_id,
+        personal_only=True,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    return merge_csv(rows, pending_items)
 
 
 async def maybe_emit_balance_low(db: AsyncSession, company: Company) -> None:

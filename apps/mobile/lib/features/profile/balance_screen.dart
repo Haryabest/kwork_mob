@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
-import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/features/profile/low_balance_banner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -41,6 +41,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
   String? _pollPaymentId;
   bool _pollCompany = false;
   bool _exporting = false;
+  int _lowBalanceThreshold = 5000;
 
   bool get _corporateFinance =>
       widget.session.corporate && widget.session.canViewFinance;
@@ -86,6 +87,16 @@ class _BalanceScreenState extends State<BalanceScreen> {
           final m = await widget.api.listCompanyMembers();
           final raw = m['items'] as List? ?? [];
           _members = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        }
+        if (widget.session.isOwner) {
+          try {
+            final settings = await widget.api.getCompanySettings();
+            final pol = settings['policies'];
+            if (pol is Map) {
+              final thr = pol['low_balance_threshold'];
+              if (thr is num) _lowBalanceThreshold = thr.toInt();
+            }
+          } catch (_) {}
         }
         final page = await widget.api.listCompanyTransactionsPage(
           userId: _authorFilter >= 0 ? _authorFilter : null,
@@ -249,19 +260,27 @@ class _BalanceScreenState extends State<BalanceScreen> {
   }
 
   Future<void> _exportCsv() async {
-    if (!widget.session.isOwner || !_corporateFinance) return;
+    if (widget.session.hidePrices) return;
+    if (_corporateFinance && !widget.session.isOwner) return;
     setState(() => _exporting = true);
     try {
-      final bytes = await widget.api.exportCompanyTransactionsCsv(
-        userId: _authorFilter >= 0 ? _authorFilter : null,
-        dateFrom: _dateFrom.text.trim().isEmpty ? null : _dateFrom.text.trim(),
-        dateTo: _dateTo.text.trim().isEmpty ? null : _dateTo.text.trim(),
-        type: _txType,
-      );
+      final bytes = _corporateFinance
+          ? await widget.api.exportCompanyTransactionsCsv(
+              userId: _authorFilter >= 0 ? _authorFilter : null,
+              dateFrom: _dateFrom.text.trim().isEmpty ? null : _dateFrom.text.trim(),
+              dateTo: _dateTo.text.trim().isEmpty ? null : _dateTo.text.trim(),
+              type: _txType,
+            )
+          : await widget.api.exportUserTransactionsCsv(
+              dateFrom: _dateFrom.text.trim().isEmpty ? null : _dateFrom.text.trim(),
+              dateTo: _dateTo.text.trim().isEmpty ? null : _dateTo.text.trim(),
+              type: _txType,
+            );
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/company_transactions.csv');
+      final name = _corporateFinance ? 'company_transactions.csv' : 'transactions.csv';
+      final file = File('${dir.path}/$name');
       await file.writeAsBytes(bytes);
-      await Share.shareXFiles([XFile(file.path)], text: 'Транзакции компании §20.3.4');
+      await Share.shareXFiles([XFile(file.path)], text: 'Транзакции §20.3.4');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -299,6 +318,12 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     '${balance.toStringAsFixed(0)} ₽',
                     style: context.theme.typography.xl.copyWith(fontWeight: FontWeight.bold),
                   ),
+                  if (_corporateFinance && widget.session.isOwner)
+                    LowBalanceBanner(
+                      balance: balance,
+                      threshold: _lowBalanceThreshold,
+                      onTopup: () => context.push('/home/company-topup'),
+                    ),
                   if (_corporateFinance) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -391,7 +416,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     onPress: _resetPageAndLoad,
                     child: const Text('Применить фильтры'),
                   ),
-                  if (_corporateFinance && widget.session.isOwner) ...[
+                  if (!_corporateFinance || widget.session.isOwner) ...[
                     const SizedBox(height: 8),
                     FButton(
                       variant: .outline,

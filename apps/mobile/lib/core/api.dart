@@ -827,6 +827,28 @@ class ApiClient {
     await _dio.delete('/user/notifications');
   }
 
+  Future<List<int>> exportUserTransactionsCsv({
+    String? dateFrom,
+    String? dateTo,
+    String? type,
+  }) async {
+    final res = await _dio.get<List<int>>(
+      '/user/transactions/export',
+      queryParameters: {
+        if (dateFrom != null && dateFrom.isNotEmpty) 'from': dateFrom,
+        if (dateTo != null && dateTo.isNotEmpty) 'to': dateTo,
+        if (type != null && type.isNotEmpty && type != 'all') 'type': type,
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data ?? [];
+  }
+
+  Future<Map<String, dynamic>> getCompanySettings() async {
+    final res = await _dio.get('/company/settings');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<List<int>> exportCompanyTransactionsCsv({
     int? userId,
     String? dateFrom,

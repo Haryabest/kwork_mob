@@ -24,7 +24,6 @@ import 'package:kwork_mobile/features/shoot/upload_checkout_screen.dart';
 import 'package:kwork_mobile/features/shoot/order_checkout_screen.dart';
 import 'package:kwork_mobile/features/calibration/calibration_wizard_screen.dart';
 import 'package:kwork_mobile/features/notifications/notifications_screen.dart';
-import 'package:kwork_mobile/features/support/faq_support_screen.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
@@ -117,11 +116,20 @@ GoRouter createRouter({
       ),
       GoRoute(
         path: '/home',
-        builder: (context, state) => HomeShell(
-          api: api,
-          session: session,
-          push: push,
-        ),
+        builder: (context, state) {
+          final q = state.uri.queryParameters;
+          final ticketId = int.tryParse(q['supportTicket'] ?? '');
+          final tab = q['tab'];
+          int? initialTab;
+          if (tab == 'support' || ticketId != null) initialTab = 3;
+          return HomeShell(
+            api: api,
+            session: session,
+            push: push,
+            initialTab: initialTab,
+            initialSupportTicketId: ticketId,
+          );
+        },
         routes: [
           GoRoute(
             path: 'shoot',
@@ -199,10 +207,10 @@ GoRouter createRouter({
           ),
           GoRoute(
             path: 'support/ticket/:ticketId',
-            builder: (context, state) => FaqSupportScreen(
-              api: api,
-              initialTicketId: int.parse(state.pathParameters['ticketId']!),
-            ),
+            redirect: (context, state) {
+              final id = state.pathParameters['ticketId'];
+              return '/home?tab=support&supportTicket=$id';
+            },
           ),
           GoRoute(
             path: 'notifications',

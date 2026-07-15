@@ -458,3 +458,26 @@ celery_app.conf.beat_schedule["shoot-link-unblock-every-5-min"] = {
     "schedule": crontab(minute="*/5"),
 }
 
+
+@celery_app.task(name="app.tasks.celery_app.purge_old_pending_payments")
+def purge_old_pending_payments():
+    """Удалить settled balance_pending_payments старше 30 дней §20.3.4."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services import pending_payments as pend
+
+    async def _run():
+        async with async_session() as db:
+            deleted = await pend.purge_old_settled(db, days=30)
+            await db.commit()
+            return {"deleted": deleted}
+
+    return asyncio.run(_run())
+
+
+celery_app.conf.beat_schedule["pending-payments-purge-daily"] = {
+    "task": "app.tasks.celery_app.purge_old_pending_payments",
+    "schedule": crontab(hour=4, minute=20),
+}
+
