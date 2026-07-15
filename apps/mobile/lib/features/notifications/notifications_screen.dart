@@ -29,16 +29,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final orders = await widget.api.listOrders(
-        companyId: widget.session.corporate ? widget.session.companyId : null,
+      final data = await widget.api.listNotifications();
+      final items = (data['items'] as List?) ?? [];
+      await NotificationInbox.instance.syncFromServer(
+        items.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
       );
-      await NotificationInbox.instance.syncFromOrders(orders);
-    } catch (_) {}
+    } catch (_) {
+      try {
+        final orders = await widget.api.listOrders(
+          companyId: widget.session.corporate ? widget.session.companyId : null,
+        );
+        await NotificationInbox.instance.syncFromOrders(orders);
+      } catch (_) {}
+    }
     _items = await NotificationInbox.instance.load();
     if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _open(InboxNotification n) async {
+    final serverId = int.tryParse(n.id.replaceFirst('srv_', ''));
+    if (serverId != null) {
+      try {
+        await widget.api.markNotificationRead(serverId);
+      } catch (_) {}
+    }
     await NotificationInbox.instance.markRead(n.id);
     if (!mounted) return;
     if (n.orderId != null) {
@@ -93,6 +107,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             onPress: _items.isEmpty
                 ? null
                 : () async {
+                    try {
+                      await widget.api.markAllNotificationsRead();
+                    } catch (_) {}
                     await NotificationInbox.instance.markAllRead();
                     await _load();
                   },
@@ -102,6 +119,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             onPress: _items.isEmpty
                 ? null
                 : () async {
+                    try {
+                      await widget.api.clearNotifications();
+                    } catch (_) {}
                     await NotificationInbox.instance.clearAll();
                     await _load();
                   },

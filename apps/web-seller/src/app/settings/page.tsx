@@ -40,6 +40,7 @@ const PREF_LABELS: Record<string, string> = {
   email_enabled: 'Email-уведомления',
   generation_done: 'Генерация готова',
   refund: 'Возврат средств',
+  nsfw_blocked: 'NSFW-блокировка',
   source_expire: 'Истечение исходников',
   cleanup: 'Очистка хранилища',
   publish_reminder: 'Напоминание опубликовать',
@@ -252,7 +253,8 @@ export default function SettingsPage() {
           <Surface style={{ maxWidth: 560 }}>
             <Stack gap="md">
               <Switch
-                label="Маркетинговые рассылки"
+                label="Маркетинговые рассылки §20.8.3"
+                description="Отписка от промо, кампаний и акций (marketing_opt_in). Транзакционные уведомления не отключаются."
                 checked={marketing}
                 onChange={(e) => setMarketing(e.currentTarget.checked)}
               />

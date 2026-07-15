@@ -138,6 +138,24 @@ class NotificationInbox {
     await prefs.remove(_key);
   }
 
+  Future<void> syncFromServer(List<Map<String, dynamic>> items) async {
+    if (items.isEmpty) return;
+    final mapped = items.map((j) {
+      final created = j['created_at']?.toString();
+      return InboxNotification(
+        id: 'srv_${j['id']}',
+        title: j['title']?.toString() ?? '',
+        body: j['body']?.toString() ?? '',
+        createdAt: DateTime.tryParse(created ?? '') ?? DateTime.now(),
+        orderId: j['order_id']?.toString(),
+        modelUuid: j['model_uuid']?.toString(),
+        type: j['type']?.toString(),
+        read: j['read'] == true,
+      );
+    }).toList();
+    await _save(mapped);
+  }
+
   Future<void> syncFromOrders(List<Map<String, dynamic>> orders) async {
     for (final o in orders) {
       final status = o['status']?.toString();

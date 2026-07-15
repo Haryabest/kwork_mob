@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
@@ -25,13 +27,25 @@ class _BalanceScreenState extends State<BalanceScreen> {
   bool _loading = true;
   bool _busy = false;
   final _amount = TextEditingController(text: '1000');
+  final _dateFrom = TextEditingController();
+  final _dateTo = TextEditingController();
+  String _txType = 'all';
+  int _pageSize = 20;
+  int _page = 1;
+  int _total = 0;
+  Timer? _pollTimer;
+  String? _pollPaymentId;
+  bool _pollCompany = false;
 
   bool get _corporateFinance =>
       widget.session.corporate && widget.session.canViewFinance;
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     _amount.dispose();
+    _dateFrom.dispose();
+    _dateTo.dispose();
     super.dispose();
   }
 
@@ -54,6 +68,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
+      final offset = (_page - 1) * _pageSize;
       if (_corporateFinance) {
         final companies = await widget.api.listCompanyMine();
         final cid = widget.session.companyId;
@@ -67,17 +82,73 @@ class _BalanceScreenState extends State<BalanceScreen> {
           final raw = m['items'] as List? ?? [];
           _members = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         }
-        _tx = await widget.api.listCompanyTransactions(
+        final page = await widget.api.listCompanyTransactionsPage(
           userId: _authorFilter >= 0 ? _authorFilter : null,
+          dateFrom: _dateFrom.text.trim().isEmpty ? null : _dateFrom.text.trim(),
+          dateTo: _dateTo.text.trim().isEmpty ? null : _dateTo.text.trim(),
+          type: _txType,
+          limit: _pageSize,
+          offset: offset,
         );
+        _total = (page['total'] as num?)?.toInt() ?? 0;
+        final items = page['items'] as List? ?? [];
+        _tx = items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       } else {
         final me = await widget.api.me();
         widget.session.applyMe(me);
-        _tx = await widget.api.listTransactions();
+        final page = await widget.api.listTransactionsPage(
+          dateFrom: _dateFrom.text.trim().isEmpty ? null : _dateFrom.text.trim(),
+          dateTo: _dateTo.text.trim().isEmpty ? null : _dateTo.text.trim(),
+          type: _txType,
+          limit: _pageSize,
+          offset: offset,
+        );
+        _total = (page['total'] as num?)?.toInt() ?? 0;
+        final items = page['items'] as List? ?? [];
+        _tx = items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         _companyBalance = null;
       }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
+  }
+
+  void _resetPageAndLoad() {
+    _page = 1;
+    _load();
+  }
+
+  void _startPaymentPoll(String paymentId, {required bool company}) {
+    _pollTimer?.cancel();
+    _pollPaymentId = paymentId;
+    _pollCompany = company;
+    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (_pollPaymentId == null) return;
+      try {
+        final st = await widget.api.pollTopupPayment(
+          _pollPaymentId!,
+          company: _pollCompany,
+        );
+        final status = st['status']?.toString();
+        if (status == 'succeeded') {
+          _pollTimer?.cancel();
+          _pollPaymentId = null;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Баланс пополнен')),
+            );
+            await _load();
+          }
+        } else if (status == 'canceled') {
+          _pollTimer?.cancel();
+          _pollPaymentId = null;
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Платёж отменён')),
+            );
+          }
+        }
+      } catch (_) {}
+    });
   }
 
   Future<void> _topup({String method = 'redirect'}) async {
@@ -102,7 +173,11 @@ class _BalanceScreenState extends State<BalanceScreen> {
       }
       if (method == 'sbp_qr') {
         final qrData = res['confirmation_data']?.toString();
+        final paymentId = res['payment_id']?.toString() ?? res['id']?.toString();
         if (qrData != null && qrData.isNotEmpty && mounted) {
+          if (paymentId != null) {
+            _startPaymentPoll(paymentId, company: false);
+          }
           await showFDialog<void>(
             context: context,
             builder: (ctx, style, animation) => FDialog(
@@ -115,6 +190,11 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     QrImageView(data: qrData, size: 220),
                     const SizedBox(height: 8),
                     Text('${amount.toStringAsFixed(0)} ₽', style: context.theme.typography.lg),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Статус обновится автоматически',
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    ),
                   ],
                 ),
               ),
@@ -146,6 +226,8 @@ class _BalanceScreenState extends State<BalanceScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  int get _totalPages => _total <= 0 ? 1 : ((_total + _pageSize - 1) ~/ _pageSize);
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +282,54 @@ class _BalanceScreenState extends State<BalanceScreen> {
                       child: Text(_busy ? '…' : 'СБП QR'),
                     ),
                   ],
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+                  FTextField(
+                    control: FTextFieldControl.managed(controller: _dateFrom),
+                    label: const Text('Дата от (ГГГГ-ММ-ДД)'),
+                  ),
+                  const SizedBox(height: 8),
+                  FTextField(
+                    control: FTextFieldControl.managed(controller: _dateTo),
+                    label: const Text('Дата до'),
+                  ),
+                  const SizedBox(height: 8),
+                  FSelect<String>(
+                    label: const Text('Тип операции'),
+                    control: FSelectControl.managed(
+                      initial: _txType,
+                      onChange: (v) {
+                        if (v == null) return;
+                        setState(() => _txType = v);
+                        _resetPageAndLoad();
+                      },
+                    ),
+                    items: const {
+                      'Все': 'all',
+                      'Пополнения': 'topup',
+                      'Списания': 'charge',
+                      'Возвраты': 'refund',
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  FSelect<int>(
+                    label: const Text('На странице §20.3.4'),
+                    control: FSelectControl.managed(
+                      initial: _pageSize,
+                      onChange: (v) {
+                        if (v == null) return;
+                        setState(() => _pageSize = v);
+                        _resetPageAndLoad();
+                      },
+                    ),
+                    items: const {'20': 20, '50': 50, '100': 100},
+                  ),
+                  const SizedBox(height: 8),
+                  FButton(
+                    variant: .outline,
+                    onPress: _resetPageAndLoad,
+                    child: const Text('Применить фильтры'),
+                  ),
+                  const SizedBox(height: 16),
                   if (_corporateFinance &&
                       widget.session.canFilterCompanyOrders &&
                       _members.isNotEmpty) ...[
@@ -210,7 +339,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                         initial: _authorFilter,
                         onChange: (v) {
                           setState(() => _authorFilter = v ?? -1);
-                          _load();
+                          _resetPageAndLoad();
                         },
                       ),
                       items: {
@@ -222,6 +351,10 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     const SizedBox(height: 16),
                   ],
                   Text('Транзакции', style: context.theme.typography.lg),
+                  Text(
+                    'Всего: $_total',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
                   const SizedBox(height: 8),
                   if (_tx.isEmpty)
                     Text('Нет операций', style: TextStyle(color: context.theme.colors.mutedForeground))
@@ -243,6 +376,38 @@ class _BalanceScreenState extends State<BalanceScreen> {
                           ),
                       ],
                     ),
+                  if (_totalPages > 1) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        FButton(
+                          variant: .outline,
+                          onPress: _page > 1
+                              ? () {
+                                  setState(() => _page -= 1);
+                                  _load();
+                                }
+                              : null,
+                          child: const Text('←'),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('$_page / $_totalPages'),
+                        ),
+                        FButton(
+                          variant: .outline,
+                          onPress: _page < _totalPages
+                              ? () {
+                                  setState(() => _page += 1);
+                                  _load();
+                                }
+                              : null,
+                          child: const Text('→'),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

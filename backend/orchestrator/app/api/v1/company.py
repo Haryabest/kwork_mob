@@ -756,6 +756,49 @@ async def company_topup(
     }
 
 
+@router.get("/balance/payment/{payment_id}")
+async def company_topup_payment_status(
+    payment_id: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Polling статуса пополнения компании (СБП QR) §20.3.3."""
+    from app.core.config import settings
+    from app.services import company_balance as bal
+    from app.services.yookassa import yookassa_service
+
+    company = await bal.get_owned_company_row(db, user)
+    if payment_id.startswith("dev-"):
+        await db.refresh(company)
+        return {
+            "status": "succeeded",
+            "payment_id": payment_id,
+            "company_balance": company.balance,
+            "dev_mock": True,
+        }
+    if not yookassa_service.configured:
+        if settings.is_development:
+            await db.refresh(company)
+            return {"status": "pending", "payment_id": payment_id, "company_balance": company.balance}
+        raise HTTPException(503, "ЮKassa не настроена")
+
+    payment = await yookassa_service.get_payment(payment_id)
+    meta = payment.get("metadata") or {}
+    if str(meta.get("user_id")) != str(user.id) or str(meta.get("company_id")) != str(company.id):
+        raise HTTPException(403, "Платёж принадлежит другому пользователю")
+    await db.refresh(company)
+    tx = await db.scalar(select(Transaction).where(Transaction.external_id == payment_id))
+    status = payment.get("status") or "pending"
+    if tx or status == "succeeded":
+        status = "succeeded"
+    return {
+        "status": status,
+        "payment_id": payment_id,
+        "company_balance": company.balance,
+        "amount": int(float((payment.get("amount") or {}).get("value") or 0)),
+    }
+
+
 @router.get("/transactions")
 async def company_transactions(
     user: User = Depends(get_current_db_user),
@@ -764,6 +807,8 @@ async def company_transactions(
     date_from: date | None = Query(default=None, alias="from"),
     date_to: date | None = Query(default=None, alias="to"),
     tx_type: str = Query(default="all", alias="type", pattern=r"^(all|topup|charge|refund)$"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
     from app.services import company_balance as bal
     from app.services.access import company_for_permission
@@ -777,7 +822,15 @@ async def company_transactions(
         date_to=date_to,
         tx_type=tx_type,
     )
-    rows = (await db.scalars(stmt.limit(200))).all()
+    total = await bal.count_company_transactions(
+        db,
+        company.id,
+        user_id=user_id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    rows = (await db.scalars(stmt.offset(offset).limit(limit))).all()
     return {
         "company_id": company.id,
         "items": [
@@ -791,6 +844,9 @@ async def company_transactions(
             }
             for t in rows
         ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
     }
 
 

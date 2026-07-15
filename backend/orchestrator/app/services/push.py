@@ -114,8 +114,28 @@ async def send_to_user(
     *,
     data: dict[str, str] | None = None,
     email_fallback: bool = True,
+    record_inbox: bool = True,
 ) -> dict[str, Any]:
     """Push на все устройства пользователя; при неудаче — email (§3.4.3)."""
+    data = data or {}
+    if record_inbox:
+        try:
+            from app.services import notification_inbox as inbox_svc
+
+            oid = data.get("order_id")
+            await inbox_svc.record(
+                db,
+                user_id=user_id,
+                title=title,
+                body=body,
+                event_type=data.get("type") or data.get("event"),
+                order_id=int(oid) if oid and str(oid).isdigit() else None,
+                model_uuid=data.get("model_uuid"),
+                dedup_key=data.get("dedup_key") or data.get("message_id"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("inbox record user=%s: %s", user_id, exc)
+
     tokens = (
         await db.scalars(select(DeviceToken).where(DeviceToken.user_id == user_id))
     ).all()

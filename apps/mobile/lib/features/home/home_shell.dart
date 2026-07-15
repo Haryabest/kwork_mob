@@ -52,7 +52,13 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _loadUnread() async {
-    final n = await NotificationInbox.instance.unreadCount();
+    var n = 0;
+    try {
+      final data = await widget.api.listNotifications(limit: 1);
+      n = (data['unread'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      n = await NotificationInbox.instance.unreadCount();
+    }
     if (mounted) setState(() => _unread = n);
   }
 

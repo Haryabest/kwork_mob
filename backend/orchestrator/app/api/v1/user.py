@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -134,17 +134,25 @@ async def get_transactions(
     date_from: date | None = Query(default=None, alias="from"),
     date_to: date | None = Query(default=None, alias="to"),
     tx_type: str = Query(default="all", alias="type", pattern=r"^(all|topup|charge|refund)$"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
-    stmt = select(Transaction).where(Transaction.user_id == user.id)
-    if tx_type != "all":
-        stmt = stmt.where(Transaction.tx_type == tx_type)
-    if date_from is not None:
-        start = datetime.combine(date_from, time.min, tzinfo=timezone.utc)
-        stmt = stmt.where(Transaction.created_at >= start)
-    if date_to is not None:
-        end = datetime.combine(date_to, time.max, tzinfo=timezone.utc)
-        stmt = stmt.where(Transaction.created_at <= end)
-    rows = (await db.scalars(stmt.order_by(Transaction.id.desc()).limit(200))).all()
+    from app.services import company_balance as bal
+
+    stmt = bal.build_user_tx_stmt(
+        user.id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    total = await bal.count_user_transactions(
+        db,
+        user.id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    rows = (await db.scalars(stmt.offset(offset).limit(limit))).all()
     return {
         "items": [
             {
@@ -155,7 +163,10 @@ async def get_transactions(
                 "created_at": t.created_at.isoformat() if t.created_at else None,
             }
             for t in rows
-        ]
+        ],
+        "total": int(total),
+        "limit": limit,
+        "offset": offset,
     }
 
 
@@ -229,7 +240,117 @@ async def topup_balance(
         "payment_method": method,
         "amount": amount,
         "receipt": True,
+        "payment_id": payment["id"],
     }
+
+
+@router.get("/balance/payment/{payment_id}")
+async def topup_payment_status(
+    payment_id: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Polling статуса пополнения (СБП QR / карта) §20.3.3."""
+    from app.core.config import settings
+    from app.services.yookassa import yookassa_service
+
+    if payment_id.startswith("dev-topup-"):
+        await db.refresh(user)
+        return {"status": "succeeded", "payment_id": payment_id, "balance": user.balance, "dev_mock": True}
+
+    if not yookassa_service.configured:
+        if settings.is_development:
+            await db.refresh(user)
+            return {"status": "pending", "payment_id": payment_id, "balance": user.balance}
+        raise HTTPException(503, "ЮKassa не настроена")
+
+    payment = await yookassa_service.get_payment(payment_id)
+    meta = payment.get("metadata") or {}
+    if str(meta.get("user_id")) != str(user.id):
+        raise HTTPException(403, "Платёж принадлежит другому пользователю")
+    await db.refresh(user)
+    tx = await db.scalar(select(Transaction).where(Transaction.external_id == payment_id))
+    status = payment.get("status") or "pending"
+    if tx or status == "succeeded":
+        status = "succeeded"
+    return {
+        "status": status,
+        "payment_id": payment_id,
+        "balance": user.balance,
+        "amount": int(float((payment.get("amount") or {}).get("value") or 0)),
+    }
+
+
+@router.get("/notifications")
+async def list_notifications(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    """Inbox уведомлений §19.16."""
+    from app.services import notification_inbox as inbox_svc
+
+    rows, total = await inbox_svc.list_for_user(db, user.id, limit=limit, offset=offset)
+    unread = await inbox_svc.unread_count(db, user.id)
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "title": r.title,
+                "body": r.body,
+                "type": r.event_type,
+                "order_id": r.order_id,
+                "model_uuid": r.model_uuid,
+                "read": r.read_at is not None,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+        "total": total,
+        "unread": unread,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.post("/notifications/read-all")
+async def notifications_read_all(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import notification_inbox as inbox_svc
+
+    n = await inbox_svc.mark_all_read(db, user.id)
+    await db.commit()
+    return {"marked": n}
+
+
+@router.post("/notifications/{notification_id}/read")
+async def notification_mark_read(
+    notification_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import notification_inbox as inbox_svc
+
+    ok = await inbox_svc.mark_read(db, user.id, notification_id)
+    if not ok:
+        raise HTTPException(404, "Уведомление не найдено")
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/notifications")
+async def notifications_clear(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import notification_inbox as inbox_svc
+
+    n = await inbox_svc.clear_all(db, user.id)
+    await db.commit()
+    return {"deleted": n}
 
 
 @router.post("/me/delete-request")

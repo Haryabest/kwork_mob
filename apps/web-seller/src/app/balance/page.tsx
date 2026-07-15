@@ -13,6 +13,7 @@ import {
   Text,
   TextInput,
   Table,
+  Pagination,
 } from '@mantine/core';
 import { IconDownload, IconPlus } from '@tabler/icons-react';
 import { useDisclosure } from '@mantine/hooks';
@@ -70,6 +71,11 @@ export default function BalancePage() {
   const [qrAmount, setQrAmount] = useState(0);
   const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number | string>(5000);
   const [savingThreshold, setSavingThreshold] = useState(false);
+  const [pageSize, setPageSize] = useState<string | null>('20');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [pollStatus, setPollStatus] = useState<string | null>(null);
 
   const memberLabel = useMemo(() => {
     const map = new Map<number, string>();
@@ -85,8 +91,11 @@ export default function BalancePage() {
     if (dateFrom) params.from = dateFrom;
     if (dateTo) params.to = dateTo;
     if (txType && txType !== 'all') params.type = txType;
+    const limit = Number(pageSize || 20);
+    params.limit = limit;
+    params.offset = (page - 1) * limit;
     return params;
-  }, [authorId, dateFrom, dateTo, txType]);
+  }, [authorId, dateFrom, dateTo, txType, pageSize, page]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -105,8 +114,9 @@ export default function BalancePage() {
 
       if (useCorporate && company) {
         setBalance(company.balance ?? 0);
-        const tx = await api.get<{ items: Tx[] }>('/company/transactions', { params });
+        const tx = await api.get<{ items: Tx[]; total?: number }>('/company/transactions', { params });
         setItems(tx.data.items ?? []);
+        setTotal(tx.data.total ?? tx.data.items?.length ?? 0);
         if (MANAGE_ROLES.has(role)) {
           const mem = await api.get<{ items: Member[] }>('/company/members');
           setMembers(mem.data.items ?? []);
@@ -121,10 +131,11 @@ export default function BalancePage() {
       } else {
         const [me, tx] = await Promise.all([
           api.get<{ balance: number }>('/user/me'),
-          api.get<{ items: Tx[] }>('/user/transactions', { params }),
+          api.get<{ items: Tx[]; total?: number }>('/user/transactions', { params }),
         ]);
         setBalance(me.data.balance ?? 0);
         setItems(tx.data.items ?? []);
+        setTotal(tx.data.total ?? tx.data.items?.length ?? 0);
       }
       setUpdatedAt(new Date());
     } catch (e) {
@@ -137,6 +148,50 @@ export default function BalancePage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [authorId, dateFrom, dateTo, txType, pageSize]);
+
+  useEffect(() => {
+    if (!qrOpened || !paymentId) return;
+    let cancelled = false;
+    const endpoint =
+      corporate && isOwner ? `/company/balance/payment/${paymentId}` : `/user/balance/payment/${paymentId}`;
+
+    const tick = async () => {
+      try {
+        const { data } = await api.get<{
+          status?: string;
+          balance?: number;
+          company_balance?: number;
+        }>(endpoint);
+        if (cancelled) return;
+        setPollStatus(data.status ?? 'pending');
+        if (data.status === 'succeeded') {
+          if (typeof data.company_balance === 'number') setBalance(data.company_balance);
+          else if (typeof data.balance === 'number') setBalance(data.balance);
+          notifications.show({ color: 'green', message: 'Баланс пополнен' });
+          closeQr();
+          setPaymentId(null);
+          await load();
+        } else if (data.status === 'canceled') {
+          notifications.show({ color: 'orange', message: 'Платёж отменён' });
+          closeQr();
+          setPaymentId(null);
+        }
+      } catch {
+        /* ignore transient poll errors */
+      }
+    };
+
+    void tick();
+    const id = window.setInterval(() => void tick(), 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [qrOpened, paymentId, corporate, isOwner, closeQr, load]);
 
   async function saveLowBalanceThreshold() {
     const value = typeof lowBalanceThreshold === 'number' ? lowBalanceThreshold : Number(lowBalanceThreshold);
@@ -169,6 +224,8 @@ export default function BalancePage() {
       const { data } = await api.post<{
         confirmation_url?: string;
         confirmation_data?: string;
+        payment_id?: string;
+        id?: string;
         status?: string;
         dev_mock?: boolean;
         balance?: number;
@@ -179,6 +236,8 @@ export default function BalancePage() {
       if (paymentMethod === 'sbp_qr' && data.confirmation_data) {
         setQrData(data.confirmation_data);
         setQrAmount(value);
+        setPaymentId(data.payment_id ?? (data as { id?: string }).id ?? null);
+        setPollStatus(data.status ?? 'pending');
         close();
         openQr();
         return;
@@ -346,6 +405,17 @@ export default function BalancePage() {
                 }))}
               />
             )}
+            <Select
+              label="На странице §20.3.4"
+              data={[
+                { value: '20', label: '20' },
+                { value: '50', label: '50' },
+                { value: '100', label: '100' },
+              ]}
+              value={pageSize}
+              onChange={setPageSize}
+              allowDeselect={false}
+            />
           </FilterRow>
 
           <Text fw={700} mb="md">
@@ -391,6 +461,16 @@ export default function BalancePage() {
               </Table>
             </ScrollTable>
           )}
+
+          {total > Number(pageSize || 20) && (
+            <Group justify="center" mt="lg">
+              <Pagination
+                total={Math.max(1, Math.ceil(total / Number(pageSize || 20)))}
+                value={page}
+                onChange={setPage}
+              />
+            </Group>
+          )}
         </Surface>
       )}
 
@@ -434,7 +514,10 @@ export default function BalancePage() {
           )}
           <Text fw={700}>{qrAmount.toLocaleString('ru-RU')} ₽</Text>
           <Text size="xs" c="#6d6c77">
-            Статус обновится автоматически после вебхука ЮKassa
+            Статус: {pollStatus === 'succeeded' ? 'оплачено' : pollStatus === 'canceled' ? 'отменено' : 'ожидание оплаты…'}
+          </Text>
+          <Text size="xs" c="#6d6c77">
+            Обновление каждые 3 сек (вебхук ЮKassa)
           </Text>
           <Button variant="light" onClick={() => void load()}>
             Обновить баланс

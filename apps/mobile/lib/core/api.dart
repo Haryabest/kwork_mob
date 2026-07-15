@@ -696,10 +696,39 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<List<Map<String, dynamic>>> listTransactions() async {
-    final res = await _dio.get('/user/transactions');
+  Future<List<Map<String, dynamic>>> listTransactions({
+    String? dateFrom,
+    String? dateTo,
+    String? type,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _dio.get('/user/transactions', queryParameters: {
+      if (dateFrom != null && dateFrom.isNotEmpty) 'from': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'to': dateTo,
+      if (type != null && type.isNotEmpty && type != 'all') 'type': type,
+      'limit': limit,
+      'offset': offset,
+    });
     final items = (res.data as Map)['items'] as List? ?? [];
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> listTransactionsPage({
+    String? dateFrom,
+    String? dateTo,
+    String? type,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _dio.get('/user/transactions', queryParameters: {
+      if (dateFrom != null && dateFrom.isNotEmpty) 'from': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'to': dateTo,
+      if (type != null && type.isNotEmpty && type != 'all') 'type': type,
+      'limit': limit,
+      'offset': offset,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
   }
 
   Future<Map<String, dynamic>> topupBalance({
@@ -720,12 +749,71 @@ class ApiClient {
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
-  Future<List<Map<String, dynamic>>> listCompanyTransactions({int? userId}) async {
+  Future<Map<String, dynamic>> listCompanyTransactionsPage({
+    int? userId,
+    String? dateFrom,
+    String? dateTo,
+    String? type,
+    int limit = 20,
+    int offset = 0,
+  }) async {
     final res = await _dio.get('/company/transactions', queryParameters: {
       if (userId != null) 'user_id': userId,
+      if (dateFrom != null && dateFrom.isNotEmpty) 'from': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'to': dateTo,
+      if (type != null && type.isNotEmpty && type != 'all') 'type': type,
+      'limit': limit,
+      'offset': offset,
     });
-    final items = (res.data as Map)['items'] as List? ?? [];
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listCompanyTransactions({
+    int? userId,
+    String? dateFrom,
+    String? dateTo,
+    String? type,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final page = await listCompanyTransactionsPage(
+      userId: userId,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      type: type,
+      limit: limit,
+      offset: offset,
+    );
+    final items = page['items'] as List? ?? [];
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> pollTopupPayment(String paymentId, {bool company = false}) async {
+    final path = company
+        ? '/company/balance/payment/$paymentId'
+        : '/user/balance/payment/$paymentId';
+    final res = await _dio.get(path);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> listNotifications({int limit = 50, int offset = 0}) async {
+    final res = await _dio.get('/user/notifications', queryParameters: {
+      'limit': limit,
+      'offset': offset,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    await _dio.post('/user/notifications/read-all');
+  }
+
+  Future<void> markNotificationRead(int id) async {
+    await _dio.post('/user/notifications/$id/read');
+  }
+
+  Future<void> clearNotifications() async {
+    await _dio.delete('/user/notifications');
   }
 
   Future<Map<String, dynamic>> listCompanyMembers() async {

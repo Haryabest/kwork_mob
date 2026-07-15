@@ -7,7 +7,7 @@ import io
 from datetime import date, datetime, time, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Company, Transaction, User
@@ -58,6 +58,61 @@ def build_company_tx_stmt(
         end = datetime.combine(date_to, time.max, tzinfo=timezone.utc)
         stmt = stmt.where(Transaction.created_at <= end)
     return stmt.order_by(Transaction.id.desc())
+
+
+def build_user_tx_stmt(
+    user_id: int,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    tx_type: str | None = None,
+):
+    stmt = select(Transaction).where(Transaction.user_id == user_id)
+    if tx_type and tx_type != "all":
+        stmt = stmt.where(Transaction.tx_type == tx_type)
+    if date_from is not None:
+        start = datetime.combine(date_from, time.min, tzinfo=timezone.utc)
+        stmt = stmt.where(Transaction.created_at >= start)
+    if date_to is not None:
+        end = datetime.combine(date_to, time.max, tzinfo=timezone.utc)
+        stmt = stmt.where(Transaction.created_at <= end)
+    return stmt.order_by(Transaction.id.desc())
+
+
+async def count_user_transactions(
+    db: AsyncSession,
+    user_id: int,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    tx_type: str | None = None,
+) -> int:
+    stmt = build_user_tx_stmt(
+        user_id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    return int(await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+
+
+async def count_company_transactions(
+    db: AsyncSession,
+    company_id: int,
+    *,
+    user_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    tx_type: str | None = None,
+) -> int:
+    stmt = build_company_tx_stmt(
+        company_id,
+        user_id=user_id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    return int(await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
 
 
 def transactions_to_csv(rows: list[Transaction]) -> str:
