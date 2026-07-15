@@ -13,6 +13,12 @@ String? routeFromDeepLinkUri(Uri? uri) {
     if (segs.first == 'notifications') {
       return '/home/notifications';
     }
+    if (segs.first == 'support') {
+      if (segs.length >= 3 && segs[1] == 'ticket') {
+        return '/home/support/ticket/${segs[2]}';
+      }
+      return '/home';
+    }
     if (segs.first == 'shoot' && segs.length >= 2) {
       return '/shoot/${segs[1]}';
     }

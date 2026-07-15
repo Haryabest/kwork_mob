@@ -138,6 +138,7 @@ async def get_transactions(
     offset: int = Query(default=0, ge=0),
 ):
     from app.services import company_balance as bal
+    from app.services import pending_payments as pend
 
     stmt = bal.build_user_tx_stmt(
         user.id,
@@ -145,17 +146,45 @@ async def get_transactions(
         date_to=date_to,
         tx_type=tx_type,
     )
-    total = await bal.count_user_transactions(
+    tx_total = await bal.count_user_transactions(
         db,
         user.id,
         date_from=date_from,
         date_to=date_to,
         tx_type=tx_type,
     )
-    rows = (await db.scalars(stmt.offset(offset).limit(limit))).all()
+    pending_items = await pend.list_pending_dicts(
+        db,
+        user_id=user.id,
+        personal_only=True,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    pending_count = len(pending_items)
+    total = int(tx_total) + pending_count
+
+    if offset < pending_count:
+        tx_offset = 0
+        tx_limit = max(0, limit - (pending_count - offset))
+    else:
+        tx_offset = offset - pending_count
+        tx_limit = limit
+
+    rows = (await db.scalars(stmt.offset(tx_offset).limit(tx_limit))).all()
+    tx_items = [bal.transaction_to_dict(t) for t in rows]
+
+    if offset < pending_count:
+        page = pending_items[offset : offset + limit]
+        need = limit - len(page)
+        if need > 0:
+            page.extend(tx_items[:need])
+    else:
+        page = tx_items
+
     return {
-        "items": [bal.transaction_to_dict(t) for t in rows],
-        "total": int(total),
+        "items": page,
+        "total": total,
         "limit": limit,
         "offset": offset,
     }
@@ -222,6 +251,17 @@ async def topup_balance(
         receipt=receipt,
         idempotence_key=f"topup-{user.id}-{amount}-{method}",
     )
+    from app.services import pending_payments as pend
+
+    await pend.upsert_pending(
+        db,
+        payment_id=payment["id"],
+        user_id=user.id,
+        amount=amount,
+        payment_method=method,
+        purpose="topup",
+    )
+    await db.commit()
     return {
         "id": payment["id"],
         "status": payment["status"],
@@ -264,6 +304,11 @@ async def topup_payment_status(
     status = payment.get("status") or "pending"
     if tx or status == "succeeded":
         status = "succeeded"
+    elif status == "canceled":
+        from app.services import pending_payments as pend
+
+        await pend.mark_status(db, payment_id, "canceled")
+        await db.commit()
     return {
         "status": status,
         "payment_id": payment_id,

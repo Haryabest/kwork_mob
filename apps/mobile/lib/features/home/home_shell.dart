@@ -821,6 +821,13 @@ class _ProfileTabState extends State<_ProfileTab> {
               title: Text(widget.session.email ?? '—'),
               subtitle: const Text('Аккаунт'),
             ),
+            if (widget.session.isOwner && widget.session.corporate)
+              FTile(
+                title: const Text('Баланс компании'),
+                subtitle: const Text('Пополнение счёта · §19.14.2'),
+                prefix: const Icon(FIcons.wallet),
+                onPress: () => context.push('/home/company-topup'),
+              ),
             if (!widget.session.hidePrices)
               FTile(
                 title: Text('Баланс: ${widget.session.balance?.toStringAsFixed(0) ?? '—'} ₽'),

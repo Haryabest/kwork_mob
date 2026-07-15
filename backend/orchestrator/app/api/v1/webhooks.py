@@ -121,6 +121,13 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
     if not payment_id:
         return {"ok": True, "ignored": True}
 
+    from app.services import pending_payments as pend_svc
+
+    if event == "payment.canceled":
+        await pend_svc.mark_status(db, payment_id, "canceled")
+        await db.commit()
+        return {"ok": True, "canceled": True, "payment_id": payment_id}
+
     try:
         if event not in ("payment.succeeded", "payment.waiting_for_capture") and parsed.get(
             "status"
@@ -134,6 +141,8 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
 
         existing = await db.scalar(select(Transaction).where(Transaction.external_id == payment_id))
         if existing:
+            await pend_svc.mark_status(db, payment_id, "succeeded")
+            await db.commit()
             await yk_wh.record_webhook_success(order_hint or existing.external_id)
             return {"ok": True, "idempotent": True}
 
@@ -168,6 +177,7 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 )
             )
             await db.commit()
+            await pend_svc.mark_status(db, payment_id, "succeeded")
             await yk_wh.record_webhook_success(company_id)
             return {"ok": True, "company_id": company.id, "credited": amount}
 
@@ -268,6 +278,7 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
         )
         await db.flush()
         queued = await try_queue_awaiting_orders(db, user.id)
+        await pend_svc.mark_status(db, payment_id, "succeeded")
         await db.commit()
         await yk_wh.record_webhook_success(user_id)
         return {"ok": True, "credited": amount, "queued_orders": queued}

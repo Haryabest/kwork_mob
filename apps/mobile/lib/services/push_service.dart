@@ -165,7 +165,11 @@ class PushService {
         type == 'cancelled') {
       return '/home/notifications';
     }
+    final ticketId = data['ticket_id']?.toString() ?? data['support_id']?.toString();
     if (type == 'support' || type == 'support_reply') {
+      if (ticketId != null && ticketId.isNotEmpty) {
+        return '/home/support/ticket/$ticketId';
+      }
       return '/home';
     }
     return null;

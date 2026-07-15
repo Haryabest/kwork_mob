@@ -5,9 +5,10 @@ import 'package:kwork_mobile/core/theme.dart';
 
 /// FAQ + форма вопроса + история обращений (§3.13 / §19.13).
 class FaqSupportScreen extends StatefulWidget {
-  const FaqSupportScreen({super.key, required this.api});
+  const FaqSupportScreen({super.key, required this.api, this.initialTicketId});
 
   final ApiClient api;
+  final int? initialTicketId;
 
   @override
   State<FaqSupportScreen> createState() => _FaqSupportScreenState();
@@ -27,7 +28,20 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
   void initState() {
     super.initState();
     _tabs = FTabController(length: 2, vsync: this);
-    _load();
+    _load().then((_) => _openInitialTicket());
+  }
+
+  Future<void> _openInitialTicket() async {
+    final id = widget.initialTicketId;
+    if (id == null || !mounted) return;
+    _tabs.index = 1;
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (c) => _TicketThreadSheet(api: widget.api, ticketId: id),
+    );
   }
 
   @override

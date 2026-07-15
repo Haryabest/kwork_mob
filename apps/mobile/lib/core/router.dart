@@ -6,6 +6,7 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/features/auth/auth_screen.dart';
 import 'package:kwork_mobile/features/company/shoot_link_screen.dart';
 import 'package:kwork_mobile/features/company/team_screen.dart';
+import 'package:kwork_mobile/features/profile/company_topup_screen.dart';
 import 'package:kwork_mobile/features/profile/balance_screen.dart';
 import 'package:kwork_mobile/features/profile/storage_settings_screen.dart';
 import 'package:kwork_mobile/features/home/home_shell.dart';
@@ -23,6 +24,7 @@ import 'package:kwork_mobile/features/shoot/upload_checkout_screen.dart';
 import 'package:kwork_mobile/features/shoot/order_checkout_screen.dart';
 import 'package:kwork_mobile/features/calibration/calibration_wizard_screen.dart';
 import 'package:kwork_mobile/features/notifications/notifications_screen.dart';
+import 'package:kwork_mobile/features/support/faq_support_screen.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
@@ -190,6 +192,17 @@ GoRouter createRouter({
           GoRoute(
             path: 'balance',
             builder: (context, state) => BalanceScreen(api: api, session: session),
+          ),
+          GoRoute(
+            path: 'company-topup',
+            builder: (context, state) => CompanyTopupScreen(api: api, session: session),
+          ),
+          GoRoute(
+            path: 'support/ticket/:ticketId',
+            builder: (context, state) => FaqSupportScreen(
+              api: api,
+              initialTicketId: int.parse(state.pathParameters['ticketId']!),
+            ),
           ),
           GoRoute(
             path: 'notifications',

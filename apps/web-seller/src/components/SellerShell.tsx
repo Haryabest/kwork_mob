@@ -115,6 +115,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
                   variant="subtle"
                   aria-label="Уведомления"
                   size="lg"
+                  visibleFrom="sm"
                 >
                   <IconBell size={19} />
                 </ActionIcon>
@@ -173,6 +174,22 @@ export function SellerShell({ children }: { children: ReactNode }) {
                   />
                 );
               })}
+              <NavLink
+                component={Link}
+                href="/notifications"
+                label="Уведомления"
+                leftSection={<IconBell size={18} stroke={1.5} />}
+                rightSection={
+                  unread > 0 ? (
+                    <Badge size="xs" color="red" circle>
+                      {unread > 99 ? '99+' : unread}
+                    </Badge>
+                  ) : null
+                }
+                active={pathname === '/notifications'}
+                onClick={() => close()}
+                hiddenFrom="sm"
+              />
             </Stack>
           </AppShell.Section>
         </AppShell.Navbar>

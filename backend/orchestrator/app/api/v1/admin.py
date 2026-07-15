@@ -534,6 +534,28 @@ async def admin_support_reply(
     )
     req.status = "answered"
     await db.commit()
+    try:
+        from app.services import push as push_svc
+
+        user = await db.get(User, req.user_id)
+        if user and push_svc.user_wants_notification(user, "support_reply"):
+            preview = (body.message or "")[:120]
+            await push_svc.send_to_user(
+                db,
+                req.user_id,
+                "Ответ поддержки",
+                preview or "Новое сообщение по вашему обращению",
+                data={
+                    "type": "support_reply",
+                    "event": "support_reply",
+                    "ticket_id": str(question_id),
+                    "deeplink": f"kworkmob://open/support/ticket/{question_id}",
+                },
+                email_fallback=True,
+            )
+            await db.commit()
+    except Exception:  # noqa: BLE001
+        pass
     return {"message": "ok"}
 
 

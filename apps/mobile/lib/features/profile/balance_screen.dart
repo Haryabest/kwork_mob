@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -36,6 +40,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
   Timer? _pollTimer;
   String? _pollPaymentId;
   bool _pollCompany = false;
+  bool _exporting = false;
 
   bool get _corporateFinance =>
       widget.session.corporate && widget.session.canViewFinance;
@@ -131,7 +136,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
         '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
   }
 
-  bool get _canTopup => !_corporateFinance || widget.session.isOwner;
+  bool get _canTopup => !_corporateFinance;
 
   void _startPaymentPoll(String paymentId, {required bool company}) {
     _pollTimer?.cancel();
@@ -177,10 +182,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
     }
     setState(() => _busy = true);
     try {
-      final companyTopup = _corporateFinance && widget.session.isOwner;
-      final res = companyTopup
-          ? await widget.api.topupCompanyBalance(amount: amount, paymentMethod: method)
-          : await widget.api.topupBalance(amount: amount, paymentMethod: method);
+      final res = await widget.api.topupBalance(amount: amount, paymentMethod: method);
       if (res['dev_mock'] == true) {
         await _load();
         if (mounted) {
@@ -195,7 +197,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
         final paymentId = res['payment_id']?.toString() ?? res['id']?.toString();
         if (qrData != null && qrData.isNotEmpty && mounted) {
           if (paymentId != null) {
-            _startPaymentPoll(paymentId, company: companyTopup);
+            _startPaymentPoll(paymentId, company: false);
           }
           await showFDialog<void>(
             context: context,
@@ -246,6 +248,29 @@ class _BalanceScreenState extends State<BalanceScreen> {
     }
   }
 
+  Future<void> _exportCsv() async {
+    if (!widget.session.isOwner || !_corporateFinance) return;
+    setState(() => _exporting = true);
+    try {
+      final bytes = await widget.api.exportCompanyTransactionsCsv(
+        userId: _authorFilter >= 0 ? _authorFilter : null,
+        dateFrom: _dateFrom.text.trim().isEmpty ? null : _dateFrom.text.trim(),
+        dateTo: _dateTo.text.trim().isEmpty ? null : _dateTo.text.trim(),
+        type: _txType,
+      );
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/company_transactions.csv');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)], text: 'Транзакции компании §20.3.4');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   int get _totalPages => _total <= 0 ? 1 : ((_total + _pageSize - 1) ~/ _pageSize);
 
   @override
@@ -279,6 +304,14 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     Text(
                       widget.session.companyName ?? 'Компания',
                       style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                  ],
+                  if (_corporateFinance && widget.session.isOwner) ...[
+                    const SizedBox(height: 8),
+                    FButton(
+                      variant: .outline,
+                      onPress: () => context.push('/home/company-topup'),
+                      child: const Text('Пополнить баланс компании §19.14.2'),
                     ),
                   ],
                   if (_canTopup) ...[
@@ -358,6 +391,14 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     onPress: _resetPageAndLoad,
                     child: const Text('Применить фильтры'),
                   ),
+                  if (_corporateFinance && widget.session.isOwner) ...[
+                    const SizedBox(height: 8),
+                    FButton(
+                      variant: .outline,
+                      onPress: _exporting ? null : _exportCsv,
+                      child: Text(_exporting ? 'Экспорт…' : 'Экспорт CSV §20.3.4'),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   if (_corporateFinance &&
                       widget.session.canFilterCompanyOrders &&

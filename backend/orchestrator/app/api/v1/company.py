@@ -743,6 +743,18 @@ async def company_topup(
         receipt=receipt,
         idempotence_key=f"company-topup-{company.id}-{body.amount}-{method}",
     )
+    from app.services import pending_payments as pend
+
+    await pend.upsert_pending(
+        db,
+        payment_id=payment["id"],
+        user_id=user.id,
+        company_id=company.id,
+        amount=body.amount,
+        payment_method=method,
+        purpose="company_topup",
+    )
+    await db.commit()
     return {
         "company_id": company.id,
         "payment_id": payment["id"],
@@ -791,6 +803,11 @@ async def company_topup_payment_status(
     status = payment.get("status") or "pending"
     if tx or status == "succeeded":
         status = "succeeded"
+    elif status == "canceled":
+        from app.services import pending_payments as pend
+
+        await pend.mark_status(db, payment_id, "canceled")
+        await db.commit()
     return {
         "status": status,
         "payment_id": payment_id,
@@ -811,6 +828,7 @@ async def company_transactions(
     offset: int = Query(default=0, ge=0),
 ):
     from app.services import company_balance as bal
+    from app.services import pending_payments as pend
     from app.services.access import company_for_permission
 
     company = await company_for_permission(db, user, "can_view_finance")
@@ -822,7 +840,7 @@ async def company_transactions(
         date_to=date_to,
         tx_type=tx_type,
     )
-    total = await bal.count_company_transactions(
+    tx_total = await bal.count_company_transactions(
         db,
         company.id,
         user_id=user_id,
@@ -830,10 +848,37 @@ async def company_transactions(
         date_to=date_to,
         tx_type=tx_type,
     )
-    rows = (await db.scalars(stmt.offset(offset).limit(limit))).all()
+    pending_items = await pend.list_pending_dicts(
+        db,
+        company_id=company.id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
+    pending_count = len(pending_items)
+    total = int(tx_total) + pending_count
+
+    if offset < pending_count:
+        tx_offset = 0
+        tx_limit = max(0, limit - (pending_count - offset))
+    else:
+        tx_offset = offset - pending_count
+        tx_limit = limit
+
+    rows = (await db.scalars(stmt.offset(tx_offset).limit(tx_limit))).all()
+    tx_items = [bal.transaction_to_dict(t, include_user=True) for t in rows]
+
+    if offset < pending_count:
+        page = pending_items[offset : offset + limit]
+        need = limit - len(page)
+        if need > 0:
+            page.extend(tx_items[:need])
+    else:
+        page = tx_items
+
     return {
         "company_id": company.id,
-        "items": [bal.transaction_to_dict(t, include_user=True) for t in rows],
+        "items": page,
         "total": total,
         "limit": limit,
         "offset": offset,

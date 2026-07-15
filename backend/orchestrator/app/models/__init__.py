@@ -454,6 +454,23 @@ class Transaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class BalancePendingPayment(Base):
+    """YooKassa topup до webhook §20.3.4."""
+
+    __tablename__ = "balance_pending_payments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    payment_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    payment_method: Mapped[str] = mapped_column(String(30), default="redirect")
+    purpose: Mapped[str] = mapped_column(String(30), default="topup")
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class WorkerNode(Base):
     """GPU-воркеры (§4): heartbeat, вес, grace period."""
 
