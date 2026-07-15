@@ -133,6 +133,11 @@ class NotificationInbox {
     await _save(items.map((e) => e.copyWith(read: true)).toList());
   }
 
+  Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
+  }
+
   Future<void> syncFromOrders(List<Map<String, dynamic>> orders) async {
     for (final o in orders) {
       final status = o['status']?.toString();
@@ -148,6 +153,15 @@ class NotificationInbox {
           modelUuid: model?['uuid']?.toString(),
           type: 'generation_done',
         );
+      } else if (status == 'blocked_nsfw') {
+        await add(
+          id: 'order_nsfw_$id',
+          title: 'NSFW-блокировка',
+          body:
+              'Заказ #$id отклонён. Средства возвращены. Аккаунт на проверке до 24 ч.',
+          orderId: id,
+          type: 'nsfw_blocked',
+        );
       } else if (status == 'failed') {
         await add(
           id: 'order_failed_$id',
@@ -156,6 +170,15 @@ class NotificationInbox {
           orderId: id,
           type: 'generation_failed',
         );
+        if ((o['amount'] as num?) != null && (o['amount'] as num) > 0) {
+          await add(
+            id: 'order_refund_$id',
+            title: 'Возврат средств',
+            body: 'По заказу #$id средства возвращены',
+            orderId: id,
+            type: 'refund',
+          );
+        }
       } else if (status == 'cancelled') {
         await add(
           id: 'order_cancelled_$id',

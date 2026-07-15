@@ -10,13 +10,15 @@ import {
   NumberInput,
   Select,
   Stack,
-  Table,
   Text,
+  TextInput,
+  Table,
 } from '@mantine/core';
 import { IconDownload, IconPlus } from '@tabler/icons-react';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
 import { api, apiMessage } from '../../services/api';
@@ -39,9 +41,17 @@ type Member = {
 
 const MANAGE_ROLES = new Set(['owner', 'manager']);
 
+const TX_TYPE_OPTIONS = [
+  { value: 'all', label: 'Все типы' },
+  { value: 'topup', label: 'Пополнения' },
+  { value: 'charge', label: 'Списания' },
+  { value: 'refund', label: 'Возвраты' },
+];
+
 /** §20.3 / §8 — баланс и транзакции (личный или компания) */
 export default function BalancePage() {
   const [opened, { open, close }] = useDisclosure(false);
+  const [qrOpened, { open: openQr, close: closeQr }] = useDisclosure(false);
   const [balance, setBalance] = useState(0);
   const [items, setItems] = useState<Tx[]>([]);
   const [amount, setAmount] = useState<number | string>(1000);
@@ -53,6 +63,13 @@ export default function BalancePage() {
   const [canFilterAuthors, setCanFilterAuthors] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [authorId, setAuthorId] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [txType, setTxType] = useState<string | null>('all');
+  const [qrData, setQrData] = useState<string | null>(null);
+  const [qrAmount, setQrAmount] = useState(0);
+  const [lowBalanceThreshold, setLowBalanceThreshold] = useState<number | string>(5000);
+  const [savingThreshold, setSavingThreshold] = useState(false);
 
   const memberLabel = useMemo(() => {
     const map = new Map<number, string>();
@@ -61,6 +78,15 @@ export default function BalancePage() {
     }
     return map;
   }, [members]);
+
+  const txParams = useCallback(() => {
+    const params: Record<string, string | number> = {};
+    if (authorId) params.user_id = Number(authorId);
+    if (dateFrom) params.from = dateFrom;
+    if (dateTo) params.to = dateTo;
+    if (txType && txType !== 'all') params.type = txType;
+    return params;
+  }, [authorId, dateFrom, dateTo, txType]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,20 +101,27 @@ export default function BalancePage() {
       setIsOwner(role === 'owner' || company?.is_owner === true);
       setCanFilterAuthors(MANAGE_ROLES.has(role));
 
+      const params = txParams();
+
       if (useCorporate && company) {
         setBalance(company.balance ?? 0);
-        const params: Record<string, string | number> = {};
-        if (authorId) params.user_id = Number(authorId);
         const tx = await api.get<{ items: Tx[] }>('/company/transactions', { params });
         setItems(tx.data.items ?? []);
         if (MANAGE_ROLES.has(role)) {
           const mem = await api.get<{ items: Member[] }>('/company/members');
           setMembers(mem.data.items ?? []);
         }
+        if (role === 'owner' || company.is_owner) {
+          const settings = await api.get<{ policies?: { low_balance_threshold?: number } }>(
+            '/company/settings',
+          );
+          const thr = settings.data.policies?.low_balance_threshold;
+          if (typeof thr === 'number') setLowBalanceThreshold(thr);
+        }
       } else {
         const [me, tx] = await Promise.all([
           api.get<{ balance: number }>('/user/me'),
-          api.get<{ items: Tx[] }>('/user/transactions'),
+          api.get<{ items: Tx[] }>('/user/transactions', { params }),
         ]);
         setBalance(me.data.balance ?? 0);
         setItems(tx.data.items ?? []);
@@ -99,13 +132,32 @@ export default function BalancePage() {
     } finally {
       setLoading(false);
     }
-  }, [authorId]);
+  }, [txParams]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  async function topup() {
+  async function saveLowBalanceThreshold() {
+    const value = typeof lowBalanceThreshold === 'number' ? lowBalanceThreshold : Number(lowBalanceThreshold);
+    if (Number.isNaN(value) || value < 0) {
+      notifications.show({ color: 'red', message: 'Укажите корректный порог' });
+      return;
+    }
+    setSavingThreshold(true);
+    try {
+      await api.patch('/company/settings', {
+        policies: { low_balance_threshold: value },
+      });
+      notifications.show({ color: 'teal', message: 'Порог низкого баланса сохранён §20.3.5' });
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setSavingThreshold(false);
+    }
+  }
+
+  async function topup(paymentMethod: 'redirect' | 'sbp_qr') {
     const value = typeof amount === 'number' ? amount : Number(amount);
     if (!value || value < 100) {
       notifications.show({ color: 'red', message: 'Минимум 100 ₽' });
@@ -116,12 +168,21 @@ export default function BalancePage() {
       const endpoint = corporate && isOwner ? '/company/balance/topup' : '/user/balance/topup';
       const { data } = await api.post<{
         confirmation_url?: string;
+        confirmation_data?: string;
         status?: string;
         dev_mock?: boolean;
         balance?: number;
       }>(endpoint, {
         amount: value,
+        payment_method: paymentMethod,
       });
+      if (paymentMethod === 'sbp_qr' && data.confirmation_data) {
+        setQrData(data.confirmation_data);
+        setQrAmount(value);
+        close();
+        openQr();
+        return;
+      }
       if (data.confirmation_url) {
         window.location.href = data.confirmation_url;
         return;
@@ -133,7 +194,7 @@ export default function BalancePage() {
         await load();
         return;
       }
-      notifications.show({ color: 'yellow', message: 'Нет confirmation_url от ЮKassa' });
+      notifications.show({ color: 'yellow', message: 'Нет данных оплаты от ЮKassa' });
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e, 'Не удалось создать платёж') });
     } finally {
@@ -144,10 +205,8 @@ export default function BalancePage() {
   async function exportCsv() {
     if (corporate && isOwner) {
       try {
-        const params: Record<string, string | number> = {};
-        if (authorId) params.user_id = Number(authorId);
         const res = await api.get('/company/transactions/export', {
-          params,
+          params: txParams(),
           responseType: 'blob',
         });
         const blob = new Blob([res.data as BlobPart], { type: 'text/csv;charset=utf-8' });
@@ -236,8 +295,44 @@ export default function BalancePage() {
             </Button>
           </Group>
 
-          {corporate && canFilterAuthors && (
-            <FilterRow mb="md">
+          {corporate && isOwner && (
+            <Group align="flex-end" wrap="wrap" gap="md" mb="lg">
+              <NumberInput
+                label="Уведомление при низком балансе, ₽ §20.3.5"
+                description="Push/email Owner при balance &lt; порога"
+                min={0}
+                max={10_000_000}
+                value={lowBalanceThreshold}
+                onChange={setLowBalanceThreshold}
+                maw={280}
+              />
+              <Button loading={savingThreshold} onClick={() => void saveLowBalanceThreshold()}>
+                Сохранить порог
+              </Button>
+            </Group>
+          )}
+
+          <FilterRow mb="md">
+            <TextInput
+              label="Дата от"
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.currentTarget.value)}
+            />
+            <TextInput
+              label="Дата до"
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.currentTarget.value)}
+            />
+            <Select
+              label="Тип операции"
+              data={TX_TYPE_OPTIONS}
+              value={txType}
+              onChange={setTxType}
+              allowDeselect={false}
+            />
+            {corporate && canFilterAuthors && (
               <Select
                 label="Сотрудник §8"
                 placeholder="Все"
@@ -250,8 +345,8 @@ export default function BalancePage() {
                   label: memberLabel.get(m.user_id) || String(m.user_id),
                 }))}
               />
-            </FilterRow>
-          )}
+            )}
+          </FilterRow>
 
           <Text fw={700} mb="md">
             История транзакций
@@ -309,11 +404,40 @@ export default function BalancePage() {
       >
         <Stack gap="md">
           <Text size="sm" c="#6d6c77">
-            Оплата через ЮKassa (карта / СБП). После оплаты вернётесь на эту страницу.
+            Оплата через ЮKassa: банковская карта или СБП (QR). После оплаты вернётесь на эту страницу.
           </Text>
           <NumberInput label="Сумма, ₽" min={100} max={500000} value={amount} onChange={setAmount} size="md" />
-          <Button loading={paying} onClick={() => void topup()} fullWidth size="md">
-            Перейти к оплате
+          <Button loading={paying} onClick={() => void topup('redirect')} fullWidth size="md">
+            Оплатить картой
+          </Button>
+          <Button
+            variant="light"
+            loading={paying}
+            onClick={() => void topup('sbp_qr')}
+            fullWidth
+            size="md"
+          >
+            Сгенерировать QR СБП
+          </Button>
+        </Stack>
+      </Modal>
+
+      <Modal opened={qrOpened} onClose={closeQr} title="СБП — оплата по QR §20.3.3" centered radius="lg" padding="lg">
+        <Stack gap="md" align="center">
+          <Text size="sm" c="#6d6c77" ta="center">
+            Отсканируйте QR-код в мобильном приложении вашего банка и подтвердите платёж.
+          </Text>
+          {qrData ? (
+            <QRCodeSVG value={qrData} size={240} level="M" includeMargin />
+          ) : (
+            <Text c="red">QR недоступен</Text>
+          )}
+          <Text fw={700}>{qrAmount.toLocaleString('ru-RU')} ₽</Text>
+          <Text size="xs" c="#6d6c77">
+            Статус обновится автоматически после вебхука ЮKassa
+          </Text>
+          <Button variant="light" onClick={() => void load()}>
+            Обновить баланс
           </Button>
         </Stack>
       </Modal>

@@ -761,13 +761,22 @@ async def company_transactions(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
     user_id: int | None = Query(default=None, description="Фильтр по сотруднику §8"),
+    date_from: date | None = Query(default=None, alias="from"),
+    date_to: date | None = Query(default=None, alias="to"),
+    tx_type: str = Query(default="all", alias="type", pattern=r"^(all|topup|charge|refund)$"),
 ):
     from app.services import company_balance as bal
     from app.services.access import company_for_permission
 
     company = await company_for_permission(db, user, "can_view_finance")
     await bal.validate_company_tx_user_filter(db, company=company, actor=user, user_id=user_id)
-    stmt = bal.build_company_tx_stmt(company.id, user_id=user_id)
+    stmt = bal.build_company_tx_stmt(
+        company.id,
+        user_id=user_id,
+        date_from=date_from,
+        date_to=date_to,
+        tx_type=tx_type,
+    )
     rows = (await db.scalars(stmt.limit(200))).all()
     return {
         "company_id": company.id,
@@ -792,7 +801,7 @@ async def export_company_transactions(
     user_id: int | None = Query(default=None, description="Фильтр по сотруднику §8"),
     date_from: date | None = Query(default=None, alias="from"),
     date_to: date | None = Query(default=None, alias="to"),
-    tx_type: str = Query(default="all", pattern=r"^(all|topup|charge|refund)$"),
+    tx_type: str = Query(default="all", alias="type", pattern=r"^(all|topup|charge|refund)$"),
 ):
     """CSV выгрузка операций компании за период (Owner §8)."""
     from fastapi.responses import Response

@@ -560,6 +560,11 @@ class _ProfileTabState extends State<_ProfileTab> {
   bool _changingPass = false;
   bool _deleting = false;
 
+  static const _masterPrefLabels = {
+    'push_enabled': 'Push-уведомления',
+    'email_enabled': 'Email-уведомления',
+  };
+
   static const _prefLabels = {
     'generation_done': 'Генерация готова',
     'refund': 'Возврат средств',
@@ -930,9 +935,9 @@ class _ProfileTabState extends State<_ProfileTab> {
           },
         ),
         const SizedBox(height: 16),
-        Text('Уведомления (push) §3.4.3', style: context.theme.typography.sm),
+        Text('Уведомления §19.14.3', style: context.theme.typography.sm),
         const SizedBox(height: 8),
-        ..._prefLabels.entries.map(
+        ..._masterPrefLabels.entries.map(
           (e) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: FSwitch(
@@ -941,6 +946,23 @@ class _ProfileTabState extends State<_ProfileTab> {
               onChange: (v) => _togglePref(e.key, v),
             ),
           ),
+        ),
+        const SizedBox(height: 8),
+        Text('События §3.4.3', style: context.theme.typography.xs.copyWith(color: AppColors.textSecondary)),
+        const SizedBox(height: 8),
+        ..._prefLabels.entries.map(
+          (e) {
+            final channelsOn =
+                (_prefs['push_enabled'] ?? true) || (_prefs['email_enabled'] ?? true);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FSwitch(
+                label: Text(e.value),
+                value: _prefs[e.key] ?? true,
+                onChange: channelsOn ? (v) => _togglePref(e.key, v) : null,
+              ),
+            );
+          },
         ),
         const SizedBox(height: 16),
         Text('Безопасность §19.14.4', style: context.theme.typography.sm),

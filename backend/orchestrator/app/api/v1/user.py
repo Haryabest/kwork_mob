@@ -1,6 +1,6 @@
 """Пользователь: профиль, баланс, транзакции, модели, device tokens."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -131,12 +131,20 @@ async def get_balance(user: User = Depends(get_current_db_user)):
 async def get_transactions(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
+    date_from: date | None = Query(default=None, alias="from"),
+    date_to: date | None = Query(default=None, alias="to"),
+    tx_type: str = Query(default="all", alias="type", pattern=r"^(all|topup|charge|refund)$"),
 ):
-    rows = (
-        await db.scalars(
-            select(Transaction).where(Transaction.user_id == user.id).order_by(Transaction.id.desc()).limit(100)
-        )
-    ).all()
+    stmt = select(Transaction).where(Transaction.user_id == user.id)
+    if tx_type != "all":
+        stmt = stmt.where(Transaction.tx_type == tx_type)
+    if date_from is not None:
+        start = datetime.combine(date_from, time.min, tzinfo=timezone.utc)
+        stmt = stmt.where(Transaction.created_at >= start)
+    if date_to is not None:
+        end = datetime.combine(date_to, time.max, tzinfo=timezone.utc)
+        stmt = stmt.where(Transaction.created_at <= end)
+    rows = (await db.scalars(stmt.order_by(Transaction.id.desc()).limit(200))).all()
     return {
         "items": [
             {

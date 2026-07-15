@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
+import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key, required this.api});
+  const NotificationsScreen({super.key, required this.api, required this.session});
 
   final ApiClient api;
+  final AppSession session;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -27,7 +29,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final orders = await widget.api.listOrders();
+      final orders = await widget.api.listOrders(
+        companyId: widget.session.corporate ? widget.session.companyId : null,
+      );
       await NotificationInbox.instance.syncFromOrders(orders);
     } catch (_) {}
     _items = await NotificationInbox.instance.load();
@@ -45,11 +49,43 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     await _load();
   }
 
+  IconData _iconFor(String? type) {
+    switch (type) {
+      case 'refund':
+        return FIcons.wallet;
+      case 'nsfw_blocked':
+        return FIcons.shield;
+      case 'generation_done':
+        return FIcons.box;
+      case 'generation_failed':
+        return FIcons.receipt;
+      case 'company_invite':
+        return FIcons.users;
+      case 'cancelled':
+        return FIcons.hourglass;
+      default:
+        return FIcons.bell;
+    }
+  }
+
+  Color _iconColor(String? type) {
+    switch (type) {
+      case 'refund':
+        return AppColors.success;
+      case 'nsfw_blocked':
+        return AppColors.error;
+      case 'generation_done':
+        return AppColors.accent;
+      default:
+        return AppColors.textSecondary;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return FScaffold(
       header: FHeader.nested(
-        title: const Text('Уведомления'),
+        title: const Text('Уведомления §19.16'),
         prefixes: [FHeaderAction.back(onPress: () => context.pop())],
         suffixes: [
           FHeaderAction(
@@ -58,6 +94,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 ? null
                 : () async {
                     await NotificationInbox.instance.markAllRead();
+                    await _load();
+                  },
+          ),
+          FHeaderAction(
+            icon: const Icon(FIcons.x),
+            onPress: _items.isEmpty
+                ? null
+                : () async {
+                    await NotificationInbox.instance.clearAll();
                     await _load();
                   },
           ),
@@ -78,10 +123,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       return FCard.raw(
                         style: FCardStyleDelta.delta(
                           decoration: DecorationDelta.boxDelta(
-                            color: n.read ? AppColors.surface : AppColors.accent.withValues(alpha: 0.06),
+                            color: n.read
+                                ? AppColors.surface
+                                : AppColors.accent.withValues(alpha: 0.06),
                           ),
                         ),
                         child: FTile(
+                          prefix: Icon(_iconFor(n.type), color: _iconColor(n.type)),
                           title: Text(
                             n.title,
                             style: TextStyle(

@@ -193,7 +193,7 @@ GoRouter createRouter({
           ),
           GoRoute(
             path: 'notifications',
-            builder: (context, state) => NotificationsScreen(api: api),
+            builder: (context, state) => NotificationsScreen(api: api, session: session),
           ),
           GoRoute(
             path: 'import-model',

@@ -243,6 +243,8 @@ class PushService {
 
   Future<Map<String, bool>> loadPrefs() async {
     final defaults = {
+      'push_enabled': true,
+      'email_enabled': true,
       'generation_done': true,
       'refund': true,
       'nsfw_blocked': true,
