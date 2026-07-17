@@ -87,6 +87,7 @@ class _QueueScreenState extends State<QueueScreen> {
 
   Future<void> _refresh() async {
     if (widget.orderId == null) return;
+    AnalyticsService.instance.track('screen_view', {'screen': 'queue_refresh'});
     _order = await widget.api.getOrder(widget.orderId!);
     if (!mounted) return;
     setState(() {});

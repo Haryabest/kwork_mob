@@ -28,3 +28,18 @@ async def test_screen_breakdown_pg_fallback(monkeypatch):
     data = await screen_breakdown(FakeDb(), days=7, limit=10)
     assert data["source"] == "postgres"
     assert data["items"][0]["screen"] == "queue"
+
+
+async def test_analytics_sync_status(monkeypatch):
+    async def fake_count(_db):
+        return 42
+
+    monkeypatch.setattr("app.services.analytics_sync.count_pending", fake_count)
+    from app.services.analytics_query import analytics_sync_status
+
+    class FakeDb:
+        pass
+
+    data = await analytics_sync_status(FakeDb())
+    assert data["pending_ch_sync"] == 42
+    assert data["alert"] is False

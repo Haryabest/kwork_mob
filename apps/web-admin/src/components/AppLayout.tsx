@@ -62,6 +62,7 @@ const NAV: {
   { path: '/task-conflicts', label: 'Task conflicts', roles: ['admin'], icon: IconShield },
   { path: '/promocodes', label: 'Промокоды', roles: ['admin'], icon: IconDiscount2 },
   { path: '/campaigns', label: 'Кампании', roles: ['admin'], icon: IconStack2 },
+  { path: '/analytics', label: 'Аналитика', roles: ['admin'], icon: IconChartBar },
   { path: '/push', label: 'Push', roles: ['admin'], icon: IconBell },
   { path: '/moderation', label: 'Модерация', roles: ['admin'], icon: IconShield },
   { path: '/tax', label: 'Налоги', roles: ['admin'], icon: IconReceipt },

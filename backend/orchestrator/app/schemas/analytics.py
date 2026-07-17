@@ -10,6 +10,51 @@ ALLOWED_EVENTS = frozenset(
     {"screen_view", "shoot_complete", "checkout_pay", "shoot_step", "shoot_step_retry"}
 )
 
+# screen_view.props.screen — каталог §19.20 (mobile track + admin breakdown)
+ALLOWED_SCREENS = frozenset(
+    {
+        "home",
+        "models",
+        "orders",
+        "support",
+        "profile",
+        "settings",
+        "queue",
+        "queue_refresh",
+        "balance",
+        "storage",
+        "notifications",
+        "api_keys",
+        "team",
+        "company_topup",
+        "company_policies",
+        "import",
+        "trash",
+        "model_viewer",
+        "publish_guide",
+        "shoot_link",
+        "shoot_link_fab",
+        "shoot_category",
+        "shoot_upload",
+        "shoot_dome",
+        "shoot_quality",
+        "order_checkout",
+        "guest_shoot",
+        "calibration",
+        "consent_gate",
+        "faq_support",
+        "campaign_banner",
+        "campaign_banner_click",
+        "campaign_banner_dismiss",
+        "pending_upload_banner",
+        "pending_upload_continue",
+        "export_prefs",
+        "export_prefs_save",
+        "mode_personal",
+        "mode_corporate",
+    }
+)
+
 
 class AnalyticsEventItem(BaseModel):
     event: str = Field(min_length=1, max_length=64)
@@ -36,6 +81,8 @@ class AnalyticsEventItem(BaseModel):
                 raise ValueError("screen_view requires props.screen")
             if len(screen) > 64:
                 raise ValueError("props.screen too long")
+            if screen not in ALLOWED_SCREENS:
+                raise ValueError(f"unknown screen: {screen}")
             bid = props.get("banner_id")
             if bid is not None and not isinstance(bid, int):
                 raise ValueError("props.banner_id must be int")

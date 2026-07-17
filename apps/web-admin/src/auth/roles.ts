@@ -19,6 +19,7 @@ export const ROLE_ROUTES: Record<StaffRole, string[]> = {
     '/invitations',
     '/promocodes',
     '/campaigns',
+    '/analytics',
     '/push',
     '/moderation',
     '/soft-launch',

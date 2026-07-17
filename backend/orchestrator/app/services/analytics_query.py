@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import MobileAnalyticsEvent
+from app.models import CampaignEntitlement, MobileAnalyticsEvent
 from app.services.analytics_ingest import _ch
 
 logger = logging.getLogger(__name__)
@@ -143,3 +143,136 @@ def raw_events_to_csv(data: dict) -> str:
             ]
         )
     return buf.getvalue()
+
+
+async def analytics_sync_status(db: AsyncSession) -> dict:
+    from app.services.analytics_sync import count_pending
+
+    pending = await count_pending(db)
+    alert = pending > 1000
+    return {
+        "pending_ch_sync": pending,
+        "alert": alert,
+        "alert_threshold": 1000,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _campaign_banner_ctr_ch(*, days: int) -> dict[int, dict] | None:
+    client = _ch()
+    if client is None:
+        return None
+    try:
+        result = client.query(
+            """
+            SELECT
+                toInt64OrZero(JSONExtractString(props, 'banner_id')) AS banner_id,
+                JSONExtractString(props, 'screen') AS screen,
+                count() AS cnt
+            FROM mobile_analytics_events
+            WHERE event = 'screen_view'
+              AND event_ts >= now() - INTERVAL %(days)s DAY
+              AND JSONExtractString(props, 'screen') IN ('campaign_banner', 'campaign_banner_click')
+              AND banner_id > 0
+            GROUP BY banner_id, screen
+            """,
+            parameters={"days": days},
+        )
+        banner_stats: dict[int, dict[str, int]] = {}
+        for r in result.result_rows or []:
+            bid, screen, cnt = int(r[0]), str(r[1]), int(r[2])
+            if bid <= 0:
+                continue
+            banner_stats.setdefault(bid, {"impressions": 0, "clicks": 0})
+            if screen == "campaign_banner":
+                banner_stats[bid]["impressions"] += cnt
+            elif screen == "campaign_banner_click":
+                banner_stats[bid]["clicks"] += cnt
+        return banner_stats
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("CH campaign banner CTR failed: %s", exc)
+        return None
+
+
+async def _campaign_banner_ctr_pg(db: AsyncSession, *, days: int) -> dict[int, dict[str, int]]:
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    screen_col = MobileAnalyticsEvent.props["screen"].astext
+    banner_col = MobileAnalyticsEvent.props["banner_id"].as_integer()
+    rows = (
+        await db.execute(
+            select(
+                CampaignEntitlement.campaign_id,
+                screen_col.label("screen"),
+                func.count().label("cnt"),
+            )
+            .join(CampaignEntitlement, CampaignEntitlement.id == banner_col)
+            .where(
+                MobileAnalyticsEvent.event == "screen_view",
+                MobileAnalyticsEvent.event_ts >= since,
+                screen_col.in_(["campaign_banner", "campaign_banner_click"]),
+                banner_col.isnot(None),
+            )
+            .group_by(CampaignEntitlement.campaign_id, screen_col)
+        )
+    ).all()
+    out: dict[int, dict[str, int]] = {}
+    for r in rows:
+        cid = int(r.campaign_id)
+        out.setdefault(cid, {"impressions": 0, "clicks": 0})
+        if r.screen == "campaign_banner":
+            out[cid]["impressions"] += int(r.cnt)
+        elif r.screen == "campaign_banner_click":
+            out[cid]["clicks"] += int(r.cnt)
+    return out
+
+
+async def campaign_banner_ctr(
+    db: AsyncSession,
+    *,
+    days: int = 30,
+    campaign_ids: list[int] | None = None,
+) -> dict:
+    """In-app banner impressions/clicks по campaign_id §19.20."""
+    banner_stats = _campaign_banner_ctr_ch(days=days)
+    source = "clickhouse"
+    by_campaign: dict[int, dict[str, int]] = {}
+    if banner_stats is None:
+        by_campaign = await _campaign_banner_ctr_pg(db, days=days)
+        source = "postgres"
+    else:
+        if banner_stats:
+            ent_rows = (
+                await db.execute(
+                    select(CampaignEntitlement.id, CampaignEntitlement.campaign_id).where(
+                        CampaignEntitlement.id.in_(list(banner_stats.keys()))
+                    )
+                )
+            ).all()
+            ent_map = {int(r.id): int(r.campaign_id) for r in ent_rows}
+            for bid, stats in banner_stats.items():
+                cid = ent_map.get(bid)
+                if cid is None:
+                    continue
+                by_campaign.setdefault(cid, {"impressions": 0, "clicks": 0})
+                by_campaign[cid]["impressions"] += stats.get("impressions", 0)
+                by_campaign[cid]["clicks"] += stats.get("clicks", 0)
+    if campaign_ids is not None:
+        by_campaign = {cid: by_campaign.get(cid, {"impressions": 0, "clicks": 0}) for cid in campaign_ids}
+    items = []
+    for cid, stats in sorted(by_campaign.items()):
+        imp = stats.get("impressions", 0)
+        clk = stats.get("clicks", 0)
+        items.append(
+            {
+                "campaign_id": cid,
+                "impressions": imp,
+                "clicks": clk,
+                "ctr": round(clk / imp, 4) if imp else 0.0,
+            }
+        )
+    return {
+        "days": days,
+        "source": source,
+        "items": items,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }

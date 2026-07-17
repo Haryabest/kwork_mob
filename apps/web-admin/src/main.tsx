@@ -18,6 +18,7 @@ import WorkersPage from './pages/WorkersPage';
 import UsersPage from './pages/UsersPage';
 import CompaniesPage from './pages/CompaniesPage';
 import PromocodesPage from './pages/PromocodesPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 import CampaignsPage from './pages/CampaignsPage';
 import PushPage from './pages/PushPage';
 import ModerationPage from './pages/ModerationPage';
@@ -79,6 +80,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 <Route path="/invitations" element={<InvitationsPage />} />
                 <Route path="/promocodes" element={<PromocodesPage />} />
                 <Route path="/campaigns" element={<CampaignsPage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/push" element={<PushPage />} />
                 <Route path="/moderation" element={<ModerationPage />} />
                 <Route path="/tax" element={<TaxPage />} />

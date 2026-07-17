@@ -77,3 +77,21 @@ def test_screen_view_banner_id():
         props={"screen": "campaign_banner", "banner_id": 42},
     )
     assert item.props["banner_id"] == 42
+
+
+def test_screen_view_campaign_banner_click():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "campaign_banner_click", "banner_id": 7},
+    )
+    assert item.props["screen"] == "campaign_banner_click"
+
+
+def test_screen_view_unknown_screen():
+    with pytest.raises(ValidationError):
+        AnalyticsEventItem(
+            event="screen_view",
+            ts="2026-07-17T10:00:00Z",
+            props={"screen": "not_a_real_screen"},
+        )

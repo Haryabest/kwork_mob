@@ -964,7 +964,7 @@ class _ProfileTabState extends State<_ProfileTab> {
 
   Future<void> _saveExportFormat(ExportFormat fmt) async {
     await ExportPrefsService.instance.setFormat(fmt);
-    AnalyticsService.instance.track('screen_view', {'screen': 'export_prefs'});
+    AnalyticsService.instance.track('screen_view', {'screen': 'export_prefs_save'});
     try {
       await widget.api.updateProfile({'export_format': fmt == ExportFormat.usdz ? 'usdz' : 'glb'});
     } catch (_) {}

@@ -25,6 +25,7 @@ type Campaign = {
   template?: string;
   status: string;
   stats?: { reach?: number; sent?: number; roi?: number; revenue_rub?: number; clicked?: number };
+  banner_ctr?: { impressions: number; clicks: number; ctr: number };
   budget_rub?: number | null;
   created_at?: string;
 };
@@ -175,12 +176,17 @@ export default function CampaignsPage() {
         />
       </SimpleGrid>
       <ShellTable
-        headers={['ID', 'Название', 'Шаблон', 'Статус', 'Бюджет', 'Действия']}
+        headers={['ID', 'Название', 'Шаблон', 'Статус', 'Баннер imp.', 'Баннер clk.', 'CTR', 'Бюджет', 'Действия']}
         rows={items.map((c) => [
           String(c.id),
           c.name,
           c.template ?? '—',
           <StateBadge key={`s${c.id}`} value={c.status} />,
+          String(c.banner_ctr?.impressions ?? 0),
+          String(c.banner_ctr?.clicks ?? 0),
+          c.banner_ctr?.impressions
+            ? `${((c.banner_ctr.ctr ?? 0) * 100).toFixed(1)}%`
+            : '—',
           c.budget_rub != null ? `${c.budget_rub} ₽` : '—',
           <Group key={`a${c.id}`} gap="xs">
             <Button size="xs" onClick={() => start(c.id)} disabled={c.status === 'running'}>

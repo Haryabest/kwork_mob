@@ -1,9 +1,13 @@
 """Celery: фоновые задачи."""
 
+import logging
+
 from celery import Celery
 from celery.schedules import crontab
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 celery_app = Celery("kwork", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 
@@ -544,6 +548,12 @@ def sync_analytics_to_clickhouse():
         async with async_session() as db:
             result = await asy.sync_unsynced(db)
             await db.commit()
+            from app.services.metrics import record_analytics_ch_pending
+
+            pending = int(result.get("pending") or 0)
+            record_analytics_ch_pending(pending)
+            if pending > 1000:
+                logger.warning("analytics CH sync backlog: pending_ch_sync=%s", pending)
             return result
 
     return asyncio.run(_run())

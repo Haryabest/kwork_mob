@@ -4262,6 +4262,55 @@
         ]
       }
     },
+    "/api/v1/admin/analytics/campaign-banner-ctr": {
+      "get": {
+        "description": "In-app banner CTR по campaign_id §19.20.",
+        "operationId": "analytics_campaign_banner_ctr_api_v1_admin_analytics_campaign_banner_ctr_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Campaign Banner Ctr",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/analytics/events": {
       "get": {
         "description": "Raw mobile analytics events из PG §19.20.",
@@ -4460,6 +4509,31 @@
           }
         ],
         "summary": "Analytics Screen Breakdown",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/analytics/status": {
+      "get": {
+        "description": "PG→CH sync backlog §19.20.",
+        "operationId": "analytics_sync_status_api_v1_admin_analytics_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Sync Status",
         "tags": [
           "Администрирование"
         ]

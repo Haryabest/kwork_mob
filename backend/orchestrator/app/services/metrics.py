@@ -27,6 +27,10 @@ TASK_DURATION = Histogram(
     "Task E2E duration",
     buckets=(30, 60, 90, 120, 180, 240, 300, 600),
 )
+ANALYTICS_CH_PENDING = Gauge(
+    "kwork_analytics_ch_pending_sync",
+    "Mobile analytics PG rows not yet mirrored to ClickHouse §19.20",
+)
 
 _ch_client = None
 
@@ -41,6 +45,10 @@ def record_pending_poll(stats: dict[str, int]) -> None:
         n = int(count or 0)
         if n > 0:
             PENDING_POLL_TOTAL.labels(outcome=outcome).inc(n)
+
+
+def record_analytics_ch_pending(count: int) -> None:
+    ANALYTICS_CH_PENDING.set(int(count or 0))
 
 
 def _ch():

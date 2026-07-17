@@ -1094,6 +1094,32 @@ async def analytics_raw_events(
     return data
 
 
+@router.get("/analytics/status")
+async def analytics_sync_status(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """PG→CH sync backlog §19.20."""
+    from app.services import analytics_query as aq
+    from app.services.metrics import record_analytics_ch_pending
+
+    data = await aq.analytics_sync_status(db)
+    record_analytics_ch_pending(data["pending_ch_sync"])
+    return data
+
+
+@router.get("/analytics/campaign-banner-ctr")
+async def analytics_campaign_banner_ctr(
+    days: int = Query(default=30, ge=1, le=90),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """In-app banner CTR по campaign_id §19.20."""
+    from app.services import analytics_query as aq
+
+    return await aq.campaign_banner_ctr(db, days=days)
+
+
 @router.post("/analytics/sync")
 async def analytics_sync_ch(
     _: dict = Depends(require_admin),
@@ -1104,6 +1130,9 @@ async def analytics_sync_ch(
 
     result = await asy.sync_unsynced(db)
     await db.commit()
+    from app.services.metrics import record_analytics_ch_pending
+
+    record_analytics_ch_pending(result.get("pending", 0))
     return result
 
 

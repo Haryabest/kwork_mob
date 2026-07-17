@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import MobileAnalyticsEvent
@@ -40,6 +40,17 @@ def _insert_ch_rows(rows: list[MobileAnalyticsEvent]) -> bool:
         return False
 
 
+async def count_pending(db: AsyncSession) -> int:
+    return int(
+        await db.scalar(
+            select(func.count())
+            .select_from(MobileAnalyticsEvent)
+            .where(MobileAnalyticsEvent.ch_synced_at.is_(None))
+        )
+        or 0
+    )
+
+
 async def sync_unsynced(db: AsyncSession, *, limit: int = 500) -> dict:
     """Mirror PG rows with ch_synced_at IS NULL into ClickHouse."""
     rows = (
@@ -51,7 +62,8 @@ async def sync_unsynced(db: AsyncSession, *, limit: int = 500) -> dict:
         )
     ).all()
     if not rows:
-        return {"synced": 0, "pending": 0}
+        pending = await count_pending(db)
+        return {"synced": 0, "pending": pending, "ok": True}
     ok = _insert_ch_rows(list(rows))
     synced = 0
     if ok:
@@ -60,9 +72,5 @@ async def sync_unsynced(db: AsyncSession, *, limit: int = 500) -> dict:
             row.ch_synced_at = now
             synced += 1
         await db.flush()
-    pending = await db.scalar(
-        select(MobileAnalyticsEvent.id)
-        .where(MobileAnalyticsEvent.ch_synced_at.is_(None))
-        .limit(1)
-    )
-    return {"synced": synced, "pending": 1 if pending else 0, "ok": ok}
+    pending = await count_pending(db)
+    return {"synced": synced, "pending": pending, "ok": ok}

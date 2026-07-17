@@ -46,7 +46,12 @@ async def templates():
 
 @router.get("")
 async def list_campaigns(db: AsyncSession = Depends(get_db)):
+    from app.services import analytics_query as aq
+
     rows = (await db.scalars(select(Campaign).order_by(Campaign.id.desc()).limit(100))).all()
+    ids = [c.id for c in rows]
+    ctr_data = await aq.campaign_banner_ctr(db, days=30, campaign_ids=ids)
+    ctr_map = {i["campaign_id"]: i for i in ctr_data.get("items") or []}
     return {
         "items": [
             {
@@ -58,9 +63,11 @@ async def list_campaigns(db: AsyncSession = Depends(get_db)):
                 "budget_rub": c.budget_rub,
                 "started_at": c.started_at.isoformat() if c.started_at else None,
                 "created_at": c.created_at.isoformat() if c.created_at else None,
+                "banner_ctr": ctr_map.get(c.id, {"impressions": 0, "clicks": 0, "ctr": 0.0}),
             }
             for c in rows
-        ]
+        ],
+        "banner_ctr_source": ctr_data.get("source"),
     }
 
 
