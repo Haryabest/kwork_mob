@@ -1057,6 +1057,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get teamRoleAll => 'Все роли';
 
   @override
+  String get teamLoadMore => 'Загрузить ещё';
+
+  @override
   String get mvPublishValidating => 'Проверка импорта';
 
   @override

@@ -1051,6 +1051,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get teamRoleAll => 'All roles';
 
   @override
+  String get teamLoadMore => 'Load more';
+
+  @override
   String get mvPublishValidating => 'Import validating';
 
   @override

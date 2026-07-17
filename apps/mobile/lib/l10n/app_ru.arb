@@ -363,6 +363,7 @@
   "teamSendInvite": "Отправить приглашение",
   "teamSearchHint": "Имя или email",
   "teamRoleAll": "Все роли",
+  "teamLoadMore": "Загрузить ещё",
   "mvPublishValidating": "Проверка импорта",
   "mvPublishImported": "Импортировано",
   "mvPublishImportFailed": "Ошибка импорта",

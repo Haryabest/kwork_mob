@@ -41,3 +41,21 @@ def test_batch_max_length():
         ]
     )
     assert len(body.events) == 1
+
+
+def test_shoot_step_valid():
+    item = AnalyticsEventItem(
+        event="shoot_step",
+        ts="2026-07-17T10:00:00Z",
+        props={"model_uuid": "abc-123", "step": 3},
+    )
+    assert item.props["step"] == 3
+
+
+def test_shoot_step_invalid_step():
+    with pytest.raises(ValidationError):
+        AnalyticsEventItem(
+            event="shoot_step",
+            ts="2026-07-17T10:00:00Z",
+            props={"model_uuid": "abc", "step": 0},
+        )

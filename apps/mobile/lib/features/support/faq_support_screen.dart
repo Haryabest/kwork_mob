@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/core/api.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/core/theme.dart';
 
 /// FAQ + форма вопроса + история обращений (§3.13 / §19.13).
@@ -28,6 +29,7 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'faq_support'});
     _tabs = FTabController(length: 2, vsync: this);
     _load().then((_) => _openInitialTicket());
   }

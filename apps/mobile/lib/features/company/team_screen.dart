@@ -295,7 +295,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                     variant: .outline,
                                     onPress: _loadingMoreMembers ? null : () => _loadMembers(append: true),
                                     child: Text(
-                                      _loadingMoreMembers ? '…' : l10n.mvLoadMore,
+                                      _loadingMoreMembers ? '…' : l10n.teamLoadMore,
                                     ),
                                   ),
                                 ),

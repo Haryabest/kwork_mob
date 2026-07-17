@@ -1057,6 +1057,9 @@ class AppLocalizationsKk extends AppLocalizations {
   String get teamRoleAll => 'Барлық рөлдер';
 
   @override
+  String get teamLoadMore => 'Тағы жүктеу';
+
+  @override
   String get mvPublishValidating => 'Импортты тексеру';
 
   @override

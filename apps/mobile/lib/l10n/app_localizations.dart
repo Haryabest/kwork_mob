@@ -2021,6 +2021,12 @@ abstract class AppLocalizations {
   /// **'Все роли'**
   String get teamRoleAll;
 
+  /// No description provided for @teamLoadMore.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузить ещё'**
+  String get teamLoadMore;
+
   /// No description provided for @mvPublishValidating.
   ///
   /// In ru, this message translates to:

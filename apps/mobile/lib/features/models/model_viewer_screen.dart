@@ -13,6 +13,7 @@ import 'package:kwork_mobile/l10n/catalog_l10n.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -356,6 +357,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'models'});
     _search.addListener(() {
       _searchDebounce?.cancel();
       _searchDebounce = Timer(const Duration(milliseconds: 400), _resetAndLoad);
@@ -778,6 +780,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'model_viewer'});
     _glbUrl = widget.model?['glb_url']?.toString();
     _publishStatus = widget.model?['publish_status']?.toString();
     _modelMeta = widget.model == null ? null : Map<String, dynamic>.from(widget.model!);

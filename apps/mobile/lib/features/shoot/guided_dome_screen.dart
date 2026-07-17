@@ -86,8 +86,16 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
     super.initState();
     AnalyticsService.instance.track('screen_view', {'screen': 'shoot_dome'});
     _index = widget.reshootIndex ?? 0;
+    _trackShootStep();
     _loadDraftMeta();
     _boot();
+  }
+
+  void _trackShootStep() {
+    AnalyticsService.instance.track('shoot_step', {
+      'model_uuid': widget.modelUuid,
+      'step': _index + 1,
+    });
   }
 
   Future<void> _loadDraftMeta() async {
@@ -436,6 +444,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         _crosshairOk = true;
         _gateMsg = null;
       });
+      _trackShootStep();
       await _loadPrevFrame();
       await _syncNativeMarker();
       _ar?.calibrate();
@@ -477,6 +486,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         _busy = false;
         _gateMsg = null;
       });
+      _trackShootStep();
       await _loadPrevFrame();
       await _syncNativeMarker();
     } catch (e) {

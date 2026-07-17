@@ -328,6 +328,7 @@
   "teamSendInvite": "发送邀请",
   "teamSearchHint": "姓名或邮箱",
   "teamRoleAll": "所有角色",
+  "teamLoadMore": "加载更多",
   "mvPublishValidating": "导入校验中",
   "mvPublishImported": "已导入",
   "mvPublishImportFailed": "导入失败",

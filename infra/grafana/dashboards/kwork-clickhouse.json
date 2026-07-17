@@ -24,6 +24,31 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "title": "Mobile analytics events / day (§19.20)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "rawSql": "SELECT day, event, sum(events) AS events FROM mobile_analytics_daily WHERE day >= today() - 14 GROUP BY day, event ORDER BY day",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } }
+      }
+    },
+    {
+      "title": "Mobile events top (7d)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "rawSql": "SELECT event, sum(events) AS total FROM mobile_analytics_daily WHERE day >= today() - 7 GROUP BY event ORDER BY total DESC LIMIT 20",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "schemaVersion": 39,

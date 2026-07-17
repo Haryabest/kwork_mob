@@ -69,6 +69,17 @@ $env:API_TOKEN = "<owner-jwt>"
 
 Pass: exit 0, `status=used`, `task_uuid` в ответе.
 
+Webhook + guest shoot (staging):
+
+```powershell
+$env:API_BASE = "https://staging.3d.app/api/v1"
+$env:API_TOKEN = "<owner-jwt>"
+$env:WEBHOOK_URL = "https://webhook.site/<uuid>"
+.\worker\scripts\e2e_guest_shoot_webhook.ps1
+```
+
+Pass: `shoot_link.uploaded` в deliveries с `ok=true`.
+
 Интеграционный тест (CI): `tests/integration/test_guest_shoot_api_smoke.py` (skip при недоступном MinIO).
 
 ## 5. Ops — iOS AR / Firebase prod / real-device QA

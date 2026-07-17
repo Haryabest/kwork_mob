@@ -328,6 +328,7 @@
   "teamSendInvite": "Send invitation",
   "teamSearchHint": "Name or email",
   "teamRoleAll": "All roles",
+  "teamLoadMore": "Load more",
   "mvPublishValidating": "Import validating",
   "mvPublishImported": "Imported",
   "mvPublishImportFailed": "Import failed",

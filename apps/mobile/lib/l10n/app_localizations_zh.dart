@@ -1036,6 +1036,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get teamRoleAll => '所有角色';
 
   @override
+  String get teamLoadMore => '加载更多';
+
+  @override
   String get mvPublishValidating => '导入校验中';
 
   @override
