@@ -3892,6 +3892,30 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Нет других активных сессий'**
   String get profileSessionsEmpty;
+
+  /// No description provided for @mvApiUploadTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузка через API'**
+  String get mvApiUploadTitle;
+
+  /// No description provided for @mvApiSkuLabel.
+  ///
+  /// In ru, this message translates to:
+  /// **'SKU'**
+  String get mvApiSkuLabel;
+
+  /// No description provided for @mvApiUploadBtn.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузка API'**
+  String get mvApiUploadBtn;
+
+  /// No description provided for @mvLoadMore.
+  ///
+  /// In ru, this message translates to:
+  /// **'Загрузить ещё'**
+  String get mvLoadMore;
 }
 
 class _AppLocalizationsDelegate

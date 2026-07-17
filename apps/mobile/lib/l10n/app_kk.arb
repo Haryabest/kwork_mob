@@ -668,5 +668,9 @@
   "profileSessionRevoke": "Аяқтау",
   "profileSessionsRevokeOthers": "Басқа сессияларды аяқтау",
   "profileSessionsRevokeOthersDone": "Басқа сессиялар аяқталды",
-  "profileSessionsEmpty": "Басқа белсенді сессиялар жоқ"
+  "profileSessionsEmpty": "Басқа белсенді сессиялар жоқ",
+  "mvApiUploadTitle": "API арқылы жүктеу",
+  "mvApiSkuLabel": "SKU",
+  "mvApiUploadBtn": "API жүктеу",
+  "mvLoadMore": "Тағы жүктеу"
 }

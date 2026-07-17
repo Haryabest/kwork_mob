@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/scale_calibration_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -32,6 +33,7 @@ class _CalibrationWizardScreenState extends State<CalibrationWizardScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'calibration'});
     _loadExisting();
   }
 

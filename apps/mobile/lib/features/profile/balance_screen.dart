@@ -51,12 +51,15 @@ class _BalanceScreenState extends State<BalanceScreen> {
   bool _savingThreshold = false;
   List<Map<String, dynamic>> _presets = [];
   String? _selectedPresetId;
+  bool? _lastCorpFinance;
+  int? _lastCompanyId;
 
   bool get _corporateFinance =>
       widget.session.corporate && widget.session.canViewFinance;
 
   @override
   void dispose() {
+    widget.session.removeListener(_onSessionModeChanged);
     _pollTimer?.cancel();
     _amount.dispose();
     _dateFrom.dispose();
@@ -69,6 +72,29 @@ class _BalanceScreenState extends State<BalanceScreen> {
   void initState() {
     super.initState();
     _thresholdCtrl.text = '5000';
+    _lastCorpFinance = _corporateFinance;
+    _lastCompanyId = widget.session.companyId;
+    widget.session.addListener(_onSessionModeChanged);
+    _restoreFilters();
+  }
+
+  @override
+  void didUpdateWidget(covariant BalanceScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _checkModeSwitch();
+  }
+
+  void _onSessionModeChanged() => _checkModeSwitch();
+
+  void _checkModeSwitch() {
+    final corp = _corporateFinance;
+    final cid = widget.session.companyId;
+    if (_lastCorpFinance == corp && _lastCompanyId == cid) return;
+    _lastCorpFinance = corp;
+    _lastCompanyId = cid;
+    _page = 1;
+    _selectedPresetId = null;
+    _presets = [];
     _restoreFilters();
   }
 

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 
 /// Корзина моделей 30 дней §3.3.1
 class ModelsTrashScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'trash'});
     _load();
   }
 

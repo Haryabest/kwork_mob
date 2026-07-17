@@ -618,11 +618,46 @@ class ApiClient {
   }
 
   Future<List<Map<String, dynamic>>> listModels({int? companyId}) async {
+    final page = await listModelsPage(companyId: companyId, limit: 100);
+    return (page['items'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> listModelsPage({
+    int? companyId,
+    String? search,
+    String? dateFrom,
+    String? dateTo,
+    String? tier,
+    int? authorId,
+    String? category,
+    String? publishFilter,
+    String sort = 'newest',
+    int limit = 20,
+    int offset = 0,
+  }) async {
     final res = await _dio.get('/user/models', queryParameters: {
       if (companyId != null) 'company_id': companyId,
+      if (search != null && search.isNotEmpty) 'search': search,
+      if (dateFrom != null && dateFrom.isNotEmpty) 'date_from': dateFrom,
+      if (dateTo != null && dateTo.isNotEmpty) 'date_to': dateTo,
+      if (tier != null && tier.isNotEmpty) 'tier': tier,
+      if (authorId != null && authorId >= 0) 'author_id': authorId,
+      if (category != null && category.isNotEmpty) 'category': category,
+      if (publishFilter != null && publishFilter.isNotEmpty) 'publish_filter': publishFilter,
+      'sort': sort,
+      'limit': limit,
+      'offset': offset,
     });
-    final items = (res.data as Map)['items'] as List? ?? [];
-    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final data = Map<String, dynamic>.from(res.data as Map);
+    final items = (data['items'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    return {
+      'items': items,
+      'total': (data['total'] as num?)?.toInt() ?? items.length,
+      'limit': (data['limit'] as num?)?.toInt() ?? limit,
+      'offset': (data['offset'] as num?)?.toInt() ?? offset,
+    };
   }
 
   Future<Map<String, dynamic>> rateModel({

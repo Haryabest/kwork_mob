@@ -2069,4 +2069,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get profileSessionsEmpty => 'Нет других активных сессий';
+
+  @override
+  String get mvApiUploadTitle => 'Загрузка через API';
+
+  @override
+  String get mvApiSkuLabel => 'SKU';
+
+  @override
+  String get mvApiUploadBtn => 'Загрузка API';
+
+  @override
+  String get mvLoadMore => 'Загрузить ещё';
 }

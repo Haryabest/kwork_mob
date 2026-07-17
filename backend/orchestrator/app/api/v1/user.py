@@ -4,13 +4,14 @@ from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_db_user
 from app.models import DeviceToken, Model3D, Order, Transaction, User
 from app.schemas.auth import AccountTypeRequest
+from app.schemas.analytics import AnalyticsEventsBody
 from app.schemas.balance_filters import (
     BalanceFilterPresetBody,
     BalanceFiltersBody,
@@ -511,25 +512,83 @@ async def list_user_models(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
     company_id: int | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=120),
+    date_from: str | None = Query(default=None, max_length=10),
+    date_to: str | None = Query(default=None, max_length=10),
+    tier: str | None = Query(default=None, pattern=r"^(small|large)$"),
+    author_id: int | None = Query(default=None, ge=1),
+    category: str | None = Query(default=None, max_length=32),
+    publish_filter: str | None = Query(default=None, pattern=r"^(published|draft)$"),
+    sort: str = Query(default="newest", pattern=r"^(newest|oldest)$"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
     from app.services import model_storage as ms
     from app.services.access import assert_company_access
 
     if company_id is not None:
         await assert_company_access(db, user, company_id)
-        where = (Model3D.company_id == company_id, Model3D.trashed_at.is_(None))
+        where = [Model3D.company_id == company_id, Model3D.trashed_at.is_(None)]
     else:
-        where = (Model3D.user_id == user.id, Model3D.trashed_at.is_(None))
+        where = [Model3D.user_id == user.id, Model3D.trashed_at.is_(None)]
 
-    rows = (
-        await db.execute(
-            select(Model3D, Order.category, Order.tier, Order.status)
-            .outerjoin(Order, Model3D.order_id == Order.id)
-            .where(*where)
-            .order_by(Model3D.id.desc())
-            .limit(100)
+    if search and search.strip():
+        q = f"%{search.strip()}%"
+        where.append(or_(Model3D.display_name.ilike(q), Model3D.uuid.ilike(q)))
+
+    if date_from:
+        try:
+            d0 = date.fromisoformat(date_from)
+            where.append(Model3D.created_at >= datetime.combine(d0, time.min, tzinfo=timezone.utc))
+        except ValueError:
+            raise HTTPException(400, "Некорректная date_from")
+
+    if date_to:
+        try:
+            d1 = date.fromisoformat(date_to)
+            where.append(Model3D.created_at <= datetime.combine(d1, time.max, tzinfo=timezone.utc))
+        except ValueError:
+            raise HTTPException(400, "Некорректная date_to")
+
+    if tier:
+        where.append(Order.tier == tier)
+
+    if author_id is not None:
+        where.append(Model3D.user_id == author_id)
+
+    if category:
+        where.append(Order.category == category)
+
+    if publish_filter == "published":
+        where.append(
+            or_(
+                Model3D.publish_status.ilike("%published%"),
+                Model3D.publish_status.ilike("%verified%"),
+            )
         )
-    ).all()
+    elif publish_filter == "draft":
+        where.append(
+            or_(
+                Model3D.publish_status.is_(None),
+                Model3D.publish_status.in_(["", "none", "not_published"]),
+            )
+        )
+
+    base = (
+        select(Model3D, Order.category, Order.tier, Order.status)
+        .outerjoin(Order, Model3D.order_id == Order.id)
+        .where(*where)
+    )
+
+    total = await db.scalar(
+        select(func.count(Model3D.id))
+        .select_from(Model3D)
+        .outerjoin(Order, Model3D.order_id == Order.id)
+        .where(*where)
+    ) or 0
+
+    order = Model3D.id.desc() if sort == "newest" else Model3D.id.asc()
+    rows = (await db.execute(base.order_by(order).offset(offset).limit(limit))).all()
 
     return {
         "items": [
@@ -538,8 +597,8 @@ async def list_user_models(
                 "order_id": m.order_id,
                 "display_name": m.display_name,
                 "user_id": m.user_id,
-                "category": category,
-                "tier": tier,
+                "category": cat,
+                "tier": order_tier,
                 "glb_url": m.glb_url,
                 "usdz_url": m.usdz_url,
                 "publish_status": m.publish_status,
@@ -547,8 +606,11 @@ async def list_user_models(
                 "created_at": m.created_at.isoformat() if m.created_at else None,
                 "storage": ms.storage_meta(m),
             }
-            for m, category, tier, order_status in rows
+            for m, cat, order_tier, order_status in rows
         ],
+        "total": int(total),
+        "limit": limit,
+        "offset": offset,
         "scope": "company" if company_id else "personal",
     }
 
@@ -637,10 +699,6 @@ async def restore_draft_backup(
     from app.services import draft_backup as dbk
 
     return dbk.restore_download(user.id, model_uuid)
-
-
-class AnalyticsEventsBody(BaseModel):
-    events: list[dict] = Field(default_factory=list, max_length=200)
 
 
 @router.post("/analytics/events")

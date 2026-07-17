@@ -668,5 +668,9 @@
   "profileSessionRevoke": "Revoke",
   "profileSessionsRevokeOthers": "Revoke other sessions",
   "profileSessionsRevokeOthersDone": "Other sessions revoked",
-  "profileSessionsEmpty": "No other active sessions"
+  "profileSessionsEmpty": "No other active sessions",
+  "mvApiUploadTitle": "API upload",
+  "mvApiSkuLabel": "SKU",
+  "mvApiUploadBtn": "API upload",
+  "mvLoadMore": "Load more"
 }

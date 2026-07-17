@@ -11,6 +11,7 @@ import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/l10n/catalog_l10n.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 
 /// Импорт готового GLB Owner компании §6.10.
@@ -44,6 +45,7 @@ class _ImportModelScreenState extends State<ImportModelScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'import'});
     _loadPrice();
   }
 

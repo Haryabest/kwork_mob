@@ -2064,4 +2064,16 @@ class AppLocalizationsKk extends AppLocalizations {
 
   @override
   String get profileSessionsEmpty => 'Басқа белсенді сессиялар жоқ';
+
+  @override
+  String get mvApiUploadTitle => 'API арқылы жүктеу';
+
+  @override
+  String get mvApiSkuLabel => 'SKU';
+
+  @override
+  String get mvApiUploadBtn => 'API жүктеу';
+
+  @override
+  String get mvLoadMore => 'Тағы жүктеу';
 }

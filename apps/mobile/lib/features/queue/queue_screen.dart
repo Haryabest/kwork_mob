@@ -3,6 +3,7 @@ import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/core/api.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/core/queue_ws.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
@@ -34,6 +35,7 @@ class _QueueScreenState extends State<QueueScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'queue'});
     _ws = QueueWsClient(wsBaseUrl: widget.api.wsBaseUrl);
     _ws.addListener(_onWs);
     _boot();

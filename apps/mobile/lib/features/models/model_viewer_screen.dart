@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -54,6 +55,10 @@ class _ModelsScreenState extends State<ModelsScreen> {
   String? _tierFilter;
   int _authorFilter = -1;
   List<Map<String, dynamic>> _members = [];
+  int _total = 0;
+  int _pageSize = 20;
+  bool _loadingMore = false;
+  Timer? _searchDebounce;
   final Map<String, String?> _thumbnails = {};
   final Map<String, File?> _localThumbs = {};
   String? _menuBusyUuid;
@@ -244,66 +249,79 @@ class _ModelsScreenState extends State<ModelsScreen> {
     if (_favoritesOnly) {
       list = list.where((m) => _favorites.contains(m['uuid']?.toString())).toList();
     }
-    if (_statusFilter == 'published') {
-      list = list.where((m) {
-        final s = m['publish_status']?.toString() ?? '';
-        return s.contains('published') || s.contains('verified');
-      }).toList();
-    } else if (_statusFilter == 'draft') {
-      list = list.where((m) {
-        final s = m['publish_status']?.toString() ?? '';
-        return s.isEmpty || s == 'none' || s == 'not_published';
-      }).toList();
-    }
-    if (_categoryFilter != null) {
-      final api = _categoryFilter!.api;
-      list = list.where((m) => m['category']?.toString() == api).toList();
-    }
-    final q = _search.text.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      list = list.where((m) {
-        final name = m['display_name']?.toString().toLowerCase() ?? '';
-        final uuid = m['uuid']?.toString().toLowerCase() ?? '';
-        return name.contains(q) || uuid.contains(q);
-      }).toList();
-    }
-    final fromRaw = _dateFrom.text.trim();
-    if (fromRaw.isNotEmpty) {
-      final from = DateTime.tryParse(fromRaw);
-      if (from != null) {
-        list = list.where((m) {
-          final d = DateTime.tryParse(m['created_at']?.toString() ?? '');
-          return d != null && !d.isBefore(from);
-        }).toList();
-      }
-    }
-    final toRaw = _dateTo.text.trim();
-    if (toRaw.isNotEmpty) {
-      final to = DateTime.tryParse(toRaw);
-      if (to != null) {
-        final end = DateTime(to.year, to.month, to.day, 23, 59, 59);
-        list = list.where((m) {
-          final d = DateTime.tryParse(m['created_at']?.toString() ?? '');
-          return d != null && !d.isAfter(end);
-        }).toList();
-      }
-    }
-    if (_tierFilter != null) {
-      list = list.where((m) => m['tier']?.toString() == _tierFilter).toList();
-    }
-    if (_authorFilter >= 0) {
-      list = list.where((m) => (m['user_id'] as num?)?.toInt() == _authorFilter).toList();
-    }
-    list.sort((a, b) {
-      final da = a['created_at']?.toString() ?? '';
-      final db = b['created_at']?.toString() ?? '';
-      return _sortNewest ? db.compareTo(da) : da.compareTo(db);
-    });
     return list;
+  }
+
+  String? get _publishFilterParam {
+    if (_statusFilter == 'published' || _statusFilter == 'draft') return _statusFilter;
+    return null;
+  }
+
+  Future<void> _resetAndLoad() => _load();
+
+  Future<void> _load({bool append = false}) async {
+    if (!append) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    } else {
+      setState(() => _loadingMore = true);
+    }
+    try {
+      final page = await widget.api.listModelsPage(
+        companyId: widget.companyId,
+        search: _search.text.trim().isEmpty ? null : _search.text.trim(),
+        dateFrom: _dateFrom.text.trim().isEmpty ? null : _dateFrom.text.trim(),
+        dateTo: _dateTo.text.trim().isEmpty ? null : _dateTo.text.trim(),
+        tier: _tierFilter,
+        authorId: _authorFilter >= 0 ? _authorFilter : null,
+        category: _categoryFilter?.api,
+        publishFilter: _publishFilterParam,
+        sort: _sortNewest ? 'newest' : 'oldest',
+        limit: _pageSize,
+        offset: append ? _items.length : 0,
+      );
+      final items = (page['items'] as List).cast<Map<String, dynamic>>();
+      _total = (page['total'] as num?)?.toInt() ?? items.length;
+      if (!append) {
+        _favorites = await LocalModelLibrary.instance.favorites();
+        if (widget.companyId != null && widget.session.canFilterCompanyOrders) {
+          try {
+            final m = await widget.api.listCompanyMembers();
+            final raw = m['items'] as List? ?? [];
+            _members = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          } catch (_) {}
+        }
+        // ignore: unawaited_futures
+        LocalModelLibrary.instance.syncPendingDownloads(
+          widget.api,
+          companyId: widget.companyId,
+        );
+      }
+      if (append) {
+        _items = [..._items, ...items];
+      } else {
+        _items = items;
+      }
+      for (final m in items) {
+        final uuid = m['uuid']?.toString();
+        if (uuid != null) _loadThumb(uuid);
+      }
+    } catch (e) {
+      if (!append) _error = formatApiError(e);
+    }
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _loadingMore = false;
+      });
+    }
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _search.dispose();
     _dateFrom.dispose();
     _dateTo.dispose();
@@ -322,7 +340,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
     if (picked == null) return;
     ctrl.text =
         '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-    setState(() {});
+    _resetAndLoad();
   }
 
   String _memberLabel(int? userId) {
@@ -338,39 +356,11 @@ class _ModelsScreenState extends State<ModelsScreen> {
   @override
   void initState() {
     super.initState();
-    _search.addListener(() => setState(() {}));
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+    _search.addListener(() {
+      _searchDebounce?.cancel();
+      _searchDebounce = Timer(const Duration(milliseconds: 400), _resetAndLoad);
     });
-    try {
-      _items = await widget.api.listModels(companyId: widget.companyId);
-      _favorites = await LocalModelLibrary.instance.favorites();
-      if (widget.companyId != null && widget.session.canFilterCompanyOrders) {
-        try {
-          final m = await widget.api.listCompanyMembers();
-          final raw = m['items'] as List? ?? [];
-          _members = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-        } catch (_) {}
-      }
-      // §3.5.3 — фоновая синхронизация GLB для completed заказов
-      // ignore: unawaited_futures
-      LocalModelLibrary.instance.syncPendingDownloads(
-        widget.api,
-        companyId: widget.companyId,
-      );
-      for (final m in _items) {
-        final uuid = m['uuid']?.toString();
-        if (uuid != null) _loadThumb(uuid);
-      }
-    } catch (e) {
-      _error = formatApiError(e);
-    }
-    if (mounted) setState(() => _loading = false);
+    _load();
   }
 
   @override
@@ -388,8 +378,18 @@ class _ModelsScreenState extends State<ModelsScreen> {
         ),
       );
     }
-    if (_items.isEmpty) {
-      return Center(child: Text(l.mvNoModels));
+    if (_items.isEmpty && _total == 0) {
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(l.mvTitle, style: context.theme.typography.xl.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            Center(child: Text(l.mvNoModels)),
+          ],
+        ),
+      );
     }
     final visible = _filtered;
     return RefreshIndicator(
@@ -470,7 +470,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
                         onPressed: () {
                           _dateFrom.clear();
                           _dateTo.clear();
-                          setState(() {});
+                          _resetAndLoad();
                         },
                         child: Text(l.mvClearDates),
                       ),
@@ -483,6 +483,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
                       initial: _tierFilter ?? 'all',
                       onChange: (v) {
                         setState(() => _tierFilter = v == null || v == 'all' ? null : v);
+                        _resetAndLoad();
                       },
                     ),
                     items: {
@@ -499,7 +500,10 @@ class _ModelsScreenState extends State<ModelsScreen> {
                       label: Text(l.mvFilterAuthor),
                       control: FSelectControl.managed(
                         initial: _authorFilter,
-                        onChange: (v) => setState(() => _authorFilter = v ?? -1),
+                        onChange: (v) {
+                          setState(() => _authorFilter = v ?? -1);
+                          _resetAndLoad();
+                        },
                       ),
                       items: {
                         l.mvFilterAuthorAll: -1,
@@ -522,17 +526,26 @@ class _ModelsScreenState extends State<ModelsScreen> {
                   FilterChip(
                     label: Text(l.mvFilterAll),
                     selected: _statusFilter == 'all',
-                    onSelected: (_) => setState(() => _statusFilter = 'all'),
+                    onSelected: (_) {
+                      setState(() => _statusFilter = 'all');
+                      _resetAndLoad();
+                    },
                   ),
                   FilterChip(
                     label: Text(l.mvPublishPublished),
                     selected: _statusFilter == 'published',
-                    onSelected: (_) => setState(() => _statusFilter = 'published'),
+                    onSelected: (_) {
+                      setState(() => _statusFilter = 'published');
+                      _resetAndLoad();
+                    },
                   ),
                   FilterChip(
                     label: Text(l.mvPublishNotPublished),
                     selected: _statusFilter == 'draft',
-                    onSelected: (_) => setState(() => _statusFilter = 'draft'),
+                    onSelected: (_) {
+                      setState(() => _statusFilter = 'draft');
+                      _resetAndLoad();
+                    },
                   ),
                   FilterChip(
                     label: Text(l.mvFilterFavorites),
@@ -542,13 +555,19 @@ class _ModelsScreenState extends State<ModelsScreen> {
                   FilterChip(
                     label: Text(_sortNewest ? l.mvSortNewest : l.mvSortOldest),
                     selected: true,
-                    onSelected: (_) => setState(() => _sortNewest = !_sortNewest),
+                    onSelected: (_) {
+                      setState(() => _sortNewest = !_sortNewest);
+                      _resetAndLoad();
+                    },
                   ),
                   ...ProductCategory.values.map(
                     (c) => FilterChip(
                       label: Text(c.label),
                       selected: _categoryFilter == c,
-                      onSelected: (v) => setState(() => _categoryFilter = v ? c : null),
+                      onSelected: (v) {
+                        setState(() => _categoryFilter = v ? c : null);
+                        _resetAndLoad();
+                      },
                     ),
                   ),
                 ],
@@ -688,6 +707,16 @@ class _ModelsScreenState extends State<ModelsScreen> {
                   ),
                 );
               },
+            ),
+          if (_items.length < _total)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                child: FButton(
+                  onPress: _loadingMore ? null : () => _load(append: true),
+                  child: Text(_loadingMore ? '…' : l.mvLoadMore),
+                ),
+              ),
             ),
         ],
       ),
@@ -1346,24 +1375,24 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                               final mp = await showDialog<String>(
                                 context: context,
                                 builder: (ctx) => AlertDialog(
-                                  title: const Text('API upload'),
+                                  title: Text(l.mvApiUploadTitle),
                                   content: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       FTextField(
                                         control: FTextFieldControl.managed(controller: ctrl),
-                                        label: const Text('SKU'),
+                                        label: Text(l.mvApiSkuLabel),
                                       ),
                                     ],
                                   ),
                                   actions: [
                                     TextButton(
                                       onPressed: () => Navigator.pop(ctx, 'wb'),
-                                      child: const Text('WB'),
+                                      child: Text(l.mvImOnWb),
                                     ),
                                     TextButton(
                                       onPressed: () => Navigator.pop(ctx, 'ozon'),
-                                      child: const Text('Ozon'),
+                                      child: Text(l.mvImOnOzon),
                                     ),
                                   ],
                                 ),
@@ -1399,7 +1428,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                                 }
                               }
                             },
-                      child: const Text('API upload'),
+                      child: Text(l.mvApiUploadBtn),
                     ),
                   ],
                 ),

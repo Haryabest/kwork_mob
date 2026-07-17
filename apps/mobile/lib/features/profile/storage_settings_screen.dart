@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 
 class StorageSettingsScreen extends StatefulWidget {
@@ -25,6 +26,7 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'storage'});
     _load();
   }
 

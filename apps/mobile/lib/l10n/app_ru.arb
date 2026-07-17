@@ -703,5 +703,9 @@
   "profileSessionRevoke": "Завершить",
   "profileSessionsRevokeOthers": "Завершить другие сессии",
   "profileSessionsRevokeOthersDone": "Другие сессии завершены",
-  "profileSessionsEmpty": "Нет других активных сессий"
+  "profileSessionsEmpty": "Нет других активных сессий",
+  "mvApiUploadTitle": "Загрузка через API",
+  "mvApiSkuLabel": "SKU",
+  "mvApiUploadBtn": "Загрузка API",
+  "mvLoadMore": "Загрузить ещё"
 }

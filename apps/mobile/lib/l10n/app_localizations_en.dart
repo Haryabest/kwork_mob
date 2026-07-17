@@ -2061,4 +2061,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profileSessionsEmpty => 'No other active sessions';
+
+  @override
+  String get mvApiUploadTitle => 'API upload';
+
+  @override
+  String get mvApiSkuLabel => 'SKU';
+
+  @override
+  String get mvApiUploadBtn => 'API upload';
+
+  @override
+  String get mvLoadMore => 'Load more';
 }

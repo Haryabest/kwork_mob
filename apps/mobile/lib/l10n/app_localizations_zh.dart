@@ -2030,4 +2030,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileSessionsEmpty => '没有其他活跃会话';
+
+  @override
+  String get mvApiUploadTitle => 'API 上传';
+
+  @override
+  String get mvApiSkuLabel => 'SKU';
+
+  @override
+  String get mvApiUploadBtn => 'API 上传';
+
+  @override
+  String get mvLoadMore => '加载更多';
 }
