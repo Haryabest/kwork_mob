@@ -357,7 +357,6 @@ class _ModelsScreenState extends State<ModelsScreen> {
   @override
   void initState() {
     super.initState();
-    AnalyticsService.instance.track('screen_view', {'screen': 'models'});
     _search.addListener(() {
       _searchDebounce?.cancel();
       _searchDebounce = Timer(const Duration(milliseconds: 400), _resetAndLoad);

@@ -49,6 +49,18 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "title": "screen_view breakdown (7d)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "rawSql": "SELECT screen, sum(events) AS views FROM mobile_analytics_screen_daily WHERE day >= today() - 7 GROUP BY screen ORDER BY views DESC LIMIT 30",
+          "refId": "A",
+          "format": "table"
+        }
+      ]
     }
   ],
   "schemaVersion": 39,

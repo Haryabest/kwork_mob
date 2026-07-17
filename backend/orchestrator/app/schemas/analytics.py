@@ -6,7 +6,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-ALLOWED_EVENTS = frozenset({"screen_view", "shoot_complete", "checkout_pay", "shoot_step"})
+ALLOWED_EVENTS = frozenset(
+    {"screen_view", "shoot_complete", "checkout_pay", "shoot_step", "shoot_step_retry"}
+)
 
 
 class AnalyticsEventItem(BaseModel):
@@ -48,6 +50,16 @@ class AnalyticsEventItem(BaseModel):
                 raise ValueError("shoot_step requires props.model_uuid")
             if not isinstance(step, int) or step < 1 or step > 12:
                 raise ValueError("shoot_step requires props.step 1..12")
+        elif self.event == "shoot_step_retry":
+            uuid = props.get("model_uuid")
+            step = props.get("step")
+            err = props.get("error_type")
+            if not isinstance(uuid, str) or not uuid.strip():
+                raise ValueError("shoot_step_retry requires props.model_uuid")
+            if not isinstance(step, int) or step < 1 or step > 12:
+                raise ValueError("shoot_step_retry requires props.step 1..12")
+            if not isinstance(err, str) or not err.strip():
+                raise ValueError("shoot_step_retry requires props.error_type")
         return self
 
 

@@ -59,3 +59,12 @@ def test_shoot_step_invalid_step():
             ts="2026-07-17T10:00:00Z",
             props={"model_uuid": "abc", "step": 0},
         )
+
+
+def test_shoot_step_retry_valid():
+    item = AnalyticsEventItem(
+        event="shoot_step_retry",
+        ts="2026-07-17T10:00:00Z",
+        props={"model_uuid": "abc-123", "step": 2, "error_type": "blurry"},
+    )
+    assert item.props["error_type"] == "blurry"

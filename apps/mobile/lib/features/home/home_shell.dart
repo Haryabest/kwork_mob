@@ -99,7 +99,11 @@ class _HomeShellState extends State<HomeShell> {
   Future<void> _loadCampaignBanners() async {
     try {
       final items = await widget.api.listCampaignBanners();
-      if (mounted) setState(() => _campaignBanners = items);
+      if (!mounted) return;
+      setState(() => _campaignBanners = items);
+      for (final b in items) {
+        AnalyticsService.instance.track('screen_view', {'screen': 'campaign_banner'});
+      }
     } catch (_) {}
   }
 
@@ -300,10 +304,13 @@ class _HomeShellState extends State<HomeShell> {
                       child: CampaignBanner(
                         title: b['title']?.toString() ?? '',
                         body: b['body']?.toString() ?? '',
-                        onDismiss: () => setState(() {
-                          final id = b['id'];
-                          if (id is int) _dismissedBannerIds.add(id);
-                        }),
+                        onDismiss: () {
+                          AnalyticsService.instance.track('screen_view', {'screen': 'campaign_banner_dismiss'});
+                          setState(() {
+                            final id = b['id'];
+                            if (id is int) _dismissedBannerIds.add(id);
+                          });
+                        },
                       ),
                     ),
               ],
@@ -921,6 +928,7 @@ class _ProfileTabState extends State<_ProfileTab> {
 
   Future<void> _saveExportFormat(ExportFormat fmt) async {
     await ExportPrefsService.instance.setFormat(fmt);
+    AnalyticsService.instance.track('screen_view', {'screen': 'export_prefs'});
     try {
       await widget.api.updateProfile({'export_format': fmt == ExportFormat.usdz ? 'usdz' : 'glb'});
     } catch (_) {}

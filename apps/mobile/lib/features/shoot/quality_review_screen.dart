@@ -7,6 +7,7 @@ import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/analytics_service.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/quality_analyzer.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 
@@ -74,6 +75,30 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
       );
       return;
     }
+    FrameQuality? frame;
+    for (final r in _results) {
+      if (r.index == index) {
+        frame = r;
+        break;
+      }
+    }
+    var errorType = 'fail';
+    if (frame != null) {
+      if (frame.blurry) {
+        errorType = 'blurry';
+      } else if (frame.overexposed) {
+        errorType = 'overexposed';
+      } else if (frame.offCenter) {
+        errorType = 'off_center';
+      } else if (frame.verdict == FrameVerdict.fail) {
+        errorType = 'fail';
+      }
+    }
+    AnalyticsService.instance.track('shoot_step_retry', {
+      'model_uuid': widget.modelUuid,
+      'step': index + 1,
+      'error_type': errorType,
+    });
     final ok = await context.push<bool>(
       '${widget.flowBase}/dome',
       extra: {'uuid': widget.modelUuid, 'reshoot': index},

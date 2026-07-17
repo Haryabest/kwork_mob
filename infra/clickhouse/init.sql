@@ -107,3 +107,14 @@ AS SELECT
     count() AS events
 FROM mobile_analytics_events
 GROUP BY day, event;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mobile_analytics_screen_daily
+ENGINE = SummingMergeTree()
+ORDER BY (day, screen)
+AS SELECT
+    toDate(event_ts) AS day,
+    JSONExtractString(props, 'screen') AS screen,
+    count() AS events
+FROM mobile_analytics_events
+WHERE event = 'screen_view' AND screen != ''
+GROUP BY day, screen;
