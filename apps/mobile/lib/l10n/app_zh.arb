@@ -647,6 +647,7 @@
   "@checkoutPromoApplied": {"placeholders": {"amount": {"type": "String"}}},
   "checkoutPromoInvalid": "优惠码无效",
   "campaignBannerDismiss": "关闭",
+  "campaignBannerCta": "了解更多",
   "companyDefaultName": "公司",
   "paymentStatusPending": "待支付",
   "paymentStatusSucceeded": "已支付",

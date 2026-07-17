@@ -9,15 +9,20 @@ class CampaignBanner extends StatelessWidget {
     required this.title,
     required this.body,
     required this.onDismiss,
+    this.clickUrl,
+    this.onCta,
   });
 
   final String title;
   final String body;
   final VoidCallback onDismiss;
+  final String? clickUrl;
+  final VoidCallback? onCta;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final tappable = clickUrl != null && clickUrl!.isNotEmpty && onCta != null;
     return Material(
       color: AppColors.accent.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(12),
@@ -29,15 +34,33 @@ class CampaignBanner extends StatelessWidget {
             const Icon(FIcons.gift, color: AppColors.accent, size: 20),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  if (body.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(body, style: const TextStyle(fontSize: 13)),
-                  ],
-                ],
+              child: InkWell(
+                onTap: tappable ? onCta : null,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      if (body.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(body, style: const TextStyle(fontSize: 13)),
+                      ],
+                      if (tappable) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          l10n.campaignBannerCta,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.accent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ),
             IconButton(

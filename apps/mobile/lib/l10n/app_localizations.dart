@@ -3761,6 +3761,12 @@ abstract class AppLocalizations {
   /// **'Скрыть'**
   String get campaignBannerDismiss;
 
+  /// No description provided for @campaignBannerCta.
+  ///
+  /// In ru, this message translates to:
+  /// **'Подробнее'**
+  String get campaignBannerCta;
+
   /// No description provided for @companyDefaultName.
   ///
   /// In ru, this message translates to:

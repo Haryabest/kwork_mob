@@ -647,6 +647,7 @@
   "@checkoutPromoApplied": {"placeholders": {"amount": {"type": "String"}}},
   "checkoutPromoInvalid": "Invalid promocode",
   "campaignBannerDismiss": "Dismiss",
+  "campaignBannerCta": "Learn more",
   "companyDefaultName": "Company",
   "paymentStatusPending": "Pending payment",
   "paymentStatusSucceeded": "Paid",

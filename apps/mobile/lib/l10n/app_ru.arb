@@ -682,6 +682,7 @@
   "@checkoutPromoApplied": {"placeholders": {"amount": {"type": "String"}}},
   "checkoutPromoInvalid": "Промокод недействителен",
   "campaignBannerDismiss": "Скрыть",
+  "campaignBannerCta": "Подробнее",
   "companyDefaultName": "Компания",
   "paymentStatusPending": "Ожидает оплаты",
   "paymentStatusSucceeded": "Оплачено",

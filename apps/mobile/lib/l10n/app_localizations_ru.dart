@@ -2005,6 +2005,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get campaignBannerDismiss => 'Скрыть';
 
   @override
+  String get campaignBannerCta => 'Подробнее';
+
+  @override
   String get companyDefaultName => 'Компания';
 
   @override

@@ -531,3 +531,25 @@ celery_app.conf.beat_schedule["pending-payments-poll-waiting-capture"] = {
     "schedule": crontab(minute="*/5"),
 }
 
+
+@celery_app.task(name="app.tasks.celery_app.sync_analytics_to_clickhouse")
+def sync_analytics_to_clickhouse():
+    """PG→CH mirror для mobile analytics §19.20."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services import analytics_sync as asy
+
+    async def _run():
+        async with async_session() as db:
+            result = await asy.sync_unsynced(db)
+            await db.commit()
+            return result
+
+    return asyncio.run(_run())
+
+
+celery_app.conf.beat_schedule["analytics-ch-sync-every-15-min"] = {
+    "task": "app.tasks.celery_app.sync_analytics_to_clickhouse",
+    "schedule": crontab(minute="*/15"),
+}

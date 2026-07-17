@@ -1997,6 +1997,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get campaignBannerDismiss => 'Dismiss';
 
   @override
+  String get campaignBannerCta => 'Learn more';
+
+  @override
   String get companyDefaultName => 'Company';
 
   @override

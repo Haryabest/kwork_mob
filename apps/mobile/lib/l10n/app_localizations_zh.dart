@@ -1966,6 +1966,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get campaignBannerDismiss => '关闭';
 
   @override
+  String get campaignBannerCta => '了解更多';
+
+  @override
   String get companyDefaultName => '公司';
 
   @override

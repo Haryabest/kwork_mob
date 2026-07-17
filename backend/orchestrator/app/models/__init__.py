@@ -944,3 +944,4 @@ class MobileAnalyticsEvent(Base):
     event_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     props: Mapped[dict | None] = mapped_column(JSONB)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    ch_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)

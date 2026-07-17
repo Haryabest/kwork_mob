@@ -647,6 +647,7 @@
   "@checkoutPromoApplied": {"placeholders": {"amount": {"type": "String"}}},
   "checkoutPromoInvalid": "Промокод жарамсыз",
   "campaignBannerDismiss": "Жасыру",
+  "campaignBannerCta": "Толығырақ",
   "companyDefaultName": "Компания",
   "paymentStatusPending": "Төлем күтілуде",
   "paymentStatusSucceeded": "Төленді",

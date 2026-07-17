@@ -11,6 +11,7 @@ import 'package:kwork_mobile/core/theme_controller.dart';
 import 'package:kwork_mobile/features/models/model_viewer_screen.dart';
 import 'package:kwork_mobile/features/support/faq_support_screen.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:kwork_mobile/services/push_service.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
@@ -196,10 +197,14 @@ class _HomeShellState extends State<HomeShell> {
     );
     if (confirmed != true) return;
     if (choice == 'personal') {
+      if (!session.corporate) return;
       await session.setPersonal();
       AnalyticsService.instance.track('screen_view', {'screen': 'mode_personal'});
     } else {
-      await session.setCompany(choice as Map<String, dynamic>);
+      final c = choice as Map<String, dynamic>;
+      final cid = c['id'] as int?;
+      if (session.corporate && session.companyId == cid) return;
+      await session.setCompany(c);
       AnalyticsService.instance.track('screen_view', {'screen': 'mode_corporate'});
     }
   }
@@ -221,7 +226,10 @@ class _HomeShellState extends State<HomeShell> {
         },
         unread: _unread,
         onShootLink: session.canManageTeam
-            ? () => context.push('/home/shoot-link')
+            ? () {
+                AnalyticsService.instance.track('screen_view', {'screen': 'shoot_link_fab'});
+                context.push('/home/shoot-link');
+              }
             : null,
       ),
       ModelsScreen(
@@ -310,6 +318,19 @@ class _HomeShellState extends State<HomeShell> {
                       child: CampaignBanner(
                         title: b['title']?.toString() ?? '',
                         body: b['body']?.toString() ?? '',
+                        clickUrl: b['click_url']?.toString(),
+                        onCta: () async {
+                          final id = b['id'];
+                          AnalyticsService.instance.track('screen_view', {
+                            'screen': 'campaign_banner_click',
+                            if (id is int) 'banner_id': id,
+                          });
+                          final url = b['click_url']?.toString();
+                          final uri = url == null ? null : Uri.tryParse(url);
+                          if (uri != null) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        },
                         onDismiss: () {
                           final id = b['id'];
                           AnalyticsService.instance.track('screen_view', {
@@ -458,6 +479,7 @@ class _HomeTabState extends State<_HomeTab> {
                   const SizedBox(height: 10),
                   FButton(
                     onPress: () async {
+                      AnalyticsService.instance.track('screen_view', {'screen': 'pending_upload_continue'});
                       await context.push(
                         '/home/shoot/upload',
                         extra: _pendingUpload!.modelUuid,

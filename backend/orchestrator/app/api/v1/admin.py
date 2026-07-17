@@ -1061,6 +1061,52 @@ async def analytics_screen_breakdown(
     return data
 
 
+@router.get("/analytics/events")
+async def analytics_raw_events(
+    user_id: int | None = Query(default=None),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    limit: int = Query(default=500, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
+    export: str | None = Query(default=None, alias="format"),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Raw mobile analytics events из PG §19.20."""
+    from fastapi.responses import Response
+
+    from app.services import analytics_query as aq
+
+    data = await aq.list_raw_events(
+        db,
+        user_id=user_id,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+    )
+    if export == "csv":
+        return Response(
+            content=aq.raw_events_to_csv(data),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="analytics-events.csv"'},
+        )
+    return data
+
+
+@router.post("/analytics/sync")
+async def analytics_sync_ch(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручной PG→CH sync несинхронизированных событий §19.20."""
+    from app.services import analytics_sync as asy
+
+    result = await asy.sync_unsynced(db)
+    await db.commit()
+    return result
+
+
 @router.get("/access-log")
 async def admin_access_log(
     date_from: datetime | None = Query(None),

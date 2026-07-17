@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -82,4 +83,63 @@ def screens_to_csv(data: dict) -> str:
     w.writerow(["screen", "views"])
     for row in data.get("items") or []:
         w.writerow([row.get("screen", ""), row.get("views", 0)])
+    return buf.getvalue()
+
+
+async def list_raw_events(
+    db: AsyncSession,
+    *,
+    user_id: int | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    limit: int = 500,
+    offset: int = 0,
+) -> dict:
+    q = select(MobileAnalyticsEvent).order_by(MobileAnalyticsEvent.event_ts.desc())
+    if user_id is not None:
+        q = q.where(MobileAnalyticsEvent.user_id == user_id)
+    if date_from is not None:
+        q = q.where(MobileAnalyticsEvent.event_ts >= date_from)
+    if date_to is not None:
+        q = q.where(MobileAnalyticsEvent.event_ts <= date_to)
+    rows = (await db.scalars(q.offset(offset).limit(limit))).all()
+    items = [
+        {
+            "id": r.id,
+            "user_id": r.user_id,
+            "event": r.event,
+            "event_ts": r.event_ts.isoformat() if r.event_ts else None,
+            "props": r.props,
+            "ingested_at": r.ingested_at.isoformat() if r.ingested_at else None,
+            "ch_synced_at": r.ch_synced_at.isoformat() if r.ch_synced_at else None,
+        }
+        for r in rows
+    ]
+    return {
+        "user_id": user_id,
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
+        "limit": limit,
+        "offset": offset,
+        "items": items,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def raw_events_to_csv(data: dict) -> str:
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["id", "user_id", "event", "event_ts", "props", "ingested_at", "ch_synced_at"])
+    for row in data.get("items") or []:
+        w.writerow(
+            [
+                row.get("id"),
+                row.get("user_id"),
+                row.get("event"),
+                row.get("event_ts"),
+                json.dumps(row.get("props") or {}, ensure_ascii=False),
+                row.get("ingested_at"),
+                row.get("ch_synced_at"),
+            ]
+        )
     return buf.getvalue()

@@ -2000,6 +2000,9 @@ class AppLocalizationsKk extends AppLocalizations {
   String get campaignBannerDismiss => 'Жасыру';
 
   @override
+  String get campaignBannerCta => 'Толығырақ';
+
+  @override
   String get companyDefaultName => 'Компания';
 
   @override

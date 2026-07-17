@@ -42,18 +42,20 @@ def _parse_ts(raw: str) -> datetime:
     return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
-def _write_clickhouse(*, user_id: int, rows: list[dict]) -> None:
+def _write_clickhouse(*, user_id: int, rows: list[dict]) -> bool:
     client = _ch()
     if client is None or not rows:
-        return
+        return False
     try:
         client.insert(
             "mobile_analytics_events",
             rows,
             column_names=["user_id", "event", "event_ts", "props"],
         )
+        return True
     except Exception as exc:  # noqa: BLE001
         logger.debug("ClickHouse mobile_analytics_events insert failed: %s", exc)
+        return False
 
 
 async def persist_events(
@@ -64,17 +66,18 @@ async def persist_events(
     if not events:
         return 0
     ch_rows: list[dict] = []
+    pg_rows: list[MobileAnalyticsEvent] = []
     for item in events:
         ts = _parse_ts(item.ts)
         props = dict(item.props or {})
-        db.add(
-            MobileAnalyticsEvent(
-                user_id=user.id,
-                event=item.event,
-                event_ts=ts,
-                props=props or None,
-            )
+        row = MobileAnalyticsEvent(
+            user_id=user.id,
+            event=item.event,
+            event_ts=ts,
+            props=props or None,
         )
+        db.add(row)
+        pg_rows.append(row)
         ch_rows.append(
             {
                 "user_id": user.id,
@@ -84,5 +87,9 @@ async def persist_events(
             }
         )
     await db.flush()
-    _write_clickhouse(user_id=user.id, rows=ch_rows)
+    if _write_clickhouse(user_id=user.id, rows=ch_rows):
+        now = datetime.now(timezone.utc)
+        for row in pg_rows:
+            row.ch_synced_at = now
+        await db.flush()
     return len(events)

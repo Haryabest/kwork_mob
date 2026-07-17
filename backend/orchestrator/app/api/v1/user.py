@@ -722,6 +722,7 @@ async def list_campaign_banners(
 ):
     """Баннеры из неиспользованных CampaignEntitlement."""
     from app.models import Campaign, CampaignEntitlement, Promocode
+    from app.services import campaigns as camp_svc
 
     ents = (
         await db.scalars(
@@ -755,6 +756,11 @@ async def list_campaign_banners(
                 "kind": ent.kind,
                 "title": title,
                 "body": body_text,
+                "click_url": camp_svc.click_track_url(
+                    ent.campaign_id,
+                    target_url=cfg.get("banner_cta_url") or cfg.get("cta_url"),
+                    user_id=user.id,
+                ),
             }
         )
     return {"items": items}
