@@ -1031,8 +1031,18 @@ class ApiClient {
     return res.data ?? [];
   }
 
-  Future<Map<String, dynamic>> listCompanyMembers() async {
-    final res = await _dio.get('/company/members');
+  Future<Map<String, dynamic>> listCompanyMembers({
+    String? search,
+    String? role,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final res = await _dio.get('/company/members', queryParameters: {
+      if (search != null && search.isNotEmpty) 'search': search,
+      if (role != null && role.isNotEmpty) 'role': role,
+      'limit': limit,
+      'offset': offset,
+    });
     return Map<String, dynamic>.from(res.data as Map);
   }
 

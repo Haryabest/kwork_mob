@@ -22,8 +22,13 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   List<Map<String, dynamic>> _members = [];
   List<Map<String, dynamic>> _audit = [];
   int? _companyId;
+  int _membersTotal = 0;
   bool _loading = true;
   bool _busy = false;
+
+  final _memberSearchCtrl = TextEditingController();
+  String _memberSearch = '';
+  String? _memberRoleFilter;
 
   final _inviteEmail = TextEditingController();
   String _inviteRole = 'photographer';
@@ -34,25 +39,47 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
     super.initState();
     AnalyticsService.instance.track('screen_view', {'screen': 'team'});
     _tabs = FTabController(length: 3, vsync: this);
+    _memberSearchCtrl.addListener(_onMemberSearchChanged);
     _load();
+  }
+
+  void _onMemberSearchChanged() {
+    final next = _memberSearchCtrl.text.trim();
+    if (next == _memberSearch) return;
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted || _memberSearchCtrl.text.trim() != next) return;
+      setState(() => _memberSearch = next);
+      _loadMembers();
+    });
   }
 
   @override
   void dispose() {
     _tabs.dispose();
     _inviteEmail.dispose();
+    _memberSearchCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  Future<void> _loadMembers() async {
     try {
-      final data = await widget.api.listCompanyMembers();
+      final data = await widget.api.listCompanyMembers(
+        search: _memberSearch.isEmpty ? null : _memberSearch,
+        role: _memberRoleFilter,
+      );
       _members = (data['items'] as List?)
               ?.map((e) => Map<String, dynamic>.from(e as Map))
               .toList() ??
           [];
       _companyId = data['company_id'] as int?;
+      _membersTotal = (data['total'] as num?)?.toInt() ?? _members.length;
+    } catch (_) {}
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      await _loadMembers();
       _audit = await widget.api.listAuditLog();
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
@@ -221,6 +248,39 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                 ),
                                 const SizedBox(height: 16),
                               ],
+                              FTextField(
+                                control: FTextFieldControl.managed(controller: _memberSearchCtrl),
+                                label: Text(l10n.teamSearchHint),
+                              ),
+                              const SizedBox(height: 8),
+                              FSelect<String?>(
+                                label: Text(l10n.teamRole),
+                                control: FSelectControl.managed(
+                                  initial: _memberRoleFilter,
+                                  onChange: (v) {
+                                    setState(() => _memberRoleFilter = v);
+                                    _loadMembers().then((_) {
+                                      if (mounted) setState(() {});
+                                    });
+                                  },
+                                ),
+                                items: {
+                                  l10n.teamRoleAll: null,
+                                  'Manager': 'manager',
+                                  'Photographer': 'photographer',
+                                  'Viewer': 'viewer',
+                                  'Owner': 'owner',
+                                },
+                              ),
+                              if (_membersTotal > _members.length)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    '${_members.length} / $_membersTotal',
+                                    style: context.theme.typography.sm,
+                                  ),
+                                ),
+                              const SizedBox(height: 12),
                               for (final m in _members)
                                 FTile(
                                   title: Text(m['full_name']?.toString() ?? m['email']?.toString() ?? '—'),

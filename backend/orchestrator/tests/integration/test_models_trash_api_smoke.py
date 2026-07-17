@@ -1,11 +1,11 @@
-"""Smoke API paths used by mobile client (§3.4 / §19)."""
+"""Integration smoke: models filters + trash pagination §19.9 / §3.3.1."""
 
 import pytest
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
-async def test_mobile_auth_and_user_paths(client, unique_email):
+async def _login(client, unique_email):
     email = unique_email()
     password = "secret123"
     reg = await client.post(
@@ -27,22 +27,34 @@ async def test_mobile_auth_and_user_paths(client, unique_email):
         json={"email": email, "password": password},
     )
     assert login.status_code == 200
-    token = login.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
-    me = await client.get("/api/v1/user/me", headers=headers)
-    assert me.status_code == 200
 
-    device = await client.post(
-        "/api/v1/user/devices",
+async def test_user_models_filters_and_trash_pagination(client, unique_email):
+    headers = await _login(client, unique_email)
+
+    models = await client.get(
+        "/api/v1/user/models",
         headers=headers,
-        json={"token": "f" * 140, "platform": "android", "app_version": "0.1.0"},
+        params={"limit": 5, "offset": 0, "sort": "newest", "publish_filter": "draft"},
     )
-    assert device.status_code in (200, 201)
+    assert models.status_code == 200
+    body = models.json()
+    assert "items" in body
+    assert "total" in body
+    assert body["limit"] == 5
+    assert body["offset"] == 0
 
-    banners = await client.get("/api/v1/user/campaign_banners", headers=headers)
-    assert banners.status_code == 200
-    assert "items" in banners.json()
+    trash = await client.get(
+        "/api/v1/models/trash",
+        headers=headers,
+        params={"limit": 10, "offset": 0},
+    )
+    assert trash.status_code == 200
+    t = trash.json()
+    assert "items" in t
+    assert "total" in t
+    assert t["limit"] == 10
 
     analytics = await client.post(
         "/api/v1/user/analytics/events",
@@ -51,8 +63,8 @@ async def test_mobile_auth_and_user_paths(client, unique_email):
             "events": [
                 {
                     "event": "screen_view",
-                    "ts": "2026-01-01T00:00:00Z",
-                    "props": {"screen": "ci_smoke"},
+                    "ts": "2026-07-17T10:00:00Z",
+                    "props": {"screen": "integration_smoke"},
                 }
             ]
         },

@@ -1541,6 +1541,12 @@ abstract class AppLocalizations {
   /// **'Фото отправлены владельцу'**
   String get guestSentToOwner;
 
+  /// No description provided for @guestMissingFrame.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет файла ракурса {index}'**
+  String guestMissingFrame(String index);
+
   /// No description provided for @guestSend12Photos.
   ///
   /// In ru, this message translates to:
@@ -2002,6 +2008,18 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Отправить приглашение'**
   String get teamSendInvite;
+
+  /// No description provided for @teamSearchHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Имя или email'**
+  String get teamSearchHint;
+
+  /// No description provided for @teamRoleAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все роли'**
+  String get teamRoleAll;
 
   /// No description provided for @mvPublishValidating.
   ///
@@ -3544,6 +3562,12 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Продолжить'**
   String get consentContinue;
+
+  /// No description provided for @consentDocVersion.
+  ///
+  /// In ru, this message translates to:
+  /// **'{title} · v{version}'**
+  String consentDocVersion(String title, String version);
 
   /// No description provided for @consentSaving.
   ///

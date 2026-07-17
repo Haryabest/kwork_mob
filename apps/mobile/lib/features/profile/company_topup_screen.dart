@@ -8,6 +8,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/features/profile/low_balance_banner.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -42,6 +43,7 @@ class _CompanyTopupScreenState extends State<CompanyTopupScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'company_topup'});
     _load();
   }
 

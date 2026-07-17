@@ -791,7 +791,12 @@ class AppLocalizationsKk extends AppLocalizations {
   String get guestConfirming => 'Растау…';
 
   @override
-  String get guestSentToOwner => 'Фото иесіне жіберildi';
+  String get guestSentToOwner => 'Фото иесіне жіберілді';
+
+  @override
+  String guestMissingFrame(String index) {
+    return 'Кадр файлы жоқ $index';
+  }
 
   @override
   String get guestSend12Photos => '12 фото жіберу';
@@ -1044,6 +1049,12 @@ class AppLocalizationsKk extends AppLocalizations {
 
   @override
   String get teamSendInvite => 'Шақыру жіберу';
+
+  @override
+  String get teamSearchHint => 'Аты немесе email';
+
+  @override
+  String get teamRoleAll => 'Барлық рөлдер';
 
   @override
   String get mvPublishValidating => 'Импортты тексеру';
@@ -1873,6 +1884,11 @@ class AppLocalizationsKk extends AppLocalizations {
 
   @override
   String get consentContinue => 'Жалғастыру';
+
+  @override
+  String consentDocVersion(String title, String version) {
+    return '$title · v$version';
+  }
 
   @override
   String get consentSaving => 'Сақталуда…';

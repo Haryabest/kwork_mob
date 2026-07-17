@@ -8,6 +8,7 @@ import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/l10n/catalog_l10n.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 /// Создание shoot-link + QR (§3.15).
@@ -31,6 +32,12 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
   Map<String, dynamic>? _link;
   bool _loading = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'shoot_link'});
+  }
 
   Future<void> _create() async {
     final l10n = AppLocalizations.of(context)!;

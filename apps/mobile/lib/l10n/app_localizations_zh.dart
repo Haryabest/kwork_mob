@@ -776,6 +776,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get guestSentToOwner => '照片已发送给所有者';
 
   @override
+  String guestMissingFrame(String index) {
+    return '缺少视角文件 $index';
+  }
+
+  @override
   String get guestSend12Photos => '发送 12 张照片';
 
   @override
@@ -1023,6 +1028,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get teamSendInvite => '发送邀请';
+
+  @override
+  String get teamSearchHint => '姓名或邮箱';
+
+  @override
+  String get teamRoleAll => '所有角色';
 
   @override
   String get mvPublishValidating => '导入校验中';
@@ -1840,6 +1851,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get consentContinue => '继续';
+
+  @override
+  String consentDocVersion(String title, String version) {
+    return '$title · v$version';
+  }
 
   @override
   String get consentSaving => '保存中…';

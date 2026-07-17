@@ -789,6 +789,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get guestSentToOwner => 'Photos sent to owner';
 
   @override
+  String guestMissingFrame(String index) {
+    return 'Missing frame file $index';
+  }
+
+  @override
   String get guestSend12Photos => 'Send 12 photos';
 
   @override
@@ -1038,6 +1043,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get teamSendInvite => 'Send invitation';
+
+  @override
+  String get teamSearchHint => 'Name or email';
+
+  @override
+  String get teamRoleAll => 'All roles';
 
   @override
   String get mvPublishValidating => 'Import validating';
@@ -1870,6 +1881,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get consentContinue => 'Continue';
+
+  @override
+  String consentDocVersion(String title, String version) {
+    return '$title · v$version';
+  }
 
   @override
   String get consentSaving => 'Saving…';

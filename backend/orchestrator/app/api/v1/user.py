@@ -705,9 +705,14 @@ async def restore_draft_backup(
 async def post_analytics_events(
     body: AnalyticsEventsBody,
     user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Приём пакета аналитики с мобильного клиента §19.20."""
-    return {"accepted": len(body.events), "user_id": user.id}
+    from app.services import analytics_ingest as ai
+
+    accepted = await ai.persist_events(db, user, body.events)
+    await db.commit()
+    return {"accepted": accepted, "user_id": user.id}
 
 
 @router.get("/campaign_banners")

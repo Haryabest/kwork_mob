@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -297,13 +297,25 @@ async def accept_invitation(
 async def list_members(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
+    search: str | None = Query(default=None, max_length=120),
+    role: str | None = Query(default=None, max_length=32),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
     from app.services.company_members import require_manager
 
     company, _role = await require_manager(db, user)
-    members = (
-        await db.scalars(select(CompanyMember).where(CompanyMember.company_id == company.id))
-    ).all()
+    where = [CompanyMember.company_id == company.id]
+    if role and role.strip():
+        where.append(CompanyMember.role == role.strip())
+    stmt = select(CompanyMember).where(*where)
+    if search and search.strip():
+        q = f"%{search.strip()}%"
+        stmt = stmt.join(User, User.id == CompanyMember.user_id).where(
+            or_(User.email.ilike(q), User.full_name.ilike(q))
+        )
+    total = await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    members = (await db.scalars(stmt.order_by(CompanyMember.id).offset(offset).limit(limit))).all()
     items = []
     for m in members:
         u = await db.get(User, m.user_id)
@@ -317,7 +329,13 @@ async def list_members(
                 "monthly_spending_limit": m.monthly_spending_limit,
             }
         )
-    return {"items": items, "company_id": company.id}
+    return {
+        "items": items,
+        "total": int(total),
+        "limit": limit,
+        "offset": offset,
+        "company_id": company.id,
+    }
 
 
 @router.delete("/members/{user_id}")

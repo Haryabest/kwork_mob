@@ -7,6 +7,7 @@ import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 /// Гостевой вход по shoot-link (§3.15) — deep link `/shoot/{token}`.
 class GuestShootGateScreen extends StatefulWidget {
@@ -31,6 +32,7 @@ class _GuestShootGateScreenState extends State<GuestShootGateScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'guest_shoot'});
     _boot();
   }
 
@@ -197,6 +199,7 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
 
   Future<void> _run() async {
     if (_running) return;
+    final l10n = AppLocalizations.of(context)!;
     setState(() {
       _running = true;
       _error = null;
@@ -211,7 +214,9 @@ class _GuestShootUploadScreenState extends State<GuestShootUploadScreen> {
       final photos = await ShootStorage.instance.listPhotos(widget.modelUuid);
       for (var i = 0; i < uploads.length; i++) {
         final file = photos[i];
-        if (file == null) throw StateError('Нет файла ракурса $i');
+        if (file == null) {
+          throw StateError(l10n.guestMissingFrame('$i'));
+        }
         setState(() {
           _statusKey = 'uploading';
           _uploadIndex = i + 1;

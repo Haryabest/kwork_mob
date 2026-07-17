@@ -81,6 +81,9 @@ export default function TeamPage() {
   const [shootCategory, setShootCategory] = useState<string | null>('other');
   const [shootTier, setShootTier] = useState<string | null>('small');
   const [accessRows, setAccessRows] = useState<AccessRow[]>([]);
+  const [memberSearchQ, setMemberSearchQ] = useState('');
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberRoleFilter, setMemberRoleFilter] = useState<string | null>(null);
   const [shootStats, setShootStats] = useState<{
     created: number;
     expired: number;
@@ -96,10 +99,22 @@ export default function TeamPage() {
     };
   }, [funnelFrom, funnelTo]);
 
+  const memberParams = useCallback(() => {
+    const params: Record<string, string | number> = { limit: 100, offset: 0 };
+    if (memberSearch) params.search = memberSearch;
+    if (memberRoleFilter) params.role = memberRoleFilter;
+    return params;
+  }, [memberSearch, memberRoleFilter]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMemberSearch(memberSearchQ.trim()), 400);
+    return () => clearTimeout(t);
+  }, [memberSearchQ]);
+
   const load = useCallback(async () => {
     try {
       const [m, i, f, a, ss] = await Promise.all([
-        api.get<{ items: Member[] }>('/company/members'),
+        api.get<{ items: Member[] }>('/company/members', { params: memberParams() }),
         api.get<{ items: Invite[] }>('/company/invitations'),
         api.get<{ items: TeamFunnelRow[] }>('/company/publication-funnel', { params: funnelParams() }),
         api.get<{ items: AccessRow[] }>('/company/access-log').catch(() => ({ data: { items: [] as AccessRow[] } })),
@@ -121,7 +136,7 @@ export default function TeamPage() {
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
     }
-  }, [funnelParams]);
+  }, [funnelParams, memberParams]);
 
   useEffect(() => {
     void load();
@@ -327,13 +342,19 @@ export default function TeamPage() {
 
       <Surface>
         <FilterRow>
-          <TextInput label="Поиск" placeholder="Имя или email" disabled />
+          <TextInput
+            label="Поиск"
+            placeholder="Имя или email"
+            value={memberSearchQ}
+            onChange={(e) => setMemberSearchQ(e.currentTarget.value)}
+          />
           <Select
             label="Роль"
             placeholder="Все роли"
             data={['owner', 'manager', 'photographer', 'viewer']}
             clearable
-            disabled
+            value={memberRoleFilter}
+            onChange={setMemberRoleFilter}
           />
         </FilterRow>
         <ScrollTable>

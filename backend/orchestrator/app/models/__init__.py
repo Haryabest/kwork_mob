@@ -931,3 +931,16 @@ class UserNotification(Base):
     model_uuid: Mapped[str | None] = mapped_column(String(36))
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class MobileAnalyticsEvent(Base):
+    """Mobile client analytics §19.20 — PG persistence (+ CH mirror)."""
+
+    __tablename__ = "mobile_analytics_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    event: Mapped[str] = mapped_column(String(64), index=True)
+    event_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    props: Mapped[dict | None] = mapped_column(JSONB)
+    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

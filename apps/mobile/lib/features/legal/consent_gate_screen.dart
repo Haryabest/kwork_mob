@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/push_deep_link.dart';
 
 /// Блокировка приложения до принятия новых версий документов (§2.8.2).
@@ -28,6 +29,7 @@ class _LegalConsentGateScreenState extends State<LegalConsentGateScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'consent_gate'});
     _load();
   }
 
@@ -136,7 +138,10 @@ class _LegalConsentGateScreenState extends State<LegalConsentGateScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Text('$title · v$version', style: const TextStyle(fontWeight: FontWeight.w600)),
+                              Text(
+                                l10n.consentDocVersion(title, '$version'),
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
                               TextButton(
                                 onPressed: () => setState(() {
                                   _expanded = _expanded == slug ? null : slug;

@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 
 /// §19.14.2 — политики доступа компании (Owner).
@@ -57,6 +58,7 @@ class _CompanyPoliciesScreenState extends State<CompanyPoliciesScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'company_policies'});
     _load();
   }
 

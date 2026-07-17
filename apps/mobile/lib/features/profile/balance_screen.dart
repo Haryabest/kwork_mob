@@ -14,6 +14,7 @@ import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/features/profile/low_balance_banner.dart';
 import 'package:kwork_mobile/core/ws_errors.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/balance_filters_prefs.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -71,6 +72,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'balance'});
     _thresholdCtrl.text = '5000';
     _lastCorpFinance = _corporateFinance;
     _lastCompanyId = widget.session.companyId;

@@ -793,6 +793,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get guestSentToOwner => 'Фото отправлены владельцу';
 
   @override
+  String guestMissingFrame(String index) {
+    return 'Нет файла ракурса $index';
+  }
+
+  @override
   String get guestSend12Photos => 'Отправить 12 фото';
 
   @override
@@ -1044,6 +1049,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get teamSendInvite => 'Отправить приглашение';
+
+  @override
+  String get teamSearchHint => 'Имя или email';
+
+  @override
+  String get teamRoleAll => 'Все роли';
 
   @override
   String get mvPublishValidating => 'Проверка импорта';
@@ -1876,6 +1887,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get consentContinue => 'Продолжить';
+
+  @override
+  String consentDocVersion(String title, String version) {
+    return '$title · v$version';
+  }
 
   @override
   String get consentSaving => 'Сохранение…';
