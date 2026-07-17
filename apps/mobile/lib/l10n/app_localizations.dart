@@ -3893,6 +3893,30 @@ abstract class AppLocalizations {
   /// **'Нет других активных сессий'**
   String get profileSessionsEmpty;
 
+  /// No description provided for @profileDisable2fa.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отключить 2FA'**
+  String get profileDisable2fa;
+
+  /// No description provided for @profileDisable2faTitle.
+  ///
+  /// In ru, this message translates to:
+  /// **'Отключить 2FA?'**
+  String get profileDisable2faTitle;
+
+  /// No description provided for @profileDisable2faBody.
+  ///
+  /// In ru, this message translates to:
+  /// **'Введите код из приложения-аутентификатора для подтверждения.'**
+  String get profileDisable2faBody;
+
+  /// No description provided for @profile2faDisabledSnackbar.
+  ///
+  /// In ru, this message translates to:
+  /// **'2FA отключена'**
+  String get profile2faDisabledSnackbar;
+
   /// No description provided for @mvApiUploadTitle.
   ///
   /// In ru, this message translates to:

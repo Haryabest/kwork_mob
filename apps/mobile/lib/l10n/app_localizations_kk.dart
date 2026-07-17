@@ -1415,7 +1415,7 @@ class AppLocalizationsKk extends AppLocalizations {
   String get profile2faStep2 => '2. Немесе құпиясөзді қолмен енгізіңіз';
 
   @override
-  String get profileSecretCopied => 'Құпиясөз көшірілді';
+  String get profileSecretCopied => 'Секрет көшірілді';
 
   @override
   String get profile2faCodeLabel => 'Authenticator коды';
@@ -2064,6 +2064,19 @@ class AppLocalizationsKk extends AppLocalizations {
 
   @override
   String get profileSessionsEmpty => 'Басқа белсенді сессиялар жоқ';
+
+  @override
+  String get profileDisable2fa => '2FA сөндіру';
+
+  @override
+  String get profileDisable2faTitle => '2FA сөндіру керек пе?';
+
+  @override
+  String get profileDisable2faBody =>
+      'Растау үшін authenticator кодын енгізіңіз.';
+
+  @override
+  String get profile2faDisabledSnackbar => '2FA сөндірілді';
 
   @override
   String get mvApiUploadTitle => 'API арқылы жүктеу';

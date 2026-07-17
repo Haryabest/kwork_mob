@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 
-class PublishGuideScreen extends StatelessWidget {
+class PublishGuideScreen extends StatefulWidget {
   const PublishGuideScreen({super.key});
+
+  @override
+  State<PublishGuideScreen> createState() => _PublishGuideScreenState();
+}
+
+class _PublishGuideScreenState extends State<PublishGuideScreen> {
+  @override
+  void initState() {
+    super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'publish_guide'});
+  }
 
   @override
   Widget build(BuildContext context) {

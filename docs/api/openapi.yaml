@@ -127,6 +127,39 @@ components:
           title: Thresholds
       title: AlertSettingsBody
       type: object
+    AnalyticsEventItem:
+      properties:
+        event:
+          maxLength: 64
+          minLength: 1
+          title: Event
+          type: string
+        props:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Props
+        ts:
+          maxLength: 40
+          minLength: 10
+          title: Ts
+          type: string
+      required:
+      - event
+      - ts
+      title: AnalyticsEventItem
+      type: object
+    AnalyticsEventsBody:
+      properties:
+        events:
+          items:
+            $ref: '#/components/schemas/AnalyticsEventItem'
+          maxItems: 200
+          title: Events
+          type: array
+      title: AnalyticsEventsBody
+      type: object
     ApiKeyCreate:
       properties:
         daily_limit:
@@ -209,6 +242,38 @@ components:
       required:
       - name
       title: AutoscalingRuleBody
+      type: object
+    BalanceFilterPresetBody:
+      properties:
+        date_from:
+          default: ''
+          maxLength: 10
+          title: Date From
+          type: string
+        date_to:
+          default: ''
+          maxLength: 10
+          title: Date To
+          type: string
+        name:
+          maxLength: 64
+          minLength: 1
+          title: Name
+          type: string
+        page_size:
+          default: 20
+          maximum: 100.0
+          minimum: 20.0
+          title: Page Size
+          type: integer
+        tx_type:
+          default: all
+          pattern: ^(all|topup|charge|refund)$
+          title: Tx Type
+          type: string
+      required:
+      - name
+      title: BalanceFilterPresetBody
       type: object
     BalanceFiltersBody:
       properties:
@@ -477,6 +542,44 @@ components:
       - name
       - template
       title: CampaignCreate
+      type: object
+    CompanyBalanceFilterPresetBody:
+      properties:
+        author_id:
+          anyOf:
+          - minimum: 1.0
+            type: integer
+          - type: 'null'
+          title: Author Id
+        date_from:
+          default: ''
+          maxLength: 10
+          title: Date From
+          type: string
+        date_to:
+          default: ''
+          maxLength: 10
+          title: Date To
+          type: string
+        name:
+          maxLength: 64
+          minLength: 1
+          title: Name
+          type: string
+        page_size:
+          default: 20
+          maximum: 100.0
+          minimum: 20.0
+          title: Page Size
+          type: integer
+        tx_type:
+          default: all
+          pattern: ^(all|topup|charge|refund)$
+          title: Tx Type
+          type: string
+      required:
+      - name
+      title: CompanyBalanceFilterPresetBody
       type: object
     CompanyBalanceFiltersBody:
       properties:
@@ -6497,6 +6600,72 @@ paths:
       summary: Company Balance
       tags:
       - Компания
+  /api/v1/company/balance-filter-presets:
+    get:
+      operationId: get_company_balance_filter_presets_api_v1_company_balance_filter_presets_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Get Company Balance Filter Presets
+      tags:
+      - Компания
+    post:
+      operationId: create_company_balance_filter_preset_api_v1_company_balance_filter_presets_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompanyBalanceFilterPresetBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Create Company Balance Filter Preset
+      tags:
+      - Компания
+  /api/v1/company/balance-filter-presets/{preset_id}:
+    delete:
+      operationId: delete_company_balance_filter_preset_api_v1_company_balance_filter_presets__preset_id__delete
+      parameters:
+      - in: path
+        name: preset_id
+        required: true
+        schema:
+          title: Preset Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Delete Company Balance Filter Preset
+      tags:
+      - Компания
   /api/v1/company/balance-filters:
     get:
       description: Saved company transaction filters for Manager/Owner §8 / §20.3.4.
@@ -7941,12 +8110,36 @@ paths:
     get:
       description: Корзина моделей §3.3.1 (30 дней).
       operationId: list_trash_models_api_v1_models_trash_get
+      parameters:
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 20
+          maximum: 100
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          title: Offset
+          type: integer
       responses:
         '200':
           content:
             application/json:
               schema: {}
           description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
       security:
       - HTTPBearer: []
       summary: List Trash Models
@@ -9325,6 +9518,33 @@ paths:
       summary: Account Type
       tags:
       - Пользователь
+  /api/v1/user/analytics/events:
+    post:
+      description: Приём пакета аналитики с мобильного клиента §19.20.
+      operationId: post_analytics_events_api_v1_user_analytics_events_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyticsEventsBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Post Analytics Events
+      tags:
+      - Пользователь
   /api/v1/user/balance:
     get:
       operationId: get_balance_api_v1_user_balance_get
@@ -9337,6 +9557,73 @@ paths:
       security:
       - HTTPBearer: []
       summary: Get Balance
+      tags:
+      - Пользователь
+  /api/v1/user/balance-filter-presets:
+    get:
+      description: Named saved views for personal balance filters §20.3.4.
+      operationId: get_balance_filter_presets_api_v1_user_balance_filter_presets_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Get Balance Filter Presets
+      tags:
+      - Пользователь
+    post:
+      operationId: create_balance_filter_preset_api_v1_user_balance_filter_presets_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BalanceFilterPresetBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Create Balance Filter Preset
+      tags:
+      - Пользователь
+  /api/v1/user/balance-filter-presets/{preset_id}:
+    delete:
+      operationId: delete_balance_filter_preset_api_v1_user_balance_filter_presets__preset_id__delete
+      parameters:
+      - in: path
+        name: preset_id
+        required: true
+        schema:
+          title: Preset Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Delete Balance Filter Preset
       tags:
       - Пользователь
   /api/v1/user/balance-filters:
@@ -9434,6 +9721,21 @@ paths:
       security:
       - HTTPBearer: []
       summary: Topup Balance
+      tags:
+      - Пользователь
+  /api/v1/user/campaign_banners:
+    get:
+      description: Баннеры из неиспользованных CampaignEntitlement.
+      operationId: list_campaign_banners_api_v1_user_campaign_banners_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: List Campaign Banners
       tags:
       - Пользователь
   /api/v1/user/devices:
@@ -9628,6 +9930,94 @@ paths:
           - type: integer
           - type: 'null'
           title: Company Id
+      - in: query
+        name: search
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 120
+            type: string
+          - type: 'null'
+          title: Search
+      - in: query
+        name: date_from
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 10
+            type: string
+          - type: 'null'
+          title: Date From
+      - in: query
+        name: date_to
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 10
+            type: string
+          - type: 'null'
+          title: Date To
+      - in: query
+        name: tier
+        required: false
+        schema:
+          anyOf:
+          - pattern: ^(small|large)$
+            type: string
+          - type: 'null'
+          title: Tier
+      - in: query
+        name: author_id
+        required: false
+        schema:
+          anyOf:
+          - minimum: 1
+            type: integer
+          - type: 'null'
+          title: Author Id
+      - in: query
+        name: category
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 32
+            type: string
+          - type: 'null'
+          title: Category
+      - in: query
+        name: publish_filter
+        required: false
+        schema:
+          anyOf:
+          - pattern: ^(published|draft)$
+            type: string
+          - type: 'null'
+          title: Publish Filter
+      - in: query
+        name: sort
+        required: false
+        schema:
+          default: newest
+          pattern: ^(newest|oldest)$
+          title: Sort
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 20
+          maximum: 100
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          title: Offset
+          type: integer
       responses:
         '200':
           content:

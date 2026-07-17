@@ -2032,6 +2032,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profileSessionsEmpty => '没有其他活跃会话';
 
   @override
+  String get profileDisable2fa => '禁用 2FA';
+
+  @override
+  String get profileDisable2faTitle => '禁用 2FA？';
+
+  @override
+  String get profileDisable2faBody => '请输入验证器应用中的代码以确认。';
+
+  @override
+  String get profile2faDisabledSnackbar => '2FA 已禁用';
+
+  @override
   String get mvApiUploadTitle => 'API 上传';
 
   @override

@@ -1,9 +1,9 @@
 'use client';
 
-import { Badge, Button, Group, Select, Text, TextInput, Table } from '@mantine/core';
+import { Badge, Button, Group, Pagination, Select, Text, TextInput, Table } from '@mantine/core';
 import { IconPlus, IconSearch } from '@tabler/icons-react';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
@@ -12,12 +12,32 @@ import { api, apiMessage } from '../../services/api';
 type Model = {
   uuid: string;
   order_id: number;
+  display_name?: string | null;
   category?: string | null;
   tier?: string | null;
+  user_id?: number;
   glb_url?: string | null;
   publish_status?: string;
   order_status?: string | null;
   created_at?: string;
+};
+
+type ModelsResponse = {
+  items: Model[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+type CompanyCtx = {
+  id: number;
+  role: string;
+};
+
+type Member = {
+  user_id: number;
+  email?: string | null;
+  full_name?: string | null;
 };
 
 const CATEGORY_OPTIONS = [
@@ -35,15 +55,10 @@ const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
   CATEGORY_OPTIONS.map((c) => [c.value, c.label]),
 );
 
-const PUBLISH_LABEL: Record<string, string> = {
-  not_published: 'Не опубликовано',
-  pending_verify: 'На проверке',
-  published: 'Опубликовано',
-  rejected: 'Отклонено',
-  import_validating: 'Проверка импорта',
-  imported: 'Импортировано',
-  import_failed: 'Ошибка импорта',
-};
+const PUBLISH_FILTER_OPTIONS = [
+  { value: 'published', label: 'Опубликованные' },
+  { value: 'draft', label: 'Черновики / не опубликовано' },
+];
 
 function publishBadgeColor(status?: string | null, orderStatus?: string | null): string {
   if (orderStatus === 'blocked_nsfw') return 'red';
@@ -69,33 +84,96 @@ function publishBadgeColor(status?: string | null, orderStatus?: string | null):
 function publishLabel(status?: string | null, orderStatus?: string | null): string {
   if (orderStatus === 'blocked_nsfw') return 'NSFW блок';
   if (!status) return '—';
-  if (PUBLISH_LABEL[status]) return PUBLISH_LABEL[status];
   if (status.includes('verified')) return 'Верифицировано';
   if (status.includes('published')) return 'Опубликовано';
+  if (status === 'not_published') return 'Не опубликовано';
   return status;
 }
 
+const MANAGE_ROLES = new Set(['owner', 'manager']);
+const PAGE_SIZE = 20;
+
 export default function ModelsPage() {
   const [items, setItems] = useState<Model[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [publishFilter, setPublishFilter] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
   const [tier, setTier] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [authorId, setAuthorId] = useState<string | null>(null);
+  const [sort, setSort] = useState<string | null>('newest');
   const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
   const [massBusy, setMassBusy] = useState(false);
+  const [company, setCompany] = useState<CompanyCtx | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+
+  const canFilterAuthors = company != null && MANAGE_ROLES.has(company.role);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(q.trim()), 400);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, publishFilter, category, tier, dateFrom, dateTo, authorId, sort, company]);
 
   useEffect(() => {
     api
-      .get<{ items: Model[] }>('/user/models')
-      .then(({ data }) => setItems(data.items ?? []))
-      .catch((e) => notifications.show({ color: 'red', message: apiMessage(e) }))
-      .finally(() => setLoading(false));
-    api
-      .get<{ items: Array<{ role?: string }> }>('/company/mine')
-      .then(({ data }) => setIsOwner((data.items ?? []).some((c) => c.role === 'owner')))
+      .get<{ items: Array<{ id: number; role?: string }> }>('/company/mine')
+      .then(({ data }) => {
+        const first = data.items?.[0];
+        if (first?.id) {
+          setCompany({ id: first.id, role: first.role || 'member' });
+          setIsOwner(first.role === 'owner');
+        }
+      })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!canFilterAuthors) return;
+    api
+      .get<{ items: Member[] }>('/company/members')
+      .then(({ data }) => setMembers(data.items ?? []))
+      .catch(() => undefined);
+  }, [canFilterAuthors]);
+
+  const loadModels = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: Record<string, string | number> = {
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+        sort: sort || 'newest',
+      };
+      if (company) params.company_id = company.id;
+      if (search) params.search = search;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
+      if (tier) params.tier = tier;
+      if (category) params.category = category;
+      if (publishFilter) params.publish_filter = publishFilter;
+      if (authorId) params.author_id = Number(authorId);
+      const { data } = await api.get<ModelsResponse>('/user/models', { params });
+      setItems(data.items ?? []);
+      setTotal(data.total ?? 0);
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setLoading(false);
+    }
+  }, [page, search, publishFilter, category, tier, dateFrom, dateTo, authorId, sort, company]);
+
+  useEffect(() => {
+    void loadModels();
+  }, [loadModels]);
 
   async function massExtendAll() {
     if (!window.confirm('Продлить хранение исходников для всех моделей компании? (лимит 3× на модель)')) {
@@ -117,15 +195,13 @@ export default function ModelsPage() {
     }
   }
 
-  const filtered = useMemo(() => {
-    return items.filter((m) => {
-      if (status && m.publish_status !== status) return false;
-      if (category && m.category !== category) return false;
-      if (tier && m.tier !== tier) return false;
-      if (q && !m.uuid.includes(q) && !String(m.order_id).includes(q)) return false;
-      return true;
-    });
-  }, [items, q, status, category, tier]);
+  const memberLabel = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const m of members) {
+      map.set(m.user_id, m.full_name || m.email || `#${m.user_id}`);
+    }
+    return map;
+  }, [members]);
 
   return (
     <SellerShell>
@@ -135,7 +211,7 @@ export default function ModelsPage() {
         action={
           <Group gap="sm">
             <Badge variant="light" color="brand">
-              {items.length} моделей
+              {total} моделей
             </Badge>
             <Button component={Link} href="/models/trash" variant="light" visibleFrom="xs">
               Корзина
@@ -164,18 +240,30 @@ export default function ModelsPage() {
         <FilterRow>
           <TextInput
             label="Поиск"
-            placeholder="UUID или заказ"
+            placeholder="Название или UUID"
             leftSection={<IconSearch size={16} />}
             value={q}
             onChange={(e) => setQ(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Дата от"
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Дата до"
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.currentTarget.value)}
           />
           <Select
             label="Публикация"
             placeholder="Все"
             clearable
-            value={status}
-            onChange={setStatus}
-            data={Object.entries(PUBLISH_LABEL).map(([value, label]) => ({ value, label }))}
+            value={publishFilter}
+            onChange={setPublishFilter}
+            data={PUBLISH_FILTER_OPTIONS}
           />
           <Select
             label="Категория"
@@ -196,9 +284,31 @@ export default function ModelsPage() {
             value={tier}
             onChange={setTier}
           />
+          <Select
+            label="Сортировка"
+            data={[
+              { value: 'newest', label: 'Сначала новые' },
+              { value: 'oldest', label: 'Сначала старые' },
+            ]}
+            value={sort}
+            onChange={setSort}
+          />
+          {canFilterAuthors && (
+            <Select
+              label="Автор"
+              placeholder="Все"
+              clearable
+              value={authorId}
+              onChange={setAuthorId}
+              data={members.map((m) => ({
+                value: String(m.user_id),
+                label: memberLabel.get(m.user_id) || `#${m.user_id}`,
+              }))}
+            />
+          )}
         </FilterRow>
 
-        {!loading && filtered.length === 0 ? (
+        {!loading && items.length === 0 ? (
           <EmptyState
             title="Моделей пока нет"
             hint="Создайте заказ с 12 ракурсами или снимите товар в приложении"
@@ -206,42 +316,49 @@ export default function ModelsPage() {
             actionHref="/orders/new"
           />
         ) : (
-          <ScrollTable>
-            <Table highlightOnHover verticalSpacing="md" miw={720}>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Модель</Table.Th>
-                  <Table.Th>Заказ</Table.Th>
-                  <Table.Th>Категория</Table.Th>
-                  <Table.Th>Создана</Table.Th>
-                  <Table.Th>Публикация</Table.Th>
-                  <Table.Th />
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {filtered.map((m) => (
-                  <Table.Tr key={m.uuid}>
-                    <Table.Td>
-                      <Text fw={600}>{m.uuid.slice(0, 8)}…</Text>
-                    </Table.Td>
-                    <Table.Td>#{m.order_id}</Table.Td>
-                    <Table.Td>{CATEGORY_LABEL[m.category || ''] || m.category || '—'}</Table.Td>
-                    <Table.Td>{m.created_at ? new Date(m.created_at).toLocaleString('ru-RU') : '—'}</Table.Td>
-                    <Table.Td>
-                      <Badge variant="light" color={publishBadgeColor(m.publish_status, m.order_status)}>
-                        {publishLabel(m.publish_status, m.order_status)}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Button component={Link} href={`/models/${m.uuid}`} size="xs" variant="light">
-                        Открыть
-                      </Button>
-                    </Table.Td>
+          <>
+            <ScrollTable>
+              <Table highlightOnHover verticalSpacing="md" miw={720}>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Модель</Table.Th>
+                    <Table.Th>Заказ</Table.Th>
+                    <Table.Th>Категория</Table.Th>
+                    <Table.Th>Создана</Table.Th>
+                    <Table.Th>Публикация</Table.Th>
+                    <Table.Th />
                   </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </ScrollTable>
+                </Table.Thead>
+                <Table.Tbody>
+                  {items.map((m) => (
+                    <Table.Tr key={m.uuid}>
+                      <Table.Td>
+                        <Text fw={600}>{m.display_name || `${m.uuid.slice(0, 8)}…`}</Text>
+                      </Table.Td>
+                      <Table.Td>#{m.order_id}</Table.Td>
+                      <Table.Td>{CATEGORY_LABEL[m.category || ''] || m.category || '—'}</Table.Td>
+                      <Table.Td>{m.created_at ? new Date(m.created_at).toLocaleString('ru-RU') : '—'}</Table.Td>
+                      <Table.Td>
+                        <Badge variant="light" color={publishBadgeColor(m.publish_status, m.order_status)}>
+                          {publishLabel(m.publish_status, m.order_status)}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Button component={Link} href={`/models/${m.uuid}`} size="xs" variant="light">
+                          Открыть
+                        </Button>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </ScrollTable>
+            {totalPages > 1 && (
+              <Group justify="center" mt="md">
+                <Pagination total={totalPages} value={page} onChange={setPage} />
+              </Group>
+            )}
+          </>
         )}
       </Surface>
     </SellerShell>

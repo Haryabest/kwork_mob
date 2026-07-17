@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -122,13 +122,22 @@ async def restore_from_trash(db: AsyncSession, *, model: Model3D, user: User) ->
     return {"ok": True, "model_uuid": model.uuid, "message": "Восстановлено из корзины"}
 
 
-async def list_trash(db: AsyncSession, user: User) -> list[dict[str, Any]]:
+async def list_trash(
+    db: AsyncSession,
+    user: User,
+    *,
+    limit: int = 20,
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    where = (Model3D.trashed_at.is_not(None), Model3D.user_id == user.id)
+    total = await db.scalar(select(func.count(Model3D.id)).where(*where)) or 0
     rows = (
         await db.scalars(
             select(Model3D)
-            .where(Model3D.trashed_at.is_not(None), Model3D.user_id == user.id)
+            .where(*where)
             .order_by(Model3D.trashed_at.desc())
-            .limit(200)
+            .offset(offset)
+            .limit(limit)
         )
     ).all()
     out = []
@@ -144,7 +153,7 @@ async def list_trash(db: AsyncSession, user: User) -> list[dict[str, Any]]:
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
         )
-    return out
+    return out, int(total)
 
 
 async def mass_extend_company_storage(

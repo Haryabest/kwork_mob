@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 
 class ApiKeysScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class _ApiKeysScreenState extends State<ApiKeysScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'api_keys'});
     _load();
   }
 

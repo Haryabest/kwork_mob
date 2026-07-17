@@ -4,6 +4,7 @@ import 'package:forui/forui.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/core/theme.dart';
 
 class TeamScreen extends StatefulWidget {
@@ -31,6 +32,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'team'});
     _tabs = FTabController(length: 3, vsync: this);
     _load();
   }

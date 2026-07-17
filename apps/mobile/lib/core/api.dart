@@ -294,6 +294,10 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<void> twoFaDisable({required String code}) async {
+    await _dio.post('/auth/2fa/disable', data: {'code': code});
+  }
+
   Future<List<Map<String, dynamic>>> legalPending() async {
     final res = await _dio.get('/legal/pending');
     final items = (res.data as Map)['pending'] as List? ?? [];
@@ -740,9 +744,28 @@ class ApiClient {
   }
 
   Future<List<Map<String, dynamic>>> listTrashModels() async {
-    final res = await _dio.get('/models/trash');
-    final items = (res.data as Map)['items'] as List? ?? [];
-    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final page = await listTrashModelsPage();
+    return (page['items'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> listTrashModelsPage({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _dio.get('/models/trash', queryParameters: {
+      'limit': limit,
+      'offset': offset,
+    });
+    final data = Map<String, dynamic>.from(res.data as Map);
+    final items = (data['items'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    return {
+      'items': items,
+      'total': (data['total'] as num?)?.toInt() ?? items.length,
+      'limit': (data['limit'] as num?)?.toInt() ?? limit,
+      'offset': (data['offset'] as num?)?.toInt() ?? offset,
+    };
   }
 
   Future<Map<String, dynamic>> getBalance() async {

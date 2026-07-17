@@ -19,8 +19,11 @@ class ModelsTrashScreen extends StatefulWidget {
 class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
+  bool _loadingMore = false;
   String? _error;
   String? _busyUuid;
+  int _total = 0;
+  static const _pageSize = 20;
 
   @override
   void initState() {
@@ -29,17 +32,36 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      _items = await widget.api.listTrashModels();
-    } catch (e) {
-      _error = formatApiError(e);
+  Future<void> _load({bool append = false}) async {
+    if (!append) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    } else {
+      setState(() => _loadingMore = true);
     }
-    if (mounted) setState(() => _loading = false);
+    try {
+      final page = await widget.api.listTrashModelsPage(
+        limit: _pageSize,
+        offset: append ? _items.length : 0,
+      );
+      final items = (page['items'] as List).cast<Map<String, dynamic>>();
+      _total = (page['total'] as num?)?.toInt() ?? items.length;
+      if (append) {
+        _items = [..._items, ...items];
+      } else {
+        _items = items;
+      }
+    } catch (e) {
+      if (!append) _error = formatApiError(e);
+    }
+    if (mounted) {
+      setState(() {
+        _loading = false;
+        _loadingMore = false;
+      });
+    }
   }
 
   Future<void> _restore(String uuid) async {
@@ -96,12 +118,18 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
                       ),
                     )
                   : RefreshIndicator(
-                      onRefresh: _load,
+                      onRefresh: () => _load(),
                       child: ListView.separated(
                         padding: const EdgeInsets.all(16),
-                        itemCount: _items.length,
+                        itemCount: _items.length + (_items.length < _total ? 1 : 0),
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, i) {
+                          if (i >= _items.length) {
+                            return FButton(
+                              onPress: _loadingMore ? null : () => _load(append: true),
+                              child: Text(_loadingMore ? '…' : l10n.mvLoadMore),
+                            );
+                          }
                           final m = _items[i];
                           final uuid = m['uuid']?.toString() ?? '';
                           final busy = _busyUuid == uuid;

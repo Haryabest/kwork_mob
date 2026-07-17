@@ -808,7 +808,57 @@ class _ProfileTabState extends State<_ProfileTab> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading2fa = false);
+    }
+  }
+
+  Future<void> _disable2fa() async {
+    final l10n = AppLocalizations.of(context)!;
+    final disableCode = TextEditingController();
+    final ok = await showFDialog<bool>(
+      context: context,
+      builder: (ctx, style, animation) => FDialog(
+        title: Text(l10n.profileDisable2faTitle),
+        body: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(l10n.profileDisable2faBody),
+            const SizedBox(height: 8),
+            FTextField(
+              control: FTextFieldControl.managed(controller: disableCode),
+              label: Text(l10n.profile2faCodeLabel),
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+            ),
+          ],
+        ),
+        actions: [
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: Text(l10n.profileDisable2fa)),
+        ],
+      ),
+    );
+    final code = disableCode.text.trim();
+    disableCode.dispose();
+    if (ok != true || code.isEmpty || !mounted) return;
+    setState(() => _loading2fa = true);
+    try {
+      await widget.api.twoFaDisable(code: code);
+      if (!mounted) return;
+      setState(() => _totpEnabled = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.profile2faDisabledSnackbar)),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _loading2fa = false);
@@ -837,7 +887,9 @@ class _ProfileTabState extends State<_ProfileTab> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _loading2fa = false);
@@ -1223,6 +1275,14 @@ class _ProfileTabState extends State<_ProfileTab> {
                     l10n.profile2faActiveHint,
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
+                  if (!_ownerRequired) ...[
+                    const SizedBox(height: 12),
+                    FButton(
+                      variant: .outline,
+                      onPress: _loading2fa ? null : _disable2fa,
+                      child: Text(l10n.profileDisable2fa),
+                    ),
+                  ],
                 ] else if (_setupSecret != null) ...[
                   const SizedBox(height: 12),
                   Text(l10n.profile2faStep1),

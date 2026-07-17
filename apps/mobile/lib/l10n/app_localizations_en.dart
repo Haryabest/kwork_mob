@@ -2063,6 +2063,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get profileSessionsEmpty => 'No other active sessions';
 
   @override
+  String get profileDisable2fa => 'Disable 2FA';
+
+  @override
+  String get profileDisable2faTitle => 'Disable 2FA?';
+
+  @override
+  String get profileDisable2faBody =>
+      'Enter the code from your authenticator app to confirm.';
+
+  @override
+  String get profile2faDisabledSnackbar => '2FA disabled';
+
+  @override
   String get mvApiUploadTitle => 'API upload';
 
   @override

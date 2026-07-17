@@ -2071,6 +2071,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get profileSessionsEmpty => 'Нет других активных сессий';
 
   @override
+  String get profileDisable2fa => 'Отключить 2FA';
+
+  @override
+  String get profileDisable2faTitle => 'Отключить 2FA?';
+
+  @override
+  String get profileDisable2faBody =>
+      'Введите код из приложения-аутентификатора для подтверждения.';
+
+  @override
+  String get profile2faDisabledSnackbar => '2FA отключена';
+
+  @override
   String get mvApiUploadTitle => 'Загрузка через API';
 
   @override

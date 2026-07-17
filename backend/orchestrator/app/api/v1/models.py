@@ -334,11 +334,14 @@ async def bulk_import_models(
 async def list_trash_models(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
     """Корзина моделей §3.3.1 (30 дней)."""
     from app.services import model_storage as ms
 
-    return {"items": await ms.list_trash(db, user)}
+    items, total = await ms.list_trash(db, user, limit=limit, offset=offset)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/{model_uuid}")
