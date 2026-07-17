@@ -652,5 +652,21 @@
   "resumeDraftBody": "You have a draft ({category}, {count}/{total} frames). Continue or start over?",
   "@resumeDraftBody": {"placeholders": {"category": {"type": "String"}, "count": {"type": "String"}, "total": {"type": "String"}}},
   "resumeDraftDiscard": "Start over",
-  "resumeDraftContinue": "Continue"
+  "resumeDraftContinue": "Continue",
+  "mvSearchHint": "Search by name",
+  "mvFilterTierAll": "All tiers",
+  "mvFilterAuthorAll": "All authors",
+  "mvFilterAuthor": "Author",
+  "mvClearDates": "Clear dates",
+  "balancePresetsLabel": "Saved views",
+  "balanceSavePreset": "Save as…",
+  "balancePresetNameHint": "View name",
+  "balancePresetSaved": "View saved",
+  "balancePresetDeleted": "View deleted",
+  "balanceApplyPreset": "Apply",
+  "profileSessionsSection": "Active sessions §19.14.4",
+  "profileSessionRevoke": "Revoke",
+  "profileSessionsRevokeOthers": "Revoke other sessions",
+  "profileSessionsRevokeOthersDone": "Other sessions revoked",
+  "profileSessionsEmpty": "No other active sessions"
 }

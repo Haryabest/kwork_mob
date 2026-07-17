@@ -18,6 +18,7 @@ import 'package:kwork_mobile/services/ar_tariff.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/services/gyro_guide.dart';
 import 'package:kwork_mobile/services/quality_analyzer.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
 import 'package:kwork_mobile/services/thermal_monitor.dart';
@@ -417,6 +418,10 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
       if (_index >= kGuidedDomeCount - 1) {
         if (mounted) {
           setState(() => _busy = false);
+          await AnalyticsService.instance.track('shoot_complete', {
+            'model_uuid': widget.modelUuid,
+            'frames': kGuidedDomeCount,
+          });
           context.pushReplacement(
             '${widget.flowBase}/review',
             extra: widget.modelUuid,
@@ -458,6 +463,10 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
       if (_index >= kGuidedDomeCount - 1) {
         if (mounted) {
           setState(() => _busy = false);
+          await AnalyticsService.instance.track('shoot_complete', {
+            'model_uuid': widget.modelUuid,
+            'frames': kGuidedDomeCount,
+          });
           context.pushReplacement('${widget.flowBase}/review', extra: widget.modelUuid);
         }
         return;

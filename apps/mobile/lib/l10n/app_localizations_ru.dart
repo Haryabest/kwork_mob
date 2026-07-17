@@ -2021,4 +2021,52 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get resumeDraftContinue => 'Продолжить';
+
+  @override
+  String get mvSearchHint => 'Поиск по названию';
+
+  @override
+  String get mvFilterTierAll => 'Все тарифы';
+
+  @override
+  String get mvFilterAuthorAll => 'Все авторы';
+
+  @override
+  String get mvFilterAuthor => 'Автор';
+
+  @override
+  String get mvClearDates => 'Сбросить даты';
+
+  @override
+  String get balancePresetsLabel => 'Сохранённые представления';
+
+  @override
+  String get balanceSavePreset => 'Сохранить как…';
+
+  @override
+  String get balancePresetNameHint => 'Название представления';
+
+  @override
+  String get balancePresetSaved => 'Представление сохранено';
+
+  @override
+  String get balancePresetDeleted => 'Представление удалено';
+
+  @override
+  String get balanceApplyPreset => 'Применить';
+
+  @override
+  String get profileSessionsSection => 'Активные сессии §19.14.4';
+
+  @override
+  String get profileSessionRevoke => 'Завершить';
+
+  @override
+  String get profileSessionsRevokeOthers => 'Завершить другие сессии';
+
+  @override
+  String get profileSessionsRevokeOthersDone => 'Другие сессии завершены';
+
+  @override
+  String get profileSessionsEmpty => 'Нет других активных сессий';
 }

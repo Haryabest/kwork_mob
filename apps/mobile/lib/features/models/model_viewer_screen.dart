@@ -5,8 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
+import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/l10n/catalog_l10n.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
@@ -21,12 +23,14 @@ class ModelsScreen extends StatefulWidget {
   const ModelsScreen({
     super.key,
     required this.api,
+    required this.session,
     this.companyId,
     this.onNotifications,
     this.unread = 0,
   });
 
   final ApiClient api;
+  final AppSession session;
   final int? companyId;
   final VoidCallback? onNotifications;
   final int unread;
@@ -44,6 +48,12 @@ class _ModelsScreenState extends State<ModelsScreen> {
   bool _sortNewest = true;
   bool _favoritesOnly = false;
   Set<String> _favorites = {};
+  final _search = TextEditingController();
+  final _dateFrom = TextEditingController();
+  final _dateTo = TextEditingController();
+  String? _tierFilter;
+  int _authorFilter = -1;
+  List<Map<String, dynamic>> _members = [];
   final Map<String, String?> _thumbnails = {};
   final Map<String, File?> _localThumbs = {};
   String? _menuBusyUuid;
@@ -249,6 +259,41 @@ class _ModelsScreenState extends State<ModelsScreen> {
       final api = _categoryFilter!.api;
       list = list.where((m) => m['category']?.toString() == api).toList();
     }
+    final q = _search.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list.where((m) {
+        final name = m['display_name']?.toString().toLowerCase() ?? '';
+        final uuid = m['uuid']?.toString().toLowerCase() ?? '';
+        return name.contains(q) || uuid.contains(q);
+      }).toList();
+    }
+    final fromRaw = _dateFrom.text.trim();
+    if (fromRaw.isNotEmpty) {
+      final from = DateTime.tryParse(fromRaw);
+      if (from != null) {
+        list = list.where((m) {
+          final d = DateTime.tryParse(m['created_at']?.toString() ?? '');
+          return d != null && !d.isBefore(from);
+        }).toList();
+      }
+    }
+    final toRaw = _dateTo.text.trim();
+    if (toRaw.isNotEmpty) {
+      final to = DateTime.tryParse(toRaw);
+      if (to != null) {
+        final end = DateTime(to.year, to.month, to.day, 23, 59, 59);
+        list = list.where((m) {
+          final d = DateTime.tryParse(m['created_at']?.toString() ?? '');
+          return d != null && !d.isAfter(end);
+        }).toList();
+      }
+    }
+    if (_tierFilter != null) {
+      list = list.where((m) => m['tier']?.toString() == _tierFilter).toList();
+    }
+    if (_authorFilter >= 0) {
+      list = list.where((m) => (m['user_id'] as num?)?.toInt() == _authorFilter).toList();
+    }
     list.sort((a, b) {
       final da = a['created_at']?.toString() ?? '';
       final db = b['created_at']?.toString() ?? '';
@@ -258,8 +303,42 @@ class _ModelsScreenState extends State<ModelsScreen> {
   }
 
   @override
+  void dispose() {
+    _search.dispose();
+    _dateFrom.dispose();
+    _dateTo.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate(TextEditingController ctrl) async {
+    final now = DateTime.now();
+    final initial = DateTime.tryParse(ctrl.text.trim()) ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isAfter(now) ? now : initial,
+      firstDate: DateTime(2020),
+      lastDate: now,
+    );
+    if (picked == null) return;
+    ctrl.text =
+        '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    setState(() {});
+  }
+
+  String _memberLabel(int? userId) {
+    if (userId == null) return '';
+    for (final m in _members) {
+      if (m['user_id'] == userId) {
+        return m['full_name']?.toString() ?? m['email']?.toString() ?? '#$userId';
+      }
+    }
+    return '#$userId';
+  }
+
+  @override
   void initState() {
     super.initState();
+    _search.addListener(() => setState(() {}));
     _load();
   }
 
@@ -271,6 +350,13 @@ class _ModelsScreenState extends State<ModelsScreen> {
     try {
       _items = await widget.api.listModels(companyId: widget.companyId);
       _favorites = await LocalModelLibrary.instance.favorites();
+      if (widget.companyId != null && widget.session.canFilterCompanyOrders) {
+        try {
+          final m = await widget.api.listCompanyMembers();
+          final raw = m['items'] as List? ?? [];
+          _members = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        } catch (_) {}
+      }
       // §3.5.3 — фоновая синхронизация GLB для completed заказов
       // ignore: unawaited_futures
       LocalModelLibrary.instance.syncPendingDownloads(
@@ -335,6 +421,93 @@ class _ModelsScreenState extends State<ModelsScreen> {
                     onPress: () => context.push('/home/models/trash'),
                     child: Text(l.mvTrash),
                   ),
+                ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Column(
+                children: [
+                  FTextField(
+                    control: FTextFieldControl.managed(controller: _search),
+                    label: Text(l.mvSearchHint),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _pickDate(_dateFrom),
+                          child: AbsorbPointer(
+                            child: FTextField(
+                              control: FTextFieldControl.managed(controller: _dateFrom),
+                              label: Text(l.dateFrom),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _pickDate(_dateTo),
+                          child: AbsorbPointer(
+                            child: FTextField(
+                              control: FTextFieldControl.managed(controller: _dateTo),
+                              label: Text(l.dateTo),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_dateFrom.text.isNotEmpty || _dateTo.text.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () {
+                          _dateFrom.clear();
+                          _dateTo.clear();
+                          setState(() {});
+                        },
+                        child: Text(l.mvClearDates),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  FSelect<String>(
+                    label: Text(l.mvFilterTierAll),
+                    control: FSelectControl.managed(
+                      initial: _tierFilter ?? 'all',
+                      onChange: (v) {
+                        setState(() => _tierFilter = v == null || v == 'all' ? null : v);
+                      },
+                    ),
+                    items: {
+                      l.mvFilterTierAll: 'all',
+                      Tier.small.localized(l): Tier.small.api,
+                      Tier.large.localized(l): Tier.large.api,
+                    },
+                  ),
+                  if (widget.companyId != null &&
+                      widget.session.canFilterCompanyOrders &&
+                      _members.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    FSelect<int>(
+                      label: Text(l.mvFilterAuthor),
+                      control: FSelectControl.managed(
+                        initial: _authorFilter,
+                        onChange: (v) => setState(() => _authorFilter = v ?? -1),
+                      ),
+                      items: {
+                        l.mvFilterAuthorAll: -1,
+                        for (final m in _members)
+                          _memberLabel(m['user_id'] as int?): m['user_id'] as int,
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),

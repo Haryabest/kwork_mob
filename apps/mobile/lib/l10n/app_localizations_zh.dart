@@ -1982,4 +1982,52 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get resumeDraftContinue => '继续';
+
+  @override
+  String get mvSearchHint => '按名称搜索';
+
+  @override
+  String get mvFilterTierAll => '全部套餐';
+
+  @override
+  String get mvFilterAuthorAll => '全部作者';
+
+  @override
+  String get mvFilterAuthor => '作者';
+
+  @override
+  String get mvClearDates => '清除日期';
+
+  @override
+  String get balancePresetsLabel => '已保存视图';
+
+  @override
+  String get balanceSavePreset => '另存为…';
+
+  @override
+  String get balancePresetNameHint => '视图名称';
+
+  @override
+  String get balancePresetSaved => '视图已保存';
+
+  @override
+  String get balancePresetDeleted => '视图已删除';
+
+  @override
+  String get balanceApplyPreset => '应用';
+
+  @override
+  String get profileSessionsSection => '活跃会话 §19.14.4';
+
+  @override
+  String get profileSessionRevoke => '终止';
+
+  @override
+  String get profileSessionsRevokeOthers => '终止其他会话';
+
+  @override
+  String get profileSessionsRevokeOthersDone => '已终止其他会话';
+
+  @override
+  String get profileSessionsEmpty => '没有其他活跃会话';
 }

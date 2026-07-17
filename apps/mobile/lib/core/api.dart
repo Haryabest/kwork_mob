@@ -5,8 +5,25 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:kwork_mobile/domain/catalog.dart';
+import 'package:kwork_mobile/l10n/app_localizations.dart';
 
 /// Человекочитаемая ошибка API (без простыни DioException).
+bool isNetworkError(Object error) {
+  if (error is SocketException) return true;
+  if (error is DioException) {
+    return error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.sendTimeout;
+  }
+  return false;
+}
+
+String userFacingError(Object error, AppLocalizations l10n) {
+  if (isNetworkError(error)) return l10n.errorNetwork;
+  return formatApiError(error);
+}
+
 String formatApiError(Object error) {
   if (error is DioException) {
     final code = error.response?.statusCode;
@@ -120,6 +137,8 @@ class ApiClient {
   }
 
   Future<String?> get accessToken => _storage.read(key: 'access_token');
+
+  Future<String?> get refreshToken => _storage.read(key: 'refresh_token');
 
   Future<void> saveTokens(String access, String refresh) async {
     await _storage.write(key: 'access_token', value: access);
@@ -714,6 +733,47 @@ class ApiClient {
   Future<Map<String, dynamic>> putCompanyBalanceFilters(Map<String, dynamic> payload) async {
     final res = await _dio.put('/company/balance-filters', data: payload);
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listBalanceFilterPresets({required bool company}) async {
+    final path = company ? '/company/balance-filter-presets' : '/user/balance-filter-presets';
+    final res = await _dio.get(path);
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> createBalanceFilterPreset({
+    required bool company,
+    required String name,
+    required Map<String, dynamic> filters,
+  }) async {
+    final path = company ? '/company/balance-filter-presets' : '/user/balance-filter-presets';
+    final res = await _dio.post(path, data: {'name': name, ...filters});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> deleteBalanceFilterPreset({required bool company, required String presetId}) async {
+    final path = company
+        ? '/company/balance-filter-presets/$presetId'
+        : '/user/balance-filter-presets/$presetId';
+    await _dio.delete(path);
+  }
+
+  Future<List<Map<String, dynamic>>> listAuthSessions() async {
+    final res = await _dio.get('/auth/sessions');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<void> revokeAuthSession(int sessionId) async {
+    await _dio.delete('/auth/sessions/$sessionId');
+  }
+
+  Future<int> revokeOtherAuthSessions() async {
+    final refresh = await refreshToken;
+    if (refresh == null || refresh.isEmpty) return 0;
+    final res = await _dio.post('/auth/sessions/revoke-others', data: {'refresh_token': refresh});
+    return (res.data as Map)['revoked'] as int? ?? 0;
   }
 
   Future<List<Map<String, dynamic>>> listTransactions({

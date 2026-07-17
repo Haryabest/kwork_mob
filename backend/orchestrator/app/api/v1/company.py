@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_db_user, get_current_db_user_optional, get_current_user
 from app.models import Company, CompanyInvitation, CompanyMember, Order, ShootLink, Transaction, User
-from app.schemas.balance_filters import CompanyBalanceFiltersBody
+from app.schemas.balance_filters import CompanyBalanceFilterPresetBody, CompanyBalanceFiltersBody
 from app.services import api_keys as api_keys_svc
 from app.services import photos as photos_service
 from app.services import tariffs as tariff_svc
@@ -949,6 +949,65 @@ async def put_company_balance_filters(
     saved = await bf.save_company_filters(db, user, company.id, body.model_dump())
     await db.commit()
     return {"scope": "company", "company_id": company.id, "filters": saved}
+
+
+@router.get("/balance-filter-presets")
+async def get_company_balance_filter_presets(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import balance_filters as bf
+    from app.services.access import company_for_permission
+
+    company = await company_for_permission(db, user, "can_view_finance")
+    return {
+        "scope": "company",
+        "company_id": company.id,
+        "items": bf.list_presets(user, company_id=company.id),
+    }
+
+
+@router.post("/balance-filter-presets")
+async def create_company_balance_filter_preset(
+    body: CompanyBalanceFilterPresetBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import balance_filters as bf
+    from app.services.access import company_for_permission
+
+    company = await company_for_permission(db, user, "can_view_finance")
+    try:
+        row = await bf.upsert_preset(
+            db,
+            user,
+            name=body.name,
+            filters=body.model_dump(),
+            company_id=company.id,
+        )
+    except ValueError as exc:
+        if str(exc) == "limit":
+            raise HTTPException(400, "Максимум 10 сохранённых представлений") from exc
+        raise HTTPException(400, "Укажите название") from exc
+    await db.commit()
+    return {"scope": "company", "company_id": company.id, "preset": row}
+
+
+@router.delete("/balance-filter-presets/{preset_id}")
+async def delete_company_balance_filter_preset(
+    preset_id: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import balance_filters as bf
+    from app.services.access import company_for_permission
+
+    company = await company_for_permission(db, user, "can_view_finance")
+    ok = await bf.delete_preset(db, user, preset_id=preset_id, company_id=company.id)
+    if not ok:
+        raise HTTPException(404, "Представление не найдено")
+    await db.commit()
+    return {"ok": True}
 
 
 class WebhookCreate(BaseModel):

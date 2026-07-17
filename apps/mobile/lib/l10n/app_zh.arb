@@ -652,5 +652,21 @@
   "resumeDraftBody": "您有草稿（{category}，{count}/{total} 帧）。继续还是重新开始？",
   "@resumeDraftBody": {"placeholders": {"category": {"type": "String"}, "count": {"type": "String"}, "total": {"type": "String"}}},
   "resumeDraftDiscard": "重新开始",
-  "resumeDraftContinue": "继续"
+  "resumeDraftContinue": "继续",
+  "mvSearchHint": "按名称搜索",
+  "mvFilterTierAll": "全部套餐",
+  "mvFilterAuthorAll": "全部作者",
+  "mvFilterAuthor": "作者",
+  "mvClearDates": "清除日期",
+  "balancePresetsLabel": "已保存视图",
+  "balanceSavePreset": "另存为…",
+  "balancePresetNameHint": "视图名称",
+  "balancePresetSaved": "视图已保存",
+  "balancePresetDeleted": "视图已删除",
+  "balanceApplyPreset": "应用",
+  "profileSessionsSection": "活跃会话 §19.14.4",
+  "profileSessionRevoke": "终止",
+  "profileSessionsRevokeOthers": "终止其他会话",
+  "profileSessionsRevokeOthersDone": "已终止其他会话",
+  "profileSessionsEmpty": "没有其他活跃会话"
 }

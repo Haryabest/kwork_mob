@@ -3796,6 +3796,102 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Продолжить'**
   String get resumeDraftContinue;
+
+  /// No description provided for @mvSearchHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Поиск по названию'**
+  String get mvSearchHint;
+
+  /// No description provided for @mvFilterTierAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все тарифы'**
+  String get mvFilterTierAll;
+
+  /// No description provided for @mvFilterAuthorAll.
+  ///
+  /// In ru, this message translates to:
+  /// **'Все авторы'**
+  String get mvFilterAuthorAll;
+
+  /// No description provided for @mvFilterAuthor.
+  ///
+  /// In ru, this message translates to:
+  /// **'Автор'**
+  String get mvFilterAuthor;
+
+  /// No description provided for @mvClearDates.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сбросить даты'**
+  String get mvClearDates;
+
+  /// No description provided for @balancePresetsLabel.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сохранённые представления'**
+  String get balancePresetsLabel;
+
+  /// No description provided for @balanceSavePreset.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сохранить как…'**
+  String get balanceSavePreset;
+
+  /// No description provided for @balancePresetNameHint.
+  ///
+  /// In ru, this message translates to:
+  /// **'Название представления'**
+  String get balancePresetNameHint;
+
+  /// No description provided for @balancePresetSaved.
+  ///
+  /// In ru, this message translates to:
+  /// **'Представление сохранено'**
+  String get balancePresetSaved;
+
+  /// No description provided for @balancePresetDeleted.
+  ///
+  /// In ru, this message translates to:
+  /// **'Представление удалено'**
+  String get balancePresetDeleted;
+
+  /// No description provided for @balanceApplyPreset.
+  ///
+  /// In ru, this message translates to:
+  /// **'Применить'**
+  String get balanceApplyPreset;
+
+  /// No description provided for @profileSessionsSection.
+  ///
+  /// In ru, this message translates to:
+  /// **'Активные сессии §19.14.4'**
+  String get profileSessionsSection;
+
+  /// No description provided for @profileSessionRevoke.
+  ///
+  /// In ru, this message translates to:
+  /// **'Завершить'**
+  String get profileSessionRevoke;
+
+  /// No description provided for @profileSessionsRevokeOthers.
+  ///
+  /// In ru, this message translates to:
+  /// **'Завершить другие сессии'**
+  String get profileSessionsRevokeOthers;
+
+  /// No description provided for @profileSessionsRevokeOthersDone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Другие сессии завершены'**
+  String get profileSessionsRevokeOthersDone;
+
+  /// No description provided for @profileSessionsEmpty.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет других активных сессий'**
+  String get profileSessionsEmpty;
 }
 
 class _AppLocalizationsDelegate

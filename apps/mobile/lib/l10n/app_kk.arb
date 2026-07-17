@@ -652,5 +652,21 @@
   "resumeDraftBody": "Черновик бар ({category}, {count}/{total} кадр). Жалғастыру немесе қайта?",
   "@resumeDraftBody": {"placeholders": {"category": {"type": "String"}, "count": {"type": "String"}, "total": {"type": "String"}}},
   "resumeDraftDiscard": "Қайта",
-  "resumeDraftContinue": "Жалғастыру"
+  "resumeDraftContinue": "Жалғастыру",
+  "mvSearchHint": "Атау бойынша іздеу",
+  "mvFilterTierAll": "Барлық тарифтер",
+  "mvFilterAuthorAll": "Барлық авторлар",
+  "mvFilterAuthor": "Автор",
+  "mvClearDates": "Күндерді тазалау",
+  "balancePresetsLabel": "Сақталған көріністер",
+  "balanceSavePreset": "Сақтау…",
+  "balancePresetNameHint": "Көрініс атауы",
+  "balancePresetSaved": "Көрініс сақталды",
+  "balancePresetDeleted": "Көрініс жойылды",
+  "balanceApplyPreset": "Қолдану",
+  "profileSessionsSection": "Белсенді сессиялар §19.14.4",
+  "profileSessionRevoke": "Аяқтау",
+  "profileSessionsRevokeOthers": "Басқа сессияларды аяқтау",
+  "profileSessionsRevokeOthersDone": "Басқа сессиялар аяқталды",
+  "profileSessionsEmpty": "Басқа белсенді сессиялар жоқ"
 }

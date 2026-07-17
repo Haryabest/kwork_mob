@@ -3,10 +3,13 @@
 from types import SimpleNamespace
 
 from app.services.balance_filters import (
+    delete_preset,
     get_company_filters,
     get_personal_filters,
+    list_presets,
     save_company_filters,
     save_personal_filters,
+    upsert_preset,
 )
 
 
@@ -65,3 +68,32 @@ def test_topup_failed_pref_respected():
     assert user_wants_notification(user, "topup_failed") is False
     user2 = SimpleNamespace(notification_prefs={"topup_failed": True, "push_enabled": True})
     assert user_wants_notification(user2, "topup_failed") is True
+
+
+def test_balance_filter_presets_crud():
+    user = SimpleNamespace(notification_prefs={})
+
+    async def _run():
+        class FakeDb:
+            async def flush(self):
+                return None
+
+        db = FakeDb()
+        row = await upsert_preset(
+            db,
+            user,
+            name="Q1 topups",
+            filters={"date_from": "2026-01-01", "tx_type": "topup", "page_size": 50},
+        )
+        assert row["name"] == "Q1 topups"
+        assert row["tx_type"] == "topup"
+        items = list_presets(user)
+        assert len(items) == 1
+        pid = items[0]["id"]
+        ok = await delete_preset(db, user, preset_id=pid)
+        assert ok is True
+        assert list_presets(user) == []
+
+    import asyncio
+
+    asyncio.run(_run())

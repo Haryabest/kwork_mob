@@ -9,6 +9,7 @@ import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/l10n/catalog_l10n.dart';
 import 'package:kwork_mobile/services/scale_calibration_service.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/widgets/order_limit_dialog.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -59,8 +60,8 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
   }
 
   Future<void> _boot() async {
+    final l10n = AppLocalizations.of(context)!;
     try {
-      final l10n = AppLocalizations.of(context)!;
       final draft = await ShootStorage.instance.loadDraft(widget.modelUuid);
       if (draft == null || !draft.photosUploaded) {
         throw StateError(l10n.upload12Photos);
@@ -83,7 +84,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = formatApiError(e);
+          _error = userFacingError(e, l10n);
           _loading = false;
         });
       }
@@ -202,6 +203,12 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
       final orderId = order['id'] as int;
       final status = order['status']?.toString();
 
+      await AnalyticsService.instance.track('checkout_pay', {
+        'order_id': orderId,
+        'tier': draft.tier.api,
+        'pay_method': payMethod,
+      });
+
       if (status == 'queued' || order['paid_from_balance'] == true) {
         await ShootStorage.instance.clearActiveDraft();
         if (!mounted) return;
@@ -264,7 +271,8 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
       if (!mounted) return;
       context.go('/home/queue/$orderId');
     } catch (e) {
-      final msg = formatApiError(e);
+      final l10n = AppLocalizations.of(context)!;
+      final msg = userFacingError(e, l10n);
       if (isOrderLimitError(msg) && mounted) {
         await showOrderLimitDialog(context);
       }

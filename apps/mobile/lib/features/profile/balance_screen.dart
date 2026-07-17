@@ -49,6 +49,8 @@ class _BalanceScreenState extends State<BalanceScreen> {
   int _lowBalanceThreshold = 5000;
   final _thresholdCtrl = TextEditingController();
   bool _savingThreshold = false;
+  List<Map<String, dynamic>> _presets = [];
+  String? _selectedPresetId;
 
   bool get _corporateFinance =>
       widget.session.corporate && widget.session.canViewFinance;
@@ -82,7 +84,103 @@ class _BalanceScreenState extends State<BalanceScreen> {
       _pageSize = (saved['page_size'] as num?)?.toInt() ?? 20;
       _authorFilter = (saved['author_filter'] as num?)?.toInt() ?? -1;
     }
+    await _loadPresets();
     await _load();
+  }
+
+  Future<void> _loadPresets() async {
+    try {
+      _presets = await widget.api.listBalanceFilterPresets(company: _corporateFinance);
+    } catch (_) {
+      _presets = [];
+    }
+  }
+
+  Map<String, dynamic> _currentFilterPayload() {
+    final payload = <String, dynamic>{
+      'date_from': _dateFrom.text.trim(),
+      'date_to': _dateTo.text.trim(),
+      'tx_type': _txType,
+      'page_size': _pageSize,
+    };
+    if (_corporateFinance && _authorFilter >= 0) {
+      payload['author_id'] = _authorFilter;
+    }
+    return payload;
+  }
+
+  Future<void> _applyPreset(Map<String, dynamic> preset) async {
+    setState(() {
+      _selectedPresetId = preset['id']?.toString();
+      _dateFrom.text = preset['date_from']?.toString() ?? '';
+      _dateTo.text = preset['date_to']?.toString() ?? '';
+      _txType = preset['tx_type']?.toString() ?? 'all';
+      _pageSize = (preset['page_size'] as num?)?.toInt() ?? 20;
+      final author = preset['author_id'];
+      _authorFilter = author == null ? -1 : (author as num).toInt();
+    });
+    _resetPageAndLoad();
+  }
+
+  Future<void> _savePresetDialog() async {
+    final l10n = AppLocalizations.of(context)!;
+    final nameCtrl = TextEditingController();
+    final ok = await showFDialog<bool>(
+      context: context,
+      builder: (ctx, style, animation) => FDialog(
+        title: Text(l10n.balanceSavePreset),
+        body: FTextField(
+          control: FTextFieldControl.managed(controller: nameCtrl),
+          label: Text(l10n.balancePresetNameHint),
+        ),
+        actions: [
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: Text(l10n.save)),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final name = nameCtrl.text.trim();
+    if (name.isEmpty) return;
+    try {
+      await widget.api.createBalanceFilterPreset(
+        company: _corporateFinance,
+        name: name,
+        filters: _currentFilterPayload(),
+      );
+      await _loadPresets();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.balancePresetSaved)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    }
+  }
+
+  Future<void> _deletePreset(String presetId) async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      await widget.api.deleteBalanceFilterPreset(company: _corporateFinance, presetId: presetId);
+      if (_selectedPresetId == presetId) _selectedPresetId = null;
+      await _loadPresets();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.balancePresetDeleted)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    }
   }
 
   Future<void> _persistFilters() async {
@@ -450,6 +548,39 @@ class _BalanceScreenState extends State<BalanceScreen> {
                       child: Text(_busy ? '…' : l10n.topupSbpQr),
                     ),
                   ],
+                  const SizedBox(height: 16),
+                  Text(l10n.balancePresetsLabel, style: context.theme.typography.sm),
+                  const SizedBox(height: 8),
+                  if (_presets.isEmpty)
+                    Text(l10n.balEmpty, style: TextStyle(color: AppColors.textSecondary, fontSize: 12))
+                  else
+                    ..._presets.map((p) {
+                      final pid = p['id']?.toString() ?? '';
+                      final selected = _selectedPresetId == pid;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: FButton(
+                                variant: selected ? .primary : .outline,
+                                onPress: () => _applyPreset(p),
+                                child: Text(p['name']?.toString() ?? l10n.balanceApplyPreset),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: pid.isEmpty ? null : () => _deletePreset(pid),
+                              icon: const Icon(FIcons.trash, size: 18),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  FButton(
+                    variant: .outline,
+                    onPress: _savePresetDialog,
+                    child: Text(l10n.balanceSavePreset),
+                  ),
                   const SizedBox(height: 16),
                   GestureDetector(
                     onTap: () => _pickDate(_dateFrom),

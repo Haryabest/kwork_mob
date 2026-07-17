@@ -11,7 +11,12 @@ from app.core.database import get_db
 from app.core.security import get_current_db_user
 from app.models import DeviceToken, Model3D, Order, Transaction, User
 from app.schemas.auth import AccountTypeRequest
-from app.schemas.balance_filters import BalanceFiltersBody, CompanyBalanceFiltersBody
+from app.schemas.balance_filters import (
+    BalanceFilterPresetBody,
+    BalanceFiltersBody,
+    CompanyBalanceFilterPresetBody,
+    CompanyBalanceFiltersBody,
+)
 from app.services import auth as auth_service
 from app.services import pii as pii_svc
 
@@ -150,6 +155,47 @@ async def put_balance_filters(
     saved = await bf.save_personal_filters(db, user, body.model_dump())
     await db.commit()
     return {"scope": "personal", "filters": saved}
+
+
+@router.get("/balance-filter-presets")
+async def get_balance_filter_presets(user: User = Depends(get_current_db_user)):
+    """Named saved views for personal balance filters §20.3.4."""
+    from app.services import balance_filters as bf
+
+    return {"scope": "personal", "items": bf.list_presets(user)}
+
+
+@router.post("/balance-filter-presets")
+async def create_balance_filter_preset(
+    body: BalanceFilterPresetBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import balance_filters as bf
+
+    try:
+        row = await bf.upsert_preset(db, user, name=body.name, filters=body.model_dump())
+    except ValueError as exc:
+        if str(exc) == "limit":
+            raise HTTPException(400, "Максимум 10 сохранённых представлений") from exc
+        raise HTTPException(400, "Укажите название") from exc
+    await db.commit()
+    return {"scope": "personal", "preset": row}
+
+
+@router.delete("/balance-filter-presets/{preset_id}")
+async def delete_balance_filter_preset(
+    preset_id: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import balance_filters as bf
+
+    ok = await bf.delete_preset(db, user, preset_id=preset_id)
+    if not ok:
+        raise HTTPException(404, "Представление не найдено")
+    await db.commit()
+    return {"ok": True}
 
 
 @router.get("/transactions")
@@ -491,6 +537,7 @@ async def list_user_models(
                 "uuid": m.uuid,
                 "order_id": m.order_id,
                 "display_name": m.display_name,
+                "user_id": m.user_id,
                 "category": category,
                 "tier": tier,
                 "glb_url": m.glb_url,

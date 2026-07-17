@@ -47,6 +47,10 @@ class _HomeShellState extends State<HomeShell> {
   final _dismissedBannerIds = <int>{};
   final _homeTabKey = GlobalKey<_HomeTabState>();
 
+  static const _tabScreens = ['home', 'models', 'orders', 'support', 'profile'];
+
+  String _screenName(int i) => _tabScreens[i.clamp(0, _tabScreens.length - 1)];
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +61,7 @@ class _HomeShellState extends State<HomeShell> {
     _loadUnread();
     _loadCampaignBanners();
     AnalyticsService.instance.flush(widget.api);
+    AnalyticsService.instance.track('screen_view', {'screen': _screenName(_index)});
     LocalModelLibrary.instance.runAutoCleanup();
     LocalModelLibrary.instance.syncPendingDownloads(
       widget.api,
@@ -211,6 +216,7 @@ class _HomeShellState extends State<HomeShell> {
       ),
       ModelsScreen(
         api: widget.api,
+        session: session,
         companyId: session.corporate ? session.companyId : null,
         onNotifications: () async {
           await context.push('/home/notifications');
@@ -246,6 +252,7 @@ class _HomeShellState extends State<HomeShell> {
             index: _index,
             onChange: (i) {
               setState(() => _index = i);
+              AnalyticsService.instance.track('screen_view', {'screen': _screenName(i)});
               if (i == 0) _homeTabKey.currentState?.refreshPending();
               if (i == 1) {
                 LocalModelLibrary.instance.syncPendingDownloads(
@@ -642,6 +649,8 @@ class _ProfileTabState extends State<_ProfileTab> {
   bool _totpEnabled = false;
   bool _ownerRequired = false;
   bool _loading2fa = false;
+  List<Map<String, dynamic>> _sessions = [];
+  bool _loadingSessions = false;
   String? _setupSecret;
   String? _setupChallenge;
   String? _setupUri;
@@ -724,7 +733,63 @@ class _ProfileTabState extends State<_ProfileTab> {
       _totpEnabled = st['totp_enabled'] == true;
       _ownerRequired = st['owner_2fa_required'] == true;
     } catch (_) {}
+    await _loadSessions();
     if (mounted) setState(() => _prefs = prefs);
+  }
+
+  Future<void> _loadSessions() async {
+    setState(() => _loadingSessions = true);
+    try {
+      _sessions = await widget.api.listAuthSessions();
+    } catch (_) {
+      _sessions = [];
+    } finally {
+      if (mounted) setState(() => _loadingSessions = false);
+    }
+  }
+
+  Future<void> _revokeSession(int sessionId) async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      await widget.api.revokeAuthSession(sessionId);
+      await _loadSessions();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.profileSessionRevoke)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    }
+  }
+
+  Future<void> _revokeOtherSessions() async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      final n = await widget.api.revokeOtherAuthSessions();
+      await _loadSessions();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(n > 0 ? l10n.profileSessionsRevokeOthersDone : l10n.profileSessionsEmpty)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    }
+  }
+
+  String _sessionWhen(String? iso) {
+    final d = DateTime.tryParse(iso ?? '');
+    if (d == null) return '—';
+    return '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
   }
 
   Future<void> _togglePref(String key, bool value) async {
@@ -1220,6 +1285,49 @@ class _ProfileTabState extends State<_ProfileTab> {
             ),
           ),
         ),
+        const SizedBox(height: 24),
+        Text(l10n.profileSessionsSection, style: context.theme.typography.sm),
+        const SizedBox(height: 8),
+        if (_loadingSessions)
+          const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
+        else if (_sessions.isEmpty)
+          Text(l10n.profileSessionsEmpty, style: TextStyle(color: AppColors.textSecondary))
+        else ...[
+          ..._sessions.map((s) {
+            final id = (s['id'] as num?)?.toInt();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('#${id ?? '—'}', style: context.theme.typography.sm),
+                        Text(
+                          '${_sessionWhen(s['created_at']?.toString())} → ${_sessionWhen(s['expires_at']?.toString())}',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (id != null)
+                    FButton(
+                      variant: .outline,
+                      onPress: () => _revokeSession(id),
+                      child: Text(l10n.profileSessionRevoke),
+                    ),
+                ],
+              ),
+            );
+          }),
+          FButton(
+            variant: .outline,
+            onPress: _sessions.length < 2 ? null : _revokeOtherSessions,
+            child: Text(l10n.profileSessionsRevokeOthers),
+          ),
+        ],
         const SizedBox(height: 24),
         FButton(
           variant: .destructive,

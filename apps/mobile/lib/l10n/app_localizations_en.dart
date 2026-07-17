@@ -2013,4 +2013,52 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get resumeDraftContinue => 'Continue';
+
+  @override
+  String get mvSearchHint => 'Search by name';
+
+  @override
+  String get mvFilterTierAll => 'All tiers';
+
+  @override
+  String get mvFilterAuthorAll => 'All authors';
+
+  @override
+  String get mvFilterAuthor => 'Author';
+
+  @override
+  String get mvClearDates => 'Clear dates';
+
+  @override
+  String get balancePresetsLabel => 'Saved views';
+
+  @override
+  String get balanceSavePreset => 'Save as…';
+
+  @override
+  String get balancePresetNameHint => 'View name';
+
+  @override
+  String get balancePresetSaved => 'View saved';
+
+  @override
+  String get balancePresetDeleted => 'View deleted';
+
+  @override
+  String get balanceApplyPreset => 'Apply';
+
+  @override
+  String get profileSessionsSection => 'Active sessions §19.14.4';
+
+  @override
+  String get profileSessionRevoke => 'Revoke';
+
+  @override
+  String get profileSessionsRevokeOthers => 'Revoke other sessions';
+
+  @override
+  String get profileSessionsRevokeOthersDone => 'Other sessions revoked';
+
+  @override
+  String get profileSessionsEmpty => 'No other active sessions';
 }

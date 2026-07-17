@@ -687,5 +687,21 @@
   "resumeDraftBody": "У вас есть черновик ({category}, {count}/{total} кадров). Продолжить или начать заново?",
   "@resumeDraftBody": {"placeholders": {"category": {"type": "String"}, "count": {"type": "String"}, "total": {"type": "String"}}},
   "resumeDraftDiscard": "Заново",
-  "resumeDraftContinue": "Продолжить"
+  "resumeDraftContinue": "Продолжить",
+  "mvSearchHint": "Поиск по названию",
+  "mvFilterTierAll": "Все тарифы",
+  "mvFilterAuthorAll": "Все авторы",
+  "mvFilterAuthor": "Автор",
+  "mvClearDates": "Сбросить даты",
+  "balancePresetsLabel": "Сохранённые представления",
+  "balanceSavePreset": "Сохранить как…",
+  "balancePresetNameHint": "Название представления",
+  "balancePresetSaved": "Представление сохранено",
+  "balancePresetDeleted": "Представление удалено",
+  "balanceApplyPreset": "Применить",
+  "profileSessionsSection": "Активные сессии §19.14.4",
+  "profileSessionRevoke": "Завершить",
+  "profileSessionsRevokeOthers": "Завершить другие сессии",
+  "profileSessionsRevokeOthersDone": "Другие сессии завершены",
+  "profileSessionsEmpty": "Нет других активных сессий"
 }

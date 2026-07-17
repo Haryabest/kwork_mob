@@ -2016,4 +2016,52 @@ class AppLocalizationsKk extends AppLocalizations {
 
   @override
   String get resumeDraftContinue => 'Жалғастыру';
+
+  @override
+  String get mvSearchHint => 'Атау бойынша іздеу';
+
+  @override
+  String get mvFilterTierAll => 'Барлық тарифтер';
+
+  @override
+  String get mvFilterAuthorAll => 'Барлық авторлар';
+
+  @override
+  String get mvFilterAuthor => 'Автор';
+
+  @override
+  String get mvClearDates => 'Күндерді тазалау';
+
+  @override
+  String get balancePresetsLabel => 'Сақталған көріністер';
+
+  @override
+  String get balanceSavePreset => 'Сақтау…';
+
+  @override
+  String get balancePresetNameHint => 'Көрініс атауы';
+
+  @override
+  String get balancePresetSaved => 'Көрініс сақталды';
+
+  @override
+  String get balancePresetDeleted => 'Көрініс жойылды';
+
+  @override
+  String get balanceApplyPreset => 'Қолдану';
+
+  @override
+  String get profileSessionsSection => 'Белсенді сессиялар §19.14.4';
+
+  @override
+  String get profileSessionRevoke => 'Аяқтау';
+
+  @override
+  String get profileSessionsRevokeOthers => 'Басқа сессияларды аяқтау';
+
+  @override
+  String get profileSessionsRevokeOthersDone => 'Басқа сессиялар аяқталды';
+
+  @override
+  String get profileSessionsEmpty => 'Басқа белсенді сессиялар жоқ';
 }
