@@ -102,7 +102,11 @@ class _HomeShellState extends State<HomeShell> {
       if (!mounted) return;
       setState(() => _campaignBanners = items);
       for (final b in items) {
-        AnalyticsService.instance.track('screen_view', {'screen': 'campaign_banner'});
+        final id = b['id'];
+        AnalyticsService.instance.track('screen_view', {
+          'screen': 'campaign_banner',
+          if (id is int) 'banner_id': id,
+        });
       }
     } catch (_) {}
   }
@@ -193,8 +197,10 @@ class _HomeShellState extends State<HomeShell> {
     if (confirmed != true) return;
     if (choice == 'personal') {
       await session.setPersonal();
+      AnalyticsService.instance.track('screen_view', {'screen': 'mode_personal'});
     } else {
       await session.setCompany(choice as Map<String, dynamic>);
+      AnalyticsService.instance.track('screen_view', {'screen': 'mode_corporate'});
     }
   }
 
@@ -305,9 +311,12 @@ class _HomeShellState extends State<HomeShell> {
                         title: b['title']?.toString() ?? '',
                         body: b['body']?.toString() ?? '',
                         onDismiss: () {
-                          AnalyticsService.instance.track('screen_view', {'screen': 'campaign_banner_dismiss'});
+                          final id = b['id'];
+                          AnalyticsService.instance.track('screen_view', {
+                            'screen': 'campaign_banner_dismiss',
+                            if (id is int) 'banner_id': id,
+                          });
                           setState(() {
-                            final id = b['id'];
                             if (id is int) _dismissedBannerIds.add(id);
                           });
                         },
@@ -369,7 +378,12 @@ class _HomeTabState extends State<_HomeTab> {
 
   Future<void> refreshPending() async {
     final summary = await UploadProgressService.instance.pendingSummary();
-    if (mounted) setState(() => _pendingUpload = summary);
+    if (!mounted) return;
+    final hadPending = _pendingUpload != null;
+    setState(() => _pendingUpload = summary);
+    if (summary != null && !hadPending) {
+      AnalyticsService.instance.track('screen_view', {'screen': 'pending_upload_banner'});
+    }
   }
 
   @override

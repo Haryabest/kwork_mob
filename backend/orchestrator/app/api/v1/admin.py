@@ -1038,6 +1038,29 @@ async def metrics_dashboard(_: dict = Depends(require_admin)):
     return await dashboard_aggregates()
 
 
+@router.get("/analytics/screens")
+async def analytics_screen_breakdown(
+    days: int = Query(default=7, ge=1, le=90),
+    limit: int = Query(default=50, ge=1, le=200),
+    export: str | None = Query(default=None, alias="format"),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """screen_view breakdown из CH MV / PG fallback §19.20."""
+    from fastapi.responses import Response
+
+    from app.services import analytics_query as aq
+
+    data = await aq.screen_breakdown(db, days=days, limit=limit)
+    if export == "csv":
+        return Response(
+            content=aq.screens_to_csv(data),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="analytics-screens.csv"'},
+        )
+    return data
+
+
 @router.get("/access-log")
 async def admin_access_log(
     date_from: datetime | None = Query(None),

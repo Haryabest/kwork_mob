@@ -36,6 +36,9 @@ class AnalyticsEventItem(BaseModel):
                 raise ValueError("screen_view requires props.screen")
             if len(screen) > 64:
                 raise ValueError("props.screen too long")
+            bid = props.get("banner_id")
+            if bid is not None and not isinstance(bid, int):
+                raise ValueError("props.banner_id must be int")
         elif self.event == "shoot_complete":
             uuid = props.get("model_uuid")
             if not isinstance(uuid, str) or not uuid.strip():

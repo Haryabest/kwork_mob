@@ -56,6 +56,11 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
       final f = photos[i];
       if (f == null) {
         results.add(FrameQuality(index: i, verdict: FrameVerdict.fail, blurry: true));
+        AnalyticsService.instance.track('shoot_step_retry', {
+          'model_uuid': widget.modelUuid,
+          'step': i + 1,
+          'error_type': 'missing_frame',
+        });
       } else {
         results.add(await QualityAnalyzer.instance.analyzeFile(i, f));
       }

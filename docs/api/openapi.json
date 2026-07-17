@@ -4262,6 +4262,83 @@
         ]
       }
     },
+    "/api/v1/admin/analytics/screens": {
+      "get": {
+        "description": "screen_view breakdown из CH MV / PG fallback §19.20.",
+        "operationId": "analytics_screen_breakdown_api_v1_admin_analytics_screens_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Screen Breakdown",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/audit-export/run": {
       "post": {
         "description": "Ручной запуск экспорта в MinIO audit-logs §10.7.7.",

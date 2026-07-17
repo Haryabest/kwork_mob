@@ -68,3 +68,12 @@ def test_shoot_step_retry_valid():
         props={"model_uuid": "abc-123", "step": 2, "error_type": "blurry"},
     )
     assert item.props["error_type"] == "blurry"
+
+
+def test_screen_view_banner_id():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "campaign_banner", "banner_id": 42},
+    )
+    assert item.props["banner_id"] == 42

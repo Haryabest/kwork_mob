@@ -10,3 +10,5 @@ def test_init_sql_has_mobile_analytics_events():
     assert "CREATE TABLE IF NOT EXISTS mobile_analytics_events" in sql
     assert "mobile_analytics_daily" in sql
     assert "mobile_analytics_screen_daily" in sql
+    backfill = Path(__file__).resolve().parents[3] / "infra" / "clickhouse" / "backfill_mobile_analytics_screen_daily.sql"
+    assert backfill.is_file()
