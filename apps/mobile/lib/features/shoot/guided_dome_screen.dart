@@ -84,6 +84,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'shoot_dome'});
     _index = widget.reshootIndex ?? 0;
     _loadDraftMeta();
     _boot();

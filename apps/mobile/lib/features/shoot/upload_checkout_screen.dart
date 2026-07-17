@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/photo_encryption.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
@@ -42,6 +43,7 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'shoot_upload'});
     _checkResume();
   }
 

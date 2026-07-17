@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/guided_dome.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/quality_analyzer.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 
@@ -34,6 +35,7 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'shoot_quality'});
     _analyze();
   }
 

@@ -87,3 +87,23 @@ CREATE TABLE IF NOT EXISTS service_logs (
     details String
 ) ENGINE = MergeTree()
 ORDER BY (timestamp, source);
+
+-- Mobile analytics ingest mirror §19.20 (PG source of truth)
+CREATE TABLE IF NOT EXISTS mobile_analytics_events (
+    user_id UInt64,
+    event LowCardinality(String),
+    event_ts DateTime,
+    props String
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(event_ts)
+ORDER BY (event_ts, event, user_id);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mobile_analytics_daily
+ENGINE = SummingMergeTree()
+ORDER BY (day, event)
+AS SELECT
+    toDate(event_ts) AS day,
+    event,
+    count() AS events
+FROM mobile_analytics_events
+GROUP BY day, event;

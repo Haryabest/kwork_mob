@@ -49,6 +49,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'order_checkout'});
     _boot();
   }
 

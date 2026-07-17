@@ -23,6 +23,8 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   List<Map<String, dynamic>> _audit = [];
   int? _companyId;
   int _membersTotal = 0;
+  bool _loadingMoreMembers = false;
+  static const _memberPageSize = 20;
   bool _loading = true;
   bool _busy = false;
 
@@ -61,19 +63,33 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
     super.dispose();
   }
 
-  Future<void> _loadMembers() async {
+  Future<void> _loadMembers({bool append = false}) async {
+    if (append) {
+      if (_loadingMoreMembers || _members.length >= _membersTotal) return;
+      setState(() => _loadingMoreMembers = true);
+    }
     try {
       final data = await widget.api.listCompanyMembers(
         search: _memberSearch.isEmpty ? null : _memberSearch,
         role: _memberRoleFilter,
+        limit: _memberPageSize,
+        offset: append ? _members.length : 0,
       );
-      _members = (data['items'] as List?)
+      final items = (data['items'] as List?)
               ?.map((e) => Map<String, dynamic>.from(e as Map))
               .toList() ??
           [];
       _companyId = data['company_id'] as int?;
-      _membersTotal = (data['total'] as num?)?.toInt() ?? _members.length;
+      _membersTotal = (data['total'] as num?)?.toInt() ?? items.length;
+      if (append) {
+        _members = [..._members, ...items];
+      } else {
+        _members = items;
+      }
     } catch (_) {}
+    if (mounted) {
+      setState(() => _loadingMoreMembers = false);
+    }
   }
 
   Future<void> _load() async {
@@ -274,10 +290,13 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                               ),
                               if (_membersTotal > _members.length)
                                 Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Text(
-                                    '${_members.length} / $_membersTotal',
-                                    style: context.theme.typography.sm,
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: FButton(
+                                    variant: .outline,
+                                    onPress: _loadingMoreMembers ? null : () => _loadMembers(append: true),
+                                    child: Text(
+                                      _loadingMoreMembers ? '…' : l10n.mvLoadMore,
+                                    ),
                                   ),
                                 ),
                               const SizedBox(height: 12),

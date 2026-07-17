@@ -707,6 +707,7 @@ class _ProfileTabState extends State<_ProfileTab> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'settings'});
     _boot();
   }
 

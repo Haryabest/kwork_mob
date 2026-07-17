@@ -62,6 +62,8 @@ type AccessRow = {
   timestamp?: string | null;
 };
 
+const MEMBER_PAGE = 20;
+
 /** §20.5 Команда + shoot_link Owner */
 export default function TeamPage() {
   const [inviteOpen, inviteHandlers] = useDisclosure(false);
@@ -84,6 +86,8 @@ export default function TeamPage() {
   const [memberSearchQ, setMemberSearchQ] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
   const [memberRoleFilter, setMemberRoleFilter] = useState<string | null>(null);
+  const [membersTotal, setMembersTotal] = useState(0);
+  const [loadingMoreMembers, setLoadingMoreMembers] = useState(false);
   const [shootStats, setShootStats] = useState<{
     created: number;
     expired: number;
@@ -99,12 +103,15 @@ export default function TeamPage() {
     };
   }, [funnelFrom, funnelTo]);
 
-  const memberParams = useCallback(() => {
-    const params: Record<string, string | number> = { limit: 100, offset: 0 };
-    if (memberSearch) params.search = memberSearch;
-    if (memberRoleFilter) params.role = memberRoleFilter;
-    return params;
-  }, [memberSearch, memberRoleFilter]);
+  const memberParams = useCallback(
+    (offset = 0) => {
+      const params: Record<string, string | number> = { limit: MEMBER_PAGE, offset };
+      if (memberSearch) params.search = memberSearch;
+      if (memberRoleFilter) params.role = memberRoleFilter;
+      return params;
+    },
+    [memberSearch, memberRoleFilter],
+  );
 
   useEffect(() => {
     const t = setTimeout(() => setMemberSearch(memberSearchQ.trim()), 400);
@@ -114,7 +121,7 @@ export default function TeamPage() {
   const load = useCallback(async () => {
     try {
       const [m, i, f, a, ss] = await Promise.all([
-        api.get<{ items: Member[] }>('/company/members', { params: memberParams() }),
+        api.get<{ items: Member[]; total?: number }>('/company/members', { params: memberParams(0) }),
         api.get<{ items: Invite[] }>('/company/invitations'),
         api.get<{ items: TeamFunnelRow[] }>('/company/publication-funnel', { params: funnelParams() }),
         api.get<{ items: AccessRow[] }>('/company/access-log').catch(() => ({ data: { items: [] as AccessRow[] } })),
@@ -129,6 +136,7 @@ export default function TeamPage() {
           .catch(() => ({ data: null })),
       ]);
       setMembers(m.data.items ?? []);
+      setMembersTotal(m.data.total ?? m.data.items?.length ?? 0);
       setInvites(i.data.items ?? []);
       setFunnelRows(f.data.items ?? []);
       setAccessRows(a.data.items ?? []);
@@ -137,6 +145,23 @@ export default function TeamPage() {
       notifications.show({ color: 'red', message: apiMessage(e) });
     }
   }, [funnelParams, memberParams]);
+
+  async function loadMoreMembers() {
+    if (loadingMoreMembers || members.length >= membersTotal) return;
+    setLoadingMoreMembers(true);
+    try {
+      const { data } = await api.get<{ items: Member[]; total?: number }>('/company/members', {
+        params: memberParams(members.length),
+      });
+      const next = data.items ?? [];
+      setMembers((prev) => [...prev, ...next]);
+      setMembersTotal(data.total ?? members.length + next.length);
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setLoadingMoreMembers(false);
+    }
+  }
 
   useEffect(() => {
     void load();
@@ -388,6 +413,13 @@ export default function TeamPage() {
             </Table.Tbody>
           </Table>
         </ScrollTable>
+        {membersTotal > members.length ? (
+          <Group justify="center" mt="md">
+            <Button variant="light" loading={loadingMoreMembers} onClick={() => void loadMoreMembers()}>
+              Загрузить ещё ({members.length}/{membersTotal})
+            </Button>
+          </Group>
+        ) : null}
       </Surface>
 
       <Surface>

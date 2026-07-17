@@ -54,3 +54,27 @@ $env:MODEL_UUID = "<uuid>"
 ```
 
 Pass: presigned ZIP HTTP 200, `access_log.action=restore_sources`.
+
+## 4. Guest shoot по ссылке (§3.15)
+
+API smoke на staging (Owner JWT, MinIO доступен):
+
+```powershell
+$env:API_BASE = "https://staging.3d.app/api/v1"
+$env:API_TOKEN = "<owner-jwt>"
+.\worker\scripts\e2e_guest_shoot_api.ps1
+```
+
+Сценарий: `POST /company/shoot_link` → `GET /shoot/{token}` → presigned PUT ×12 → `POST /shoot/{token}/complete`.
+
+Pass: exit 0, `status=used`, `task_uuid` в ответе.
+
+Интеграционный тест (CI): `tests/integration/test_guest_shoot_api_smoke.py` (skip при недоступном MinIO).
+
+## 5. Ops — iOS AR / Firebase prod / real-device QA
+
+См. `docs/mobile/RELEASE.md` и `docs/deployment/OPS_DEVICE_QA.md`.
+
+- **iOS AR**: Guided Dome на iPhone, §2 выше.
+- **Firebase prod**: `scripts/push_e2e.py` с prod `API_BASE` + зарегистрированный device token.
+- **Real-device QA**: чеклист подписи, deep links, guest shoot в Safari → приложение.

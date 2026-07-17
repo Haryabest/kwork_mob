@@ -5,6 +5,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/storage_space.dart';
 import 'package:kwork_mobile/services/scale_calibration_service.dart';
@@ -42,6 +43,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService.instance.track('screen_view', {'screen': 'shoot_category'});
     if (widget.session.dateOfBirth != null) {
       _birth.text = widget.session.dateOfBirth!;
     }
