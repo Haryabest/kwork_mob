@@ -81,9 +81,10 @@ export async function startOAuth(
   provider: string,
   mode: 'login' | 'register',
   consents?: string[],
+  companyId?: number,
 ): Promise<void> {
   const redirectUri = webOAuthRedirectUri();
-  const params: Record<string, string> = {
+  const params: Record<string, string | number> = {
     platform: 'web',
     mode,
     redirect_uri: redirectUri,
@@ -91,6 +92,7 @@ export async function startOAuth(
   if (mode === 'register' && consents?.length) {
     params.consents = consents.join(',');
   }
+  if (companyId) params.company_id = companyId;
   const { data } = await api.get<{ authorize_url: string; state: string }>(
     `/auth/oauth/${provider}/authorize`,
     { params },

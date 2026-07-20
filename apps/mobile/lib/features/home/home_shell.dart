@@ -714,6 +714,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   List<Map<String, String>> _oauthProviders = [];
   bool _oauthLinking = false;
   String? _lastOAuthUnlinkHint;
+  String? _lastOAuthLinkHint;
 
   static String _prefLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -791,31 +792,38 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
     } catch (_) {}
     await _loadSessions();
     await _loadOAuth();
-    await _loadLastOAuthUnlinkHint();
+    await _loadOAuthAuditHints();
     if (mounted) setState(() => _prefs = prefs);
   }
 
-  Future<void> _loadLastOAuthUnlinkHint() async {
+  String? _oauthAuditHint(String prefix, Map<String, dynamic> row) {
+    final details = row['details'];
+    final provider = details is Map ? details['provider']?.toString() : null;
+    final at = row['created_at']?.toString();
+    if (provider == null || provider.isEmpty) return null;
+    return at != null && at.isNotEmpty ? '$prefix: $provider · $at' : '$prefix: $provider';
+  }
+
+  Future<void> _loadOAuthAuditHints() async {
     try {
-      final res = await widget.api.userAudit(action: 'oauth_unlink', limit: 1);
+      final res = await widget.api.userAudit(actionPrefix: 'oauth_', limit: 50);
       final items = res['items'] as List?;
-      if (items == null || items.isEmpty) {
-        _lastOAuthUnlinkHint = null;
-        return;
+      _lastOAuthUnlinkHint = null;
+      _lastOAuthLinkHint = null;
+      if (items == null || items.isEmpty) return;
+      for (final raw in items) {
+        final row = Map<String, dynamic>.from(raw as Map);
+        final action = row['action']?.toString();
+        if (action == 'oauth_unlink' && _lastOAuthUnlinkHint == null) {
+          _lastOAuthUnlinkHint = _oauthAuditHint('Последняя отвязка', row);
+        } else if (action == 'oauth_link' && _lastOAuthLinkHint == null) {
+          _lastOAuthLinkHint = _oauthAuditHint('Последняя привязка', row);
+        }
+        if (_lastOAuthUnlinkHint != null && _lastOAuthLinkHint != null) break;
       }
-      final row = Map<String, dynamic>.from(items.first as Map);
-      final details = row['details'];
-      final provider = details is Map ? details['provider']?.toString() : null;
-      final at = row['created_at']?.toString();
-      if (provider == null || provider.isEmpty) {
-        _lastOAuthUnlinkHint = null;
-        return;
-      }
-      _lastOAuthUnlinkHint = at != null && at.isNotEmpty
-          ? 'Последняя отвязка: $provider · $at'
-          : 'Последняя отвязка: $provider';
     } catch (_) {
       _lastOAuthUnlinkHint = null;
+      _lastOAuthLinkHint = null;
     }
   }
 
@@ -870,6 +878,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
       AnalyticsService.instance.track('screen_view', {'screen': 'oauth_link_$provider'});
       await _refreshMeOAuth();
       await _loadOAuth();
+      await _loadOAuthAuditHints();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Соцсеть привязана')),
@@ -896,7 +905,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
         companyId: widget.session.corporate ? widget.session.companyId : null,
       );
       await _refreshMeOAuth();
-      await _loadLastOAuthUnlinkHint();
+      await _loadOAuthAuditHints();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Соцсеть отвязана')),
@@ -1455,6 +1464,15 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
               ),
             );
           }),
+          if (_lastOAuthLinkHint != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                _lastOAuthLinkHint!,
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+            ),
+          ],
           if (_lastOAuthUnlinkHint != null) ...[
             Padding(
               padding: const EdgeInsets.only(bottom: 8),

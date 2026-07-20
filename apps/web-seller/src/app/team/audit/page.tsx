@@ -18,7 +18,7 @@ const ACTION_FILTER = [
 
 export default function AuditPage() {
   const [items, setItems] = useState<Row[]>([]);
-  const [actionFilter, setActionFilter] = useState<string | null>('');
+  const [actionFilter, setActionFilter] = useState<string | null>('oauth_');
 
   const load = useCallback(async () => {
     const params: Record<string, string> = {};

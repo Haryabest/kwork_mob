@@ -199,6 +199,26 @@ export default function SettingsPage() {
     }
   }
 
+  async function exportUserAuditCsv() {
+    setBusy(true);
+    try {
+      const { data } = await api.get('/user/audit/export', {
+        params: { action_prefix: 'oauth_' },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'user_audit.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      notifications.show({ color: 'red', message: apiMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveProfile() {
     setBusy(true);
     try {
@@ -462,6 +482,16 @@ export default function SettingsPage() {
                   })}
                 </Stack>
               )}
+
+              <Group justify="space-between" mt="md">
+                <Text fw={600}>Личный аудит OAuth</Text>
+                <Button size="xs" variant="light" loading={busy} onClick={() => void exportUserAuditCsv()}>
+                  Export CSV
+                </Button>
+              </Group>
+              <Text size="sm" c="#6d6c77">
+                Скачать историю oauth_login / oauth_link / oauth_unlink.
+              </Text>
 
               <Text fw={600} mt="md">
                 Активные сессии

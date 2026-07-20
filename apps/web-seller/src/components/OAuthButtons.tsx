@@ -3,7 +3,7 @@
 import { Button, Divider, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
-import { CONSENT_SLUGS, fetchOAuthProviders, oauthErrorMessage, startOAuth, type OAuthProvider } from '../lib/oauth';
+import { CONSENT_SLUGS, fetchOAuthProviders, oauthErrorMessage, resolveOAuthCompanyId, startOAuth, type OAuthProvider } from '../lib/oauth';
 
 type Props = {
   mode: 'login' | 'register';
@@ -32,10 +32,12 @@ export function OAuthButtons({ mode, consents, disabled }: Props) {
     }
     setLoading(provider);
     try {
+      const companyId = await resolveOAuthCompanyId();
       await startOAuth(
         provider,
         mode,
         mode === 'register' ? CONSENT_SLUGS.filter((s) => consents?.[s]) : undefined,
+        companyId,
       );
     } catch (error) {
       notifications.show({ color: 'red', message: oauthErrorMessage(error) });
