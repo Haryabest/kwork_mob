@@ -23,6 +23,9 @@ class AppSession extends ChangeNotifier {
   String? _inn;
   String? _phone;
   List<String> _oauthProviders = [];
+  String? _lastOAuthLoginHint;
+  String? _lastOAuthLinkHint;
+  String? _lastOAuthUnlinkHint;
 
   int? get userId => _userId;
   String? get email => _email;
@@ -30,6 +33,9 @@ class AppSession extends ChangeNotifier {
   String? get inn => _inn;
   String? get phone => _phone;
   List<String> get oauthProviders => List.unmodifiable(_oauthProviders);
+  String? get lastOAuthLoginHint => _lastOAuthLoginHint;
+  String? get lastOAuthLinkHint => _lastOAuthLinkHint;
+  String? get lastOAuthUnlinkHint => _lastOAuthUnlinkHint;
   double? get balance => _balance;
   bool get corporate => _corporate;
   int? get companyId => _corporate ? _companyId : null;
@@ -111,6 +117,13 @@ class AppSession extends ChangeNotifier {
     } else {
       _oauthProviders = [];
     }
+    notifyListeners();
+  }
+
+  void setOAuthAuditHints({String? login, String? link, String? unlink}) {
+    _lastOAuthLoginHint = login;
+    _lastOAuthLinkHint = link;
+    _lastOAuthUnlinkHint = unlink;
     notifyListeners();
   }
 

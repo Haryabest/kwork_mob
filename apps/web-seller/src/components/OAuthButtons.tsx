@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Divider, Stack, Text } from '@mantine/core';
+import { Badge, Button, Divider, Group, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { CONSENT_SLUGS, fetchOAuthProviders, oauthErrorMessage, resolveOAuthCompanyId, startOAuth, type OAuthProvider } from '../lib/oauth';
@@ -14,11 +14,15 @@ type Props = {
 export function OAuthButtons({ mode, consents, disabled }: Props) {
   const [providers, setProviders] = useState<OAuthProvider[]>([]);
   const [loading, setLoading] = useState<string | null>(null);
+  const [corporateMode, setCorporateMode] = useState(false);
 
   useEffect(() => {
     fetchOAuthProviders()
       .then(setProviders)
       .catch(() => setProviders([]));
+    resolveOAuthCompanyId()
+      .then((id) => setCorporateMode(Boolean(id)))
+      .catch(() => setCorporateMode(false));
   }, []);
 
   if (!providers.length) return null;
@@ -48,9 +52,16 @@ export function OAuthButtons({ mode, consents, disabled }: Props) {
   return (
     <Stack gap="sm">
       <Divider label="или" labelPosition="center" />
-      <Text size="sm" c="dimmed" ta="center">
-        Войти через
-      </Text>
+      <Group justify="center" gap="xs">
+        <Text size="sm" c="dimmed" ta="center">
+          Войти через
+        </Text>
+        {corporateMode && (
+          <Badge size="sm" variant="light" color="blue">
+            Корп. режим
+          </Badge>
+        )}
+      </Group>
       <Stack gap="xs">
         {providers.map((p) => (
           <Button

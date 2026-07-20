@@ -597,6 +597,34 @@ async def get_user(user_id: int, _: dict = Depends(require_admin), db: AsyncSess
     }
 
 
+@router.get("/users/{user_id}/audit")
+async def admin_user_audit_log(
+    user_id: int,
+    action: str | None = Query(None),
+    action_prefix: str | None = Query(None, description="Например oauth_"),
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Audit_log пользователя для support §2.2.3."""
+    from app.services import audit_query as aq
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "Не найден")
+    return await aq.list_audit_logs(
+        db,
+        action=action,
+        action_prefix=action_prefix,
+        user_id=user_id,
+        days=days,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.post("/users/{user_id}/block")
 async def block_user(
     user_id: int,

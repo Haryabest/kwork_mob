@@ -120,6 +120,30 @@ async def test_list_user_audit_logs_oauth():
 
 
 @pytest.mark.asyncio
+async def test_admin_user_audit_filter():
+    from app.models import AuditLog
+
+    row = AuditLog(id=5, user_id=12, action="oauth_login", details={"provider": "sber"})
+
+    class FakeDb:
+        async def get(self, _model, uid):
+            return object() if uid == 12 else None
+
+        async def scalar(self, _stmt):
+            return 1
+
+        async def scalars(self, _stmt):
+            class R:
+                def all(self_inner):
+                    return [row]
+
+            return R()
+
+    data = await aq.list_audit_logs(FakeDb(), user_id=12, action="oauth_login", days=30)
+    assert data["items"][0]["action"] == "oauth_login"
+
+
+@pytest.mark.asyncio
 async def test_user_audit_export_rows():
     import csv
     import io

@@ -36,6 +36,7 @@ import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/push_service.dart';
+import 'package:kwork_mobile/services/oauth_audit_hints.dart';
 import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -369,6 +370,7 @@ class _SplashScreenState extends State<_SplashScreen> {
     try {
       final me = await widget.api.me();
       widget.session.applyMe(me);
+      await OAuthAuditHints.refresh(widget.api, widget.session);
     } catch (_) {}
   }
 

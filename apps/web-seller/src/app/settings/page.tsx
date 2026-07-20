@@ -53,20 +53,20 @@ type TwoFaStatus = {
   owner_2fa_required?: boolean;
 };
 
-type OAuthUnlinkAudit = {
+type OAuthAuditEntry = {
   user_id?: number;
   details?: { provider?: string };
   created_at?: string | null;
 };
 
 async function loadLastOAuthUnlink(isOwner: boolean): Promise<{
-  item: OAuthUnlinkAudit | null;
+  item: OAuthAuditEntry | null;
   scope: 'company' | 'personal' | null;
 }> {
   const params = { action: 'oauth_unlink', limit: 1 };
   if (isOwner) {
     try {
-      const { data } = await api.get<{ items: OAuthUnlinkAudit[] }>('/company/audit', { params });
+      const { data } = await api.get<{ items: OAuthAuditEntry[] }>('/company/audit', { params });
       const item = data.items?.[0] ?? null;
       if (item) return { item, scope: 'company' };
     } catch {
@@ -74,11 +74,22 @@ async function loadLastOAuthUnlink(isOwner: boolean): Promise<{
     }
   }
   try {
-    const { data } = await api.get<{ items: OAuthUnlinkAudit[] }>('/user/audit', { params });
+    const { data } = await api.get<{ items: OAuthAuditEntry[] }>('/user/audit', { params });
     const item = data.items?.[0] ?? null;
     return { item, scope: item ? 'personal' : null };
   } catch {
     return { item: null, scope: null };
+  }
+}
+
+async function loadLastOAuthLogin(): Promise<OAuthAuditEntry | null> {
+  try {
+    const { data } = await api.get<{ items: OAuthAuditEntry[] }>('/user/audit', {
+      params: { action: 'oauth_login', limit: 1 },
+    });
+    return data.items?.[0] ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -114,7 +125,8 @@ export default function SettingsPage() {
   const [disableCode, setDisableCode] = useState('');
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([]);
-  const [lastOAuthUnlink, setLastOAuthUnlink] = useState<OAuthUnlinkAudit | null>(null);
+  const [lastOAuthUnlink, setLastOAuthUnlink] = useState<OAuthAuditEntry | null>(null);
+  const [lastOAuthLogin, setLastOAuthLogin] = useState<OAuthAuditEntry | null>(null);
   const [oauthUnlinkScope, setOauthUnlinkScope] = useState<'company' | 'personal' | null>(null);
   const [oauthCompanyId, setOauthCompanyId] = useState<number | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -166,6 +178,7 @@ export default function SettingsPage() {
     const unlink = await loadLastOAuthUnlink(Boolean(s.data.is_company_owner));
     setLastOAuthUnlink(unlink.item);
     setOauthUnlinkScope(unlink.scope);
+    setLastOAuthLogin(await loadLastOAuthLogin());
   }, [loadSessions]);
 
   useEffect(() => {
@@ -439,6 +452,14 @@ export default function SettingsPage() {
               <Text size="sm" c="#6d6c77">
                 Привяжите VK ID, Яндекс ID или Сбер ID для быстрого входа.
               </Text>
+              {lastOAuthLogin && (
+                <Text size="xs" c="dimmed">
+                  Последний вход через соцсеть: {lastOAuthLogin.details?.provider ?? '—'}
+                  {lastOAuthLogin.created_at
+                    ? ` · ${new Date(lastOAuthLogin.created_at).toLocaleString('ru-RU')}`
+                    : ''}
+                </Text>
+              )}
               {lastOAuthUnlink && (
                 <Text size="xs" c="dimmed">
                   {oauthUnlinkScope === 'company' ? 'Последняя отвязка в компании' : 'Последняя отвязка'}:{' '}
