@@ -45,3 +45,53 @@ async def test_list_audit_logs_oauth_prefix():
     assert data["total"] == 1
     assert data["items"][0]["action"] == "oauth_login"
     assert data["items"][0]["details"]["provider"] == "vk"
+
+
+@pytest.mark.asyncio
+async def test_list_company_audit_logs_oauth_members():
+    from app.models import AuditLog
+
+    oauth_row = AuditLog(
+        id=2,
+        user_id=5,
+        company_id=None,
+        action="oauth_link",
+        details={"provider": "yandex"},
+    )
+    corp_row = AuditLog(
+        id=3,
+        user_id=5,
+        company_id=1,
+        action="company_invite_sent",
+        details={},
+    )
+
+    class FakeDbOauth:
+        async def scalar(self, _stmt):
+            return 1
+
+        async def scalars(self, _stmt):
+            class R:
+                def all(self_inner):
+                    return [oauth_row]
+
+            return R()
+
+    class FakeDbCorp:
+        async def scalar(self, _stmt):
+            return 1
+
+        async def scalars(self, _stmt):
+            class R:
+                def all(self_inner):
+                    return [corp_row]
+
+            return R()
+
+    data = await aq.list_company_audit_logs(
+        FakeDbOauth(), company_id=1, member_user_ids=[5], action_prefix="oauth_", days=30
+    )
+    assert data["items"][0]["action"] == "oauth_link"
+
+    data2 = await aq.list_company_audit_logs(FakeDbCorp(), company_id=1, member_user_ids=[5], days=30)
+    assert data2["total"] == 1

@@ -36,6 +36,7 @@ import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/push_service.dart';
+import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 GoRouter createRouter({
@@ -317,6 +318,7 @@ class _SplashScreenState extends State<_SplashScreen> {
         );
         await widget.session.setCompanies(await widget.api.myCompanies());
         await widget.push.init();
+        await _completePendingOAuthLinkRefresh();
       } catch (_) {}
     }
     if (!mounted) return;
@@ -349,6 +351,25 @@ class _SplashScreenState extends State<_SplashScreen> {
       );
       await _goAuthenticatedHome();
     }
+  }
+
+  Future<void> _completePendingOAuthLinkRefresh() async {
+    final pending = OAuthPending.instance;
+    if (pending.pendingFlow != OAuthFlow.link) return;
+    if (!await widget.api.hasToken) return;
+    final provider = pending.pendingProvider;
+    final code = pending.pendingCode;
+    final state = pending.pendingState;
+    if (provider != null && code != null && state != null) {
+      try {
+        await widget.api.oauthLinkComplete(provider: provider, code: code, state: state);
+        pending.clear();
+      } catch (_) {}
+    }
+    try {
+      final me = await widget.api.me();
+      widget.session.applyMe(me);
+    } catch (_) {}
   }
 
   Future<bool> _maybeCloudRestore() async {

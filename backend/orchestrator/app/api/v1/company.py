@@ -612,30 +612,31 @@ async def revoke_sessions(
 
 @router.get("/audit")
 async def audit_log(
+    action: str | None = Query(None),
+    action_prefix: str | None = Query(None, description="Например oauth_"),
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models import AuditLog
+    from app.services import audit_query as aq
     from app.services.company_members import get_owned_company
 
     company = await get_owned_company(db, user)
-    rows = (
-        await db.scalars(
-            select(AuditLog).where(AuditLog.company_id == company.id).order_by(AuditLog.id.desc()).limit(200)
-        )
-    ).all()
-    return {
-        "items": [
-            {
-                "id": r.id,
-                "user_id": r.user_id,
-                "action": r.action,
-                "details": r.details,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in rows
-        ]
-    }
+    member_ids = list(
+        await db.scalars(select(CompanyMember.user_id).where(CompanyMember.company_id == company.id))
+    )
+    return await aq.list_company_audit_logs(
+        db,
+        company_id=company.id,
+        member_user_ids=member_ids,
+        action=action,
+        action_prefix=action_prefix,
+        days=days,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/access-log")
@@ -664,6 +665,9 @@ async def company_access_log(
 
 @router.get("/audit/export")
 async def audit_export(
+    action: str | None = Query(None),
+    action_prefix: str | None = Query(None),
+    days: int = Query(30, ge=1, le=365),
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -672,20 +676,29 @@ async def audit_export(
 
     from fastapi.responses import Response
 
-    from app.models import AuditLog
+    from app.services import audit_query as aq
     from app.services.company_members import get_owned_company
 
     company = await get_owned_company(db, user)
-    rows = (
-        await db.scalars(
-            select(AuditLog).where(AuditLog.company_id == company.id).order_by(AuditLog.id.desc()).limit(5000)
-        )
-    ).all()
+    member_ids = list(
+        await db.scalars(select(CompanyMember.user_id).where(CompanyMember.company_id == company.id))
+    )
+    data = await aq.list_company_audit_logs(
+        db,
+        company_id=company.id,
+        member_user_ids=member_ids,
+        action=action,
+        action_prefix=action_prefix,
+        days=days,
+        limit=5000,
+        offset=0,
+    )
+    rows = data["items"]
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["id", "user_id", "action", "details", "created_at"])
     for r in rows:
-        w.writerow([r.id, r.user_id, r.action, r.details, r.created_at.isoformat() if r.created_at else ""])
+        w.writerow([r["id"], r["user_id"], r["action"], r["details"], r["created_at"] or ""])
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",

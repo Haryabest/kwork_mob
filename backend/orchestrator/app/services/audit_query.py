@@ -41,16 +41,58 @@ async def list_audit_logs(
         "total": int(total or 0),
         "days": days,
         "items": [
-            {
-                "id": r.id,
-                "user_id": r.user_id,
-                "company_id": r.company_id,
-                "action": r.action,
-                "details": r.details,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in rows
+            _audit_row(r) for r in rows
         ],
+    }
+
+
+def _audit_row(r: AuditLog) -> dict:
+    return {
+        "id": r.id,
+        "user_id": r.user_id,
+        "company_id": r.company_id,
+        "action": r.action,
+        "details": r.details,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    }
+
+
+async def list_company_audit_logs(
+    db: AsyncSession,
+    *,
+    company_id: int,
+    member_user_ids: list[int],
+    action: str | None = None,
+    action_prefix: str | None = None,
+    days: int = 30,
+    limit: int = 200,
+    offset: int = 0,
+) -> dict:
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    filters = [AuditLog.created_at >= since]
+    if action:
+        filters.append(AuditLog.action == action)
+    elif action_prefix:
+        filters.append(AuditLog.action.like(f"{action_prefix}%"))
+
+    if action_prefix and action_prefix.startswith("oauth"):
+        if member_user_ids:
+            filters.append(AuditLog.user_id.in_(member_user_ids))
+        else:
+            filters.append(AuditLog.id < 0)
+    else:
+        filters.append(AuditLog.company_id == company_id)
+
+    total = await db.scalar(select(func.count()).select_from(AuditLog).where(*filters))
+    rows = (
+        await db.scalars(
+            select(AuditLog).where(*filters).order_by(AuditLog.id.desc()).offset(offset).limit(limit)
+        )
+    ).all()
+    return {
+        "total": int(total or 0),
+        "days": days,
+        "items": [_audit_row(r) for r in rows],
     }
 
 
