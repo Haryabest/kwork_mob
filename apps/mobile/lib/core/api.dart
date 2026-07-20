@@ -906,10 +906,12 @@ class ApiClient {
   Future<Map<String, dynamic>> listTrashModelsPage({
     int limit = 20,
     int offset = 0,
+    String? publishFilter,
   }) async {
     final res = await _dio.get('/models/trash', queryParameters: {
       'limit': limit,
       'offset': offset,
+      if (publishFilter != null && publishFilter.isNotEmpty) 'publish_filter': publishFilter,
     });
     final data = Map<String, dynamic>.from(res.data as Map);
     final items = (data['items'] as List? ?? [])
@@ -1286,6 +1288,10 @@ class ApiClient {
     final res = await _dio.get('/user/devices');
     final items = (res.data as Map)['items'] as List? ?? [];
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<void> deleteUserDevice(int id) async {
+    await _dio.delete('/user/devices/$id');
   }
 
   Future<List<Map<String, dynamic>>> getFaq() async {

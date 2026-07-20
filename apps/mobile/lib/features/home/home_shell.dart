@@ -716,6 +716,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   bool _oauthLinking = false;
   List<Map<String, dynamic>> _accessLog = [];
   List<Map<String, dynamic>> _pushDevices = [];
+  int? _revokingDeviceId;
 
   static String _prefLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -805,6 +806,27 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
       _pushDevices = [];
     }
     if (mounted) setState(() => _prefs = prefs);
+  }
+
+  Future<void> _revokePushDevice(int id) async {
+    setState(() => _revokingDeviceId = id);
+    try {
+      await widget.api.deleteUserDevice(id);
+      _pushDevices = await widget.api.listUserDevices();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Устройство отвязано')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _revokingDeviceId = null);
+    }
   }
 
   Future<void> _refreshOAuthAuditHints() async {
@@ -1621,14 +1643,28 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
           Text('Нет зарегистрированных устройств', style: TextStyle(color: AppColors.textSecondary))
         else
           ..._pushDevices.take(10).map((d) {
+            final id = (d['id'] as num?)?.toInt();
             final platform = d['platform']?.toString() ?? '—';
             final ver = d['app_version']?.toString();
             final prefix = d['token_prefix']?.toString() ?? '—';
+            final busy = id != null && _revokingDeviceId == id;
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                '$platform${ver != null && ver.isNotEmpty ? ' · $ver' : ''} · $prefix',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$platform${ver != null && ver.isNotEmpty ? ' · $ver' : ''} · $prefix',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ),
+                  if (id != null)
+                    FButton(
+                      variant: .outline,
+                      onPress: busy ? null : () => _revokePushDevice(id),
+                      child: Text(busy ? '…' : 'Отвязать'),
+                    ),
+                ],
               ),
             );
           }),

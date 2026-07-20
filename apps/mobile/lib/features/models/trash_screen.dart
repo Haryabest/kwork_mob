@@ -23,6 +23,7 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
   String? _error;
   String? _busyUuid;
   int _total = 0;
+  String? _publishFilter;
   static const _pageSize = 20;
 
   @override
@@ -45,6 +46,7 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
       final page = await widget.api.listTrashModelsPage(
         limit: _pageSize,
         offset: append ? _items.length : 0,
+        publishFilter: _publishFilter,
       );
       final items = (page['items'] as List).cast<Map<String, dynamic>>();
       _total = (page['total'] as num?)?.toInt() ?? items.length;
@@ -90,6 +92,41 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
     return iso.substring(0, 10);
   }
 
+  Widget _filterBar(AppLocalizations l10n) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          FButton(
+            style: _publishFilter == null ? .primary : .outline,
+            onPress: () {
+              setState(() => _publishFilter = null);
+              _load();
+            },
+            child: const Text('Все'),
+          ),
+          FButton(
+            style: _publishFilter == 'published' ? .primary : .outline,
+            onPress: () {
+              setState(() => _publishFilter = 'published');
+              _load();
+            },
+            child: const Text('Опублик.'),
+          ),
+          FButton(
+            style: _publishFilter == 'draft' ? .primary : .outline,
+            onPress: () {
+              setState(() => _publishFilter = 'draft');
+              _load();
+            },
+            child: const Text('Черновики'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -106,7 +143,8 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       children: [
-                        SizedBox(height: MediaQuery.sizeOf(context).height * 0.25),
+                        _filterBar(l10n),
+                        SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
                         Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -122,10 +160,11 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
                       ? ListView(
                           physics: const AlwaysScrollableScrollPhysics(),
                           children: [
-                            SizedBox(height: MediaQuery.sizeOf(context).height * 0.25),
+                            _filterBar(l10n),
+                            SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
                             Center(
                               child: Text(
-                                l10n.trashEmpty,
+                                _publishFilter != null ? 'Нет моделей по фильтру' : l10n.trashEmpty,
                                 textAlign: TextAlign.center,
                               ),
                             ),
@@ -133,17 +172,19 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
                         )
                       : ListView.separated(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _items.length + (_items.length < _total ? 1 : 0),
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          padding: const EdgeInsets.only(bottom: 16),
+                          itemCount: _items.length + (_items.length < _total ? 1 : 0) + 1,
+                          separatorBuilder: (_, i) => i == 0 ? const SizedBox.shrink() : const SizedBox(height: 8),
                           itemBuilder: (context, i) {
-                            if (i >= _items.length) {
+                            if (i == 0) return _filterBar(l10n);
+                            final idx = i - 1;
+                            if (idx >= _items.length) {
                               return FButton(
                                 onPress: _loadingMore ? null : () => _load(append: true),
                                 child: Text(_loadingMore ? '…' : l10n.mvLoadMore),
                               );
                             }
-                            final m = _items[i];
+                            final m = _items[idx];
                             final uuid = m['uuid']?.toString() ?? '';
                             final busy = _busyUuid == uuid;
                             final orderId = m['order_id']?.toString() ?? '—';

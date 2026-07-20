@@ -221,6 +221,20 @@ export default function SettingsPage() {
     load().catch((e) => notifications.show({ color: 'red', message: apiMessage(e) }));
   }, [load]);
 
+  async function revokePushDevice(id: number) {
+    setBusy(true);
+    try {
+      await api.delete(`/user/devices/${id}`);
+      const { data } = await api.get<{ items: typeof pushDevices }>('/user/devices');
+      setPushDevices(data.items ?? []);
+      notifications.show({ color: 'teal', message: 'Устройство отвязано' });
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function unlinkOAuthProvider(provider: string) {
     setBusy(true);
     try {
@@ -668,6 +682,7 @@ export default function SettingsPage() {
                       <Table.Th>Версия</Table.Th>
                       <Table.Th>Токен</Table.Th>
                       <Table.Th>Обновлено</Table.Th>
+                      <Table.Th />
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -682,6 +697,17 @@ export default function SettingsPage() {
                         </Table.Td>
                         <Table.Td>
                           {d.updated_at ? new Date(d.updated_at).toLocaleString('ru-RU') : '—'}
+                        </Table.Td>
+                        <Table.Td>
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            color="red"
+                            disabled={busy}
+                            onClick={() => void revokePushDevice(d.id)}
+                          >
+                            Отвязать
+                          </Button>
                         </Table.Td>
                       </Table.Tr>
                     ))}

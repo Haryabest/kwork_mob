@@ -18318,6 +18318,52 @@
         ]
       }
     },
+    "/api/v1/user/devices/{device_id}": {
+      "delete": {
+        "description": "Отвязка push-устройства по id §2.5.5.",
+        "operationId": "delete_device_by_id_api_v1_user_devices__device_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Device By Id",
+        "tags": [
+          "Пользователь"
+        ]
+      }
+    },
     "/api/v1/user/draft-backups": {
       "get": {
         "description": "Список облачных черновиков TTL 7 дней §3.3.2.",

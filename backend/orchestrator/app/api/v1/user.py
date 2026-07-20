@@ -740,6 +740,23 @@ async def list_devices(
     }
 
 
+@router.delete("/devices/{device_id}")
+async def delete_device_by_id(
+    device_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отвязка push-устройства по id §2.5.5."""
+    row = await db.scalar(
+        select(DeviceToken).where(DeviceToken.id == device_id, DeviceToken.user_id == user.id)
+    )
+    if not row:
+        raise HTTPException(404, "Устройство не найдено")
+    await db.delete(row)
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("/devices")
 async def register_device(
     body: DeviceTokenRequest,
