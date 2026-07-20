@@ -138,6 +138,7 @@ class _QueueScreenState extends State<QueueScreen> {
   }
 
   Future<void> _reconnectWs() async {
+    AnalyticsService.instance.track('screen_view', {'screen': 'queue_reconnect_ws'});
     try {
       final uid = widget.session.userId;
       final token = await widget.api.accessToken;

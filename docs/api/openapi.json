@@ -4262,6 +4262,31 @@
         ]
       }
     },
+    "/api/v1/admin/analytics/alerts/check": {
+      "post": {
+        "description": "Проверка PG→CH backlog → Telegram/email §19.20.",
+        "operationId": "analytics_alerts_check_api_v1_admin_analytics_alerts_check_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Alerts Check",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/analytics/campaign-banner-ctr": {
       "get": {
         "description": "In-app banner CTR по campaign_id §19.20.",
@@ -4509,6 +4534,67 @@
           }
         ],
         "summary": "Analytics Screen Breakdown",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/analytics/screens/timeseries": {
+      "get": {
+        "description": "screen_view по дням (top screens) §19.20.",
+        "operationId": "analytics_screen_timeseries_api_v1_admin_analytics_screens_timeseries_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 14,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "top",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Top",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analytics Screen Timeseries",
         "tags": [
           "Администрирование"
         ]

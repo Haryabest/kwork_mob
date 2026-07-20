@@ -43,3 +43,17 @@ async def test_analytics_sync_status(monkeypatch):
     data = await analytics_sync_status(FakeDb())
     assert data["pending_ch_sync"] == 42
     assert data["alert"] is False
+
+
+async def test_screen_timeseries_pg_fallback(monkeypatch):
+    from app.services.analytics_query import screen_timeseries
+
+    monkeypatch.setattr("app.services.analytics_query._screen_timeseries_ch", lambda **_: None)
+
+    async def fake_pg(_db, *, days, top):
+        return ["home"], [{"day": "2026-07-01", "home": 3}]
+
+    monkeypatch.setattr("app.services.analytics_query._screen_timeseries_pg", fake_pg)
+    data = await screen_timeseries(object(), days=7, top=5)
+    assert data["source"] == "postgres"
+    assert data["screens"] == ["home"]

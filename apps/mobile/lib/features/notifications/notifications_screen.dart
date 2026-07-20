@@ -52,6 +52,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _open(InboxNotification n) async {
+    AnalyticsService.instance.track('screen_view', {'screen': 'notifications_mark_read'});
     final serverId = int.tryParse(n.id.replaceFirst('srv_', ''));
     if (serverId != null) {
       try {
@@ -121,6 +122,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             onPress: _items.isEmpty
                 ? null
                 : () async {
+                    AnalyticsService.instance.track('screen_view', {'screen': 'notifications_mark_read'});
                     try {
                       await widget.api.markAllNotificationsRead();
                     } catch (_) {}

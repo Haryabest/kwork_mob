@@ -118,3 +118,17 @@ AS SELECT
 FROM mobile_analytics_events
 WHERE event = 'screen_view' AND screen != ''
 GROUP BY day, screen;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS mobile_analytics_banner_daily
+ENGINE = SummingMergeTree()
+ORDER BY (day, banner_id, screen)
+AS SELECT
+    toDate(event_ts) AS day,
+    toInt64OrZero(JSONExtractString(props, 'banner_id')) AS banner_id,
+    JSONExtractString(props, 'screen') AS screen,
+    count() AS events
+FROM mobile_analytics_events
+WHERE event = 'screen_view'
+  AND JSONExtractString(props, 'screen') IN ('campaign_banner', 'campaign_banner_click')
+  AND banner_id > 0
+GROUP BY day, banner_id, screen;

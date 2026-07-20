@@ -95,3 +95,21 @@ def test_screen_view_unknown_screen():
             ts="2026-07-17T10:00:00Z",
             props={"screen": "not_a_real_screen"},
         )
+
+
+def test_screen_view_queue_reconnect_ws():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "queue_reconnect_ws"},
+    )
+    assert item.props["screen"] == "queue_reconnect_ws"
+
+
+def test_screen_view_notifications_mark_read():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "notifications_mark_read"},
+    )
+    assert item.props["screen"] == "notifications_mark_read"

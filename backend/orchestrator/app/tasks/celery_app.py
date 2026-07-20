@@ -554,6 +554,9 @@ def sync_analytics_to_clickhouse():
             record_analytics_ch_pending(pending)
             if pending > 1000:
                 logger.warning("analytics CH sync backlog: pending_ch_sync=%s", pending)
+            from app.services import analytics_alerts as aa
+
+            await aa.check_and_alert(db)
             return result
 
     return asyncio.run(_run())

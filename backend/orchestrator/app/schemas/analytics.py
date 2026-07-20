@@ -21,6 +21,8 @@ ALLOWED_SCREENS = frozenset(
         "settings",
         "queue",
         "queue_refresh",
+        "queue_reconnect_ws",
+        "notifications_mark_read",
         "balance",
         "storage",
         "notifications",

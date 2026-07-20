@@ -1094,6 +1094,32 @@ async def analytics_raw_events(
     return data
 
 
+@router.get("/analytics/screens/timeseries")
+async def analytics_screen_timeseries(
+    days: int = Query(default=14, ge=1, le=90),
+    top: int = Query(default=8, ge=1, le=20),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """screen_view по дням (top screens) §19.20."""
+    from app.services import analytics_query as aq
+
+    return await aq.screen_timeseries(db, days=days, top=top)
+
+
+@router.post("/analytics/alerts/check")
+async def analytics_alerts_check(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Проверка PG→CH backlog → Telegram/email §19.20."""
+    from app.services import analytics_alerts as aa
+
+    result = await aa.check_and_alert(db)
+    await db.commit()
+    return result
+
+
 @router.get("/analytics/status")
 async def analytics_sync_status(
     _: dict = Depends(require_admin),
