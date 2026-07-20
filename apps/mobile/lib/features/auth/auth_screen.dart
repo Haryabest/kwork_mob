@@ -121,6 +121,7 @@ class _AuthScreenState extends State<AuthScreen> {
         provider: provider,
         mode: _step == _AuthStep.register ? 'register' : 'login',
         consents: _step == _AuthStep.register ? _oauthConsents : null,
+        companyId: widget.session.corporate ? widget.session.companyId : null,
       );
       final uri = Uri.parse(url);
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {

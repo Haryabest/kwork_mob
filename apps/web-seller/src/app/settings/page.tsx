@@ -58,14 +58,26 @@ type OAuthUnlinkAudit = {
   created_at?: string | null;
 };
 
-async function loadLastOAuthUnlink(): Promise<OAuthUnlinkAudit | null> {
+async function loadLastOAuthUnlink(isOwner: boolean): Promise<{
+  item: OAuthUnlinkAudit | null;
+  scope: 'company' | 'personal' | null;
+}> {
+  const params = { action: 'oauth_unlink', limit: 1 };
+  if (isOwner) {
+    try {
+      const { data } = await api.get<{ items: OAuthUnlinkAudit[] }>('/company/audit', { params });
+      const item = data.items?.[0] ?? null;
+      if (item) return { item, scope: 'company' };
+    } catch {
+      /* not owner or no access */
+    }
+  }
   try {
-    const { data } = await api.get<{ items: OAuthUnlinkAudit[] }>('/company/audit', {
-      params: { action: 'oauth_unlink', limit: 1 },
-    });
-    return data.items?.[0] ?? null;
+    const { data } = await api.get<{ items: OAuthUnlinkAudit[] }>('/user/audit', { params });
+    const item = data.items?.[0] ?? null;
+    return { item, scope: item ? 'personal' : null };
   } catch {
-    return null;
+    return { item: null, scope: null };
   }
 }
 
@@ -102,6 +114,7 @@ export default function SettingsPage() {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([]);
   const [lastOAuthUnlink, setLastOAuthUnlink] = useState<OAuthUnlinkAudit | null>(null);
+  const [oauthUnlinkScope, setOauthUnlinkScope] = useState<'company' | 'personal' | null>(null);
   const [busy, setBusy] = useState(false);
   const oauthLinkedProviders = me?.oauth_providers ?? [];
 
@@ -147,7 +160,9 @@ export default function SettingsPage() {
     } catch {
       setOauthProviders([]);
     }
-    setLastOAuthUnlink(await loadLastOAuthUnlink());
+    const unlink = await loadLastOAuthUnlink(Boolean(s.data.is_company_owner));
+    setLastOAuthUnlink(unlink.item);
+    setOauthUnlinkScope(unlink.scope);
   }, [loadSessions]);
 
   useEffect(() => {
@@ -160,7 +175,9 @@ export default function SettingsPage() {
       await unlinkOAuth(provider);
       const { data } = await api.get<Me>('/user/me');
       setMe(data);
-      setLastOAuthUnlink(await loadLastOAuthUnlink());
+      const unlink = await loadLastOAuthUnlink(Boolean(twoFa?.is_company_owner));
+      setLastOAuthUnlink(unlink.item);
+      setOauthUnlinkScope(unlink.scope);
       notifications.show({ color: 'teal', message: 'Соцсеть отвязана' });
     } catch (error) {
       notifications.show({ color: 'red', message: oauthErrorMessage(error) });
@@ -401,7 +418,8 @@ export default function SettingsPage() {
               </Text>
               {lastOAuthUnlink && (
                 <Text size="xs" c="dimmed">
-                  Последняя отвязка в компании: {lastOAuthUnlink.details?.provider ?? '—'}
+                  {oauthUnlinkScope === 'company' ? 'Последняя отвязка в компании' : 'Последняя отвязка'}:{' '}
+                  {lastOAuthUnlink.details?.provider ?? '—'}
                   {lastOAuthUnlink.created_at
                     ? ` · ${new Date(lastOAuthUnlink.created_at).toLocaleString('ru-RU')}`
                     : ''}

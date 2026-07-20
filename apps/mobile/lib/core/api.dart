@@ -274,6 +274,7 @@ class ApiClient {
     required String provider,
     required String mode,
     List<String>? consents,
+    int? companyId,
   }) async {
     final res = await _dio.get(
       '/auth/oauth/$provider/authorize',
@@ -282,6 +283,7 @@ class ApiClient {
         'mode': mode,
         'redirect_uri': mobileOAuthRedirect,
         if (consents != null && consents.isNotEmpty) 'consents': consents.join(','),
+        if (companyId != null) 'company_id': companyId,
       },
     );
     final data = Map<String, dynamic>.from(res.data as Map);

@@ -74,6 +74,30 @@ async def get_me(
     return payload
 
 
+@router.get("/audit")
+async def user_audit_log(
+    action: str | None = Query(None),
+    action_prefix: str | None = Query(None, description="Например oauth_"),
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Личный audit_log текущего пользователя §2.5.5."""
+    from app.services import audit_query as aq
+
+    return await aq.list_audit_logs(
+        db,
+        action=action,
+        action_prefix=action_prefix,
+        user_id=user.id,
+        days=days,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.patch("/me")
 async def update_me(
     payload: dict,
