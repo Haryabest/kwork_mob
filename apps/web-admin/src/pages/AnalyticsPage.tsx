@@ -2,6 +2,7 @@ import { Badge, Button, Card, Center, Group, Loader, NumberInput, Select, Text, 
 import { notifications } from '@mantine/notifications';
 import { IconDownload, IconRefresh } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { MetricGrid, PageHeader, ShellTable } from '../components/Panel';
 import { api, getApiError } from '../services/api';
@@ -319,7 +320,13 @@ export default function AnalyticsPage() {
         headers={['ID', 'User', 'Action', 'Provider', 'Platform', 'Created']}
         rows={oauthAuditLogs.map((r) => [
           String(r.id),
-          String(r.user_id ?? '—'),
+          r.user_id ? (
+            <Text key={`u-${r.id}`} component={Link} to={`/users/${r.user_id}`} size="sm" c="brand">
+              {r.user_id}
+            </Text>
+          ) : (
+            '—'
+          ),
           r.action,
           String((r.details?.provider as string) ?? '—'),
           String((r.details?.platform as string) ?? '—'),

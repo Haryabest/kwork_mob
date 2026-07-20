@@ -150,6 +150,7 @@ class _AuthScreenState extends State<AuthScreen> {
           await widget.api.oauthLinkComplete(provider: provider, code: code, state: state);
           AnalyticsService.instance.track('screen_view', {'screen': 'oauth_link_$provider'});
           await _refreshMeOAuth();
+          await OAuthAuditHints.refresh(widget.api, widget.session);
         } catch (e) {
           if (mounted) setState(() => _error = formatApiError(e));
         }

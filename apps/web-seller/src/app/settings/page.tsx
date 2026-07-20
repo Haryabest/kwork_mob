@@ -93,6 +93,16 @@ async function loadLastOAuthLogin(): Promise<OAuthAuditEntry | null> {
   }
 }
 
+async function refreshOAuthHints(isOwner: boolean): Promise<{
+  unlink: OAuthAuditEntry | null;
+  unlinkScope: 'company' | 'personal' | null;
+  login: OAuthAuditEntry | null;
+}> {
+  const unlinkData = await loadLastOAuthUnlink(isOwner);
+  const login = await loadLastOAuthLogin();
+  return { unlink: unlinkData.item, unlinkScope: unlinkData.scope, login };
+}
+
 const PREF_LABELS: Record<string, string> = {
   push_enabled: 'Push-уведомления',
   email_enabled: 'Email-уведомления',
@@ -175,10 +185,16 @@ export default function SettingsPage() {
       setOauthProviders([]);
     }
     setOauthCompanyId(await resolveOAuthCompanyId());
-    const unlink = await loadLastOAuthUnlink(Boolean(s.data.is_company_owner));
-    setLastOAuthUnlink(unlink.item);
-    setOauthUnlinkScope(unlink.scope);
-    setLastOAuthLogin(await loadLastOAuthLogin());
+    const hints = await refreshOAuthHints(Boolean(s.data.is_company_owner));
+    setLastOAuthUnlink(hints.unlink);
+    setOauthUnlinkScope(hints.unlinkScope);
+    setLastOAuthLogin(hints.login);
+    if (cachedMe) {
+      const afterLink = await refreshOAuthHints(Boolean(s.data.is_company_owner));
+      setLastOAuthUnlink(afterLink.unlink);
+      setOauthUnlinkScope(afterLink.unlinkScope);
+      setLastOAuthLogin(afterLink.login);
+    }
   }, [loadSessions]);
 
   useEffect(() => {
@@ -191,10 +207,10 @@ export default function SettingsPage() {
       await unlinkOAuth(provider, oauthCompanyId);
       const { data } = await api.get<Me>('/user/me');
       setMe(data);
-      const unlink = await loadLastOAuthUnlink(Boolean(twoFa?.is_company_owner));
-      setLastOAuthUnlink(unlink.item);
-      setOauthUnlinkScope(unlink.scope);
-      setLastOAuthLogin(await loadLastOAuthLogin());
+      const hints = await refreshOAuthHints(Boolean(twoFa?.is_company_owner));
+      setLastOAuthUnlink(hints.unlink);
+      setOauthUnlinkScope(hints.unlinkScope);
+      setLastOAuthLogin(hints.login);
       notifications.show({ color: 'teal', message: 'Соцсеть отвязана' });
     } catch (error) {
       notifications.show({ color: 'red', message: oauthErrorMessage(error) });
