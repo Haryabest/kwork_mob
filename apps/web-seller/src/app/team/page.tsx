@@ -340,6 +340,37 @@ export default function TeamPage() {
 
       <Surface mb="md">
         <Group justify="space-between" mb="sm">
+          <Text fw={600}>Audit log</Text>
+          <Button
+            size="xs"
+            variant="light"
+            onClick={async () => {
+              try {
+                const { data } = await api.get('/company/audit/export', { responseType: 'blob' });
+                const url = URL.createObjectURL(data);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'company-audit.csv';
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (e) {
+                notifications.show({ color: 'red', message: apiMessage(e) });
+              }
+            }}
+          >
+            Export audit CSV
+          </Button>
+        </Group>
+        <Text size="sm" c="dimmed">
+          Полный журнал — на вкладке{' '}
+          <a href="/team/audit" style={{ color: 'var(--mantine-color-brand-6)' }}>
+            Аудит
+          </a>
+        </Text>
+      </Surface>
+
+      <Surface mb="md">
+        <Group justify="space-between" mb="sm">
           <Text fw={600}>Access log §10.7.2 (скачивания моделей)</Text>
           <Button
             size="xs"

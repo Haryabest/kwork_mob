@@ -42,6 +42,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   bool _loading = true;
   bool _busy = false;
   bool _exportingAccessLog = false;
+  bool _exportingAudit = false;
 
   final _memberSearchCtrl = TextEditingController();
   String _memberSearch = '';
@@ -104,6 +105,30 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
     } catch (_) {}
     if (mounted) {
       setState(() => _loadingMoreMembers = false);
+    }
+  }
+
+  Future<void> _exportCompanyAudit() async {
+    setState(() => _exportingAudit = true);
+    try {
+      final bytes = await widget.api.exportCompanyAuditCsv();
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/company_audit.csv');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)], text: 'company_audit.csv');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Экспорт audit готов')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportingAudit = false);
     }
   }
 
@@ -651,6 +676,12 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                 ],
                                 const Divider(height: 24),
                                 Text(l10n.teamAudit, style: context.theme.typography.sm),
+                                const SizedBox(height: 8),
+                                FButton(
+                                  variant: .outline,
+                                  onPress: _exportingAudit ? null : _exportCompanyAudit,
+                                  child: Text(_exportingAudit ? '…' : 'Экспорт audit CSV'),
+                                ),
                                 const SizedBox(height: 8),
                               ],
                               for (final a in _audit)

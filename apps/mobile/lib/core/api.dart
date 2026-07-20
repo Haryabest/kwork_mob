@@ -451,6 +451,18 @@ class ApiClient {
     return res.data ?? [];
   }
 
+  Future<List<int>> exportCompanyAuditCsv({String? actionPrefix, int days = 30}) async {
+    final res = await _dio.get<List<int>>(
+      '/company/audit/export',
+      queryParameters: {
+        if (actionPrefix != null) 'action_prefix': actionPrefix,
+        'days': days,
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data ?? [];
+  }
+
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
     final res = await _dio.patch('/user/me', data: data);
     return Map<String, dynamic>.from(res.data as Map);
