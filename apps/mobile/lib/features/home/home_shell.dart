@@ -716,6 +716,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   bool _oauthLinking = false;
   List<Map<String, dynamic>> _accessLog = [];
   List<Map<String, dynamic>> _pushDevices = [];
+  List<Map<String, dynamic>> _draftBackups = [];
   int? _revokingDeviceId;
 
   static String _prefLabel(AppLocalizations l, String key) {
@@ -804,6 +805,11 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
       _pushDevices = await widget.api.listUserDevices();
     } catch (_) {
       _pushDevices = [];
+    }
+    try {
+      _draftBackups = await widget.api.listDraftBackups();
+    } catch (_) {
+      _draftBackups = [];
     }
     if (mounted) setState(() => _prefs = prefs);
   }
@@ -1665,6 +1671,26 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
                       child: Text(busy ? '…' : 'Отвязать'),
                     ),
                 ],
+              ),
+            );
+          }),
+        const SizedBox(height: 24),
+        Text('Облачные черновики', style: context.theme.typography.sm),
+        const SizedBox(height: 8),
+        if (_draftBackups.isEmpty)
+          Text('Нет сохранённых черновиков', style: TextStyle(color: AppColors.textSecondary))
+        else
+          ..._draftBackups.take(10).map((b) {
+            final uuid = b['model_uuid']?.toString() ?? '—';
+            final exp = b['expires_at']?.toString();
+            final cat = b['category']?.toString();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '${uuid.length > 8 ? '${uuid.substring(0, 8)}…' : uuid}'
+                '${cat != null && cat.isNotEmpty ? ' · $cat' : ''}'
+                '${exp != null && exp.length >= 10 ? ' · до ${exp.substring(0, 10)}' : ''}',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
               ),
             );
           }),

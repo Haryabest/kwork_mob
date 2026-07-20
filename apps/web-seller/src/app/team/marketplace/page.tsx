@@ -36,13 +36,18 @@ export default function TeamMarketplacePage() {
   const [clientId, setClientId] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [mpStatus, setMpStatus] = useState<{ credentials?: { wb?: boolean; ozon?: boolean } } | null>(null);
 
   const load = useCallback(async () => {
-    const { data } = await api.get<{ items: Cred[]; upload_enabled: boolean }>(
-      '/company/marketplace/credentials',
-    );
-    setItems(data.items ?? []);
-    setUploadEnabled(Boolean(data.upload_enabled));
+    const [creds, status] = await Promise.all([
+      api.get<{ items: Cred[]; upload_enabled: boolean }>('/company/marketplace/credentials'),
+      api.get<{ credentials?: { wb?: boolean; ozon?: boolean }; upload_enabled?: boolean }>(
+        '/company/marketplace/status',
+      ),
+    ]);
+    setItems(creds.data.items ?? []);
+    setUploadEnabled(Boolean(creds.data.upload_enabled));
+    setMpStatus(status.data);
   }, []);
 
   useEffect(() => {
@@ -83,6 +88,12 @@ export default function TeamMarketplacePage() {
           <Text fw={600}>Статус сервиса</Text>
           <Badge color={uploadEnabled ? 'teal' : 'gray'}>
             API upload: {uploadEnabled ? 'включён' : 'выключен (admin)'}
+          </Badge>
+          <Badge color={mpStatus?.credentials?.wb ? 'teal' : 'gray'}>
+            WB: {mpStatus?.credentials?.wb ? 'ключ есть' : 'нет ключа'}
+          </Badge>
+          <Badge color={mpStatus?.credentials?.ozon ? 'teal' : 'gray'}>
+            Ozon: {mpStatus?.credentials?.ozon ? 'ключ есть' : 'нет ключа'}
           </Badge>
         </Group>
         <Text size="sm" c="dimmed">

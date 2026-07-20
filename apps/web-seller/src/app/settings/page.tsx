@@ -145,6 +145,9 @@ export default function SettingsPage() {
   const [pushDevices, setPushDevices] = useState<
     Array<{ id: number; platform?: string; app_version?: string; token_prefix?: string; updated_at?: string }>
   >([]);
+  const [draftBackups, setDraftBackups] = useState<
+    Array<{ model_uuid: string; category?: string; captured_count?: number; uploaded_at?: string; expires_at?: string }>
+  >([]);
   const [busy, setBusy] = useState(false);
   const oauthLinkedProviders = me?.oauth_providers ?? [];
 
@@ -214,6 +217,12 @@ export default function SettingsPage() {
       setPushDevices(data.items ?? []);
     } catch {
       setPushDevices([]);
+    }
+    try {
+      const { data } = await api.get<{ items: typeof draftBackups; ttl_days?: number }>('/user/draft-backups');
+      setDraftBackups(data.items ?? []);
+    } catch {
+      setDraftBackups([]);
     }
   }, [loadSessions]);
 
@@ -709,6 +718,43 @@ export default function SettingsPage() {
                             Отвязать
                           </Button>
                         </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              )}
+
+              <Text fw={600} mt="md">
+                Облачные черновики
+              </Text>
+              <Text size="sm" c="#6d6c77">
+                Бэкапы съёмки TTL 7 дней §3.3.2
+              </Text>
+              {draftBackups.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  Нет сохранённых черновиков
+                </Text>
+              ) : (
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Модель</Table.Th>
+                      <Table.Th>Категория</Table.Th>
+                      <Table.Th>Ракурсы</Table.Th>
+                      <Table.Th>Истекает</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {draftBackups.map((b) => (
+                      <Table.Tr key={b.model_uuid}>
+                        <Table.Td>
+                          <Text size="sm" ff="monospace">
+                            {b.model_uuid.slice(0, 8)}…
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>{b.category ?? '—'}</Table.Td>
+                        <Table.Td>{b.captured_count ?? '—'}</Table.Td>
+                        <Table.Td>{b.expires_at ? b.expires_at.slice(0, 10) : '—'}</Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>
