@@ -40,18 +40,25 @@ def _screen_breakdown_ch(*, days: int, limit: int) -> list[dict] | None:
         return None
 
 
-async def _screen_breakdown_pg(db: AsyncSession, *, days: int, limit: int) -> list[dict]:
+async def _screen_breakdown_pg(
+    db: AsyncSession, *, days: int, limit: int, screen_category: str | None = None
+) -> list[dict]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     screen_col = MobileAnalyticsEvent.props["screen"].astext
+    filters = [
+        MobileAnalyticsEvent.event == "screen_view",
+        MobileAnalyticsEvent.event_ts >= since,
+        screen_col.isnot(None),
+        screen_col != "",
+    ]
+    if screen_category == "oauth":
+        filters.append(screen_col.like("oauth_%"))
+    elif screen_category == "app":
+        filters.append(~screen_col.like("oauth_%"))
     rows = (
         await db.execute(
             select(screen_col.label("screen"), func.count().label("views"))
-            .where(
-                MobileAnalyticsEvent.event == "screen_view",
-                MobileAnalyticsEvent.event_ts >= since,
-                screen_col.isnot(None),
-                screen_col != "",
-            )
+            .where(*filters)
             .group_by(screen_col)
             .order_by(func.count().desc())
             .limit(limit)
@@ -60,17 +67,28 @@ async def _screen_breakdown_pg(db: AsyncSession, *, days: int, limit: int) -> li
     return [{"screen": str(r.screen), "views": int(r.views)} for r in rows]
 
 
-async def screen_breakdown(db: AsyncSession, *, days: int = 7, limit: int = 50) -> dict:
+async def screen_breakdown(
+    db: AsyncSession, *, days: int = 7, limit: int = 50, screen_category: str | None = None
+) -> dict:
     items = _screen_breakdown_ch(days=days, limit=limit)
     source = "clickhouse"
     if items is None:
-        items = await _screen_breakdown_pg(db, days=days, limit=limit)
+        items = await _screen_breakdown_pg(db, days=days, limit=limit, screen_category=screen_category)
         source = "postgres"
+    elif screen_category == "oauth":
+        items = [i for i in items if str(i.get("screen", "")).startswith("oauth_")][:limit]
+    elif screen_category == "app":
+        items = [i for i in items if not str(i.get("screen", "")).startswith("oauth_")][:limit]
     total = sum(i["views"] for i in items)
+    oauth_login = sum(i["views"] for i in items if str(i.get("screen", "")).startswith("oauth_login_"))
+    oauth_link = sum(i["views"] for i in items if str(i.get("screen", "")).startswith("oauth_link_"))
     return {
         "days": days,
         "limit": limit,
+        "screen_category": screen_category,
         "total_views": total,
+        "oauth_login_views": oauth_login,
+        "oauth_link_views": oauth_link,
         "source": source,
         "items": items,
         "as_of": datetime.now(timezone.utc).isoformat(),
@@ -92,6 +110,7 @@ async def list_raw_events(
     user_id: int | None = None,
     event: str | None = None,
     screen: str | None = None,
+    screen_category: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     limit: int = 500,
@@ -104,6 +123,10 @@ async def list_raw_events(
         filters.append(MobileAnalyticsEvent.event == event)
     if screen is not None:
         filters.append(MobileAnalyticsEvent.props["screen"].as_string() == screen)
+    if screen_category == "oauth":
+        filters.append(MobileAnalyticsEvent.props["screen"].as_string().like("oauth_%"))
+    elif screen_category == "app":
+        filters.append(~MobileAnalyticsEvent.props["screen"].as_string().like("oauth_%"))
     if date_from is not None:
         filters.append(MobileAnalyticsEvent.event_ts >= date_from)
     if date_to is not None:
@@ -136,6 +159,7 @@ async def list_raw_events(
         "user_id": user_id,
         "event": event,
         "screen": screen,
+        "screen_category": screen_category,
         "date_from": date_from.isoformat() if date_from else None,
         "date_to": date_to.isoformat() if date_to else None,
         "limit": limit,

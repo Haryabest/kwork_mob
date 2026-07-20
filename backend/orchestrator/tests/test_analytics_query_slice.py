@@ -121,3 +121,46 @@ async def test_list_raw_events_screen_filter():
     data = await list_raw_events(FakeDb(), screen="queue", limit=10, offset=0)
     assert data["screen"] == "queue"
     assert data["items"][0]["props"]["screen"] == "queue"
+
+
+async def test_list_raw_events_screen_category_oauth():
+    from datetime import datetime, timezone
+
+    from app.services.analytics_query import list_raw_events
+
+    class FakeRow:
+        id = 3
+        user_id = 1
+        event = "screen_view"
+        event_ts = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        props = {"screen": "oauth_login_vk"}
+        ingested_at = None
+        ch_synced_at = None
+
+    class FakeDb:
+        async def scalar(self, *_a, **_k):
+            return 1
+
+        async def scalars(self, *_a, **_k):
+            return SimpleNamespace(all=lambda: [FakeRow()])
+
+    data = await list_raw_events(FakeDb(), screen_category="oauth", limit=10, offset=0)
+    assert data["screen_category"] == "oauth"
+    assert data["items"][0]["props"]["screen"] == "oauth_login_vk"
+
+
+async def test_screen_breakdown_oauth_totals(monkeypatch):
+    from app.services.analytics_query import screen_breakdown
+
+    async def fake_pg(_db, *, days, limit, screen_category=None):
+        return [
+            {"screen": "oauth_login_vk", "views": 5},
+            {"screen": "oauth_link_yandex", "views": 2},
+            {"screen": "home", "views": 10},
+        ]
+
+    monkeypatch.setattr("app.services.analytics_query._screen_breakdown_ch", lambda **_: None)
+    monkeypatch.setattr("app.services.analytics_query._screen_breakdown_pg", fake_pg)
+    data = await screen_breakdown(object(), days=7, limit=50)
+    assert data["oauth_login_views"] == 5
+    assert data["oauth_link_views"] == 2

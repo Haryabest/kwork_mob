@@ -125,3 +125,22 @@ async def test_unlink_oauth_blocks_last_login_method():
     with pytest.raises(HTTPException) as exc:
         await oa.unlink_oauth(FakeDb(), user, "vk")
     assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_record_screen_event_oauth():
+    from app.services.analytics_ingest import record_screen_event
+
+    added = []
+
+    class FakeDb:
+        async def flush(self):
+            pass
+
+        def add(self, row):
+            added.append(row)
+
+    await record_screen_event(FakeDb(), user_id=7, screen="oauth_login_vk")
+    assert len(added) == 1
+    assert added[0].props["screen"] == "oauth_login_vk"
+    assert added[0].props["source"] == "server"

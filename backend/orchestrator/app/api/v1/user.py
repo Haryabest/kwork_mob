@@ -61,9 +61,17 @@ def _user_payload(user: User) -> dict:
 
 
 @router.get("/me")
-async def get_me(user: User = Depends(get_current_db_user)):
+async def get_me(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Текущий пользователь (для seller и staff)."""
-    return _user_payload(user)
+    from app.services import oauth_auth as oauth_svc
+
+    payload = _user_payload(user)
+    identities = await oauth_svc.list_oauth_identities(db, user.id)
+    payload["oauth_providers"] = [row["provider"] for row in identities if row.get("provider")]
+    return payload
 
 
 @router.patch("/me")

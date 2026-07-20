@@ -58,6 +58,29 @@ def _write_clickhouse(*, user_id: int, rows: list[dict]) -> bool:
         return False
 
 
+async def record_screen_event(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    screen: str,
+    source: str = "server",
+) -> None:
+    from app.schemas.analytics import is_oauth_screen
+
+    if not is_oauth_screen(screen):
+        return
+    now = datetime.now(timezone.utc)
+    props = {"screen": screen, "source": source}
+    row = MobileAnalyticsEvent(
+        user_id=user_id,
+        event="screen_view",
+        event_ts=now,
+        props=props,
+    )
+    db.add(row)
+    await db.flush()
+
+
 async def persist_events(
     db: AsyncSession,
     user: User,

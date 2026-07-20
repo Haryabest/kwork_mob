@@ -35,6 +35,7 @@ async def _store_state(
     mode: str,
     consents: list[str] | None,
     user_id: int | None = None,
+    platform: str = "web",
 ) -> None:
     redis = await get_redis()
     payload = {
@@ -43,6 +44,7 @@ async def _store_state(
         "mode": mode,
         "consents": consents or [],
         "user_id": user_id,
+        "platform": platform,
     }
     await redis.set(
         f"{OAUTH_STATE_PREFIX}{state}",
@@ -85,7 +87,14 @@ async def start_oauth(
             raise HTTPException(422, "Для регистрации нужны все обязательные согласия")
     uri = redirect_uri or default_redirect_uri(platform)
     state = secrets.token_urlsafe(24)
-    await _store_state(state, provider=provider, redirect_uri=uri, mode=mode, consents=consents)
+    await _store_state(
+        state,
+        provider=provider,
+        redirect_uri=uri,
+        mode=mode,
+        consents=consents,
+        platform=platform,
+    )
     return {"authorize_url": op.build_authorize_url(cfg, redirect_uri=uri, state=state), "state": state}
 
 
@@ -203,6 +212,11 @@ async def complete_oauth(
         ip=ip,
         user_agent=user_agent,
     )
+    platform = str(stored.get("platform") or "web")
+    if platform == "web":
+        from app.services.analytics_ingest import record_screen_event
+
+        await record_screen_event(db, user_id=user.id, screen=f"oauth_login_{provider}")
     access, refresh = await auth_service.issue_tokens_for_user(db, user, remember_me=True)
     return user, access, refresh
 
@@ -246,6 +260,7 @@ async def start_oauth_link(
         mode="link",
         consents=None,
         user_id=user_id,
+        platform=platform,
     )
     return {"authorize_url": op.build_authorize_url(cfg, redirect_uri=uri, state=state), "state": state}
 
@@ -320,6 +335,11 @@ async def complete_oauth_link(
             profile=profile_raw,
         )
     )
+    platform = str(stored.get("platform") or "web")
+    if platform == "web":
+        from app.services.analytics_ingest import record_screen_event
+
+        await record_screen_event(db, user_id=user.id, screen=f"oauth_link_{provider}")
     await db.commit()
     return {"linked": True, "provider": provider}
 

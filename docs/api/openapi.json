@@ -4562,6 +4562,23 @@
           },
           {
             "in": "query",
+            "name": "screen_category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(oauth|app)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Screen Category"
+            }
+          },
+          {
+            "in": "query",
             "name": "date_from",
             "required": false,
             "schema": {
@@ -4692,6 +4709,23 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "screen_category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(oauth|app)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Screen Category"
             }
           },
           {

@@ -20,6 +20,8 @@ type ScreenRow = { screen: string; views: number };
 type ScreensData = {
   days: number;
   total_views: number;
+  oauth_login_views?: number;
+  oauth_link_views?: number;
   source: string;
   items: ScreenRow[];
 };
@@ -55,6 +57,7 @@ export default function AnalyticsPage() {
   const [dateTo, setDateTo] = useState('');
   const [eventFilter, setEventFilter] = useState<string | null>(null);
   const [screenFilter, setScreenFilter] = useState<string | null>(null);
+  const [screenCategory, setScreenCategory] = useState<string | null>(null);
   const [events, setEvents] = useState<RawEvent[]>([]);
   const [eventsTotal, setEventsTotal] = useState(0);
   const [eventsOffset, setEventsOffset] = useState(0);
@@ -65,15 +68,17 @@ export default function AnalyticsPage() {
     const d = Number(days) || 7;
     const tsParams: Record<string, string | number> = { days: d, top: 8 };
     if (chartScreen) tsParams.screen = chartScreen;
+    const scParams: Record<string, string | number> = { days: d };
+    if (screenCategory) scParams.screen_category = screenCategory;
     const [sc, st, ts] = await Promise.all([
-      api.get<ScreensData>('/admin/analytics/screens', { params: { days: d } }),
+      api.get<ScreensData>('/admin/analytics/screens', { params: scParams }),
       api.get<SyncStatus>('/admin/analytics/status'),
       api.get<TimeseriesData>('/admin/analytics/screens/timeseries', { params: tsParams }),
     ]);
     setScreens(sc.data);
     setSync(st.data);
     setTimeseries(ts.data);
-  }, [days, chartScreen]);
+  }, [days, chartScreen, screenCategory]);
 
   const chartScreens = useMemo(() => {
     if (chartScreen) return [chartScreen];
@@ -116,6 +121,7 @@ export default function AnalyticsPage() {
     if (userId !== '') params.user_id = Number(userId);
     if (eventFilter) params.event = eventFilter;
     if (screenFilter) params.screen = screenFilter;
+    if (screenCategory) params.screen_category = screenCategory;
     if (dateFrom) params.date_from = `${dateFrom}T00:00:00Z`;
     if (dateTo) params.date_to = `${dateTo}T23:59:59Z`;
     return params;
@@ -207,6 +213,8 @@ export default function AnalyticsPage() {
             hint: sync?.alert ? `>${sync?.alert_threshold}` : 'OK',
           },
           { label: 'Views', value: String(screens?.total_views ?? 0), hint: `${screens?.days ?? days}д` },
+          { label: 'oauth_login', value: String(screens?.oauth_login_views ?? 0) },
+          { label: 'oauth_link', value: String(screens?.oauth_link_views ?? 0) },
           { label: 'Source', value: screens?.source ?? '—' },
           { label: 'Screens', value: String(screens?.items?.length ?? 0) },
         ]}
@@ -231,6 +239,18 @@ export default function AnalyticsPage() {
           value={chartScreen}
           onChange={setChartScreen}
           w={180}
+        />
+        <Select
+          label="Screen категория"
+          placeholder="все"
+          clearable
+          data={[
+            { value: 'oauth', label: 'OAuth (oauth_*)' },
+            { value: 'app', label: 'App (без oauth_)' },
+          ]}
+          value={screenCategory}
+          onChange={setScreenCategory}
+          w={200}
         />
         <Button variant="light" leftSection={<IconDownload size={16} />} onClick={() => void exportScreensCsv()}>
           Screens CSV

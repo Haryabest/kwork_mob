@@ -1042,6 +1042,7 @@ async def metrics_dashboard(_: dict = Depends(require_admin)):
 async def analytics_screen_breakdown(
     days: int = Query(default=7, ge=1, le=90),
     limit: int = Query(default=50, ge=1, le=200),
+    screen_category: str | None = Query(default=None, pattern=r"^(oauth|app)$"),
     export: str | None = Query(default=None, alias="format"),
     _: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -1051,7 +1052,7 @@ async def analytics_screen_breakdown(
 
     from app.services import analytics_query as aq
 
-    data = await aq.screen_breakdown(db, days=days, limit=limit)
+    data = await aq.screen_breakdown(db, days=days, limit=limit, screen_category=screen_category)
     if export == "csv":
         return Response(
             content=aq.screens_to_csv(data),
@@ -1066,6 +1067,7 @@ async def analytics_raw_events(
     user_id: int | None = Query(default=None),
     event: str | None = Query(default=None, max_length=64),
     screen: str | None = Query(default=None, max_length=64),
+    screen_category: str | None = Query(default=None, pattern=r"^(oauth|app)$"),
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
     limit: int = Query(default=500, ge=1, le=2000),
@@ -1084,6 +1086,7 @@ async def analytics_raw_events(
         user_id=user_id,
         event=event,
         screen=screen,
+        screen_category=screen_category,
         date_from=date_from,
         date_to=date_to,
         limit=limit,
