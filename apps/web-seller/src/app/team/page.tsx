@@ -83,6 +83,7 @@ export default function TeamPage() {
   const [shootCategory, setShootCategory] = useState<string | null>('other');
   const [shootTier, setShootTier] = useState<string | null>('small');
   const [accessRows, setAccessRows] = useState<AccessRow[]>([]);
+  const [webhookDlq, setWebhookDlq] = useState(0);
   const [memberSearchQ, setMemberSearchQ] = useState('');
   const [memberSearch, setMemberSearch] = useState('');
   const [memberRoleFilter, setMemberRoleFilter] = useState<string | null>(null);
@@ -128,7 +129,7 @@ export default function TeamPage() {
 
   const load = useCallback(async () => {
     try {
-      const [m, i, f, a, ss] = await Promise.all([
+      const [m, i, f, a, ss, wh] = await Promise.all([
         api.get<{ items: Member[]; total?: number }>('/company/members', { params: memberParams(0) }),
         api.get<{ items: Invite[] }>('/company/invitations'),
         api.get<{ items: TeamFunnelRow[] }>('/company/publication-funnel', { params: funnelParams() }),
@@ -142,6 +143,9 @@ export default function TeamPage() {
             conversion_rate: number;
           }>('/company/shoot_links/stats')
           .catch(() => ({ data: null })),
+        api
+          .get<{ dlq?: number }>('/company/webhooks/deliveries/dashboard')
+          .catch(() => ({ data: { dlq: 0 } })),
       ]);
       setMembers(m.data.items ?? []);
       setMembersTotal(m.data.total ?? m.data.items?.length ?? 0);
@@ -149,6 +153,7 @@ export default function TeamPage() {
       setFunnelRows(f.data.items ?? []);
       setAccessRows(a.data.items ?? []);
       if (ss.data) setShootStats(ss.data);
+      setWebhookDlq(wh.data?.dlq ?? 0);
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
     }
@@ -241,7 +246,7 @@ export default function TeamPage() {
       <SubNav
         items={[
           { href: '/team/roles', label: 'Роли' },
-          { href: '/team/webhooks', label: 'Webhooks' },
+          { href: '/team/webhooks', label: webhookDlq > 0 ? `Webhooks (${webhookDlq} DLQ)` : 'Webhooks' },
           { href: '/team/policies', label: 'Политики' },
           { href: '/team/audit', label: 'Аудит' },
           { href: '/team/sessions', label: 'Сессии' },

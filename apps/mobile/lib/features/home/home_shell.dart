@@ -724,6 +724,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   int? _revokingDeviceId;
   String? _deletingDraftUuid;
   bool _exportingAudit = false;
+  bool _exportingAccessLog = false;
 
   static String _prefLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -838,6 +839,30 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
       }
     } finally {
       if (mounted) setState(() => _revokingDeviceId = null);
+    }
+  }
+
+  Future<void> _exportUserAccessLog() async {
+    setState(() => _exportingAccessLog = true);
+    try {
+      final bytes = await widget.api.exportUserAccessLogCsv();
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/user_access_log.csv');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)], text: 'user_access_log.csv');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Экспорт access-log готов')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportingAccessLog = false);
     }
   }
 
@@ -1575,6 +1600,11 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
               ),
             );
           }),
+          FButton(
+            variant: .outline,
+            onPress: _exportingAccessLog ? null : _exportUserAccessLog,
+            child: Text(_exportingAccessLog ? '…' : 'Экспорт access-log CSV'),
+          ),
           const SizedBox(height: 16),
         ],
         FButton(

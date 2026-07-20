@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
@@ -6,6 +8,8 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/core/theme.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class TeamScreen extends StatefulWidget {
   const TeamScreen({super.key, required this.api, required this.session});
@@ -37,6 +41,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   static const _memberPageSize = 20;
   bool _loading = true;
   bool _busy = false;
+  bool _exportingAccessLog = false;
 
   final _memberSearchCtrl = TextEditingController();
   String _memberSearch = '';
@@ -99,6 +104,30 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
     } catch (_) {}
     if (mounted) {
       setState(() => _loadingMoreMembers = false);
+    }
+  }
+
+  Future<void> _exportCompanyAccessLog() async {
+    setState(() => _exportingAccessLog = true);
+    try {
+      final bytes = await widget.api.exportCompanyAccessLogCsv();
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/company_access_log.csv');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)], text: 'company_access_log.csv');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Экспорт access-log готов')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportingAccessLog = false);
     }
   }
 
@@ -562,6 +591,12 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                 Text(
                                   'Скачивания моделей §10.7.2',
                                   style: context.theme.typography.sm,
+                                ),
+                                const SizedBox(height: 8),
+                                FButton(
+                                  variant: .outline,
+                                  onPress: _exportingAccessLog ? null : _exportCompanyAccessLog,
+                                  child: Text(_exportingAccessLog ? '…' : 'Экспорт access-log CSV'),
                                 ),
                                 const SizedBox(height: 8),
                                 if (_accessLog.isEmpty)

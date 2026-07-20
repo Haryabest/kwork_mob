@@ -435,6 +435,22 @@ class ApiClient {
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  Future<List<int>> exportUserAccessLogCsv() async {
+    final res = await _dio.get<List<int>>(
+      '/user/access-log/export',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data ?? [];
+  }
+
+  Future<List<int>> exportCompanyAccessLogCsv() async {
+    final res = await _dio.get<List<int>>(
+      '/company/access-log/export',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data ?? [];
+  }
+
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
     final res = await _dio.patch('/user/me', data: data);
     return Map<String, dynamic>.from(res.data as Map);
