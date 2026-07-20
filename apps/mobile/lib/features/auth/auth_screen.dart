@@ -6,7 +6,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
-import 'package:kwork_mobile/services/oauth_callbacks.dart';
+import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:kwork_mobile/services/push_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -135,9 +135,17 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _onOAuthPending(String provider, String code, String state, OAuthFlow flow) async {
-    if (flow == OAuthFlow.link && OAuthCallbacks.linkCompleter != null) {
-      await OAuthCallbacks.linkCompleter!(provider, code, state);
+    if (flow == OAuthFlow.link) {
+      if (await widget.api.hasToken) {
+        try {
+          await widget.api.oauthLinkComplete(provider: provider, code: code, state: state);
+          AnalyticsService.instance.track('screen_view', {'screen': 'oauth_link_$provider'});
+        } catch (e) {
+          if (mounted) setState(() => _error = formatApiError(e));
+        }
+      }
       OAuthPending.instance.clear();
+      if (mounted) context.go('/home?tab=profile');
       return;
     }
     await _onOAuthCallback(provider, code, state);
@@ -150,6 +158,7 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       final data = await widget.api.oauthCallback(provider: provider, code: code, state: state);
+      AnalyticsService.instance.track('screen_view', {'screen': 'oauth_login_$provider'});
       OAuthPending.instance.clear();
       if (data['status'] == 'pending_type') {
         if (!mounted) return;

@@ -10,6 +10,15 @@ ALLOWED_EVENTS = frozenset(
     {"screen_view", "shoot_complete", "checkout_pay", "shoot_step", "shoot_step_retry"}
 )
 
+_OAUTH_PROVIDERS = frozenset({"vk", "yandex", "sber"})
+
+
+def is_oauth_screen(screen: str) -> bool:
+    for prefix in ("oauth_login_", "oauth_link_"):
+        if screen.startswith(prefix):
+            return screen[len(prefix) :] in _OAUTH_PROVIDERS
+    return False
+
 # screen_view.props.screen — каталог §19.20 (mobile track + admin breakdown)
 ALLOWED_SCREENS = frozenset(
     {
@@ -91,7 +100,7 @@ class AnalyticsEventItem(BaseModel):
                 raise ValueError("screen_view requires props.screen")
             if len(screen) > 64:
                 raise ValueError("props.screen too long")
-            if screen not in ALLOWED_SCREENS:
+            if screen not in ALLOWED_SCREENS and not is_oauth_screen(screen):
                 raise ValueError(f"unknown screen: {screen}")
             bid = props.get("banner_id")
             if bid is not None and not isinstance(bid, int):

@@ -25,6 +25,7 @@ import {
   fetchOAuthProviders,
   oauthErrorMessage,
   startOAuthLink,
+  unlinkOAuth,
   type OAuthIdentity,
   type OAuthProvider,
 } from '../../lib/oauth';
@@ -134,6 +135,19 @@ export default function SettingsPage() {
   useEffect(() => {
     load().catch((e) => notifications.show({ color: 'red', message: apiMessage(e) }));
   }, [load]);
+
+  async function unlinkOAuthProvider(provider: string) {
+    setBusy(true);
+    try {
+      await unlinkOAuth(provider);
+      setOauthLinked(await fetchOAuthIdentities());
+      notifications.show({ color: 'teal', message: 'Соцсеть отвязана' });
+    } catch (error) {
+      notifications.show({ color: 'red', message: oauthErrorMessage(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function linkOAuth(provider: string) {
     setBusy(true);
@@ -377,7 +391,18 @@ export default function SettingsPage() {
                       <Group key={p.provider} justify="space-between">
                         <Text size="sm">{p.label}</Text>
                         {linked ? (
-                          <Badge color="teal">Привязан</Badge>
+                          <Group gap="xs">
+                            <Badge color="teal">Привязан</Badge>
+                            <Button
+                              size="xs"
+                              variant="subtle"
+                              color="red"
+                              loading={busy}
+                              onClick={() => void unlinkOAuthProvider(p.provider)}
+                            >
+                              Отвязать
+                            </Button>
+                          </Group>
                         ) : (
                           <Button size="xs" variant="light" loading={busy} onClick={() => void linkOAuth(p.provider)}>
                             Привязать

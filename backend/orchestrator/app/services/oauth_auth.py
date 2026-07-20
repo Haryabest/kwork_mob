@@ -322,3 +322,32 @@ async def complete_oauth_link(
     )
     await db.commit()
     return {"linked": True, "provider": provider}
+
+
+async def unlink_oauth(db: AsyncSession, user: User, provider: str) -> dict:
+    if provider not in op.OAUTH_PROVIDERS:
+        raise HTTPException(400, "Неизвестный провайдер")
+    identity = await db.scalar(
+        select(UserOAuthIdentity).where(
+            UserOAuthIdentity.user_id == user.id,
+            UserOAuthIdentity.provider == provider,
+        )
+    )
+    if not identity:
+        raise HTTPException(404, "Привязка не найдена")
+
+    other = await db.scalar(
+        select(UserOAuthIdentity.id).where(
+            UserOAuthIdentity.user_id == user.id,
+            UserOAuthIdentity.provider != provider,
+        )
+    )
+    if not user.password_hash and not other:
+        raise HTTPException(
+            400,
+            "Нельзя отвязать единственный способ входа. Сначала задайте пароль.",
+        )
+
+    await db.delete(identity)
+    await db.commit()
+    return {"unlinked": True, "provider": provider}

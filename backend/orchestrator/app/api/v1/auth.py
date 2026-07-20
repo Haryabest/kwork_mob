@@ -38,6 +38,7 @@ from app.schemas.oauth import (
     OAuthProvidersResponse,
     OAuthStartResponse,
     OAuthTokenResponse,
+    OAuthUnlinkResponse,
 )
 from app.services import oauth_auth as oauth_svc
 from app.services import oauth_providers as oauth_providers_svc
@@ -144,6 +145,17 @@ async def oauth_link_complete(
         redirect_uri=body.redirect_uri,
     )
     return OAuthLinkResponse(**data)
+
+
+@router.delete("/oauth/{provider}/link", response_model=OAuthUnlinkResponse)
+async def oauth_link_remove(
+    provider: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отвязка соцсети от текущего аккаунта."""
+    data = await oauth_svc.unlink_oauth(db, user, provider)
+    return OAuthUnlinkResponse(**data)
 
 
 class TwoFACodeBody(BaseModel):

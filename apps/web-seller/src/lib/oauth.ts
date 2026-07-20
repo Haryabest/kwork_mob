@@ -56,6 +56,10 @@ export async function completeOAuthLinkCallback(code: string, state: string): Pr
   sessionStorage.removeItem('oauth_flow');
 }
 
+export async function unlinkOAuth(provider: string): Promise<void> {
+  await api.delete(`/auth/oauth/${provider}/link`);
+}
+
 export async function startOAuth(
   provider: string,
   mode: 'login' | 'register',

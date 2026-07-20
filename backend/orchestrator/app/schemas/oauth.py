@@ -36,5 +36,10 @@ class OAuthLinkResponse(BaseModel):
     provider: str
 
 
+class OAuthUnlinkResponse(BaseModel):
+    unlinked: bool
+    provider: str
+
+
 class OAuthIdentitiesResponse(BaseModel):
     items: list[dict[str, str | None]]

@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kwork_mobile/core/deep_link_routes.dart';
 
+import 'package:kwork_mobile/services/oauth_pending.dart';
+
 void main() {
   test('https shoot link', () {
     expect(
@@ -16,11 +18,22 @@ void main() {
     );
   });
 
-  test('kworkmob oauth callback', () {
+  test('kworkmob oauth callback login', () {
+    OAuthPending.instance.start('vk', flow: OAuthFlow.login);
     expect(
       routeFromDeepLinkUri(Uri.parse('kworkmob://open/oauth/callback?code=x&state=y')),
       '/auth',
     );
+    OAuthPending.instance.clear();
+  });
+
+  test('kworkmob oauth callback link', () {
+    OAuthPending.instance.start('vk', flow: OAuthFlow.link);
+    expect(
+      routeFromDeepLinkUri(Uri.parse('kworkmob://open/oauth/callback?code=x&state=y')),
+      '/home?tab=profile',
+    );
+    OAuthPending.instance.clear();
   });
 
   test('kworkmob scheme queue', () {

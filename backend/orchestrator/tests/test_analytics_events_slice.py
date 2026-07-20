@@ -194,3 +194,30 @@ def test_screen_view_notifications_mark_all_read():
         props={"screen": "notifications_mark_all_read"},
     )
     assert item.props["screen"] == "notifications_mark_all_read"
+
+
+def test_screen_view_oauth_login_vk():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "oauth_login_vk"},
+    )
+    assert item.props["screen"] == "oauth_login_vk"
+
+
+def test_screen_view_oauth_link_yandex():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "oauth_link_yandex"},
+    )
+    assert item.props["screen"] == "oauth_link_yandex"
+
+
+def test_screen_view_oauth_unknown_provider():
+    with pytest.raises(ValidationError):
+        AnalyticsEventItem(
+            event="screen_view",
+            ts="2026-07-17T10:00:00Z",
+            props={"screen": "oauth_login_google"},
+        )

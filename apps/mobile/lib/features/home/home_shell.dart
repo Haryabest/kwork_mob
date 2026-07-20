@@ -16,7 +16,6 @@ import 'package:kwork_mobile/services/push_service.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/analytics_service.dart';
-import 'package:kwork_mobile/services/oauth_callbacks.dart';
 import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
 import 'package:kwork_mobile/services/upload_progress_service.dart';
@@ -94,6 +93,10 @@ class _HomeShellState extends State<HomeShell> {
           SnackBar(content: Text(title), duration: const Duration(seconds: 3)),
         );
       }
+      return;
+    }
+    if (uri.path == '/home' && uri.queryParameters['tab'] == 'profile') {
+      setState(() => _index = 4);
       return;
     }
     if (mounted) context.go(route);
@@ -689,7 +692,7 @@ class _ProfileTab extends StatefulWidget {
   State<_ProfileTab> createState() => _ProfileTabState();
 }
 
-class _ProfileTabState extends State<_ProfileTab> {
+class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   Map<String, bool> _prefs = {};
   bool _totpEnabled = false;
   bool _ownerRequired = false;
@@ -755,12 +758,16 @@ class _ProfileTabState extends State<_ProfileTab> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    OAuthPending.instance.bind(_onOAuthPending);
     AnalyticsService.instance.track('screen_view', {'screen': 'settings'});
     _boot();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    OAuthPending.instance.unbind();
     _code.dispose();
     _oldPass.dispose();
     _newPass.dispose();
@@ -797,10 +804,40 @@ class _ProfileTabState extends State<_ProfileTab> {
     }
   }
 
-  Future<void> _linkOAuth(String provider) async {
+  void _onOAuthPending(String provider, String code, String state, OAuthFlow flow) {
+    if (flow == OAuthFlow.link) {
+      _completeOAuthLink(provider, code, state);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _resumePendingOAuthLink();
+    }
+  }
+
+  Future<void> _resumePendingOAuthLink() async {
+    final pending = OAuthPending.instance;
+    if (pending.pendingFlow != OAuthFlow.link) return;
+    final code = pending.pendingCode;
+    final st = pending.pendingState;
+    final provider = pending.pendingProvider;
+    if (code != null && st != null && provider != null) {
+      await _completeOAuthLink(provider, code, st);
+      return;
+    }
+    if (_oauthLinking) {
+      await _loadOAuth();
+      if (mounted) setState(() => _oauthLinking = false);
+    }
+  }
+
+  Future<void> _completeOAuthLink(String provider, String code, String state) async {
     setState(() => _oauthLinking = true);
-    OAuthCallbacks.linkCompleter = (p, code, state) async {
-      await widget.api.oauthLinkComplete(provider: p, code: code, state: state);
+    try {
+      await widget.api.oauthLinkComplete(provider: provider, code: code, state: state);
+      AnalyticsService.instance.track('screen_view', {'screen': 'oauth_link_$provider'});
       await _loadOAuth();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -808,7 +845,42 @@ class _ProfileTabState extends State<_ProfileTab> {
         );
         setState(() {});
       }
-    };
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    } finally {
+      OAuthPending.instance.clear();
+      if (mounted) setState(() => _oauthLinking = false);
+    }
+  }
+
+  Future<void> _unlinkOAuth(String provider) async {
+    setState(() => _oauthLinking = true);
+    try {
+      await widget.api.oauthUnlink(provider);
+      await _loadOAuth();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Соцсеть отвязана')),
+        );
+        setState(() {});
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _oauthLinking = false);
+    }
+  }
+
+  Future<void> _linkOAuth(String provider) async {
+    setState(() => _oauthLinking = true);
     try {
       OAuthPending.instance.start(provider, flow: OAuthFlow.link);
       final url = await widget.api.oauthLinkAuthorizeUrl(provider);
@@ -817,16 +889,13 @@ class _ProfileTabState extends State<_ProfileTab> {
         throw StateError('Не удалось открыть браузер');
       }
     } catch (e) {
-      OAuthCallbacks.linkCompleter = null;
       OAuthPending.instance.clear();
       if (mounted) {
+        setState(() => _oauthLinking = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(formatApiError(e))),
         );
       }
-    } finally {
-      OAuthCallbacks.linkCompleter = null;
-      if (mounted) setState(() => _oauthLinking = false);
     }
   }
 
@@ -1333,10 +1402,20 @@ class _ProfileTabState extends State<_ProfileTab> {
               padding: const EdgeInsets.only(bottom: 8),
               child: FTile(
                 title: Text(p['label'] ?? key),
-                suffix: linked
-                    ? const Icon(FIcons.check, color: AppColors.success)
-                    : null,
-                onPress: linked || _oauthLinking ? null : () => _linkOAuth(key),
+                subtitle: linked ? const Text('Привязано', style: TextStyle(color: AppColors.success)) : null,
+                suffix: _oauthLinking
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : linked
+                        ? FButton(
+                            variant: .outline,
+                            onPress: () => _unlinkOAuth(key),
+                            child: const Text('Отвязать'),
+                          )
+                        : FButton(
+                            variant: .outline,
+                            onPress: () => _linkOAuth(key),
+                            child: const Text('Привязать'),
+                          ),
               ),
             );
           }),

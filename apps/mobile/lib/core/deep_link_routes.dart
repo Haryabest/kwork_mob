@@ -9,9 +9,11 @@ String? routeFromDeepLinkUri(Uri? uri) {
     if (segs.first == 'oauth' && segs.length >= 2 && segs[1] == 'callback') {
       final code = uri.queryParameters['code'];
       final state = uri.queryParameters['state'];
+      final isLink = OAuthPending.instance.pendingFlow == OAuthFlow.link;
       if (code != null && state != null) {
         OAuthPending.instance.deliver(code, state);
       }
+      if (isLink) return '/home?tab=profile';
       return '/auth';
     }
     if (segs.first == 'queue' && segs.length >= 2) {

@@ -1803,6 +1803,24 @@
         "title": "OAuthTokenResponse",
         "type": "object"
       },
+      "OAuthUnlinkResponse": {
+        "properties": {
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "unlinked": {
+            "title": "Unlinked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "unlinked",
+          "provider"
+        ],
+        "title": "OAuthUnlinkResponse",
+        "type": "object"
+      },
       "OrderCreateRequest": {
         "properties": {
           "birth_date": {
@@ -10911,6 +10929,52 @@
       }
     },
     "/api/v1/auth/oauth/{provider}/link": {
+      "delete": {
+        "description": "Отвязка соцсети от текущего аккаунта.",
+        "operationId": "oauth_link_remove_api_v1_auth_oauth__provider__link_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthUnlinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Oauth Link Remove",
+        "tags": [
+          "Аутентификация"
+        ]
+      },
       "get": {
         "description": "Старт привязки соцсети к текущему аккаунту.",
         "operationId": "oauth_link_start_api_v1_auth_oauth__provider__link_get",

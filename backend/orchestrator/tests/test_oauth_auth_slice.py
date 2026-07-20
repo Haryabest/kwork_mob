@@ -97,3 +97,31 @@ async def test_start_oauth_link(monkeypatch):
     data = await oa.start_oauth_link(42, "vk", redirect_uri="http://cb", platform="web")
     assert "authorize_url" in data
     assert "vk" in data["authorize_url"]
+
+
+@pytest.mark.asyncio
+async def test_unlink_oauth_blocks_last_login_method():
+    from app.models import User, UserOAuthIdentity
+
+    user = User(id=1, email="u@test.ru", password_hash=None)
+    identity = UserOAuthIdentity(
+        id=1, user_id=1, provider="vk", provider_user_id="123", email="u@test.ru"
+    )
+
+    class FakeDb:
+        def __init__(self):
+            self._call = 0
+
+        async def scalar(self, _stmt):
+            self._call += 1
+            return identity if self._call == 1 else None
+
+        async def delete(self, _obj):
+            pass
+
+        async def commit(self):
+            pass
+
+    with pytest.raises(HTTPException) as exc:
+        await oa.unlink_oauth(FakeDb(), user, "vk")
+    assert exc.value.status_code == 400

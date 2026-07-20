@@ -341,6 +341,10 @@ class ApiClient {
     });
   }
 
+  Future<void> oauthUnlink(String provider) async {
+    await _dio.delete('/auth/oauth/$provider/link');
+  }
+
   Future<Map<String, dynamic>> verifyLogin2fa({
     required String challengeToken,
     required String code,

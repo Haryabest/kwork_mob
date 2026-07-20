@@ -126,6 +126,7 @@ GoRouter createRouter({
           final ticketId = int.tryParse(q['supportTicket'] ?? '');
           final tab = q['tab'];
           int? initialTab;
+          if (tab == 'profile') initialTab = 4;
           if (tab == 'support' || ticketId != null) initialTab = 3;
           return HomeShell(
             api: api,
