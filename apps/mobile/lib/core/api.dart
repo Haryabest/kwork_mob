@@ -508,6 +508,11 @@ class ApiClient {
     await _dio.delete('/company/invitations/$invitationId');
   }
 
+  Future<Map<String, dynamic>> companyMarketplaceStatus() async {
+    final res = await _dio.get('/company/marketplace/status');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> changeMemberRole({
     required int userId,
     required String role,

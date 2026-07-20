@@ -518,6 +518,24 @@ export default function TeamPage() {
                             </Tooltip>
                           )}
                         </CopyButton>
+                        {inv.status === 'pending' && (
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="red"
+                            onClick={async () => {
+                              try {
+                                await api.delete(`/company/invitations/${inv.id}`);
+                                notifications.show({ color: 'teal', message: 'Приглашение отменено' });
+                                await load();
+                              } catch (e) {
+                                notifications.show({ color: 'red', message: apiMessage(e) });
+                              }
+                            }}
+                          >
+                            Отменить
+                          </Button>
+                        )}
                       </Group>
                     </Table.Td>
                   </Table.Tr>

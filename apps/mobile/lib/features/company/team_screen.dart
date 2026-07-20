@@ -27,6 +27,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   int? _sessionMemberId;
   List<Map<String, dynamic>> _memberSessions = [];
   List<Map<String, dynamic>> _invitations = [];
+  Map<String, dynamic>? _marketplaceStatus;
   int? _companyId;
   int _membersTotal = 0;
   bool _loadingMoreMembers = false;
@@ -104,6 +105,15 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
       await _loadMembers();
       _audit = await widget.api.listAuditLog();
       _invitations = await widget.api.listInvitations();
+      if (widget.session.isOwner) {
+        try {
+          _marketplaceStatus = await widget.api.companyMarketplaceStatus();
+        } catch (_) {
+          _marketplaceStatus = null;
+        }
+      } else {
+        _marketplaceStatus = null;
+      }
       if (widget.session.isOwner) {
         _accessLog = await widget.api.listCompanyAccessLog();
         try {
