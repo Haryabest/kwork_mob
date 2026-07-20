@@ -26,9 +26,8 @@ def test_access_log_to_csv():
     assert "abc-123" in lines[1]
 
 
-def test_list_user_access_logs():
-    import asyncio
-
+@pytest.mark.asyncio
+async def test_list_user_access_logs():
     from app.models import AccessLog
 
     row = AccessLog(id=1, user_id=3, model_uuid="uuid-1", action="download", file_format="glb")
@@ -44,6 +43,6 @@ def test_list_user_access_logs():
 
             return R()
 
-    data = asyncio.run(al.list_access_logs(FakeDb(), user_id=3, limit=10))
+    data = await al.list_access_logs(FakeDb(), user_id=3, limit=10)
     assert data["total"] == 1
     assert data["items"][0]["action"] == "download"

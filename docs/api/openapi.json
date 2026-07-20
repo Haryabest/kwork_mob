@@ -17524,6 +17524,31 @@
         ]
       }
     },
+    "/api/v1/user/access-log/export": {
+      "get": {
+        "description": "CSV export личных скачиваний §2.5.5.",
+        "operationId": "user_access_log_export_api_v1_user_access_log_export_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "User Access Log Export",
+        "tags": [
+          "Пользователь"
+        ]
+      }
+    },
     "/api/v1/user/account-type": {
       "post": {
         "operationId": "account_type_api_v1_user_account_type_post",

@@ -542,9 +542,32 @@ export default function SettingsPage() {
                 Скачать историю oauth_login / oauth_link / oauth_unlink.
               </Text>
 
-              <Text fw={600} mt="md">
-                Скачивания моделей
-              </Text>
+              <Group justify="space-between" mt="md">
+                <Text fw={600}>Скачивания моделей</Text>
+                <Button
+                  size="xs"
+                  variant="light"
+                  loading={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const { data } = await api.get('/user/access-log/export', { responseType: 'blob' });
+                      const url = URL.createObjectURL(data);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'user-access-log.csv';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (error) {
+                      notifications.show({ color: 'red', message: apiMessage(error) });
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Export CSV
+                </Button>
+              </Group>
               {accessLogRows.length === 0 ? (
                 <Text size="sm" c="dimmed">
                   Пока нет скачиваний

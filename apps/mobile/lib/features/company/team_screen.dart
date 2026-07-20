@@ -22,6 +22,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   List<Map<String, dynamic>> _members = [];
   List<Map<String, dynamic>> _audit = [];
   List<Map<String, dynamic>> _accessLog = [];
+  Map<String, dynamic>? _funnelTotals;
   int? _companyId;
   int _membersTotal = 0;
   bool _loadingMoreMembers = false;
@@ -100,8 +101,15 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
       _audit = await widget.api.listAuditLog();
       if (widget.session.isOwner) {
         _accessLog = await widget.api.listCompanyAccessLog();
+        try {
+          final funnel = await widget.api.companyPublicationFunnel();
+          _funnelTotals = Map<String, dynamic>.from(funnel['totals'] as Map? ?? {});
+        } catch (_) {
+          _funnelTotals = null;
+        }
       } else {
         _accessLog = [];
+        _funnelTotals = null;
       }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
@@ -267,6 +275,17 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                   onPress: _busy ? null : _massExtendStorage,
                                   prefix: const Icon(FIcons.clock),
                                   child: Text(l10n.teamExtendAllBtn),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+                              if (widget.session.isOwner && _funnelTotals != null) ...[
+                                Text('Воронка публикации §7.9', style: context.theme.typography.sm),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Сгенерировано: ${_funnelTotals!['generated'] ?? 0} · '
+                                  'Скачано: ${_funnelTotals!['downloaded'] ?? 0} · '
+                                  'Верифицировано: ${_funnelTotals!['verified'] ?? 0}',
+                                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                                 ),
                                 const SizedBox(height: 16),
                               ],

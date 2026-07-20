@@ -538,6 +538,11 @@ class ApiClient {
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  Future<Map<String, dynamic>> companyPublicationFunnel() async {
+    final res = await _dio.get('/company/publication-funnel');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   int countActiveOrders(List<Map<String, dynamic>> orders, {int? companyId}) {
     const active = {'queued', 'processing', 'awaiting_payment', 'pending'};
     return orders.where((o) {

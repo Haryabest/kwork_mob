@@ -148,6 +148,24 @@ async def user_access_log(
     return await access_svc.list_access_logs(db, user_id=user.id, limit=limit)
 
 
+@router.get("/access-log/export")
+async def user_access_log_export(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """CSV export личных скачиваний §2.5.5."""
+    from fastapi.responses import Response
+
+    from app.services import access_log as access_svc
+
+    data = await access_svc.list_access_logs(db, user_id=user.id, limit=5000)
+    return Response(
+        content=access_svc.to_csv(data["items"]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="user-access-log.csv"'},
+    )
+
+
 @router.patch("/me")
 async def update_me(
     payload: dict,
