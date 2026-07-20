@@ -504,6 +504,10 @@ class ApiClient {
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  Future<void> revokeInvitation(int invitationId) async {
+    await _dio.delete('/company/invitations/$invitationId');
+  }
+
   Future<Map<String, dynamic>> changeMemberRole({
     required int userId,
     required String role,

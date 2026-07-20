@@ -220,6 +220,26 @@ async def list_invitations(
     }
 
 
+@router.delete("/invitations/{invitation_id}")
+async def revoke_invitation(
+    invitation_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отмена pending-приглашения §2.5.5."""
+    from app.services.access import require_company_permission
+
+    inv = await db.get(CompanyInvitation, invitation_id)
+    if not inv:
+        raise HTTPException(404, "Не найдено")
+    await require_company_permission(db, user, inv.company_id, "can_invite_members")
+    if inv.status != "pending":
+        raise HTTPException(400, "Приглашение уже обработано")
+    inv.status = "revoked"
+    await db.commit()
+    return {"message": "ok", "id": invitation_id}
+
+
 @router.get("/invite/{token}")
 async def get_invitation(token: str, db: AsyncSession = Depends(get_db)):
     inv = await db.scalar(select(CompanyInvitation).where(CompanyInvitation.token == token))

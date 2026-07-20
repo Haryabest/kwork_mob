@@ -92,6 +92,10 @@ export default function BalancePage() {
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [pollStatus, setPollStatus] = useState<string | null>(null);
   const [filtersReady, setFiltersReady] = useState(false);
+  const [presets, setPresets] = useState<
+    Array<{ id: string; name: string; date_from?: string; date_to?: string; tx_type?: string; page_size?: number; author_id?: number }>
+  >([]);
+  const [presetId, setPresetId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -201,6 +205,62 @@ export default function BalancePage() {
     if (!filtersReady) return;
     void load();
   }, [load, filtersReady]);
+
+  const presetsPath = corporate ? '/company/balance-filter-presets' : '/user/balance-filter-presets';
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    api
+      .get<{ items: typeof presets }>(presetsPath)
+      .then(({ data }) => setPresets(data.items ?? []))
+      .catch(() => setPresets([]));
+  }, [corporate, filtersReady, presetsPath]);
+
+  function applyPreset(id: string | null) {
+    setPresetId(id);
+    const p = presets.find((x) => x.id === id);
+    if (!p) return;
+    setDateFrom(p.date_from || '');
+    setDateTo(p.date_to || '');
+    setTxType(p.tx_type || 'all');
+    setPageSize(String(p.page_size || 20));
+    if (corporate && p.author_id) setAuthorId(String(p.author_id));
+    setPage(1);
+  }
+
+  async function savePreset() {
+    const name = window.prompt('Название представления');
+    if (!name?.trim()) return;
+    try {
+      const body: Record<string, string | number> = {
+        name: name.trim(),
+        date_from: dateFrom,
+        date_to: dateTo,
+        tx_type: txType || 'all',
+        page_size: Number(pageSize || 20),
+      };
+      if (corporate && authorId) body.author_id = Number(authorId);
+      await api.post(presetsPath, body);
+      const { data } = await api.get<{ items: typeof presets }>(presetsPath);
+      setPresets(data.items ?? []);
+      notifications.show({ color: 'teal', message: 'Представление сохранено' });
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    }
+  }
+
+  async function deletePreset() {
+    if (!presetId) return;
+    try {
+      await api.delete(`${presetsPath}/${presetId}`);
+      setPresetId(null);
+      const { data } = await api.get<{ items: typeof presets }>(presetsPath);
+      setPresets(data.items ?? []);
+      notifications.show({ color: 'teal', message: 'Представление удалено' });
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    }
+  }
 
   useEffect(() => {
     setPage(1);
@@ -454,6 +514,24 @@ export default function BalancePage() {
               allowDeselect={false}
             />
           </FilterRow>
+
+          <Group mb="md" align="flex-end">
+            <Select
+              label="Представления §20.3.4"
+              placeholder="Выберите"
+              clearable
+              value={presetId}
+              onChange={(v) => applyPreset(v)}
+              data={presets.map((p) => ({ value: p.id, label: p.name }))}
+              maw={240}
+            />
+            <Button variant="light" size="sm" onClick={() => void savePreset()}>
+              Сохранить
+            </Button>
+            <Button variant="light" size="sm" color="red" disabled={!presetId} onClick={() => void deletePreset()}>
+              Удалить
+            </Button>
+          </Group>
 
           <Text fw={700} mb="md">
             История транзакций

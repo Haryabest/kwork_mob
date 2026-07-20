@@ -7782,6 +7782,34 @@ paths:
       summary: List Invitations
       tags:
       - Компания
+  /api/v1/company/invitations/{invitation_id}:
+    delete:
+      description: Отмена pending-приглашения §2.5.5.
+      operationId: revoke_invitation_api_v1_company_invitations__invitation_id__delete
+      parameters:
+      - in: path
+        name: invitation_id
+        required: true
+        schema:
+          title: Invitation Id
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Revoke Invitation
+      tags:
+      - Компания
   /api/v1/company/invite:
     post:
       description: Пригласить сотрудника (email, роль, лимиты).

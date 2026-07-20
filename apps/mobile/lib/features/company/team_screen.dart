@@ -26,6 +26,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   Map<String, dynamic>? _shootStats;
   int? _sessionMemberId;
   List<Map<String, dynamic>> _memberSessions = [];
+  List<Map<String, dynamic>> _invitations = [];
   int? _companyId;
   int _membersTotal = 0;
   bool _loadingMoreMembers = false;
@@ -102,6 +103,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
     try {
       await _loadMembers();
       _audit = await widget.api.listAuditLog();
+      _invitations = await widget.api.listInvitations();
       if (widget.session.isOwner) {
         _accessLog = await widget.api.listCompanyAccessLog();
         try {
@@ -214,6 +216,28 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
         );
       }
       await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _revokeInvitation(int id) async {
+    setState(() => _busy = true);
+    try {
+      await widget.api.revokeInvitation(id);
+      _invitations = await widget.api.listInvitations();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Приглашение отменено')),
+        );
+        setState(() {});
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -451,6 +475,23 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                         onPress: _busy ? null : _invite,
                         child: Text(_busy ? '…' : l10n.teamSendInvite),
                       ),
+                      if (_invitations.isNotEmpty) ...[
+                        const SizedBox(height: 24),
+                        Text('Исходящие приглашения', style: context.theme.typography.sm),
+                        const SizedBox(height: 8),
+                        for (final inv in _invitations)
+                          FTile(
+                            title: Text(inv['email']?.toString() ?? '—'),
+                            subtitle: Text('${inv['role'] ?? '—'} · ${inv['status'] ?? '—'}'),
+                            suffix: inv['status'] == 'pending'
+                                ? FButton(
+                                    variant: .outline,
+                                    onPress: _busy ? null : () => _revokeInvitation(inv['id'] as int),
+                                    child: const Text('Отменить'),
+                                  )
+                                : null,
+                          ),
+                      ],
                     ],
                   ),
                 ),
