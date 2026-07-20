@@ -30,6 +30,7 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
   ProductCategory _category = ProductCategory.other;
   Tier _tier = Tier.small;
   Map<String, dynamic>? _link;
+  Map<String, dynamic>? _stats;
   bool _loading = false;
   String? _error;
 
@@ -37,6 +38,16 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
   void initState() {
     super.initState();
     AnalyticsService.instance.track('screen_view', {'screen': 'shoot_link'});
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final companyId = widget.session.companyId;
+    if (companyId == null) return;
+    try {
+      final stats = await widget.api.shootLinksStats(companyId: companyId);
+      if (mounted) setState(() => _stats = stats);
+    } catch (_) {}
   }
 
   Future<void> _create() async {
@@ -56,6 +67,7 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
         category: _category.api,
         tier: _tier.api,
       );
+      await _loadStats();
     } catch (e) {
       _error = formatApiError(e);
     }
@@ -75,6 +87,14 @@ class _ShootLinkScreenState extends State<ShootLinkScreen> {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          if (_stats != null) ...[
+            Text(
+              'Статистика: создано ${_stats!['created'] ?? 0} · активны ${_stats!['active'] ?? 0} · '
+              'успешные ${_stats!['success'] ?? 0}',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+          ],
           FSelect<ProductCategory>(
             label: Text(l10n.shootCategoryLabel),
             control: FSelectControl.managed(

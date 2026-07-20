@@ -543,6 +543,24 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> shootLinksStats({int? companyId}) async {
+    final res = await _dio.get('/company/shoot_links/stats', queryParameters: {
+      if (companyId != null) 'company_id': companyId,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listMemberSessions(int memberId) async {
+    final res = await _dio.get('/company/members/$memberId/sessions');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<int> revokeMemberSessions(int memberId) async {
+    final res = await _dio.post('/company/members/$memberId/sessions/revoke');
+    return (res.data as Map)['revoked'] as int? ?? 0;
+  }
+
   int countActiveOrders(List<Map<String, dynamic>> orders, {int? companyId}) {
     const active = {'queued', 'processing', 'awaiting_payment', 'pending'};
     return orders.where((o) {

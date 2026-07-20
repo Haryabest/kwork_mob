@@ -94,6 +94,14 @@ export default function TeamPage() {
     success: number;
     active: number;
     conversion_rate: number;
+    recent?: Array<{
+      id: number;
+      token: string;
+      status: string;
+      category?: string;
+      tier?: string;
+      created_at?: string | null;
+    }>;
   } | null>(null);
 
   const funnelParams = useCallback(() => {
@@ -383,6 +391,38 @@ export default function TeamPage() {
           </Table>
         </ScrollTable>
       </Surface>
+
+      {shootStats?.recent && shootStats.recent.length > 0 && (
+        <Surface mb="md">
+          <Text fw={600} mb="sm">
+            Shoot links §3.15 (последние)
+          </Text>
+          <ScrollTable>
+            <Table miw={560} verticalSpacing="sm">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Токен</Table.Th>
+                  <Table.Th>Статус</Table.Th>
+                  <Table.Th>Категория</Table.Th>
+                  <Table.Th>Тариф</Table.Th>
+                  <Table.Th>Создан</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {shootStats.recent.map((r) => (
+                  <Table.Tr key={r.id}>
+                    <Table.Td>{r.token}</Table.Td>
+                    <Table.Td>{r.status}</Table.Td>
+                    <Table.Td>{r.category ?? '—'}</Table.Td>
+                    <Table.Td>{r.tier ?? '—'}</Table.Td>
+                    <Table.Td>{r.created_at ? new Date(r.created_at).toLocaleString('ru-RU') : '—'}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </ScrollTable>
+        </Surface>
+      )}
 
       <Surface>
         <FilterRow>

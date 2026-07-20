@@ -23,6 +23,9 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   List<Map<String, dynamic>> _audit = [];
   List<Map<String, dynamic>> _accessLog = [];
   Map<String, dynamic>? _funnelTotals;
+  Map<String, dynamic>? _shootStats;
+  int? _sessionMemberId;
+  List<Map<String, dynamic>> _memberSessions = [];
   int? _companyId;
   int _membersTotal = 0;
   bool _loadingMoreMembers = false;
@@ -42,7 +45,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     AnalyticsService.instance.track('screen_view', {'screen': 'team'});
-    _tabs = FTabController(length: 3, vsync: this);
+    _tabs = FTabController(length: widget.session.canManageTeam ? 4 : 3, vsync: this);
     _memberSearchCtrl.addListener(_onMemberSearchChanged);
     _load();
   }
@@ -111,8 +114,50 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
         _accessLog = [];
         _funnelTotals = null;
       }
+      if (widget.session.canManageTeam && _companyId != null) {
+        try {
+          _shootStats = await widget.api.shootLinksStats(companyId: _companyId);
+        } catch (_) {
+          _shootStats = null;
+        }
+      } else {
+        _shootStats = null;
+      }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _loadMemberSessions(int memberId) async {
+    setState(() => _sessionMemberId = memberId);
+    try {
+      _memberSessions = await widget.api.listMemberSessions(memberId);
+    } catch (_) {
+      _memberSessions = [];
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _revokeMemberSessions() async {
+    final memberId = _sessionMemberId;
+    if (memberId == null) return;
+    setState(() => _busy = true);
+    try {
+      final n = await widget.api.revokeMemberSessions(memberId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Отозвано сессий: $n')),
+        );
+      }
+      await _loadMemberSessions(memberId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _massExtendStorage() async {
@@ -289,6 +334,16 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                 ),
                                 const SizedBox(height: 16),
                               ],
+                              if (widget.session.canManageTeam && _shootStats != null) ...[
+                                Text('Shoot links §3.15', style: context.theme.typography.sm),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Создано: ${_shootStats!['created'] ?? 0} · активны ${_shootStats!['active'] ?? 0} · '
+                                  'успешные ${_shootStats!['success'] ?? 0}',
+                                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
                               FTextField(
                                 control: FTextFieldControl.managed(controller: _memberSearchCtrl),
                                 label: Text(l10n.teamSearchHint),
@@ -446,6 +501,46 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                           ),
                   ),
                 ),
+                if (widget.session.canManageTeam)
+                  FTabEntry(
+                    label: const Text('Сессии'),
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        FSelect<int?>(
+                          label: const Text('Сотрудник'),
+                          control: FSelectControl.managed(
+                            initial: _sessionMemberId,
+                            onChange: (v) {
+                              if (v != null) _loadMemberSessions(v);
+                            },
+                          ),
+                          items: {
+                            for (final m in _members)
+                              (m['email']?.toString() ?? '#${m['user_id']}'): m['user_id'] as int?,
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        if (_sessionMemberId != null)
+                          FButton(
+                            variant: .outline,
+                            onPress: _busy ? null : _revokeMemberSessions,
+                            child: const Text('Отозвать все сессии'),
+                          ),
+                        const SizedBox(height: 12),
+                        if (_memberSessions.isEmpty)
+                          const Text('Нет сессий', style: TextStyle(color: AppColors.textSecondary))
+                        else
+                          for (final s in _memberSessions)
+                            FTile(
+                              title: Text('${s['jti']?.toString().substring(0, 8) ?? '—'}…'),
+                              subtitle: Text(
+                                '${s['revoked'] == true ? 'revoked' : 'active'} · ${s['created_at'] ?? ''}',
+                              ),
+                            ),
+                      ],
+                    ),
+                  ),
               ],
             ),
     );
