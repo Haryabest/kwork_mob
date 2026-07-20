@@ -526,6 +526,12 @@ class ApiClient {
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  Future<List<Map<String, dynamic>>> listCompanyAccessLog({int limit = 50}) async {
+    final res = await _dio.get('/company/access-log', queryParameters: {'limit': limit});
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   int countActiveOrders(List<Map<String, dynamic>> orders, {int? companyId}) {
     const active = {'queued', 'processing', 'awaiting_payment', 'pending'};
     return orders.where((o) {

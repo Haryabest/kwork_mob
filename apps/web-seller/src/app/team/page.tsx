@@ -326,9 +326,28 @@ export default function TeamPage() {
       </Surface>
 
       <Surface mb="md">
-        <Text fw={600} mb="sm">
-          Access log §10.7.2 (скачивания моделей)
-        </Text>
+        <Group justify="space-between" mb="sm">
+          <Text fw={600}>Access log §10.7.2 (скачивания моделей)</Text>
+          <Button
+            size="xs"
+            variant="light"
+            onClick={async () => {
+              try {
+                const { data } = await api.get('/company/access-log/export', { responseType: 'blob' });
+                const url = URL.createObjectURL(data);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'company-access-log.csv';
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (e) {
+                notifications.show({ color: 'red', message: apiMessage(e) });
+              }
+            }}
+          >
+            Export CSV
+          </Button>
+        </Group>
         <ScrollTable>
           <Table miw={560} verticalSpacing="sm">
             <Table.Thead>

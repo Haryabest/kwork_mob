@@ -21,6 +21,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   late final FTabController _tabs;
   List<Map<String, dynamic>> _members = [];
   List<Map<String, dynamic>> _audit = [];
+  List<Map<String, dynamic>> _accessLog = [];
   int? _companyId;
   int _membersTotal = 0;
   bool _loadingMoreMembers = false;
@@ -97,6 +98,11 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
     try {
       await _loadMembers();
       _audit = await widget.api.listAuditLog();
+      if (widget.session.isOwner) {
+        _accessLog = await widget.api.listCompanyAccessLog();
+      } else {
+        _accessLog = [];
+      }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
@@ -383,6 +389,31 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                         : ListView(
                             padding: const EdgeInsets.all(16),
                             children: [
+                              if (widget.session.isOwner) ...[
+                                Text(
+                                  'Скачивания моделей §10.7.2',
+                                  style: context.theme.typography.sm,
+                                ),
+                                const SizedBox(height: 8),
+                                if (_accessLog.isEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Text(l10n.teamNoAudit, style: const TextStyle(color: AppColors.textSecondary)),
+                                  )
+                                else
+                                  for (final r in _accessLog)
+                                    FTile(
+                                      title: Text(r['model_uuid']?.toString().substring(0, 8) ?? '—'),
+                                      subtitle: Text(
+                                        '${r['action'] ?? '—'} · user ${r['user_id'] ?? '—'}\n${r['timestamp'] ?? ''}',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                const Divider(height: 24),
+                                Text(l10n.teamAudit, style: context.theme.typography.sm),
+                                const SizedBox(height: 8),
+                              ],
                               for (final a in _audit)
                                 FTile(
                                   title: Text(a['action']?.toString() ?? '—'),

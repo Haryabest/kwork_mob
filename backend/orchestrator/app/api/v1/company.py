@@ -663,6 +663,36 @@ async def company_access_log(
     )
 
 
+@router.get("/access-log/export")
+async def company_access_log_export(
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    model_uuid: str | None = Query(None),
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """CSV export скачиваний моделей компании §10.7.2."""
+    from fastapi.responses import Response
+
+    from app.services import access_log as access_svc
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    data = await access_svc.list_access_logs(
+        db,
+        company_id=company.id,
+        model_uuid=model_uuid,
+        date_from=date_from,
+        date_to=date_to,
+        limit=5000,
+    )
+    return Response(
+        content=access_svc.to_csv(data["items"]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="company-access-log.csv"'},
+    )
+
+
 @router.get("/audit/export")
 async def audit_export(
     action: str | None = Query(None),
