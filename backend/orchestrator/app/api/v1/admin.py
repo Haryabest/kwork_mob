@@ -625,6 +625,47 @@ async def admin_user_audit_log(
     )
 
 
+@router.get("/users/{user_id}/audit/export")
+async def admin_user_audit_export(
+    user_id: int,
+    action: str | None = Query(None),
+    action_prefix: str | None = Query(None),
+    days: int = Query(30, ge=1, le=365),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    import csv
+    import io
+
+    from fastapi.responses import Response
+
+    from app.services import audit_query as aq
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "Не найден")
+    data = await aq.list_audit_logs(
+        db,
+        action=action,
+        action_prefix=action_prefix,
+        user_id=user_id,
+        days=days,
+        limit=5000,
+        offset=0,
+    )
+    rows = data["items"]
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["id", "user_id", "action", "details", "created_at"])
+    for r in rows:
+        w.writerow([r["id"], r["user_id"], r["action"], r["details"], r["created_at"] or ""])
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="user_{user_id}_audit.csv"'},
+    )
+
+
 @router.post("/users/{user_id}/block")
 async def block_user(
     user_id: int,

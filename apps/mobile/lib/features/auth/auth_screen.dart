@@ -7,6 +7,7 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/services/analytics_service.dart';
+import 'package:kwork_mobile/services/oauth_audit_hints.dart';
 import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:kwork_mobile/services/push_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -170,6 +171,7 @@ class _AuthScreenState extends State<AuthScreen> {
       AnalyticsService.instance.track('screen_view', {'screen': 'oauth_login_$provider'});
       OAuthPending.instance.clear();
       await _refreshMeOAuth();
+      await OAuthAuditHints.refresh(widget.api, widget.session);
       if (data['status'] == 'pending_type') {
         if (!mounted) return;
         setState(() => _step = _AuthStep.accountType);

@@ -568,7 +568,32 @@ export function UserDetailPage() {
         ])}
       />
       <Card withBorder mt="md">
-        <Text fw={600} mb="sm">OAuth audit</Text>
+        <Group justify="space-between" mb="sm">
+          <Text fw={600}>OAuth audit</Text>
+          <Button
+            size="xs"
+            variant="light"
+            leftSection={<IconDownload size={14} />}
+            onClick={async () => {
+              try {
+                const { data } = await api.get(`/admin/users/${id}/audit/export`, {
+                  params: { action_prefix: 'oauth_' },
+                  responseType: 'blob',
+                });
+                const url = URL.createObjectURL(data);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `user_${id}_audit.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (e) {
+                notifications.show({ color: 'red', message: getApiError(e) });
+              }
+            }}
+          >
+            Export CSV
+          </Button>
+        </Group>
         <ShellTable
           headers={['ID', 'Action', 'Details', 'When']}
           rows={

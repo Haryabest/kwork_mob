@@ -5986,6 +5986,58 @@ paths:
       summary: Admin User Audit Log
       tags:
       - Администрирование
+  /api/v1/admin/users/{user_id}/audit/export:
+    get:
+      operationId: admin_user_audit_export_api_v1_admin_users__user_id__audit_export_get
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: integer
+      - in: query
+        name: action
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Action
+      - in: query
+        name: action_prefix
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Action Prefix
+      - in: query
+        name: days
+        required: false
+        schema:
+          default: 30
+          maximum: 365
+          minimum: 1
+          title: Days
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Admin User Audit Export
+      tags:
+      - Администрирование
   /api/v1/admin/users/{user_id}/block:
     post:
       operationId: block_user_api_v1_admin_users__user_id__block_post
