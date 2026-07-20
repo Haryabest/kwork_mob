@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Annotated, Any
 
 import bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,10 +85,24 @@ def decode_token(token: str, expected_type: TokenType | None = None) -> dict:
     return payload
 
 
+async def get_access_token(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(optional_security)],
+) -> str:
+    if credentials and credentials.credentials:
+        return credentials.credentials
+    from app.services.auth_cookies import ACCESS_COOKIE
+
+    cookie_token = request.cookies.get(ACCESS_COOKIE)
+    if cookie_token:
+        return cookie_token
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Не авторизован")
+
+
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    token: Annotated[str, Depends(get_access_token)],
 ) -> dict:
-    return decode_token(credentials.credentials, TokenType.ACCESS)
+    return decode_token(token, TokenType.ACCESS)
 
 
 async def get_current_db_user(

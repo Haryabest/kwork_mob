@@ -6,7 +6,6 @@ import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { notifications } from '@mantine/notifications';
 import { api, apiMessage, API_URL } from '../../../services/api';
-import { auth } from '../../../lib/auth';
 import axios from 'axios';
 
 export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
@@ -15,6 +14,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
   const [info, setInfo] = useState<{ email: string; role: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
     axios
@@ -22,10 +22,14 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
       .then(({ data }) => setInfo(data))
       .catch((e) => notifications.show({ color: 'red', message: apiMessage(e, 'Приглашение недействительно') }))
       .finally(() => setLoading(false));
+    api
+      .get('/user/me')
+      .then(() => setLoggedIn(true))
+      .catch(() => setLoggedIn(false));
   }, [token]);
 
   async function accept() {
-    if (!auth.getAccessToken()) {
+    if (!loggedIn) {
       router.push(`/register?invite=${token}`);
       return;
     }
@@ -65,7 +69,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
           {info && (
             <>
               <Button fullWidth loading={busy} onClick={() => void accept()}>
-                {auth.getAccessToken() ? 'Принять приглашение' : 'Зарегистрироваться и принять'}
+                {loggedIn ? 'Принять приглашение' : 'Зарегистрироваться и принять'}
               </Button>
               <Button fullWidth variant="subtle" onClick={() => router.push(`/?invite=${token}`)}>
                 У меня уже есть аккаунт

@@ -16,11 +16,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 import { notifications } from '@mantine/notifications';
-import { auth } from '../lib/auth';
 import { api, apiMessage } from '../services/api';
+import { getRecaptchaToken, loginErrorDetail, recaptchaEnabled } from '../lib/recaptcha';
 import { OAuthButtons } from './OAuthButtons';
 
-/** §20.1 — авторизация + 2FA challenge */
+/** §20.1 — авторизация + 2FA challenge + reCAPTCHA v3 */
 export function AuthCard() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -29,9 +29,9 @@ export function AuthCard() {
   const [loading, setLoading] = useState(false);
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState('');
+  const [requiresCaptcha, setRequiresCaptcha] = useState(false);
 
-  async function finishWithTokens(access: string, refresh: string) {
-    auth.setTokens(access, refresh);
+  async function finishLogin() {
     const me = await api.get<{ status?: string }>('/user/me');
     router.replace(me.data.status === 'pending_type' ? '/register/type' : '/dashboard');
   }
@@ -41,34 +41,39 @@ export function AuthCard() {
     setLoading(true);
     try {
       if (challenge) {
-        const { data } = await api.post<{ access_token: string; refresh_token: string }>(
-          '/auth/2fa/verify-login',
-          { challenge_token: challenge, code: code.trim() },
-        );
-        await finishWithTokens(data.access_token, data.refresh_token);
+        await api.post('/auth/2fa/verify-login', {
+          challenge_token: challenge,
+          code: code.trim(),
+        });
+        await finishLogin();
         return;
       }
-      const { data } = await api.post<{
-        access_token?: string;
-        refresh_token?: string;
-        requires_2fa?: boolean;
-        challenge_token?: string;
-      }>('/auth/login', {
+      const payload: Record<string, unknown> = {
         email,
         password,
         remember_me: remember,
-      });
+      };
+      if (requiresCaptcha || recaptchaEnabled()) {
+        const captcha = await getRecaptchaToken('login');
+        if (captcha) payload.captcha_token = captcha;
+      }
+      const { data } = await api.post<{
+        requires_2fa?: boolean;
+        challenge_token?: string;
+      }>('/auth/login', payload);
       if (data.requires_2fa && data.challenge_token) {
         setChallenge(data.challenge_token);
         notifications.show({ color: 'blue', message: 'Введите код из Authenticator' });
         return;
       }
-      if (!data.access_token || !data.refresh_token) {
-        throw new Error('Нет токенов');
-      }
-      await finishWithTokens(data.access_token, data.refresh_token);
+      await finishLogin();
     } catch (error) {
-      notifications.show({ color: 'red', message: apiMessage(error, 'Неверный email или пароль') });
+      const detail = loginErrorDetail(error);
+      if (detail.requires_captcha) setRequiresCaptcha(true);
+      notifications.show({
+        color: 'red',
+        message: detail.message || apiMessage(error, 'Неверный email или пароль'),
+      });
     } finally {
       setLoading(false);
     }
@@ -126,6 +131,11 @@ export function AuthCard() {
                   onChange={(e) => setRemember(e.currentTarget.checked)}
                   label="Запомнить меня"
                 />
+                {requiresCaptcha && (
+                  <Text size="xs" c="dimmed">
+                    После нескольких неудачных попыток включена проверка reCAPTCHA
+                  </Text>
+                )}
               </>
             ) : (
               <TextInput

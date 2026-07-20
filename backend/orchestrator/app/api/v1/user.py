@@ -607,6 +607,35 @@ async def request_account_deletion(
     }
 
 
+@router.get("/me/deletion-request")
+async def get_deletion_request(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Статус заявки на удаление аккаунта (§20.8)."""
+    from sqlalchemy import select
+
+    from app.models import DeletionRequest
+
+    row = await db.scalar(
+        select(DeletionRequest)
+        .where(
+            DeletionRequest.user_id == user.id,
+            DeletionRequest.status.in_(("pending", "processing")),
+        )
+        .order_by(DeletionRequest.requested_at.desc())
+    )
+    if not row:
+        return {"active": False}
+    return {
+        "active": True,
+        "id": row.id,
+        "status": row.status,
+        "requested_at": row.requested_at.isoformat() if row.requested_at else None,
+        "due_at": row.due_at.isoformat() if row.due_at else None,
+    }
+
+
 @router.get("/models")
 async def list_user_models(
     user: User = Depends(get_current_db_user),

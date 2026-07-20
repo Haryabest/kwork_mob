@@ -16,7 +16,6 @@ import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { AuthPage } from '../../../components/AuthPage';
-import { auth } from '../../../lib/auth';
 import { api, apiMessage } from '../../../services/api';
 
 export default function AccountTypePage() {
@@ -42,7 +41,9 @@ export default function AccountTypePage() {
   });
 
   async function submit() {
-    if (!auth.getAccessToken()) {
+    try {
+      await api.get('/user/me');
+    } catch {
       notifications.show({ color: 'red', message: 'Сессия истекла — войдите снова' });
       router.replace('/');
       return;

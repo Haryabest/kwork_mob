@@ -1,21 +1,22 @@
 'use client';
 
-const ACCESS_TOKEN = 'access_token';
-const REFRESH_TOKEN = 'refresh_token';
-
-function storage() {
-  return typeof window === 'undefined' ? null : window.localStorage;
-}
+/** JWT в httpOnly cookies (§20.10.2) — клиент не хранит токены. */
 
 export const auth = {
-  getAccessToken: () => storage()?.getItem(ACCESS_TOKEN) ?? null,
-  getRefreshToken: () => storage()?.getItem(REFRESH_TOKEN) ?? null,
-  setTokens(accessToken: string, refreshToken: string) {
-    storage()?.setItem(ACCESS_TOKEN, accessToken);
-    storage()?.setItem(REFRESH_TOKEN, refreshToken);
+  getAccessToken: () => null as string | null,
+  getRefreshToken: () => null as string | null,
+  setTokens(_accessToken: string, _refreshToken: string) {
+    /* cookies выставляет backend */
   },
   clear() {
-    storage()?.removeItem(ACCESS_TOKEN);
-    storage()?.removeItem(REFRESH_TOKEN);
+    /* logout endpoint очищает cookies */
+  },
+  async logout(apiPost: (url: string, body?: object) => Promise<unknown>) {
+    try {
+      await apiPost('/auth/logout', {});
+    } catch {
+      /* ignore */
+    }
+    this.clear();
   },
 };

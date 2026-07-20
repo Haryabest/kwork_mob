@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 30
 
+    # reCAPTCHA v3 (§20.10.2 / §10)
+    RECAPTCHA_SECRET_KEY: str = ""
+    RECAPTCHA_MIN_SCORE: float = 0.5
+
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""

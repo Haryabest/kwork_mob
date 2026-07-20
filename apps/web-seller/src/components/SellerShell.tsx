@@ -34,7 +34,6 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { auth } from '../lib/auth';
 import { AuthGuard } from './AuthGuard';
 import { api } from '../services/api';
 import { GRADIENT_PRIMARY } from '../theme/brand';
@@ -138,13 +137,11 @@ export function SellerShell({ children }: { children: ReactNode }) {
                     color="red"
                     leftSection={<IconLogout size={16} />}
                     onClick={async () => {
-                      const refresh = auth.getRefreshToken();
                       try {
-                        if (refresh) await api.post('/auth/logout', { refresh_token: refresh });
+                        await api.post('/auth/logout', {});
                       } catch {
                         /* ignore */
                       }
-                      auth.clear();
                       router.replace('/');
                     }}
                   >

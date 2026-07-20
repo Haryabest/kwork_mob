@@ -5,7 +5,10 @@ import { auth } from '../lib/auth';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
-export const api = axios.create({ baseURL: API_URL });
+export const api = axios.create({
+  baseURL: API_URL,
+  withCredentials: true,
+});
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = auth.getAccessToken();
@@ -13,7 +16,7 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-let refreshing: Promise<string | null> | null = null;
+let refreshing: Promise<boolean> | null = null;
 
 api.interceptors.response.use(
   (response) => response,
@@ -24,23 +27,17 @@ api.interceptors.response.use(
     }
     request._retry = true;
     refreshing ??= axios
-      .post<{ access_token: string; refresh_token?: string }>(`${API_URL}/auth/refresh`, {
-        refresh_token: auth.getRefreshToken(),
-      })
-      .then(({ data }) => {
-        auth.setTokens(data.access_token, data.refresh_token ?? auth.getRefreshToken() ?? '');
-        return data.access_token;
-      })
+      .post(`${API_URL}/auth/refresh`, {}, { withCredentials: true })
+      .then(() => true)
       .catch(() => {
         auth.clear();
-        return null;
+        return false;
       })
       .finally(() => {
         refreshing = null;
       });
-    const token = await refreshing;
-    if (!token) return Promise.reject(error);
-    request.headers.Authorization = `Bearer ${token}`;
+    const ok = await refreshing;
+    if (!ok) return Promise.reject(error);
     return api(request);
   },
 );
@@ -48,9 +45,13 @@ api.interceptors.response.use(
 export function apiMessage(error: unknown, fallback = 'Не удалось выполнить запрос') {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data as
-      | { detail?: string | { msg?: string }[]; message?: string }
+      | { detail?: string | { msg?: string; message?: string }[] | Record<string, unknown>; message?: string }
       | undefined;
     if (typeof detail?.detail === 'string') return detail.detail;
+    if (typeof detail?.detail === 'object' && detail.detail !== null && !Array.isArray(detail.detail)) {
+      const obj = detail.detail as { message?: string };
+      if (obj.message) return obj.message;
+    }
     if (Array.isArray(detail?.detail)) {
       return detail.detail.map((d) => (typeof d === 'string' ? d : d.msg)).filter(Boolean).join('; ') || fallback;
     }

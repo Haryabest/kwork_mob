@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,8 +44,34 @@ from app.services import oauth_auth as oauth_svc
 from app.services import oauth_providers as oauth_providers_svc
 from app.services.company_owner_2fa import user_is_company_owner
 from app.services.legal import record_consents
+from app.services.auth_cookies import (
+    clear_auth_cookies,
+    read_refresh_token,
+    set_auth_cookies,
+    web_cookie_auth,
+)
+from app.services import login_guard as login_guard_svc
 
 router = APIRouter()
+
+
+def _issue_auth_response(
+    response: Response,
+    request: Request,
+    *,
+    access: str,
+    refresh: str,
+    remember_me: bool,
+    extra: dict | None = None,
+) -> dict:
+    payload = {"token_type": "bearer", **(extra or {})}
+    if web_cookie_auth(request):
+        set_auth_cookies(response, access=access, refresh=refresh, remember_me=remember_me)
+        payload["token_type"] = "cookie"
+        return payload
+    payload["access_token"] = access
+    payload["refresh_token"] = refresh
+    return payload
 
 
 @router.get("/oauth/providers", response_model=OAuthProvidersResponse)
@@ -82,6 +108,7 @@ async def oauth_callback(
     provider: str,
     body: OAuthCallbackBody,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Обмен code→токены после редиректа с провайдера."""
@@ -95,6 +122,14 @@ async def oauth_callback(
         user_agent=request.headers.get("user-agent"),
     )
     is_owner = await user_is_company_owner(db, user)
+    if web_cookie_auth(request):
+        set_auth_cookies(response, access=access, refresh=refresh, remember_me=True)
+        return OAuthTokenResponse(
+            access_token="",
+            refresh_token="",
+            status=user.status,
+            owner_2fa_required=is_owner and not user.totp_enabled,
+        )
     return OAuthTokenResponse(
         access_token=access,
         refresh_token=refresh,
@@ -201,10 +236,24 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
 
 
 @router.post("/verify-email", response_model=VerifyEmailResponse)
-async def verify_email(body: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
+async def verify_email(
+    body: VerifyEmailRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     """Подтверждение email → JWT для выбора типа аккаунта."""
     user = await auth_service.verify_email(db, body.email, body.code)
     access, refresh = await auth_service.issue_tokens_for_user(db, user, remember_me=True)
+    if web_cookie_auth(request):
+        set_auth_cookies(response, access=access, refresh=refresh, remember_me=True)
+        return VerifyEmailResponse(
+            message="Email подтверждён. Выберите тип аккаунта.",
+            status=user.status,
+            access_token=None,
+            refresh_token=None,
+            token_type="cookie",
+        )
     return VerifyEmailResponse(
         message="Email подтверждён. Выберите тип аккаунта.",
         status=user.status,
@@ -229,17 +278,31 @@ async def account_type(
     }
 
 
+@router.get("/login/challenge")
+async def login_challenge(request: Request, email: str = Query(...)):
+    """Проверка: нужна ли captcha перед login (§20.10.2)."""
+    ip = client_ip(request)
+    return await login_guard_svc.login_status(ip, email)
+
+
 @router.post("/login")
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(body: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     """Вход. Owner с 2FA → challenge; иначе JWT."""
     email = body.email.lower().strip()
+    ip = client_ip(request)
+    await login_guard_svc.assert_login_allowed(ip, email)
+    await login_guard_svc.require_captcha_if_needed(ip, email, body.captcha_token)
+
     user = await db.scalar(select(User).where(User.email == email))
     if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
+        await login_guard_svc.record_login_failure(ip, email)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный email или пароль")
     if not user.email_verified:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Подтвердите email перед входом")
     if user.status in ("blocked", "deleted"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Аккаунт недоступен")
+
+    await login_guard_svc.clear_login_failures(ip, email)
 
     if user.totp_enabled and user.totp_secret:
         challenge = totp_svc.create_challenge_token(
@@ -255,17 +318,26 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     access, refresh = await auth_service.issue_tokens_for_user(db, user, remember_me=body.remember_me)
     is_owner = await user_is_company_owner(db, user)
-    return {
-        "access_token": access,
-        "refresh_token": refresh,
-        "token_type": "bearer",
-        "requires_2fa": False,
-        "owner_2fa_required": is_owner and not user.totp_enabled,
-    }
+    return _issue_auth_response(
+        response,
+        request,
+        access=access,
+        refresh=refresh,
+        remember_me=body.remember_me,
+        extra={
+            "requires_2fa": False,
+            "owner_2fa_required": is_owner and not user.totp_enabled,
+        },
+    )
 
 
 @router.post("/2fa/verify-login", response_model=TokenResponse)
-async def verify_login_2fa(body: TwoFACodeBody, db: AsyncSession = Depends(get_db)):
+async def verify_login_2fa(
+    body: TwoFACodeBody,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     if not body.challenge_token:
         raise HTTPException(400, "challenge_token обязателен")
     payload = totp_svc.decode_challenge_token(body.challenge_token, totp_svc.CHALLENGE_LOGIN_2FA)
@@ -274,7 +346,18 @@ async def verify_login_2fa(body: TwoFACodeBody, db: AsyncSession = Depends(get_d
         raise HTTPException(401, "Неверный код 2FA")
     remember = bool(payload.get("remember_me"))
     access, refresh = await auth_service.issue_tokens_for_user(db, user, remember_me=remember)
-    return TokenResponse(access_token=access, refresh_token=refresh)
+    data = _issue_auth_response(
+        response,
+        request,
+        access=access,
+        refresh=refresh,
+        remember_me=remember,
+    )
+    return TokenResponse(
+        access_token=data.get("access_token") or "",
+        refresh_token=data.get("refresh_token") or "",
+        token_type=data.get("token_type", "bearer"),
+    )
 
 
 @router.post("/2fa/setup")
@@ -329,15 +412,50 @@ async def owner_2fa_status(
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    access, refresh = await auth_service.refresh_tokens(db, body.refresh_token)
-    return TokenResponse(access_token=access, refresh_token=refresh)
+async def refresh_token(
+    request: Request,
+    response: Response,
+    body: RefreshRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    refresh = read_refresh_token(request, body.refresh_token if body else None)
+    if not refresh:
+        raise HTTPException(400, "refresh_token обязателен")
+    access, new_refresh = await auth_service.refresh_tokens(db, refresh)
+    data = _issue_auth_response(
+        response,
+        request,
+        access=access,
+        refresh=new_refresh,
+        remember_me=True,
+    )
+    return TokenResponse(
+        access_token=data.get("access_token") or "",
+        refresh_token=data.get("refresh_token") or "",
+        token_type=data.get("token_type", "bearer"),
+    )
 
 
 @router.post("/logout")
-async def logout(body: LogoutRequest, db: AsyncSession = Depends(get_db)):
-    await auth_service.logout_user(db, body.refresh_token)
+async def logout(
+    request: Request,
+    response: Response,
+    body: LogoutRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    refresh = read_refresh_token(request, body.refresh_token if body else None)
+    if refresh:
+        await auth_service.logout_user(db, refresh)
+    clear_auth_cookies(response)
     return {"message": "ok"}
+
+
+@router.get("/ws-token")
+async def ws_token(user: User = Depends(get_current_db_user)):
+    """Краткоживущий access для WebSocket (httpOnly cookie не передаётся в query)."""
+    from app.core.security import create_access_token
+
+    return {"access_token": create_access_token(user.id)}
 
 
 @router.post("/password/reset")
@@ -447,18 +565,22 @@ async def revoke_session(
 
 
 class RevokeOthersBody(BaseModel):
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 @router.post("/sessions/revoke-others")
 async def revoke_other_sessions(
-    body: RevokeOthersBody,
+    request: Request,
+    body: RevokeOthersBody | None = None,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Завершить все сессии, кроме текущей (§20.8)."""
+    refresh = read_refresh_token(request, body.refresh_token if body else None)
+    if not refresh:
+        raise HTTPException(400, "Нет refresh-токена")
     try:
-        payload = decode_token(body.refresh_token, TokenType.REFRESH)
+        payload = decode_token(refresh, TokenType.REFRESH)
         current_jti = payload.get("jti")
     except Exception:
         raise HTTPException(400, "Неверный refresh-токен")

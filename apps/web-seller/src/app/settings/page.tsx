@@ -7,6 +7,7 @@ import {
   Code,
   Group,
   Image,
+  Modal,
   PasswordInput,
   Stack,
   Switch,
@@ -19,7 +20,6 @@ import { notifications } from '@mantine/notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { SellerShell } from '../../components/SellerShell';
 import { PageHeader, Surface } from '../../components/ui';
-import { auth } from '../../lib/auth';
 import {
   fetchOAuthProviders,
   oauthErrorMessage,
@@ -51,6 +51,13 @@ type TwoFaStatus = {
   totp_enabled: boolean;
   is_company_owner?: boolean;
   owner_2fa_required?: boolean;
+};
+
+type DeletionRequest = {
+  active: boolean;
+  status?: string;
+  requested_at?: string | null;
+  due_at?: string | null;
 };
 
 type OAuthAuditEntry = {
@@ -149,6 +156,9 @@ export default function SettingsPage() {
     Array<{ model_uuid: string; category?: string; captured_count?: number; uploaded_at?: string; expires_at?: string }>
   >([]);
   const [busy, setBusy] = useState(false);
+  const [deletion, setDeletion] = useState<DeletionRequest | null>(null);
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
   const oauthLinkedProviders = me?.oauth_providers ?? [];
 
   const loadSessions = useCallback(async () => {
@@ -203,6 +213,12 @@ export default function SettingsPage() {
       setLastOAuthUnlink(afterLink.unlink);
       setOauthUnlinkScope(afterLink.unlinkScope);
       setLastOAuthLogin(afterLink.login);
+    }
+    try {
+      const { data: del } = await api.get<DeletionRequest>('/user/me/deletion-request');
+      setDeletion(del);
+    } catch {
+      setDeletion(null);
     }
     try {
       const { data } = await api.get<{
@@ -406,15 +422,8 @@ export default function SettingsPage() {
   }
 
   async function revokeOtherSessions() {
-    const refresh = auth.getRefreshToken();
-    if (!refresh) {
-      notifications.show({ color: 'red', message: 'Нет активной сессии' });
-      return;
-    }
     try {
-      const { data } = await api.post<{ revoked: number }>('/auth/sessions/revoke-others', {
-        refresh_token: refresh,
-      });
+      const { data } = await api.post<{ revoked: number }>('/auth/sessions/revoke-others', {});
       notifications.show({ color: 'teal', message: `Завершено сессий: ${data.revoked}` });
       await loadSessions();
     } catch (e) {
@@ -423,12 +432,29 @@ export default function SettingsPage() {
   }
 
   async function deleteAccount() {
-    if (!confirm('Удалить аккаунт? Заявка на забвение (SLA 30 дней).')) return;
+    if (deleteConfirm.trim().toUpperCase() !== 'УДАЛИТЬ') {
+      notifications.show({ color: 'orange', message: 'Введите УДАЛИТЬ для подтверждения' });
+      return;
+    }
+    setBusy(true);
     try {
-      await api.post('/user/me/delete-request');
-      notifications.show({ color: 'orange', message: 'Заявка на удаление создана' });
+      const { data } = await api.post<{
+        due_at?: string;
+        message?: string;
+      }>('/user/me/delete-request');
+      setDeletion({
+        active: true,
+        status: 'pending',
+        due_at: data.due_at ?? null,
+        requested_at: new Date().toISOString(),
+      });
+      setDeleteModal(false);
+      setDeleteConfirm('');
+      notifications.show({ color: 'orange', message: data.message || 'Заявка на удаление создана' });
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -821,15 +847,58 @@ export default function SettingsPage() {
                 Удаление аккаунта
               </Text>
               <Text size="sm" c="#6d6c77">
-                Право на забвение: заявка исполняется через 30 дней.
+                Право на забвение (§2.8.3): персональные данные удаляются в течение 30 дней. Финансовые
+                записи анонимизируются и хранятся 5 лет.
               </Text>
-              <Button color="red" variant="light" onClick={() => void deleteAccount()}>
-                Удалить аккаунт
-              </Button>
+              {deletion?.active ? (
+                <Stack gap="xs">
+                  <Badge color="orange">Заявка принята</Badge>
+                  <Text size="sm">
+                    Статус: {deletion.status ?? 'pending'}
+                    {deletion.due_at
+                      ? ` · исполнение до ${new Date(deletion.due_at).toLocaleDateString('ru-RU')}`
+                      : ''}
+                  </Text>
+                </Stack>
+              ) : (
+                <Button color="red" variant="light" onClick={() => setDeleteModal(true)}>
+                  Удалить аккаунт
+                </Button>
+              )}
             </Stack>
           </Surface>
         </Tabs.Panel>
       </Tabs>
+
+      <Modal
+        opened={deleteModal}
+        onClose={() => {
+          setDeleteModal(false);
+          setDeleteConfirm('');
+        }}
+        title="Удалить аккаунт?"
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            Это необратимо после исполнения заявки. Введите <strong>УДАЛИТЬ</strong> для подтверждения.
+          </Text>
+          <TextInput
+            label="Подтверждение"
+            placeholder="УДАЛИТЬ"
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDeleteModal(false)}>
+              Отмена
+            </Button>
+            <Button color="red" loading={busy} onClick={() => void deleteAccount()}>
+              Подать заявку
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </SellerShell>
   );
 }

@@ -4,9 +4,8 @@ import { Center, Loader, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect } from 'react';
-import { auth } from '../../lib/auth';
-import { completeOAuthCallback, completeOAuthLinkCallback, getOAuthFlow, oauthErrorMessage } from '../../lib/oauth';
-import { api } from '../../services/api';
+import { completeOAuthCallback, completeOAuthLinkCallback, getOAuthFlow, oauthErrorMessage } from '../../../../lib/oauth';
+import { api } from '../../../../services/api';
 
 function OAuthCallbackInner() {
   const router = useRouter();
@@ -37,8 +36,7 @@ function OAuthCallbackInner() {
           router.replace('/settings');
           return;
         }
-        const data = await completeOAuthCallback(code, state);
-        auth.setTokens(data.access_token, data.refresh_token);
+        await completeOAuthCallback(code, state);
         const me = await api.get<{ status?: string }>('/user/me');
         router.replace(me.data.status === 'pending_type' ? '/register/type' : '/dashboard');
       } catch (error) {

@@ -5,7 +5,6 @@ import { notifications } from '@mantine/notifications';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { AuthPage } from '../../../components/AuthPage';
-import { auth } from '../../../lib/auth';
 import { api, apiMessage } from '../../../services/api';
 
 function VerifyForm() {
@@ -18,14 +17,7 @@ function VerifyForm() {
   async function submit() {
     setLoading(true);
     try {
-      const { data } = await api.post<{
-        status: string;
-        access_token?: string;
-        refresh_token?: string;
-      }>('/auth/verify-email', { email, code });
-      if (data.access_token && data.refresh_token) {
-        auth.setTokens(data.access_token, data.refresh_token);
-      }
+      await api.post('/auth/verify-email', { email, code });
       router.push('/register/type');
     } catch (error) {
       notifications.show({ color: 'red', message: apiMessage(error, 'Неверный код') });

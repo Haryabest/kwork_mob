@@ -18,7 +18,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SellerShell } from '../../../components/SellerShell';
 import { PageHeader, Surface } from '../../../components/ui';
 import { api, apiMessage, API_URL } from '../../../services/api';
-import { auth } from '../../../lib/auth';
 
 type OrderDetail = {
   id: number;
@@ -83,7 +82,8 @@ export default function OrderDetailPage() {
       try {
         const me = await api.get<{ id: number }>('/user/me');
         userIdRef.current = me.data.id;
-        const token = auth.getAccessToken();
+        const { data: wsAuth } = await api.get<{ access_token: string }>('/auth/ws-token');
+        const token = wsAuth.access_token;
         if (!token || closed) return;
         const url = `${wsBase()}/ws/queue/${me.data.id}?token=${encodeURIComponent(token)}`;
         ws = new WebSocket(url);

@@ -45,6 +45,7 @@ class LoginRequest(BaseModel):
     password: str
     remember_me: bool = False
     remember: bool | None = None
+    captcha_token: str | None = None
 
     @model_validator(mode="after")
     def sync_remember(self):
@@ -85,11 +86,11 @@ class AccountTypeRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 class LogoutRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 class PasswordResetRequest(BaseModel):
@@ -116,6 +117,6 @@ class PasswordConfirmRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
+    access_token: str | None = None
+    refresh_token: str | None = None
     token_type: str = "bearer"
