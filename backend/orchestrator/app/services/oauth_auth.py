@@ -1,0 +1,205 @@
+"""OAuth login/register business logic."""
+
+from __future__ import annotations
+
+import json
+import secrets
+from datetime import datetime, timezone
+
+from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.core.redis import get_redis
+from app.models import User, UserOAuthIdentity
+from app.services import auth as auth_service
+from app.services import oauth_providers as op
+from app.services.legal import record_consents
+
+OAUTH_STATE_PREFIX = "oauth_state:"
+REQUIRED_CONSENTS = frozenset({"terms", "privacy", "offer", "rights", "nsfw_rules"})
+
+
+def default_redirect_uri(platform: str) -> str:
+    if platform == "mobile":
+        return settings.MOBILE_OAUTH_REDIRECT_URI
+    return f"{settings.SELLER_PUBLIC_URL.rstrip('/')}/auth/oauth/callback"
+
+
+async def _store_state(
+    state: str,
+    *,
+    provider: str,
+    redirect_uri: str,
+    mode: str,
+    consents: list[str] | None,
+) -> None:
+    redis = await get_redis()
+    payload = {
+        "provider": provider,
+        "redirect_uri": redirect_uri,
+        "mode": mode,
+        "consents": consents or [],
+    }
+    await redis.set(
+        f"{OAUTH_STATE_PREFIX}{state}",
+        json.dumps(payload),
+        ex=settings.OAUTH_STATE_TTL_SECONDS,
+    )
+
+
+async def _pop_state(state: str) -> dict:
+    redis = await get_redis()
+    key = f"{OAUTH_STATE_PREFIX}{state}"
+    raw = await redis.get(key)
+    if not raw:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неверный или просроченный state")
+    await redis.delete(key)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Неверный state") from exc
+    return data
+
+
+async def start_oauth(
+    provider: str,
+    *,
+    redirect_uri: str | None,
+    platform: str,
+    mode: str,
+    consents: list[str] | None,
+) -> dict:
+    if provider not in op.OAUTH_PROVIDERS:
+        raise HTTPException(400, "Неизвестный провайдер")
+    cfg = op.provider_config(provider)
+    if not cfg:
+        raise HTTPException(503, f"Провайдер {provider} не настроен")
+    if mode not in {"login", "register"}:
+        raise HTTPException(400, "mode должен быть login или register")
+    if mode == "register":
+        if not consents or not REQUIRED_CONSENTS.issubset(set(consents)):
+            raise HTTPException(422, "Для регистрации нужны все обязательные согласия")
+    uri = redirect_uri or default_redirect_uri(platform)
+    state = secrets.token_urlsafe(24)
+    await _store_state(state, provider=provider, redirect_uri=uri, mode=mode, consents=consents)
+    return {"authorize_url": op.build_authorize_url(cfg, redirect_uri=uri, state=state), "state": state}
+
+
+async def _find_or_create_user(
+    db: AsyncSession,
+    *,
+    provider: str,
+    provider_user_id: str,
+    email: str,
+    full_name: str | None,
+    profile: dict,
+    mode: str,
+    consents: list[str],
+    ip: str | None,
+    user_agent: str | None,
+) -> User:
+    identity = await db.scalar(
+        select(UserOAuthIdentity).where(
+            UserOAuthIdentity.provider == provider,
+            UserOAuthIdentity.provider_user_id == provider_user_id,
+        )
+    )
+    if identity:
+        user = await db.get(User, identity.user_id)
+        if not user or user.status in ("blocked", "deleted"):
+            raise HTTPException(403, "Аккаунт недоступен")
+        identity.email = email
+        identity.profile = profile
+        user.last_login_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(user)
+        return user
+
+    email_norm = email.strip().lower()
+    user = await db.scalar(select(User).where(User.email == email_norm))
+    if user:
+        if user.status in ("blocked", "deleted"):
+            raise HTTPException(403, "Аккаунт недоступен")
+    else:
+        if mode != "register":
+            raise HTTPException(
+                404,
+                "Аккаунт не найден. Зарегистрируйтесь через соцсеть или email.",
+            )
+        user = User(
+            email=email_norm,
+            password_hash=None,
+            full_name=full_name or None,
+            status="pending_type",
+            email_verified=True,
+        )
+        db.add(user)
+        await db.flush()
+        await record_consents(db, user.id, consents, ip, user_agent)
+
+    db.add(
+        UserOAuthIdentity(
+            user_id=user.id,
+            provider=provider,
+            provider_user_id=provider_user_id,
+            email=email_norm,
+            profile=profile,
+        )
+    )
+    user.last_login_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def complete_oauth(
+    db: AsyncSession,
+    provider: str,
+    *,
+    code: str,
+    state: str,
+    redirect_uri: str | None,
+    ip: str | None,
+    user_agent: str | None,
+) -> tuple[User, str, str]:
+    if provider not in op.OAUTH_PROVIDERS:
+        raise HTTPException(400, "Неизвестный провайдер")
+    cfg = op.provider_config(provider)
+    if not cfg:
+        raise HTTPException(503, f"Провайдер {provider} не настроен")
+
+    stored = await _pop_state(state)
+    if stored.get("provider") != provider:
+        raise HTTPException(400, "state не соответствует провайдеру")
+    uri = redirect_uri or stored.get("redirect_uri") or default_redirect_uri("web")
+    if stored.get("redirect_uri") and redirect_uri and stored["redirect_uri"] != redirect_uri:
+        raise HTTPException(400, "redirect_uri не совпадает")
+
+    try:
+        token_payload = await op.exchange_code(cfg, code=code, redirect_uri=uri)
+        profile_raw = await op.fetch_profile(cfg, token_payload)
+    except Exception as exc:
+        raise HTTPException(502, f"Ошибка OAuth: {exc}") from exc
+
+    provider_user_id, email, full_name = op.parse_profile(provider, profile_raw)
+    if not provider_user_id:
+        raise HTTPException(502, "Провайдер не вернул идентификатор пользователя")
+    if not email:
+        raise HTTPException(502, "Провайдер не вернул email")
+
+    user = await _find_or_create_user(
+        db,
+        provider=provider,
+        provider_user_id=provider_user_id,
+        email=email,
+        full_name=full_name or None,
+        profile=profile_raw,
+        mode=str(stored.get("mode") or "login"),
+        consents=list(stored.get("consents") or []),
+        ip=ip,
+        user_agent=user_agent,
+    )
+    access, refresh = await auth_service.issue_tokens_for_user(db, user, remember_me=True)
+    return user, access, refresh

@@ -1065,6 +1065,7 @@ async def analytics_screen_breakdown(
 async def analytics_raw_events(
     user_id: int | None = Query(default=None),
     event: str | None = Query(default=None, max_length=64),
+    screen: str | None = Query(default=None, max_length=64),
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
     limit: int = Query(default=500, ge=1, le=2000),
@@ -1082,6 +1083,7 @@ async def analytics_raw_events(
         db,
         user_id=user_id,
         event=event,
+        screen=screen,
         date_from=date_from,
         date_to=date_to,
         limit=limit,

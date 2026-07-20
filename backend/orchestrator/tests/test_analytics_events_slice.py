@@ -176,3 +176,21 @@ def test_screen_view_faq_question_send():
         props={"screen": "faq_question_send"},
     )
     assert item.props["screen"] == "faq_question_send"
+
+
+def test_screen_view_support_ticket_close():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "support_ticket_close", "ticket_id": 5},
+    )
+    assert item.props["ticket_id"] == 5
+
+
+def test_screen_view_notifications_mark_all_read():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "notifications_mark_all_read"},
+    )
+    assert item.props["screen"] == "notifications_mark_all_read"

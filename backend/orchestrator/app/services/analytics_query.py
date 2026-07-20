@@ -91,6 +91,7 @@ async def list_raw_events(
     *,
     user_id: int | None = None,
     event: str | None = None,
+    screen: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     limit: int = 500,
@@ -101,6 +102,8 @@ async def list_raw_events(
         filters.append(MobileAnalyticsEvent.user_id == user_id)
     if event is not None:
         filters.append(MobileAnalyticsEvent.event == event)
+    if screen is not None:
+        filters.append(MobileAnalyticsEvent.props["screen"].as_string() == screen)
     if date_from is not None:
         filters.append(MobileAnalyticsEvent.event_ts >= date_from)
     if date_to is not None:
@@ -132,6 +135,7 @@ async def list_raw_events(
     return {
         "user_id": user_id,
         "event": event,
+        "screen": screen,
         "date_from": date_from.isoformat() if date_from else None,
         "date_to": date_to.isoformat() if date_to else None,
         "limit": limit,

@@ -31,10 +31,71 @@ from app.schemas.auth import (
 )
 from app.services import auth as auth_service
 from app.services import totp as totp_svc
+from app.schemas.oauth import (
+    OAuthCallbackBody,
+    OAuthProvidersResponse,
+    OAuthStartResponse,
+    OAuthTokenResponse,
+)
+from app.services import oauth_auth as oauth_svc
+from app.services import oauth_providers as oauth_providers_svc
 from app.services.company_owner_2fa import user_is_company_owner
 from app.services.legal import record_consents
 
 router = APIRouter()
+
+
+@router.get("/oauth/providers", response_model=OAuthProvidersResponse)
+async def oauth_providers():
+    """Доступные OAuth-провайдеры (VK / Yandex / Sber)."""
+    return OAuthProvidersResponse(items=oauth_providers_svc.list_enabled_providers())
+
+
+@router.get("/oauth/{provider}/authorize", response_model=OAuthStartResponse)
+async def oauth_authorize(
+    provider: str,
+    request: Request,
+    redirect_uri: str | None = None,
+    platform: str = "web",
+    mode: str = "login",
+    consents: str | None = None,
+):
+    """Старт OAuth — URL для редиректа на провайдера."""
+    consent_list = [c.strip() for c in consents.split(",")] if consents else None
+    data = await oauth_svc.start_oauth(
+        provider,
+        redirect_uri=redirect_uri,
+        platform=platform,
+        mode=mode,
+        consents=consent_list,
+    )
+    return OAuthStartResponse(**data)
+
+
+@router.post("/oauth/{provider}/callback", response_model=OAuthTokenResponse)
+async def oauth_callback(
+    provider: str,
+    body: OAuthCallbackBody,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Обмен code→токены после редиректа с провайдера."""
+    user, access, refresh = await oauth_svc.complete_oauth(
+        db,
+        provider,
+        code=body.code,
+        state=body.state,
+        redirect_uri=body.redirect_uri,
+        ip=client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+    is_owner = await user_is_company_owner(db, user)
+    return OAuthTokenResponse(
+        access_token=access,
+        refresh_token=refresh,
+        status=user.status,
+        owner_2fa_required=is_owner and not user.totp_enabled,
+    )
 
 
 class TwoFACodeBody(BaseModel):
@@ -96,7 +157,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Вход. Owner с 2FA → challenge; иначе JWT."""
     email = body.email.lower().strip()
     user = await db.scalar(select(User).where(User.email == email))
-    if not user or not verify_password(body.password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный email или пароль")
     if not user.email_verified:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Подтвердите email перед входом")
@@ -230,7 +291,7 @@ async def password_change(
     db: AsyncSession = Depends(get_db),
 ):
     """Смена пароля в настройках (§20.8.2)."""
-    if not verify_password(body.old_password, user.password_hash):
+    if not verify_password(body.old_password, user.password_hash or ""):
         raise HTTPException(400, "Неверный текущий пароль")
     auth_service.validate_password_strength(body.new_password)
     from app.core.security import hash_password

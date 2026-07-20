@@ -85,6 +85,16 @@ class Settings(BaseSettings):
     YOOKASSA_WEBHOOK_ALLOW_PRIVATE: bool = False  # localhost/dev behind Tailscale
     YOOKASSA_WEBHOOK_IP_ALLOWLIST: str = ""  # empty → official YooKassa CIDRs
     SELLER_PUBLIC_URL: str = "http://localhost:3000"
+    MOBILE_OAUTH_REDIRECT_URI: str = "kworkmob://open/oauth/callback"
+
+    # OAuth VK / Yandex / Sber ID (§2.2.3 — расширение email+пароль)
+    OAUTH_VK_CLIENT_ID: str = ""
+    OAUTH_VK_CLIENT_SECRET: str = ""
+    OAUTH_YANDEX_CLIENT_ID: str = ""
+    OAUTH_YANDEX_CLIENT_SECRET: str = ""
+    OAUTH_SBER_CLIENT_ID: str = ""
+    OAUTH_SBER_CLIENT_SECRET: str = ""
+    OAUTH_STATE_TTL_SECONDS: int = 600
 
     WORKER_TOKEN: str = "worker-dev-token"
 

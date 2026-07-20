@@ -95,3 +95,29 @@ async def test_list_raw_events_event_filter():
     assert data["event"] == "screen_view"
     assert data["total"] == 1
     assert data["items"][0]["event"] == "screen_view"
+
+
+async def test_list_raw_events_screen_filter():
+    from datetime import datetime, timezone
+
+    from app.services.analytics_query import list_raw_events
+
+    class FakeRow:
+        id = 2
+        user_id = 1
+        event = "screen_view"
+        event_ts = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        props = {"screen": "queue"}
+        ingested_at = None
+        ch_synced_at = None
+
+    class FakeDb:
+        async def scalar(self, *_a, **_k):
+            return 1
+
+        async def scalars(self, *_a, **_k):
+            return SimpleNamespace(all=lambda: [FakeRow()])
+
+    data = await list_raw_events(FakeDb(), screen="queue", limit=10, offset=0)
+    assert data["screen"] == "queue"
+    assert data["items"][0]["props"]["screen"] == "queue"

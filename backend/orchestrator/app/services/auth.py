@@ -120,7 +120,7 @@ async def login_user(
 ) -> tuple[str, str]:
     email = _normalize_email(email)
     user = await db.scalar(select(User).where(User.email == email))
-    if not user or not verify_password(password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный email или пароль")
 
     if not user.email_verified:

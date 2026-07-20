@@ -1,9 +1,19 @@
+import 'package:kwork_mobile/services/oauth_pending.dart';
+
 /// Маршрут go_router из URI (push / kworkmob:// / universal link path).
 String? routeFromDeepLinkUri(Uri? uri) {
   if (uri == null) return null;
   if (uri.scheme == 'kworkmob' || uri.host == 'open') {
     final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
     if (segs.isEmpty) return '/home';
+    if (segs.first == 'oauth' && segs.length >= 2 && segs[1] == 'callback') {
+      final code = uri.queryParameters['code'];
+      final state = uri.queryParameters['state'];
+      if (code != null && state != null) {
+        OAuthPending.instance.deliver(code, state);
+      }
+      return '/auth';
+    }
     if (segs.first == 'queue' && segs.length >= 2) {
       return '/home/queue/${segs[1]}';
     }

@@ -16,6 +16,13 @@ void main() {
     );
   });
 
+  test('kworkmob oauth callback', () {
+    expect(
+      routeFromDeepLinkUri(Uri.parse('kworkmob://open/oauth/callback?code=x&state=y')),
+      '/auth',
+    );
+  });
+
   test('kworkmob scheme queue', () {
     expect(
       routeFromDeepLinkUri(Uri.parse('kworkmob://open/queue/99')),

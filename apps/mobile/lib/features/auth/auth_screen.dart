@@ -6,7 +6,9 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:kwork_mobile/services/push_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 enum _AuthStep { login, register, verifyEmail, accountType, forgot, resetConfirm, twoFa }
 
@@ -57,15 +59,21 @@ class _AuthScreenState extends State<AuthScreen> {
   String? _devCode;
   String? _devResetToken;
   String? _info;
+  List<Map<String, String>> _oauthProviders = [];
+
+  static const _oauthConsents = ['terms', 'privacy', 'offer', 'rights', 'nsfw_rules'];
 
   @override
   void initState() {
     super.initState();
     _step = widget.initialMode == 'register' ? _AuthStep.register : _AuthStep.login;
+    _loadOAuthProviders();
+    OAuthPending.instance.bind(_onOAuthCallback);
   }
 
   @override
   void dispose() {
+    OAuthPending.instance.unbind();
     _email.dispose();
     _password.dispose();
     _passwordConfirm.dispose();
@@ -84,6 +92,86 @@ class _AuthScreenState extends State<AuthScreen> {
     _bik.dispose();
     _checkingAccount.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadOAuthProviders() async {
+    try {
+      final items = await widget.api.listOAuthProviders();
+      if (mounted) setState(() => _oauthProviders = items);
+    } catch (_) {}
+  }
+
+  Future<void> _startOAuth(String provider) async {
+    if (_step == _AuthStep.register && !_consents) {
+      setState(() => _error = AppLocalizations.of(context)!.authAcceptTerms);
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      OAuthPending.instance.start(provider);
+      final url = await widget.api.oauthAuthorizeUrl(
+        provider: provider,
+        mode: _step == _AuthStep.register ? 'register' : 'login',
+        consents: _step == _AuthStep.register ? _oauthConsents : null,
+      );
+      final uri = Uri.parse(url);
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw StateError('Не удалось открыть браузер');
+      }
+    } catch (e) {
+      OAuthPending.instance.clear();
+      setState(() => _error = formatApiError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _onOAuthCallback(String provider, String code, String state) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data = await widget.api.oauthCallback(provider: provider, code: code, state: state);
+      OAuthPending.instance.clear();
+      if (data['status'] == 'pending_type') {
+        if (!mounted) return;
+        setState(() => _step = _AuthStep.accountType);
+        return;
+      }
+      await _finishLogin();
+    } catch (e) {
+      setState(() => _error = formatApiError(e));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<Widget> _oauthButtons() {
+    if (_oauthProviders.isEmpty) return [];
+    if (_step != _AuthStep.login && _step != _AuthStep.register) return [];
+    return [
+      const SizedBox(height: 16),
+      Text(
+        'Войти через',
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+      ),
+      const SizedBox(height: 8),
+      ..._oauthProviders.map(
+        (p) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: FButton(
+            variant: .outline,
+            onPress: _loading ? null : () => _startOAuth(p['provider'] ?? ''),
+            child: Text(p['label'] ?? p['provider'] ?? ''),
+          ),
+        ),
+      ),
+    ];
   }
 
   void _setStep(_AuthStep step) {
@@ -386,6 +474,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   const SizedBox(height: 12),
                   ..._footer(l10n),
+                  ..._oauthButtons(),
                 ],
               ),
             ),

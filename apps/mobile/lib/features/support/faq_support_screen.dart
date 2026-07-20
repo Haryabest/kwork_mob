@@ -379,6 +379,10 @@ class _TicketThreadSheetState extends State<_TicketThreadSheet> {
                         ? null
                         : () async {
                             await widget.api.closeSupport(widget.ticketId);
+                            AnalyticsService.instance.track('screen_view', {
+                              'screen': 'support_ticket_close',
+                              'ticket_id': widget.ticketId,
+                            });
                             await _load();
                           },
                     child: Text(l10n.faqClose),

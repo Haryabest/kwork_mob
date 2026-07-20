@@ -1652,6 +1652,113 @@
         "title": "ModelRenameBody",
         "type": "object"
       },
+      "OAuthCallbackBody": {
+        "properties": {
+          "code": {
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Uri"
+          },
+          "state": {
+            "minLength": 8,
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "state"
+        ],
+        "title": "OAuthCallbackBody",
+        "type": "object"
+      },
+      "OAuthProvidersResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OAuthProvidersResponse",
+        "type": "object"
+      },
+      "OAuthStartResponse": {
+        "properties": {
+          "authorize_url": {
+            "title": "Authorize Url",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorize_url",
+          "state"
+        ],
+        "title": "OAuthStartResponse",
+        "type": "object"
+      },
+      "OAuthTokenResponse": {
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "owner_2fa_required": {
+            "default": false,
+            "title": "Owner 2Fa Required",
+            "type": "boolean"
+          },
+          "refresh_token": {
+            "title": "Refresh Token",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "refresh_token"
+        ],
+        "title": "OAuthTokenResponse",
+        "type": "object"
+      },
       "OrderCreateRequest": {
         "properties": {
           "birth_date": {
@@ -4372,6 +4479,23 @@
                 }
               ],
               "title": "Event"
+            }
+          },
+          {
+            "in": "query",
+            "name": "screen",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Screen"
             }
           },
           {
@@ -10540,6 +10664,176 @@
           }
         },
         "summary": "Logout",
+        "tags": [
+          "Аутентификация"
+        ]
+      }
+    },
+    "/api/v1/auth/oauth/providers": {
+      "get": {
+        "description": "Доступные OAuth-провайдеры (VK / Yandex / Sber).",
+        "operationId": "oauth_providers_api_v1_auth_oauth_providers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthProvidersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Oauth Providers",
+        "tags": [
+          "Аутентификация"
+        ]
+      }
+    },
+    "/api/v1/auth/oauth/{provider}/authorize": {
+      "get": {
+        "description": "Старт OAuth — URL для редиректа на провайдера.",
+        "operationId": "oauth_authorize_api_v1_auth_oauth__provider__authorize_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "redirect_uri",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Redirect Uri"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": {
+              "default": "web",
+              "title": "Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "login",
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "consents",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Consents"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Oauth Authorize",
+        "tags": [
+          "Аутентификация"
+        ]
+      }
+    },
+    "/api/v1/auth/oauth/{provider}/callback": {
+      "post": {
+        "description": "Обмен code→токены после редиректа с провайдера.",
+        "operationId": "oauth_callback_api_v1_auth_oauth__provider__callback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthCallbackBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Oauth Callback",
         "tags": [
           "Аутентификация"
         ]

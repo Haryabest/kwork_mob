@@ -18,6 +18,7 @@ import { FormEvent, useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { auth } from '../lib/auth';
 import { api, apiMessage } from '../services/api';
+import { OAuthButtons } from './OAuthButtons';
 
 /** §20.1 — авторизация + 2FA challenge */
 export function AuthCard() {
@@ -152,6 +153,8 @@ export function AuthCard() {
             )}
           </Stack>
         </form>
+
+        {!challenge && <OAuthButtons mode="login" disabled={loading} />}
 
         <Divider color="rgba(0,87,184,0.1)" />
 

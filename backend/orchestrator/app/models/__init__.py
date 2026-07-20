@@ -14,7 +14,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[str | None] = mapped_column(String(255))
     full_name: Mapped[str | None] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(32))
     inn: Mapped[str | None] = mapped_column(String(255))
@@ -945,3 +945,17 @@ class MobileAnalyticsEvent(Base):
     props: Mapped[dict | None] = mapped_column(JSONB)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     ch_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class UserOAuthIdentity(Base):
+    """Привязка аккаунта к VK / Yandex / Sber ID."""
+
+    __tablename__ = "user_oauth_identities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(20), index=True)
+    provider_user_id: Mapped[str] = mapped_column(String(128), index=True)
+    email: Mapped[str | None] = mapped_column(String(255))
+    profile: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

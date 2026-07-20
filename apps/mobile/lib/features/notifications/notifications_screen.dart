@@ -122,7 +122,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             onPress: _items.isEmpty
                 ? null
                 : () async {
-                    AnalyticsService.instance.track('screen_view', {'screen': 'notifications_mark_read'});
+                    AnalyticsService.instance.track('screen_view', {'screen': 'notifications_mark_all_read'});
                     try {
                       await widget.api.markAllNotificationsRead();
                     } catch (_) {}

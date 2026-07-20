@@ -257,6 +257,55 @@ class ApiClient {
     return data;
   }
 
+  static const mobileOAuthRedirect = 'kworkmob://open/oauth/callback';
+
+  Future<List<Map<String, String>>> listOAuthProviders() async {
+    final res = await _dio.get('/auth/oauth/providers');
+    final data = Map<String, dynamic>.from(res.data as Map);
+    final items = (data['items'] as List?) ?? [];
+    return items
+        .map((e) => Map<String, String>.from(
+              (e as Map).map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')),
+            ))
+        .toList();
+  }
+
+  Future<String> oauthAuthorizeUrl({
+    required String provider,
+    required String mode,
+    List<String>? consents,
+  }) async {
+    final res = await _dio.get(
+      '/auth/oauth/$provider/authorize',
+      queryParameters: {
+        'platform': 'mobile',
+        'mode': mode,
+        'redirect_uri': mobileOAuthRedirect,
+        if (consents != null && consents.isNotEmpty) 'consents': consents.join(','),
+      },
+    );
+    final data = Map<String, dynamic>.from(res.data as Map);
+    return data['authorize_url'] as String;
+  }
+
+  Future<Map<String, dynamic>> oauthCallback({
+    required String provider,
+    required String code,
+    required String state,
+  }) async {
+    final res = await _dio.post('/auth/oauth/$provider/callback', data: {
+      'code': code,
+      'state': state,
+      'redirect_uri': mobileOAuthRedirect,
+    });
+    final data = Map<String, dynamic>.from(res.data as Map);
+    await saveTokens(
+      data['access_token'] as String,
+      data['refresh_token'] as String,
+    );
+    return data;
+  }
+
   Future<Map<String, dynamic>> verifyLogin2fa({
     required String challengeToken,
     required String code,

@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, type FormEvent, useState } from 'react';
 import { AuthPage } from '../../components/AuthPage';
+import { OAuthButtons } from '../../components/OAuthButtons';
 import { api, apiMessage } from '../../services/api';
 
 const CONSENT_SLUGS = ['terms', 'privacy', 'offer', 'rights', 'nsfw_rules'] as const;
@@ -157,6 +158,8 @@ function RegisterForm() {
                 }
               />
             </Stack>
+
+            <OAuthButtons mode="register" consents={consents} disabled={loading} />
 
             <Button type="submit" loading={loading}>
               Зарегистрироваться

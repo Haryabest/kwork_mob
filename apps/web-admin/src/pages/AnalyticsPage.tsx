@@ -54,6 +54,7 @@ export default function AnalyticsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [eventFilter, setEventFilter] = useState<string | null>(null);
+  const [screenFilter, setScreenFilter] = useState<string | null>(null);
   const [events, setEvents] = useState<RawEvent[]>([]);
   const [eventsTotal, setEventsTotal] = useState(0);
   const [eventsOffset, setEventsOffset] = useState(0);
@@ -114,6 +115,7 @@ export default function AnalyticsPage() {
     const params: Record<string, string | number> = { ...extra };
     if (userId !== '') params.user_id = Number(userId);
     if (eventFilter) params.event = eventFilter;
+    if (screenFilter) params.screen = screenFilter;
     if (dateFrom) params.date_from = `${dateFrom}T00:00:00Z`;
     if (dateTo) params.date_to = `${dateTo}T23:59:59Z`;
     return params;
@@ -287,6 +289,16 @@ export default function AnalyticsPage() {
           value={eventFilter}
           onChange={setEventFilter}
           w={180}
+        />
+        <Select
+          label="Screen"
+          placeholder="все"
+          clearable
+          searchable
+          data={(screens?.items ?? []).map((r) => ({ value: r.screen, label: r.screen }))}
+          value={screenFilter}
+          onChange={setScreenFilter}
+          w={200}
         />
         <Button loading={eventsLoading} onClick={() => void loadEvents(0)}>
           Загрузить
