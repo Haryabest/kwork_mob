@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/locale_controller.dart';
 import 'package:kwork_mobile/core/session.dart';
@@ -719,6 +723,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _draftBackups = [];
   int? _revokingDeviceId;
   String? _deletingDraftUuid;
+  bool _exportingAudit = false;
 
   static String _prefLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -833,6 +838,30 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
       }
     } finally {
       if (mounted) setState(() => _revokingDeviceId = null);
+    }
+  }
+
+  Future<void> _exportUserAudit() async {
+    setState(() => _exportingAudit = true);
+    try {
+      final bytes = await widget.api.exportUserAuditCsv(actionPrefix: 'oauth_');
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/user_audit.csv');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)], text: 'user_audit.csv');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Экспорт audit готов')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportingAudit = false);
     }
   }
 
@@ -1548,6 +1577,12 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
           }),
           const SizedBox(height: 16),
         ],
+        FButton(
+          variant: .outline,
+          onPress: _exportingAudit ? null : _exportUserAudit,
+          child: Text(_exportingAudit ? '…' : 'Экспорт OAuth audit CSV'),
+        ),
+        const SizedBox(height: 16),
         Text(l10n.profileSecuritySection, style: context.theme.typography.sm),
         const SizedBox(height: 8),
         FTile(

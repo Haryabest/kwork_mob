@@ -539,6 +539,33 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<List<Map<String, dynamic>>> listUserAudit({int limit = 20, String? actionPrefix}) async {
+    final res = await _dio.get('/user/audit', queryParameters: {
+      'limit': limit,
+      if (actionPrefix != null) 'action_prefix': actionPrefix,
+    });
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<int>> exportUserAuditCsv({String? actionPrefix, int days = 30}) async {
+    final res = await _dio.get<List<int>>(
+      '/user/audit/export',
+      queryParameters: {
+        if (actionPrefix != null) 'action_prefix': actionPrefix,
+        'days': days,
+      },
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return res.data ?? [];
+  }
+
+  Future<List<Map<String, dynamic>>> listCompanyRoles() async {
+    final res = await _dio.get('/company/roles');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   Future<List<Map<String, dynamic>>> listAuditLog() async {
     final res = await _dio.get('/company/audit');
     final items = (res.data as Map)['items'] as List? ?? [];

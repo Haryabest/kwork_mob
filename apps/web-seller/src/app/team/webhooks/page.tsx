@@ -65,6 +65,8 @@ export default function WebhooksPage() {
     dlq: number;
     delivered_24h: number;
     success_rate_24h: number;
+    failed_streak_hooks?: number;
+    by_status?: Record<string, number>;
   } | null>(null);
 
   const load = useCallback(async () => {
@@ -81,6 +83,8 @@ export default function WebhooksPage() {
         dlq: number;
         delivered_24h: number;
         success_rate_24h: number;
+        failed_streak_hooks?: number;
+        by_status?: Record<string, number>;
       }>('/company/webhooks/deliveries/dashboard').catch(() => ({ data: null })),
     ]);
     setHooks(h.data.items ?? []);
@@ -152,6 +156,8 @@ export default function WebhooksPage() {
 
   const dlqCount = deliveries.filter((d) => d.status === 'dlq').length;
 
+  const failedCount = dash?.by_status?.failed ?? 0;
+
   return (
     <SellerShell>
       <PageHeader
@@ -164,22 +170,32 @@ export default function WebhooksPage() {
         }
       />
 
-      {dash && (
-        <Group mb="lg" gap="md">
-          <Badge size="lg" variant="light" color="orange">
-            Pending {dash.pending}
-          </Badge>
-          <Badge size="lg" variant="light" color={dash.dlq ? 'red' : 'teal'}>
-            DLQ {dash.dlq}
-          </Badge>
-          <Badge size="lg" variant="light" color="teal">
-            OK 24ч {dash.delivered_24h}
-          </Badge>
-          <Badge size="lg" variant="light">
-            Success {Math.round(dash.success_rate_24h * 1000) / 10}%
-          </Badge>
-        </Group>
-      )}
+      <Group mb="lg" gap="md">
+        <Badge size="lg" variant="light" color="orange">
+          Pending {dash?.pending ?? 0}
+        </Badge>
+        <Badge size="lg" variant="light" color={(dash?.dlq ?? 0) > 0 ? 'red' : 'teal'}>
+          DLQ {dash?.dlq ?? 0}
+        </Badge>
+        <Badge size="lg" variant="light" color={failedCount > 0 ? 'red' : 'gray'}>
+          Failed {failedCount}
+        </Badge>
+        {dash && (
+          <>
+            <Badge size="lg" variant="light" color="teal">
+              OK 24ч {dash.delivered_24h}
+            </Badge>
+            <Badge size="lg" variant="light">
+              Success {Math.round(dash.success_rate_24h * 1000) / 10}%
+            </Badge>
+            {(dash.failed_streak_hooks ?? 0) > 0 && (
+              <Badge size="lg" variant="light" color="red">
+                Hooks streak {dash.failed_streak_hooks}
+              </Badge>
+            )}
+          </>
+        )}
+      </Group>
 
       <Surface mb="lg">
         <Text fw={600} mb="sm">

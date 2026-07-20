@@ -29,6 +29,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   List<Map<String, dynamic>> _invitations = [];
   List<Map<String, dynamic>> _webhooks = [];
   List<Map<String, dynamic>> _webhookDeliveries = [];
+  List<Map<String, dynamic>> _roles = [];
   Map<String, dynamic>? _marketplaceStatus;
   int? _companyId;
   int _membersTotal = 0;
@@ -129,6 +130,11 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
           _webhookDeliveries = [];
         }
         try {
+          _roles = await widget.api.listCompanyRoles();
+        } catch (_) {
+          _roles = [];
+        }
+        try {
           final funnel = await widget.api.companyPublicationFunnel();
           _funnelTotals = Map<String, dynamic>.from(funnel['totals'] as Map? ?? {});
         } catch (_) {
@@ -138,6 +144,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
         _accessLog = [];
         _webhooks = [];
         _webhookDeliveries = [];
+        _roles = [];
         _funnelTotals = null;
       }
       if (widget.session.canManageTeam && _companyId != null) {
@@ -400,6 +407,19 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                   'Ozon: ${(_marketplaceStatus!['credentials'] as Map?)?['ozon'] == true ? 'настроен' : 'нет'}',
                                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                                 ),
+                                const SizedBox(height: 16),
+                              ],
+                              if (widget.session.isOwner && _roles.isNotEmpty) ...[
+                                Text('Роли компании §2.5', style: context.theme.typography.sm),
+                                const SizedBox(height: 8),
+                                for (final r in _roles)
+                                  FTile(
+                                    title: Text(r['name']?.toString() ?? r['slug']?.toString() ?? '—'),
+                                    subtitle: Text(
+                                      r['slug']?.toString() ?? 'custom',
+                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                    ),
+                                  ),
                                 const SizedBox(height: 16),
                               ],
                               FTextField(
