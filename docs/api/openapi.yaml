@@ -2811,6 +2811,15 @@ paths:
           minimum: 1
           title: Top
           type: integer
+      - in: query
+        name: screen
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          title: Screen
       responses:
         '200':
           content:

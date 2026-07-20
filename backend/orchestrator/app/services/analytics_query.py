@@ -95,14 +95,25 @@ async def list_raw_events(
     limit: int = 500,
     offset: int = 0,
 ) -> dict:
-    q = select(MobileAnalyticsEvent).order_by(MobileAnalyticsEvent.event_ts.desc())
+    filters = [MobileAnalyticsEvent.id.isnot(None)]
     if user_id is not None:
-        q = q.where(MobileAnalyticsEvent.user_id == user_id)
+        filters.append(MobileAnalyticsEvent.user_id == user_id)
     if date_from is not None:
-        q = q.where(MobileAnalyticsEvent.event_ts >= date_from)
+        filters.append(MobileAnalyticsEvent.event_ts >= date_from)
     if date_to is not None:
-        q = q.where(MobileAnalyticsEvent.event_ts <= date_to)
-    rows = (await db.scalars(q.offset(offset).limit(limit))).all()
+        filters.append(MobileAnalyticsEvent.event_ts <= date_to)
+    total = int(
+        await db.scalar(select(func.count()).select_from(MobileAnalyticsEvent).where(*filters)) or 0
+    )
+    rows = (
+        await db.scalars(
+            select(MobileAnalyticsEvent)
+            .where(*filters)
+            .order_by(MobileAnalyticsEvent.event_ts.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+    ).all()
     items = [
         {
             "id": r.id,
@@ -121,6 +132,8 @@ async def list_raw_events(
         "date_to": date_to.isoformat() if date_to else None,
         "limit": limit,
         "offset": offset,
+        "total": total,
+        "has_more": offset + len(items) < total,
         "items": items,
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
@@ -277,11 +290,30 @@ async def campaign_banner_ctr(
     }
 
 
-def _screen_timeseries_ch(*, days: int, top: int) -> tuple[list[str], list[dict]] | None:
+def _screen_timeseries_ch(
+    *, days: int, top: int, screen: str | None = None
+) -> tuple[list[str], list[dict]] | None:
     client = _ch()
     if client is None:
         return None
     try:
+        if screen:
+            screens = [screen]
+            series_rows = client.query(
+                """
+                SELECT day, sum(events) AS views
+                FROM mobile_analytics_screen_daily
+                WHERE day >= today() - %(days)s AND screen = %(screen)s
+                GROUP BY day
+                ORDER BY day
+                """,
+                parameters={"days": days, "screen": screen},
+            ).result_rows or []
+            series = [
+                {"day": str(day), screen: int(views)}
+                for day, views in series_rows
+            ]
+            return screens, series
         top_rows = client.query(
             """
             SELECT screen, sum(events) AS views
@@ -318,10 +350,29 @@ def _screen_timeseries_ch(*, days: int, top: int) -> tuple[list[str], list[dict]
         return None
 
 
-async def _screen_timeseries_pg(db: AsyncSession, *, days: int, top: int) -> tuple[list[str], list[dict]]:
+async def _screen_timeseries_pg(
+    db: AsyncSession, *, days: int, top: int, screen: str | None = None
+) -> tuple[list[str], list[dict]]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     screen_col = MobileAnalyticsEvent.props["screen"].astext
     day_col = func.date_trunc("day", MobileAnalyticsEvent.event_ts)
+    if screen:
+        rows = (
+            await db.execute(
+                select(day_col.label("day"), func.count().label("views"))
+                .where(
+                    MobileAnalyticsEvent.event == "screen_view",
+                    MobileAnalyticsEvent.event_ts >= since,
+                    screen_col == screen,
+                )
+                .group_by(day_col)
+                .order_by(day_col)
+            )
+        ).all()
+        series = [
+            {"day": r.day.date().isoformat() if r.day else "", screen: int(r.views)} for r in rows
+        ]
+        return [screen], series
     top_rows = (
         await db.execute(
             select(screen_col.label("screen"), func.count().label("views"))
@@ -359,17 +410,20 @@ async def _screen_timeseries_pg(db: AsyncSession, *, days: int, top: int) -> tup
     return screens, series
 
 
-async def screen_timeseries(db: AsyncSession, *, days: int = 14, top: int = 8) -> dict:
-    ch = _screen_timeseries_ch(days=days, top=top)
+async def screen_timeseries(
+    db: AsyncSession, *, days: int = 14, top: int = 8, screen: str | None = None
+) -> dict:
+    ch = _screen_timeseries_ch(days=days, top=top, screen=screen)
     source = "clickhouse"
     if ch is None:
-        screens, series = await _screen_timeseries_pg(db, days=days, top=top)
+        screens, series = await _screen_timeseries_pg(db, days=days, top=top, screen=screen)
         source = "postgres"
     else:
         screens, series = ch
     return {
         "days": days,
         "top": top,
+        "screen": screen,
         "source": source,
         "screens": screens,
         "series": series,

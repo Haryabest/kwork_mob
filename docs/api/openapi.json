@@ -4567,6 +4567,23 @@
               "title": "Top",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "screen",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Screen"
+            }
           }
         ],
         "responses": {

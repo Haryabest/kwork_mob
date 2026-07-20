@@ -131,3 +131,21 @@ def test_screen_view_notifications_clear():
         props={"screen": "notifications_clear"},
     )
     assert item.props["screen"] == "notifications_clear"
+
+
+def test_screen_view_queue_cancel_ack():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "queue_cancel_ack"},
+    )
+    assert item.props["screen"] == "queue_cancel_ack"
+
+
+def test_screen_view_support_ticket_open():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "support_ticket_open", "ticket_id": 99},
+    )
+    assert item.props["ticket_id"] == 99

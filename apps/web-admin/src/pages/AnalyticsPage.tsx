@@ -36,6 +36,7 @@ type TimeseriesData = {
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState('7');
+  const [chartScreen, setChartScreen] = useState<string | null>(null);
   const [screens, setScreens] = useState<ScreensData | null>(null);
   const [timeseries, setTimeseries] = useState<TimeseriesData | null>(null);
   const [sync, setSync] = useState<SyncStatus | null>(null);
@@ -45,19 +46,29 @@ export default function AnalyticsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [events, setEvents] = useState<RawEvent[]>([]);
+  const [eventsTotal, setEventsTotal] = useState(0);
+  const [eventsOffset, setEventsOffset] = useState(0);
+  const [eventsLimit] = useState(200);
   const [eventsLoading, setEventsLoading] = useState(false);
 
   const load = useCallback(async () => {
     const d = Number(days) || 7;
+    const tsParams: Record<string, string | number> = { days: d, top: 8 };
+    if (chartScreen) tsParams.screen = chartScreen;
     const [sc, st, ts] = await Promise.all([
       api.get<ScreensData>('/admin/analytics/screens', { params: { days: d } }),
       api.get<SyncStatus>('/admin/analytics/status'),
-      api.get<TimeseriesData>('/admin/analytics/screens/timeseries', { params: { days: d, top: 8 } }),
+      api.get<TimeseriesData>('/admin/analytics/screens/timeseries', { params: tsParams }),
     ]);
     setScreens(sc.data);
     setSync(st.data);
     setTimeseries(ts.data);
-  }, [days]);
+  }, [days, chartScreen]);
+
+  const chartScreens = useMemo(() => {
+    if (chartScreen) return [chartScreen];
+    return timeseries?.screens ?? [];
+  }, [chartScreen, timeseries]);
 
   const chartData = useMemo(
     () =>
@@ -98,13 +109,18 @@ export default function AnalyticsPage() {
     return params;
   }
 
-  async function loadEvents() {
+  async function loadEvents(nextOffset = eventsOffset) {
     setEventsLoading(true);
     try {
-      const { data } = await api.get<{ items: RawEvent[] }>('/admin/analytics/events', {
-        params: eventParams({ limit: 200 }),
-      });
+      const { data } = await api.get<{ items: RawEvent[]; total?: number; offset?: number }>(
+        '/admin/analytics/events',
+        {
+          params: eventParams({ limit: eventsLimit, offset: nextOffset }),
+        },
+      );
       setEvents(data.items ?? []);
+      setEventsTotal(data.total ?? 0);
+      setEventsOffset(data.offset ?? nextOffset);
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
     } finally {
@@ -195,6 +211,15 @@ export default function AnalyticsPage() {
           onChange={(v) => setDays(v || '7')}
           w={140}
         />
+        <Select
+          label="Screen (график)"
+          placeholder="Top 8"
+          clearable
+          data={(screens?.items ?? []).map((r) => ({ value: r.screen, label: r.screen }))}
+          value={chartScreen}
+          onChange={setChartScreen}
+          w={180}
+        />
         <Button variant="light" leftSection={<IconDownload size={16} />} onClick={() => void exportScreensCsv()}>
           Screens CSV
         </Button>
@@ -203,7 +228,8 @@ export default function AnalyticsPage() {
       {chartData.length > 0 && (
         <Card withBorder mb="md" p="md">
           <Title order={5} mb="sm">
-            Screen views по дням (top {timeseries?.screens?.length ?? 0}, {timeseries?.source})
+            Screen views по дням ({chartScreen ?? `top ${timeseries?.screens?.length ?? 0}`},{' '}
+            {timeseries?.source})
           </Title>
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={chartData}>
@@ -212,7 +238,7 @@ export default function AnalyticsPage() {
               <YAxis fontSize={12} />
               <Tooltip />
               <Legend />
-              {(timeseries?.screens ?? []).map((s, i) => (
+              {chartScreens.map((s, i) => (
                 <Line
                   key={s}
                   type="monotone"
@@ -243,11 +269,34 @@ export default function AnalyticsPage() {
         />
         <TextInput type="date" label="С" value={dateFrom} onChange={(e) => setDateFrom(e.currentTarget.value)} w={160} />
         <TextInput type="date" label="По" value={dateTo} onChange={(e) => setDateTo(e.currentTarget.value)} w={160} />
-        <Button loading={eventsLoading} onClick={() => void loadEvents()}>
+        <Button loading={eventsLoading} onClick={() => void loadEvents(0)}>
           Загрузить
         </Button>
         <Button variant="light" leftSection={<IconDownload size={16} />} onClick={() => void exportEventsCsv()}>
           Export CSV
+        </Button>
+      </Group>
+      <Group mb="sm" gap="xs">
+        <Text size="sm" c="dimmed">
+          {eventsTotal > 0
+            ? `${eventsOffset + 1}–${eventsOffset + events.length} из ${eventsTotal}`
+            : '—'}
+        </Text>
+        <Button
+          size="xs"
+          variant="light"
+          disabled={eventsOffset <= 0 || eventsLoading}
+          onClick={() => void loadEvents(Math.max(0, eventsOffset - eventsLimit))}
+        >
+          ← Назад
+        </Button>
+        <Button
+          size="xs"
+          variant="light"
+          disabled={eventsOffset + events.length >= eventsTotal || eventsLoading}
+          onClick={() => void loadEvents(eventsOffset + eventsLimit)}
+        >
+          Вперёд →
         </Button>
       </Group>
       <ShellTable

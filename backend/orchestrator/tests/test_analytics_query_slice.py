@@ -55,10 +55,16 @@ async def test_screen_timeseries_pg_fallback(monkeypatch):
 
     monkeypatch.setattr("app.services.analytics_query._screen_timeseries_ch", lambda **_: None)
 
-    async def fake_pg(_db, *, days, top):
+    async def fake_pg(_db, *, days, top, screen=None):
+        if screen:
+            return [screen], [{"day": "2026-07-01", screen: 5}]
         return ["home"], [{"day": "2026-07-01", "home": 3}]
 
     monkeypatch.setattr("app.services.analytics_query._screen_timeseries_pg", fake_pg)
     data = await screen_timeseries(object(), days=7, top=5)
     assert data["source"] == "postgres"
     assert data["screens"] == ["home"]
+
+    data2 = await screen_timeseries(object(), days=7, top=5, screen="queue")
+    assert data2["screen"] == "queue"
+    assert data2["screens"] == ["queue"]

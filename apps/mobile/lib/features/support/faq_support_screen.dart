@@ -34,17 +34,25 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
     _load().then((_) => _openInitialTicket());
   }
 
+  Future<void> _openTicket(int ticketId) async {
+    AnalyticsService.instance.track('screen_view', {
+      'screen': 'support_ticket_open',
+      'ticket_id': ticketId,
+    });
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (c) => _TicketThreadSheet(api: widget.api, ticketId: ticketId),
+    );
+  }
+
   Future<void> _openInitialTicket() async {
     final id = widget.initialTicketId;
     if (id == null || !mounted) return;
     _tabs.index = 1;
     await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (c) => _TicketThreadSheet(api: widget.api, ticketId: id),
-    );
+    await _openTicket(id);
   }
 
   @override
@@ -139,7 +147,11 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
                 ),
                 FTabEntry(
                   label: Text(l10n.faqMyTickets),
-                  child: _TicketsTab(items: _tickets, api: widget.api),
+                  child: _TicketsTab(
+                    items: _tickets,
+                    api: widget.api,
+                    onOpenTicket: _openTicket,
+                  ),
                 ),
               ],
             ),
@@ -212,10 +224,15 @@ class _FaqTab extends StatelessWidget {
 }
 
 class _TicketsTab extends StatelessWidget {
-  const _TicketsTab({required this.items, required this.api});
+  const _TicketsTab({
+    required this.items,
+    required this.api,
+    required this.onOpenTicket,
+  });
 
   final List<Map<String, dynamic>> items;
   final ApiClient api;
+  final Future<void> Function(int ticketId) onOpenTicket;
 
   @override
   Widget build(BuildContext context) {
@@ -232,16 +249,7 @@ class _TicketsTab extends StatelessWidget {
         return FTile(
           title: Text(t['subject']?.toString() ?? l10n.faqTicketDefault('${t['id']}')),
           subtitle: Text('${t['status']} · ${t['created_at'] ?? ''}'),
-          onPress: () async {
-            await showModalBottomSheet<void>(
-              context: ctx,
-              isScrollControlled: true,
-              builder: (c) => _TicketThreadSheet(
-                api: api,
-                ticketId: t['id'] as int,
-              ),
-            );
-          },
+          onPress: () => onOpenTicket(t['id'] as int),
         );
       },
     );
