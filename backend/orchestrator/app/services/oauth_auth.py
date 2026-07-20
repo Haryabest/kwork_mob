@@ -34,6 +34,7 @@ async def _store_state(
     redirect_uri: str,
     mode: str,
     consents: list[str] | None,
+    user_id: int | None = None,
 ) -> None:
     redis = await get_redis()
     payload = {
@@ -41,6 +42,7 @@ async def _store_state(
         "redirect_uri": redirect_uri,
         "mode": mode,
         "consents": consents or [],
+        "user_id": user_id,
     }
     await redis.set(
         f"{OAUTH_STATE_PREFIX}{state}",
@@ -203,3 +205,120 @@ async def complete_oauth(
     )
     access, refresh = await auth_service.issue_tokens_for_user(db, user, remember_me=True)
     return user, access, refresh
+
+
+async def list_oauth_identities(db: AsyncSession, user_id: int) -> list[dict]:
+    rows = (
+        await db.scalars(
+            select(UserOAuthIdentity)
+            .where(UserOAuthIdentity.user_id == user_id)
+            .order_by(UserOAuthIdentity.provider)
+        )
+    ).all()
+    return [
+        {
+            "provider": r.provider,
+            "email": r.email,
+            "linked_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
+
+
+async def start_oauth_link(
+    user_id: int,
+    provider: str,
+    *,
+    redirect_uri: str | None,
+    platform: str,
+) -> dict:
+    if provider not in op.OAUTH_PROVIDERS:
+        raise HTTPException(400, "Неизвестный провайдер")
+    cfg = op.provider_config(provider)
+    if not cfg:
+        raise HTTPException(503, f"Провайдер {provider} не настроен")
+    uri = redirect_uri or default_redirect_uri(platform)
+    state = secrets.token_urlsafe(24)
+    await _store_state(
+        state,
+        provider=provider,
+        redirect_uri=uri,
+        mode="link",
+        consents=None,
+        user_id=user_id,
+    )
+    return {"authorize_url": op.build_authorize_url(cfg, redirect_uri=uri, state=state), "state": state}
+
+
+async def complete_oauth_link(
+    db: AsyncSession,
+    user: User,
+    provider: str,
+    *,
+    code: str,
+    state: str,
+    redirect_uri: str | None,
+) -> dict:
+    if provider not in op.OAUTH_PROVIDERS:
+        raise HTTPException(400, "Неизвестный провайдер")
+    cfg = op.provider_config(provider)
+    if not cfg:
+        raise HTTPException(503, f"Провайдер {provider} не настроен")
+
+    stored = await _pop_state(state)
+    if stored.get("provider") != provider:
+        raise HTTPException(400, "state не соответствует провайдеру")
+    if stored.get("mode") != "link":
+        raise HTTPException(400, "Неверный режим OAuth")
+    if int(stored.get("user_id") or 0) != user.id:
+        raise HTTPException(403, "state не соответствует пользователю")
+    uri = redirect_uri or stored.get("redirect_uri") or default_redirect_uri("web")
+    if stored.get("redirect_uri") and redirect_uri and stored["redirect_uri"] != redirect_uri:
+        raise HTTPException(400, "redirect_uri не совпадает")
+
+    try:
+        token_payload = await op.exchange_code(cfg, code=code, redirect_uri=uri)
+        profile_raw = await op.fetch_profile(cfg, token_payload)
+    except Exception as exc:
+        raise HTTPException(502, f"Ошибка OAuth: {exc}") from exc
+
+    provider_user_id, email, _full_name = op.parse_profile(provider, profile_raw)
+    if not provider_user_id:
+        raise HTTPException(502, "Провайдер не вернул идентификатор пользователя")
+
+    existing = await db.scalar(
+        select(UserOAuthIdentity).where(
+            UserOAuthIdentity.provider == provider,
+            UserOAuthIdentity.provider_user_id == provider_user_id,
+        )
+    )
+    if existing:
+        if existing.user_id != user.id:
+            raise HTTPException(409, "Этот аккаунт соцсети уже привязан к другому пользователю")
+        existing.profile = profile_raw
+        if email:
+            existing.email = email.strip().lower()
+        await db.commit()
+        return {"linked": True, "provider": provider}
+
+    already = await db.scalar(
+        select(UserOAuthIdentity).where(
+            UserOAuthIdentity.user_id == user.id,
+            UserOAuthIdentity.provider == provider,
+        )
+    )
+    if already:
+        raise HTTPException(409, f"Провайдер {provider} уже привязан")
+
+    email_norm = (email or user.email).strip().lower()
+    db.add(
+        UserOAuthIdentity(
+            user_id=user.id,
+            provider=provider,
+            provider_user_id=provider_user_id,
+            email=email_norm,
+            profile=profile_raw,
+        )
+    )
+    await db.commit()
+    return {"linked": True, "provider": provider}

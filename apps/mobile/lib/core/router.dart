@@ -306,6 +306,11 @@ class _SplashScreenState extends State<_SplashScreen> {
       try {
         final me = await widget.api.me();
         widget.session.applyMe(me);
+        if (me['status']?.toString() == 'pending_type') {
+          if (!mounted) return;
+          context.go('/auth?mode=account-type');
+          return;
+        }
         await ExportPrefsService.instance.load(
           fromServer: me['export_format']?.toString(),
         );

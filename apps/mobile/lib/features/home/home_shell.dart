@@ -16,6 +16,8 @@ import 'package:kwork_mobile/services/push_service.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
 import 'package:kwork_mobile/services/analytics_service.dart';
+import 'package:kwork_mobile/services/oauth_callbacks.dart';
+import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
 import 'package:kwork_mobile/services/upload_progress_service.dart';
 import 'package:kwork_mobile/widgets/campaign_banner.dart';
@@ -706,6 +708,9 @@ class _ProfileTabState extends State<_ProfileTab> {
   final _phone = TextEditingController();
   bool _changingPass = false;
   bool _deleting = false;
+  List<Map<String, String>> _oauthProviders = [];
+  List<Map<String, String>> _oauthLinked = [];
+  bool _oauthLinking = false;
 
   static String _prefLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -778,7 +783,51 @@ class _ProfileTabState extends State<_ProfileTab> {
       _ownerRequired = st['owner_2fa_required'] == true;
     } catch (_) {}
     await _loadSessions();
+    await _loadOAuth();
     if (mounted) setState(() => _prefs = prefs);
+  }
+
+  Future<void> _loadOAuth() async {
+    try {
+      _oauthProviders = await widget.api.listOAuthProviders();
+      _oauthLinked = await widget.api.listOAuthIdentities();
+    } catch (_) {
+      _oauthProviders = [];
+      _oauthLinked = [];
+    }
+  }
+
+  Future<void> _linkOAuth(String provider) async {
+    setState(() => _oauthLinking = true);
+    OAuthCallbacks.linkCompleter = (p, code, state) async {
+      await widget.api.oauthLinkComplete(provider: p, code: code, state: state);
+      await _loadOAuth();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Соцсеть привязана')),
+        );
+        setState(() {});
+      }
+    };
+    try {
+      OAuthPending.instance.start(provider, flow: OAuthFlow.link);
+      final url = await widget.api.oauthLinkAuthorizeUrl(provider);
+      final uri = Uri.parse(url);
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        throw StateError('Не удалось открыть браузер');
+      }
+    } catch (e) {
+      OAuthCallbacks.linkCompleter = null;
+      OAuthPending.instance.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e))),
+        );
+      }
+    } finally {
+      OAuthCallbacks.linkCompleter = null;
+      if (mounted) setState(() => _oauthLinking = false);
+    }
   }
 
   Future<void> _loadSessions() async {
@@ -1274,6 +1323,25 @@ class _ProfileTabState extends State<_ProfileTab> {
           },
         ),
         const SizedBox(height: 16),
+        if (_oauthProviders.isNotEmpty) ...[
+          Text('Вход через соцсети', style: context.theme.typography.sm),
+          const SizedBox(height: 8),
+          ..._oauthProviders.map((p) {
+            final key = p['provider'] ?? '';
+            final linked = _oauthLinked.any((l) => l['provider'] == key);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FTile(
+                title: Text(p['label'] ?? key),
+                suffix: linked
+                    ? const Icon(FIcons.check, color: AppColors.success)
+                    : null,
+                onPress: linked || _oauthLinking ? null : () => _linkOAuth(key),
+              ),
+            );
+          }),
+          const SizedBox(height: 16),
+        ],
         Text(l10n.profileSecuritySection, style: context.theme.typography.sm),
         const SizedBox(height: 8),
         FTile(

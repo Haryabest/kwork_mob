@@ -33,6 +33,8 @@ from app.services import auth as auth_service
 from app.services import totp as totp_svc
 from app.schemas.oauth import (
     OAuthCallbackBody,
+    OAuthIdentitiesResponse,
+    OAuthLinkResponse,
     OAuthProvidersResponse,
     OAuthStartResponse,
     OAuthTokenResponse,
@@ -96,6 +98,52 @@ async def oauth_callback(
         status=user.status,
         owner_2fa_required=is_owner and not user.totp_enabled,
     )
+
+
+@router.get("/oauth/identities", response_model=OAuthIdentitiesResponse)
+async def oauth_identities(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Привязанные OAuth-провайдеры текущего пользователя."""
+    items = await oauth_svc.list_oauth_identities(db, user.id)
+    return OAuthIdentitiesResponse(items=items)
+
+
+@router.get("/oauth/{provider}/link", response_model=OAuthStartResponse)
+async def oauth_link_start(
+    provider: str,
+    user: User = Depends(get_current_db_user),
+    redirect_uri: str | None = None,
+    platform: str = "web",
+):
+    """Старт привязки соцсети к текущему аккаунту."""
+    data = await oauth_svc.start_oauth_link(
+        user.id,
+        provider,
+        redirect_uri=redirect_uri,
+        platform=platform,
+    )
+    return OAuthStartResponse(**data)
+
+
+@router.post("/oauth/{provider}/link", response_model=OAuthLinkResponse)
+async def oauth_link_complete(
+    provider: str,
+    body: OAuthCallbackBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Завершение привязки соцсети (code + state)."""
+    data = await oauth_svc.complete_oauth_link(
+        db,
+        user,
+        provider,
+        code=body.code,
+        state=body.state,
+        redirect_uri=body.redirect_uri,
+    )
+    return OAuthLinkResponse(**data)
 
 
 class TwoFACodeBody(BaseModel):

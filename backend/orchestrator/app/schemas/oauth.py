@@ -29,3 +29,12 @@ class OAuthProvidersResponse(BaseModel):
 class OAuthTokenResponse(TokenResponse):
     status: str | None = None
     owner_2fa_required: bool = False
+
+
+class OAuthLinkResponse(BaseModel):
+    linked: bool
+    provider: str
+
+
+class OAuthIdentitiesResponse(BaseModel):
+    items: list[dict[str, str | None]]

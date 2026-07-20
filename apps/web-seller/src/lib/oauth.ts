@@ -16,6 +16,46 @@ export function webOAuthRedirectUri(): string {
   return `${window.location.origin}/auth/oauth/callback`;
 }
 
+export type OAuthIdentity = { provider: string; email?: string | null; linked_at?: string | null };
+
+export async function fetchOAuthIdentities(): Promise<OAuthIdentity[]> {
+  const { data } = await api.get<{ items: OAuthIdentity[] }>('/auth/oauth/identities');
+  return data.items ?? [];
+}
+
+export async function startOAuthLink(provider: string): Promise<void> {
+  const redirectUri = webOAuthRedirectUri();
+  const { data } = await api.get<{ authorize_url: string; state: string }>(
+    `/auth/oauth/${provider}/link`,
+    { params: { platform: 'web', redirect_uri: redirectUri } },
+  );
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem('oauth_state', data.state);
+    sessionStorage.setItem('oauth_provider', provider);
+    sessionStorage.setItem('oauth_redirect_uri', redirectUri);
+    sessionStorage.setItem('oauth_flow', 'link');
+  }
+  window.location.href = data.authorize_url;
+}
+
+export async function completeOAuthLinkCallback(code: string, state: string): Promise<void> {
+  const provider = sessionStorage.getItem('oauth_provider');
+  const redirectUri = sessionStorage.getItem('oauth_redirect_uri') || webOAuthRedirectUri();
+  const savedState = sessionStorage.getItem('oauth_state');
+  if (!provider || state !== savedState) {
+    throw new Error('Неверный OAuth state');
+  }
+  await api.post(`/auth/oauth/${provider}/link`, {
+    code,
+    state,
+    redirect_uri: redirectUri,
+  });
+  sessionStorage.removeItem('oauth_state');
+  sessionStorage.removeItem('oauth_provider');
+  sessionStorage.removeItem('oauth_redirect_uri');
+  sessionStorage.removeItem('oauth_flow');
+}
+
 export async function startOAuth(
   provider: string,
   mode: 'login' | 'register',
@@ -38,6 +78,7 @@ export async function startOAuth(
     sessionStorage.setItem('oauth_state', data.state);
     sessionStorage.setItem('oauth_provider', provider);
     sessionStorage.setItem('oauth_redirect_uri', redirectUri);
+    sessionStorage.setItem('oauth_flow', mode);
   }
   window.location.href = data.authorize_url;
 }
@@ -64,7 +105,13 @@ export async function completeOAuthCallback(
   sessionStorage.removeItem('oauth_state');
   sessionStorage.removeItem('oauth_provider');
   sessionStorage.removeItem('oauth_redirect_uri');
+  sessionStorage.removeItem('oauth_flow');
   return data;
+}
+
+export function getOAuthFlow(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem('oauth_flow');
 }
 
 export { CONSENT_SLUGS };

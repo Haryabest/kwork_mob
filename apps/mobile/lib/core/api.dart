@@ -306,6 +306,41 @@ class ApiClient {
     return data;
   }
 
+  Future<List<Map<String, String>>> listOAuthIdentities() async {
+    final res = await _dio.get('/auth/oauth/identities');
+    final data = Map<String, dynamic>.from(res.data as Map);
+    final items = (data['items'] as List?) ?? [];
+    return items
+        .map((e) => Map<String, String>.from(
+              (e as Map).map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')),
+            ))
+        .toList();
+  }
+
+  Future<String> oauthLinkAuthorizeUrl(String provider) async {
+    final res = await _dio.get(
+      '/auth/oauth/$provider/link',
+      queryParameters: {
+        'platform': 'mobile',
+        'redirect_uri': mobileOAuthRedirect,
+      },
+    );
+    final data = Map<String, dynamic>.from(res.data as Map);
+    return data['authorize_url'] as String;
+  }
+
+  Future<void> oauthLinkComplete({
+    required String provider,
+    required String code,
+    required String state,
+  }) async {
+    await _dio.post('/auth/oauth/$provider/link', data: {
+      'code': code,
+      'state': state,
+      'redirect_uri': mobileOAuthRedirect,
+    });
+  }
+
   Future<Map<String, dynamic>> verifyLogin2fa({
     required String challengeToken,
     required String code,

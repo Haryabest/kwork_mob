@@ -5,7 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect } from 'react';
 import { auth } from '../../lib/auth';
-import { completeOAuthCallback, oauthErrorMessage } from '../../lib/oauth';
+import { completeOAuthCallback, completeOAuthLinkCallback, getOAuthFlow, oauthErrorMessage } from '../../lib/oauth';
 import { api } from '../../services/api';
 
 function OAuthCallbackInner() {
@@ -28,6 +28,13 @@ function OAuthCallbackInner() {
     }
     (async () => {
       try {
+        const flow = getOAuthFlow();
+        if (flow === 'link') {
+          await completeOAuthLinkCallback(code, state);
+          notifications.show({ color: 'teal', message: 'Соцсеть привязана' });
+          router.replace('/settings');
+          return;
+        }
         const data = await completeOAuthCallback(code, state);
         auth.setTokens(data.access_token, data.refresh_token);
         const me = await api.get<{ status?: string }>('/user/me');

@@ -6,6 +6,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
+import 'package:kwork_mobile/services/oauth_callbacks.dart';
 import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:kwork_mobile/services/push_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -66,9 +67,13 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void initState() {
     super.initState();
-    _step = widget.initialMode == 'register' ? _AuthStep.register : _AuthStep.login;
+    _step = widget.initialMode == 'register'
+        ? _AuthStep.register
+        : widget.initialMode == 'account-type'
+            ? _AuthStep.accountType
+            : _AuthStep.login;
     _loadOAuthProviders();
-    OAuthPending.instance.bind(_onOAuthCallback);
+    OAuthPending.instance.bind(_onOAuthPending);
   }
 
   @override
@@ -111,7 +116,7 @@ class _AuthScreenState extends State<AuthScreen> {
       _error = null;
     });
     try {
-      OAuthPending.instance.start(provider);
+      OAuthPending.instance.start(provider, flow: _step == _AuthStep.register ? OAuthFlow.register : OAuthFlow.login);
       final url = await widget.api.oauthAuthorizeUrl(
         provider: provider,
         mode: _step == _AuthStep.register ? 'register' : 'login',
@@ -127,6 +132,15 @@ class _AuthScreenState extends State<AuthScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _onOAuthPending(String provider, String code, String state, OAuthFlow flow) async {
+    if (flow == OAuthFlow.link && OAuthCallbacks.linkCompleter != null) {
+      await OAuthCallbacks.linkCompleter!(provider, code, state);
+      OAuthPending.instance.clear();
+      return;
+    }
+    await _onOAuthCallback(provider, code, state);
   }
 
   Future<void> _onOAuthCallback(String provider, String code, String state) async {

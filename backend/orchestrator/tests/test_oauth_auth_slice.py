@@ -75,3 +75,25 @@ async def test_start_oauth_register_requires_consents(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await oa.start_oauth("yandex", redirect_uri=None, platform="web", mode="register", consents=["terms"])
     assert exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_start_oauth_link(monkeypatch):
+    monkeypatch.setattr(op.settings, "OAUTH_VK_CLIENT_ID", "vk")
+    monkeypatch.setattr(op.settings, "OAUTH_VK_CLIENT_SECRET", "sec")
+
+    class FakeRedis:
+        stored = None
+
+        async def set(self, key, val, ex=None):
+            self.stored = val
+
+    fake = FakeRedis()
+
+    async def fake_redis():
+        return fake
+
+    monkeypatch.setattr("app.services.oauth_auth.get_redis", fake_redis)
+    data = await oa.start_oauth_link(42, "vk", redirect_uri="http://cb", platform="web")
+    assert "authorize_url" in data
+    assert "vk" in data["authorize_url"]

@@ -1683,6 +1683,50 @@
         "title": "OAuthCallbackBody",
         "type": "object"
       },
+      "OAuthIdentitiesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "OAuthIdentitiesResponse",
+        "type": "object"
+      },
+      "OAuthLinkResponse": {
+        "properties": {
+          "linked": {
+            "title": "Linked",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "linked",
+          "provider"
+        ],
+        "title": "OAuthLinkResponse",
+        "type": "object"
+      },
       "OAuthProvidersResponse": {
         "properties": {
           "items": {
@@ -10669,6 +10713,33 @@
         ]
       }
     },
+    "/api/v1/auth/oauth/identities": {
+      "get": {
+        "description": "Привязанные OAuth-провайдеры текущего пользователя.",
+        "operationId": "oauth_identities_api_v1_auth_oauth_identities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthIdentitiesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Oauth Identities",
+        "tags": [
+          "Аутентификация"
+        ]
+      }
+    },
     "/api/v1/auth/oauth/providers": {
       "get": {
         "description": "Доступные OAuth-провайдеры (VK / Yandex / Sber).",
@@ -10834,6 +10905,136 @@
           }
         },
         "summary": "Oauth Callback",
+        "tags": [
+          "Аутентификация"
+        ]
+      }
+    },
+    "/api/v1/auth/oauth/{provider}/link": {
+      "get": {
+        "description": "Старт привязки соцсети к текущему аккаунту.",
+        "operationId": "oauth_link_start_api_v1_auth_oauth__provider__link_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "redirect_uri",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Redirect Uri"
+            }
+          },
+          {
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": {
+              "default": "web",
+              "title": "Platform",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Oauth Link Start",
+        "tags": [
+          "Аутентификация"
+        ]
+      },
+      "post": {
+        "description": "Завершение привязки соцсети (code + state).",
+        "operationId": "oauth_link_complete_api_v1_auth_oauth__provider__link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthCallbackBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Oauth Link Complete",
         "tags": [
           "Аутентификация"
         ]

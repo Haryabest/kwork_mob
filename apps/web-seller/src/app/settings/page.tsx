@@ -20,6 +20,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { SellerShell } from '../../components/SellerShell';
 import { PageHeader, Surface } from '../../components/ui';
 import { auth } from '../../lib/auth';
+import {
+  fetchOAuthIdentities,
+  fetchOAuthProviders,
+  oauthErrorMessage,
+  startOAuthLink,
+  type OAuthIdentity,
+  type OAuthProvider,
+} from '../../lib/oauth';
 import { api, apiMessage } from '../../services/api';
 
 type SessionItem = {
@@ -75,6 +83,8 @@ export default function SettingsPage() {
   const [totpCode, setTotpCode] = useState('');
   const [disableCode, setDisableCode] = useState('');
   const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([]);
+  const [oauthLinked, setOauthLinked] = useState<OAuthIdentity[]>([]);
   const [busy, setBusy] = useState(false);
 
   const loadSessions = useCallback(async () => {
@@ -111,11 +121,29 @@ export default function SettingsPage() {
     });
     setTwoFa(s.data);
     void loadSessions();
+    try {
+      const [providers, linked] = await Promise.all([fetchOAuthProviders(), fetchOAuthIdentities()]);
+      setOauthProviders(providers);
+      setOauthLinked(linked);
+    } catch {
+      setOauthProviders([]);
+      setOauthLinked([]);
+    }
   }, [loadSessions]);
 
   useEffect(() => {
     load().catch((e) => notifications.show({ color: 'red', message: apiMessage(e) }));
   }, [load]);
+
+  async function linkOAuth(provider: string) {
+    setBusy(true);
+    try {
+      await startOAuthLink(provider);
+    } catch (error) {
+      notifications.show({ color: 'red', message: oauthErrorMessage(error) });
+      setBusy(false);
+    }
+  }
 
   async function saveProfile() {
     setBusy(true);
@@ -328,6 +356,36 @@ export default function SettingsPage() {
                   >
                     Отключить 2FA
                   </Button>
+                </Stack>
+              )}
+
+              <Text fw={600} mt="md">
+                Вход через соцсети
+              </Text>
+              <Text size="sm" c="#6d6c77">
+                Привяжите VK ID, Яндекс ID или Сбер ID для быстрого входа.
+              </Text>
+              {oauthProviders.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  OAuth не настроен на сервере
+                </Text>
+              ) : (
+                <Stack gap="xs">
+                  {oauthProviders.map((p) => {
+                    const linked = oauthLinked.some((l) => l.provider === p.provider);
+                    return (
+                      <Group key={p.provider} justify="space-between">
+                        <Text size="sm">{p.label}</Text>
+                        {linked ? (
+                          <Badge color="teal">Привязан</Badge>
+                        ) : (
+                          <Button size="xs" variant="light" loading={busy} onClick={() => void linkOAuth(p.provider)}>
+                            Привязать
+                          </Button>
+                        )}
+                      </Group>
+                    );
+                  })}
                 </Stack>
               )}
 
