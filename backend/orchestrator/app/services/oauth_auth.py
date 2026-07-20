@@ -12,13 +12,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.redis import get_redis
-from app.models import User, UserOAuthIdentity
+from app.models import AuditLog, User, UserOAuthIdentity
 from app.services import auth as auth_service
 from app.services import oauth_providers as op
 from app.services.legal import record_consents
 
 OAUTH_STATE_PREFIX = "oauth_state:"
 REQUIRED_CONSENTS = frozenset({"terms", "privacy", "offer", "rights", "nsfw_rules"})
+
+
+async def _audit_oauth(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    action: str,
+    provider: str,
+    platform: str | None = None,
+) -> None:
+    details: dict = {"provider": provider}
+    if platform:
+        details["platform"] = platform
+    db.add(AuditLog(user_id=user_id, action=action, details=details))
 
 
 def default_redirect_uri(platform: str) -> str:
@@ -217,6 +231,8 @@ async def complete_oauth(
         from app.services.analytics_ingest import record_screen_event
 
         await record_screen_event(db, user_id=user.id, screen=f"oauth_login_{provider}")
+    await _audit_oauth(db, user_id=user.id, action="oauth_login", provider=provider, platform=platform)
+    await db.commit()
     access, refresh = await auth_service.issue_tokens_for_user(db, user, remember_me=True)
     return user, access, refresh
 
@@ -313,6 +329,12 @@ async def complete_oauth_link(
         existing.profile = profile_raw
         if email:
             existing.email = email.strip().lower()
+        platform = str(stored.get("platform") or "web")
+        if platform == "web":
+            from app.services.analytics_ingest import record_screen_event
+
+            await record_screen_event(db, user_id=user.id, screen=f"oauth_link_{provider}")
+        await _audit_oauth(db, user_id=user.id, action="oauth_link", provider=provider, platform=platform)
         await db.commit()
         return {"linked": True, "provider": provider}
 
@@ -340,6 +362,7 @@ async def complete_oauth_link(
         from app.services.analytics_ingest import record_screen_event
 
         await record_screen_event(db, user_id=user.id, screen=f"oauth_link_{provider}")
+    await _audit_oauth(db, user_id=user.id, action="oauth_link", provider=provider, platform=platform)
     await db.commit()
     return {"linked": True, "provider": provider}
 
@@ -368,6 +391,7 @@ async def unlink_oauth(db: AsyncSession, user: User, provider: str) -> dict:
             "Нельзя отвязать единственный способ входа. Сначала задайте пароль.",
         )
 
+    await _audit_oauth(db, user_id=user.id, action="oauth_unlink", provider=provider)
     await db.delete(identity)
     await db.commit()
     return {"unlinked": True, "provider": provider}

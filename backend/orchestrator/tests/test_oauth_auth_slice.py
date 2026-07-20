@@ -128,6 +128,56 @@ async def test_unlink_oauth_blocks_last_login_method():
 
 
 @pytest.mark.asyncio
+async def test_audit_oauth_login():
+    added = []
+
+    class FakeDb:
+        async def commit(self):
+            pass
+
+        def add(self, row):
+            added.append(row)
+
+    await oa._audit_oauth(FakeDb(), user_id=5, action="oauth_login", provider="vk", platform="mobile")
+    assert len(added) == 1
+    assert added[0].action == "oauth_login"
+    assert added[0].user_id == 5
+    assert added[0].details == {"provider": "vk", "platform": "mobile"}
+
+
+@pytest.mark.asyncio
+async def test_unlink_oauth_writes_audit():
+    from app.models import User, UserOAuthIdentity
+
+    user = User(id=1, email="u@test.ru", password_hash="hash")
+    identity = UserOAuthIdentity(
+        id=1, user_id=1, provider="vk", provider_user_id="123", email="u@test.ru"
+    )
+    added = []
+
+    class FakeDb:
+        def __init__(self):
+            self._call = 0
+
+        async def scalar(self, _stmt):
+            self._call += 1
+            return identity if self._call == 1 else 1
+
+        def add(self, row):
+            added.append(row)
+
+        async def delete(self, _obj):
+            pass
+
+        async def commit(self):
+            pass
+
+    result = await oa.unlink_oauth(FakeDb(), user, "vk")
+    assert result == {"unlinked": True, "provider": "vk"}
+    assert any(r.action == "oauth_unlink" for r in added)
+
+
+@pytest.mark.asyncio
 async def test_record_screen_event_oauth():
     from app.services.analytics_ingest import record_screen_event
 

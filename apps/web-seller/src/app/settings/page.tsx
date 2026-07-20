@@ -21,12 +21,10 @@ import { SellerShell } from '../../components/SellerShell';
 import { PageHeader, Surface } from '../../components/ui';
 import { auth } from '../../lib/auth';
 import {
-  fetchOAuthIdentities,
   fetchOAuthProviders,
   oauthErrorMessage,
   startOAuthLink,
   unlinkOAuth,
-  type OAuthIdentity,
   type OAuthProvider,
 } from '../../lib/oauth';
 import { api, apiMessage } from '../../services/api';
@@ -45,6 +43,7 @@ type Me = {
   marketing_opt_in?: boolean;
   totp_enabled?: boolean;
   notification_prefs?: Record<string, boolean>;
+  oauth_providers?: string[];
 };
 
 type TwoFaStatus = {
@@ -85,8 +84,8 @@ export default function SettingsPage() {
   const [disableCode, setDisableCode] = useState('');
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([]);
-  const [oauthLinked, setOauthLinked] = useState<OAuthIdentity[]>([]);
   const [busy, setBusy] = useState(false);
+  const oauthLinkedProviders = me?.oauth_providers ?? [];
 
   const loadSessions = useCallback(async () => {
     try {
@@ -123,12 +122,9 @@ export default function SettingsPage() {
     setTwoFa(s.data);
     void loadSessions();
     try {
-      const [providers, linked] = await Promise.all([fetchOAuthProviders(), fetchOAuthIdentities()]);
-      setOauthProviders(providers);
-      setOauthLinked(linked);
+      setOauthProviders(await fetchOAuthProviders());
     } catch {
       setOauthProviders([]);
-      setOauthLinked([]);
     }
   }, [loadSessions]);
 
@@ -140,7 +136,8 @@ export default function SettingsPage() {
     setBusy(true);
     try {
       await unlinkOAuth(provider);
-      setOauthLinked(await fetchOAuthIdentities());
+      const { data } = await api.get<Me>('/user/me');
+      setMe(data);
       notifications.show({ color: 'teal', message: 'Соцсеть отвязана' });
     } catch (error) {
       notifications.show({ color: 'red', message: oauthErrorMessage(error) });
@@ -386,7 +383,7 @@ export default function SettingsPage() {
               ) : (
                 <Stack gap="xs">
                   {oauthProviders.map((p) => {
-                    const linked = oauthLinked.some((l) => l.provider === p.provider);
+                    const linked = oauthLinkedProviders.includes(p.provider);
                     return (
                       <Group key={p.provider} justify="space-between">
                         <Text size="sm">{p.label}</Text>

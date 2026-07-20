@@ -712,7 +712,6 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   bool _changingPass = false;
   bool _deleting = false;
   List<Map<String, String>> _oauthProviders = [];
-  List<Map<String, String>> _oauthLinked = [];
   bool _oauthLinking = false;
 
   static String _prefLabel(AppLocalizations l, String key) {
@@ -794,13 +793,18 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
     if (mounted) setState(() => _prefs = prefs);
   }
 
+  Future<void> _refreshMeOAuth() async {
+    try {
+      final me = await widget.api.me();
+      widget.session.applyMe(me);
+    } catch (_) {}
+  }
+
   Future<void> _loadOAuth() async {
     try {
       _oauthProviders = await widget.api.listOAuthProviders();
-      _oauthLinked = await widget.api.listOAuthIdentities();
     } catch (_) {
       _oauthProviders = [];
-      _oauthLinked = [];
     }
   }
 
@@ -838,6 +842,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
     try {
       await widget.api.oauthLinkComplete(provider: provider, code: code, state: state);
       AnalyticsService.instance.track('screen_view', {'screen': 'oauth_link_$provider'});
+      await _refreshMeOAuth();
       await _loadOAuth();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -861,6 +866,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
     setState(() => _oauthLinking = true);
     try {
       await widget.api.oauthUnlink(provider);
+      await _refreshMeOAuth();
       await _loadOAuth();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1397,7 +1403,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
           const SizedBox(height: 8),
           ..._oauthProviders.map((p) {
             final key = p['provider'] ?? '';
-            final linked = _oauthLinked.any((l) => l['provider'] == key);
+            final linked = widget.session.oauthProviders.contains(key);
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: FTile(

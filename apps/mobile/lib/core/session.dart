@@ -22,12 +22,14 @@ class AppSession extends ChangeNotifier {
   String? _fullName;
   String? _inn;
   String? _phone;
+  List<String> _oauthProviders = [];
 
   int? get userId => _userId;
   String? get email => _email;
   String? get fullName => _fullName;
   String? get inn => _inn;
   String? get phone => _phone;
+  List<String> get oauthProviders => List.unmodifiable(_oauthProviders);
   double? get balance => _balance;
   bool get corporate => _corporate;
   int? get companyId => _corporate ? _companyId : null;
@@ -103,6 +105,12 @@ class AppSession extends ChangeNotifier {
     _fullName = me['full_name']?.toString();
     _inn = me['inn']?.toString();
     _phone = me['phone']?.toString();
+    final op = me['oauth_providers'];
+    if (op is List) {
+      _oauthProviders = op.map((e) => e.toString()).toList();
+    } else {
+      _oauthProviders = [];
+    }
     notifyListeners();
   }
 
