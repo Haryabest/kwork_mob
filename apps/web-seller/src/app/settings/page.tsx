@@ -194,6 +194,7 @@ export default function SettingsPage() {
       const unlink = await loadLastOAuthUnlink(Boolean(twoFa?.is_company_owner));
       setLastOAuthUnlink(unlink.item);
       setOauthUnlinkScope(unlink.scope);
+      setLastOAuthLogin(await loadLastOAuthLogin());
       notifications.show({ color: 'teal', message: 'Соцсеть отвязана' });
     } catch (error) {
       notifications.show({ color: 'red', message: oauthErrorMessage(error) });

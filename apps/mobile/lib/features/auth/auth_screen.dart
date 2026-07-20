@@ -188,10 +188,28 @@ class _AuthScreenState extends State<AuthScreen> {
     if (_step != _AuthStep.login && _step != _AuthStep.register) return [];
     return [
       const SizedBox(height: 16),
-      Text(
-        'Войти через',
-        textAlign: TextAlign.center,
-        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text(
+            'Войти через',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+          if (widget.session.corporate) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Корп. режим',
+                style: TextStyle(color: AppColors.accent, fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ],
       ),
       const SizedBox(height: 8),
       ..._oauthProviders.map(

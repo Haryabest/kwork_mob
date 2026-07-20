@@ -488,10 +488,21 @@ export function UserDetailPage() {
     created_at?: string | null;
     orders: Array<{ id: number; status: string; amount: number; created_at?: string | null }>;
   } | null>(null);
+  const [auditItems, setAuditItems] = useState<
+    Array<{ id: number; action: string; details?: Record<string, unknown>; created_at?: string | null }>
+  >([]);
 
   async function load() {
     const { data } = await api.get(`/admin/users/${id}`);
     setUser(data);
+    try {
+      const audit = await api.get<{ items: typeof auditItems }>(`/admin/users/${id}/audit`, {
+        params: { action_prefix: 'oauth_', limit: 50 },
+      });
+      setAuditItems(audit.data.items ?? []);
+    } catch {
+      setAuditItems([]);
+    }
   }
 
   useEffect(() => {
@@ -556,6 +567,24 @@ export function UserDetailPage() {
           `${o.amount} ₽`,
         ])}
       />
+      <Card withBorder mt="md">
+        <Text fw={600} mb="sm">OAuth audit</Text>
+        <ShellTable
+          headers={['ID', 'Action', 'Details', 'When']}
+          rows={
+            auditItems.length
+              ? auditItems.map((r) => [
+                  String(r.id),
+                  r.action,
+                  r.details?.provider
+                    ? `${String(r.details.provider)}${r.details.platform ? ` (${String(r.details.platform)})` : ''}`
+                    : '—',
+                  r.created_at ? new Date(r.created_at).toLocaleString('ru-RU') : '—',
+                ])
+              : [['—', '—', 'Нет oauth_* событий', '—']]
+          }
+        />
+      </Card>
     </>
   );
 }
