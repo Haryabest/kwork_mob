@@ -17475,6 +17475,55 @@
         ]
       }
     },
+    "/api/v1/user/access-log": {
+      "get": {
+        "description": "Личные скачивания моделей §2.5.5 / §10.7.2.",
+        "operationId": "user_access_log_api_v1_user_access_log_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "User Access Log",
+        "tags": [
+          "Пользователь"
+        ]
+      }
+    },
     "/api/v1/user/account-type": {
       "post": {
         "operationId": "account_type_api_v1_user_account_type_post",

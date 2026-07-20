@@ -136,6 +136,18 @@ async def user_audit_export(
     )
 
 
+@router.get("/access-log")
+async def user_access_log(
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Личные скачивания моделей §2.5.5 / §10.7.2."""
+    from app.services import access_log as access_svc
+
+    return await access_svc.list_access_logs(db, user_id=user.id, limit=limit)
+
+
 @router.patch("/me")
 async def update_me(
     payload: dict,

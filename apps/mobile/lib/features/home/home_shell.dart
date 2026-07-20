@@ -714,6 +714,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   bool _deleting = false;
   List<Map<String, String>> _oauthProviders = [];
   bool _oauthLinking = false;
+  List<Map<String, dynamic>> _accessLog = [];
 
   static String _prefLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -792,6 +793,11 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
     await _loadSessions();
     await _loadOAuth();
     await OAuthAuditHints.refresh(widget.api, widget.session);
+    try {
+      _accessLog = await widget.api.listUserAccessLog();
+    } catch (_) {
+      _accessLog = [];
+    }
     if (mounted) setState(() => _prefs = prefs);
   }
 
@@ -1464,6 +1470,26 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
               ),
             ),
           ],
+          const SizedBox(height: 16),
+        ],
+        if (_accessLog.isNotEmpty) ...[
+          Text('Скачивания моделей', style: context.theme.typography.sm),
+          const SizedBox(height: 8),
+          ..._accessLog.take(10).map((r) {
+            final uuid = r['model_uuid']?.toString() ?? '—';
+            final short = uuid.length > 8 ? '${uuid.substring(0, 8)}…' : uuid;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FTile(
+                title: Text(short),
+                subtitle: Text(
+                  '${r['action'] ?? '—'} · ${r['timestamp'] ?? ''}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            );
+          }),
           const SizedBox(height: 16),
         ],
         Text(l10n.profileSecuritySection, style: context.theme.typography.sm),

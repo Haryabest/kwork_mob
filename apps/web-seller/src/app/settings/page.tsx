@@ -139,6 +139,9 @@ export default function SettingsPage() {
   const [lastOAuthLogin, setLastOAuthLogin] = useState<OAuthAuditEntry | null>(null);
   const [oauthUnlinkScope, setOauthUnlinkScope] = useState<'company' | 'personal' | null>(null);
   const [oauthCompanyId, setOauthCompanyId] = useState<number | undefined>(undefined);
+  const [accessLogRows, setAccessLogRows] = useState<
+    Array<{ id: number; model_uuid: string; action?: string; file_format?: string; timestamp?: string }>
+  >([]);
   const [busy, setBusy] = useState(false);
   const oauthLinkedProviders = me?.oauth_providers ?? [];
 
@@ -194,6 +197,14 @@ export default function SettingsPage() {
       setLastOAuthUnlink(afterLink.unlink);
       setOauthUnlinkScope(afterLink.unlinkScope);
       setLastOAuthLogin(afterLink.login);
+    }
+    try {
+      const { data } = await api.get<{
+        items: Array<{ id: number; model_uuid: string; action?: string; file_format?: string; timestamp?: string }>;
+      }>('/user/access-log', { params: { limit: 20 } });
+      setAccessLogRows(data.items ?? []);
+    } catch {
+      setAccessLogRows([]);
     }
   }, [loadSessions]);
 
@@ -530,6 +541,38 @@ export default function SettingsPage() {
               <Text size="sm" c="#6d6c77">
                 Скачать историю oauth_login / oauth_link / oauth_unlink.
               </Text>
+
+              <Text fw={600} mt="md">
+                Скачивания моделей
+              </Text>
+              {accessLogRows.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  Пока нет скачиваний
+                </Text>
+              ) : (
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Когда</Table.Th>
+                      <Table.Th>Модель</Table.Th>
+                      <Table.Th>Действие</Table.Th>
+                      <Table.Th>Формат</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {accessLogRows.map((r) => (
+                      <Table.Tr key={r.id}>
+                        <Table.Td>
+                          {r.timestamp ? new Date(r.timestamp).toLocaleString('ru-RU') : '—'}
+                        </Table.Td>
+                        <Table.Td>{r.model_uuid?.slice(0, 8) ?? '—'}…</Table.Td>
+                        <Table.Td>{r.action ?? '—'}</Table.Td>
+                        <Table.Td>{r.file_format ?? '—'}</Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              )}
 
               <Text fw={600} mt="md">
                 Активные сессии

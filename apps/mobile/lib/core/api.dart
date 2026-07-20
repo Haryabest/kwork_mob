@@ -429,6 +429,12 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<List<Map<String, dynamic>>> listUserAccessLog({int limit = 20}) async {
+    final res = await _dio.get('/user/access-log', queryParameters: {'limit': limit});
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
     final res = await _dio.patch('/user/me', data: data);
     return Map<String, dynamic>.from(res.data as Map);
