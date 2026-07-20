@@ -117,3 +117,41 @@ async def test_list_user_audit_logs_oauth():
     data = await aq.list_audit_logs(FakeDb(), user_id=7, action_prefix="oauth_", days=30)
     assert data["items"][0]["action"] == "oauth_unlink"
     assert data["items"][0]["user_id"] == 7
+
+
+@pytest.mark.asyncio
+async def test_user_audit_export_rows():
+    import csv
+    import io
+
+    from app.models import AuditLog
+
+    row = AuditLog(
+        id=4,
+        user_id=7,
+        action="oauth_unlink",
+        details={"provider": "vk"},
+        created_at=None,
+    )
+
+    class FakeDb:
+        async def scalar(self, _stmt):
+            return 1
+
+        async def scalars(self, _stmt):
+            class R:
+                def all(self_inner):
+                    return [row]
+
+            return R()
+
+    data = await aq.list_audit_logs(FakeDb(), user_id=7, action="oauth_unlink", days=30, limit=5000)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["id", "user_id", "action", "details", "created_at"])
+    for r in data["items"]:
+        w.writerow([r["id"], r["user_id"], r["action"], r["details"], r["created_at"] or ""])
+    lines = buf.getvalue().strip().splitlines()
+    assert lines[0] == "id,user_id,action,details,created_at"
+    assert "oauth_unlink" in lines[1]
+    assert "vk" in lines[1]

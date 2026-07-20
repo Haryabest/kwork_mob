@@ -23,6 +23,7 @@ import { auth } from '../../lib/auth';
 import {
   fetchOAuthProviders,
   oauthErrorMessage,
+  resolveOAuthCompanyId,
   startOAuthLink,
   unlinkOAuth,
   type OAuthProvider,
@@ -115,6 +116,7 @@ export default function SettingsPage() {
   const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([]);
   const [lastOAuthUnlink, setLastOAuthUnlink] = useState<OAuthUnlinkAudit | null>(null);
   const [oauthUnlinkScope, setOauthUnlinkScope] = useState<'company' | 'personal' | null>(null);
+  const [oauthCompanyId, setOauthCompanyId] = useState<number | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const oauthLinkedProviders = me?.oauth_providers ?? [];
 
@@ -160,6 +162,7 @@ export default function SettingsPage() {
     } catch {
       setOauthProviders([]);
     }
+    setOauthCompanyId(await resolveOAuthCompanyId());
     const unlink = await loadLastOAuthUnlink(Boolean(s.data.is_company_owner));
     setLastOAuthUnlink(unlink.item);
     setOauthUnlinkScope(unlink.scope);
@@ -172,7 +175,7 @@ export default function SettingsPage() {
   async function unlinkOAuthProvider(provider: string) {
     setBusy(true);
     try {
-      await unlinkOAuth(provider);
+      await unlinkOAuth(provider, oauthCompanyId);
       const { data } = await api.get<Me>('/user/me');
       setMe(data);
       const unlink = await loadLastOAuthUnlink(Boolean(twoFa?.is_company_owner));
@@ -189,7 +192,7 @@ export default function SettingsPage() {
   async function linkOAuth(provider: string) {
     setBusy(true);
     try {
-      await startOAuthLink(provider);
+      await startOAuthLink(provider, oauthCompanyId);
     } catch (error) {
       notifications.show({ color: 'red', message: oauthErrorMessage(error) });
       setBusy(false);

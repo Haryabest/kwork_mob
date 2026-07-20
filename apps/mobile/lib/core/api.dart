@@ -412,6 +412,23 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> userAudit({
+    String? action,
+    String? actionPrefix,
+    int limit = 100,
+    int offset = 0,
+    int days = 30,
+  }) async {
+    final res = await _dio.get('/user/audit', queryParameters: {
+      if (action != null) 'action': action,
+      if (actionPrefix != null) 'action_prefix': actionPrefix,
+      'limit': limit,
+      'offset': offset,
+      'days': days,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
     final res = await _dio.patch('/user/me', data: data);
     return Map<String, dynamic>.from(res.data as Map);

@@ -23,11 +23,26 @@ export async function fetchOAuthIdentities(): Promise<OAuthIdentity[]> {
   return data.items ?? [];
 }
 
-export async function startOAuthLink(provider: string): Promise<void> {
+export async function resolveOAuthCompanyId(): Promise<number | undefined> {
+  try {
+    const { data } = await api.get<{
+      items: Array<{ id: number; balance?: number | null }>;
+    }>('/company/mine');
+    const company = data.items?.[0];
+    if (company?.id && company.balance != null) return company.id;
+  } catch {
+    /* personal mode */
+  }
+  return undefined;
+}
+
+export async function startOAuthLink(provider: string, companyId?: number): Promise<void> {
   const redirectUri = webOAuthRedirectUri();
+  const params: Record<string, string | number> = { platform: 'web', redirect_uri: redirectUri };
+  if (companyId) params.company_id = companyId;
   const { data } = await api.get<{ authorize_url: string; state: string }>(
     `/auth/oauth/${provider}/link`,
-    { params: { platform: 'web', redirect_uri: redirectUri } },
+    { params },
   );
   if (typeof window !== 'undefined') {
     sessionStorage.setItem('oauth_state', data.state);
@@ -56,8 +71,10 @@ export async function completeOAuthLinkCallback(code: string, state: string): Pr
   sessionStorage.removeItem('oauth_flow');
 }
 
-export async function unlinkOAuth(provider: string): Promise<void> {
-  await api.delete(`/auth/oauth/${provider}/link`);
+export async function unlinkOAuth(provider: string, companyId?: number): Promise<void> {
+  await api.delete(`/auth/oauth/${provider}/link`, {
+    params: companyId ? { company_id: companyId } : undefined,
+  });
 }
 
 export async function startOAuth(

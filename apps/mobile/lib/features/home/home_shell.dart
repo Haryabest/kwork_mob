@@ -713,6 +713,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   bool _deleting = false;
   List<Map<String, String>> _oauthProviders = [];
   bool _oauthLinking = false;
+  String? _lastOAuthUnlinkHint;
 
   static String _prefLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -790,7 +791,32 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
     } catch (_) {}
     await _loadSessions();
     await _loadOAuth();
+    await _loadLastOAuthUnlinkHint();
     if (mounted) setState(() => _prefs = prefs);
+  }
+
+  Future<void> _loadLastOAuthUnlinkHint() async {
+    try {
+      final res = await widget.api.userAudit(action: 'oauth_unlink', limit: 1);
+      final items = res['items'] as List?;
+      if (items == null || items.isEmpty) {
+        _lastOAuthUnlinkHint = null;
+        return;
+      }
+      final row = Map<String, dynamic>.from(items.first as Map);
+      final details = row['details'];
+      final provider = details is Map ? details['provider']?.toString() : null;
+      final at = row['created_at']?.toString();
+      if (provider == null || provider.isEmpty) {
+        _lastOAuthUnlinkHint = null;
+        return;
+      }
+      _lastOAuthUnlinkHint = at != null && at.isNotEmpty
+          ? 'Последняя отвязка: $provider · $at'
+          : 'Последняя отвязка: $provider';
+    } catch (_) {
+      _lastOAuthUnlinkHint = null;
+    }
   }
 
   Future<void> _refreshMeOAuth() async {
@@ -870,6 +896,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
         companyId: widget.session.corporate ? widget.session.companyId : null,
       );
       await _refreshMeOAuth();
+      await _loadLastOAuthUnlinkHint();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Соцсеть отвязана')),
@@ -1428,6 +1455,15 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
               ),
             );
           }),
+          if (_lastOAuthUnlinkHint != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                _lastOAuthUnlinkHint!,
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
         ],
         Text(l10n.profileSecuritySection, style: context.theme.typography.sm),

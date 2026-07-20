@@ -10486,6 +10486,53 @@ paths:
       summary: User Audit Log
       tags:
       - Пользователь
+  /api/v1/user/audit/export:
+    get:
+      description: CSV export личного audit_log §2.5.5.
+      operationId: user_audit_export_api_v1_user_audit_export_get
+      parameters:
+      - in: query
+        name: action
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Action
+      - in: query
+        name: action_prefix
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Action Prefix
+      - in: query
+        name: days
+        required: false
+        schema:
+          default: 30
+          maximum: 365
+          minimum: 1
+          title: Days
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: User Audit Export
+      tags:
+      - Пользователь
   /api/v1/user/balance:
     get:
       operationId: get_balance_api_v1_user_balance_get
