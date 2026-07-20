@@ -146,6 +146,33 @@ async def test_audit_oauth_login():
 
 
 @pytest.mark.asyncio
+async def test_audit_oauth_with_company_id():
+    added = []
+
+    class FakeDb:
+        async def commit(self):
+            pass
+
+        def add(self, row):
+            added.append(row)
+
+    await oa._audit_oauth(
+        FakeDb(), user_id=3, action="oauth_link", provider="vk", company_id=9
+    )
+    assert added[0].company_id == 9
+
+
+@pytest.mark.asyncio
+async def test_resolve_oauth_company_id_member():
+    class FakeDb:
+        async def scalar(self, _stmt):
+            return 1
+
+    cid = await oa._resolve_oauth_company_id(FakeDb(), user_id=2, company_id=5)
+    assert cid == 5
+
+
+@pytest.mark.asyncio
 async def test_unlink_oauth_writes_audit():
     from app.models import User, UserOAuthIdentity
 

@@ -317,12 +317,13 @@ class ApiClient {
         .toList();
   }
 
-  Future<String> oauthLinkAuthorizeUrl(String provider) async {
+  Future<String> oauthLinkAuthorizeUrl(String provider, {int? companyId}) async {
     final res = await _dio.get(
       '/auth/oauth/$provider/link',
       queryParameters: {
         'platform': 'mobile',
         'redirect_uri': mobileOAuthRedirect,
+        if (companyId != null) 'company_id': companyId,
       },
     );
     final data = Map<String, dynamic>.from(res.data as Map);
@@ -341,8 +342,11 @@ class ApiClient {
     });
   }
 
-  Future<void> oauthUnlink(String provider) async {
-    await _dio.delete('/auth/oauth/$provider/link');
+  Future<void> oauthUnlink(String provider, {int? companyId}) async {
+    await _dio.delete(
+      '/auth/oauth/$provider/link',
+      queryParameters: {if (companyId != null) 'company_id': companyId},
+    );
   }
 
   Future<Map<String, dynamic>> verifyLogin2fa({

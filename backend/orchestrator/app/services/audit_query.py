@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AuditLog
@@ -77,9 +77,14 @@ async def list_company_audit_logs(
 
     if action_prefix and action_prefix.startswith("oauth"):
         if member_user_ids:
-            filters.append(AuditLog.user_id.in_(member_user_ids))
+            filters.append(
+                or_(
+                    AuditLog.company_id == company_id,
+                    AuditLog.user_id.in_(member_user_ids),
+                )
+            )
         else:
-            filters.append(AuditLog.id < 0)
+            filters.append(AuditLog.company_id == company_id)
     else:
         filters.append(AuditLog.company_id == company_id)
 

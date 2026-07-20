@@ -865,9 +865,11 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   Future<void> _unlinkOAuth(String provider) async {
     setState(() => _oauthLinking = true);
     try {
-      await widget.api.oauthUnlink(provider);
+      await widget.api.oauthUnlink(
+        provider,
+        companyId: widget.session.corporate ? widget.session.companyId : null,
+      );
       await _refreshMeOAuth();
-      await _loadOAuth();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Соцсеть отвязана')),
@@ -889,7 +891,8 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
     setState(() => _oauthLinking = true);
     try {
       OAuthPending.instance.start(provider, flow: OAuthFlow.link);
-      final url = await widget.api.oauthLinkAuthorizeUrl(provider);
+      final cid = widget.session.corporate ? widget.session.companyId : null;
+      final url = await widget.api.oauthLinkAuthorizeUrl(provider, companyId: cid);
       final uri = Uri.parse(url);
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
         throw StateError('Не удалось открыть браузер');

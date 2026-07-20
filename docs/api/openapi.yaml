@@ -6682,6 +6682,14 @@ paths:
           - type: string
           - type: 'null'
           title: Consents
+      - in: query
+        name: company_id
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Company Id
       responses:
         '200':
           content:
@@ -6742,6 +6750,14 @@ paths:
         schema:
           title: Provider
           type: string
+      - in: query
+        name: company_id
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Company Id
       responses:
         '200':
           content:
@@ -6785,6 +6801,14 @@ paths:
           default: web
           title: Platform
           type: string
+      - in: query
+        name: company_id
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Company Id
       responses:
         '200':
           content:

@@ -62,6 +62,7 @@ async def oauth_authorize(
     platform: str = "web",
     mode: str = "login",
     consents: str | None = None,
+    company_id: int | None = None,
 ):
     """Старт OAuth — URL для редиректа на провайдера."""
     consent_list = [c.strip() for c in consents.split(",")] if consents else None
@@ -71,6 +72,7 @@ async def oauth_authorize(
         platform=platform,
         mode=mode,
         consents=consent_list,
+        company_id=company_id,
     )
     return OAuthStartResponse(**data)
 
@@ -117,13 +119,27 @@ async def oauth_link_start(
     user: User = Depends(get_current_db_user),
     redirect_uri: str | None = None,
     platform: str = "web",
+    company_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
 ):
     """Старт привязки соцсети к текущему аккаунту."""
+    from app.models import CompanyMember
+
+    if company_id is not None:
+        ok = await db.scalar(
+            select(CompanyMember.id).where(
+                CompanyMember.company_id == company_id,
+                CompanyMember.user_id == user.id,
+            )
+        )
+        if not ok:
+            raise HTTPException(400, "Нет доступа к компании")
     data = await oauth_svc.start_oauth_link(
         user.id,
         provider,
         redirect_uri=redirect_uri,
         platform=platform,
+        company_id=company_id,
     )
     return OAuthStartResponse(**data)
 
@@ -150,11 +166,12 @@ async def oauth_link_complete(
 @router.delete("/oauth/{provider}/link", response_model=OAuthUnlinkResponse)
 async def oauth_link_remove(
     provider: str,
+    company_id: int | None = None,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Отвязка соцсети от текущего аккаунта."""
-    data = await oauth_svc.unlink_oauth(db, user, provider)
+    data = await oauth_svc.unlink_oauth(db, user, provider, company_id=company_id)
     return OAuthUnlinkResponse(**data)
 
 

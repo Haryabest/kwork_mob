@@ -52,6 +52,23 @@ type TwoFaStatus = {
   owner_2fa_required?: boolean;
 };
 
+type OAuthUnlinkAudit = {
+  user_id?: number;
+  details?: { provider?: string };
+  created_at?: string | null;
+};
+
+async function loadLastOAuthUnlink(): Promise<OAuthUnlinkAudit | null> {
+  try {
+    const { data } = await api.get<{ items: OAuthUnlinkAudit[] }>('/company/audit', {
+      params: { action: 'oauth_unlink', limit: 1 },
+    });
+    return data.items?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const PREF_LABELS: Record<string, string> = {
   push_enabled: 'Push-уведомления',
   email_enabled: 'Email-уведомления',
@@ -84,6 +101,7 @@ export default function SettingsPage() {
   const [disableCode, setDisableCode] = useState('');
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([]);
+  const [lastOAuthUnlink, setLastOAuthUnlink] = useState<OAuthUnlinkAudit | null>(null);
   const [busy, setBusy] = useState(false);
   const oauthLinkedProviders = me?.oauth_providers ?? [];
 
@@ -129,6 +147,7 @@ export default function SettingsPage() {
     } catch {
       setOauthProviders([]);
     }
+    setLastOAuthUnlink(await loadLastOAuthUnlink());
   }, [loadSessions]);
 
   useEffect(() => {
@@ -141,6 +160,7 @@ export default function SettingsPage() {
       await unlinkOAuth(provider);
       const { data } = await api.get<Me>('/user/me');
       setMe(data);
+      setLastOAuthUnlink(await loadLastOAuthUnlink());
       notifications.show({ color: 'teal', message: 'Соцсеть отвязана' });
     } catch (error) {
       notifications.show({ color: 'red', message: oauthErrorMessage(error) });
@@ -379,6 +399,14 @@ export default function SettingsPage() {
               <Text size="sm" c="#6d6c77">
                 Привяжите VK ID, Яндекс ID или Сбер ID для быстрого входа.
               </Text>
+              {lastOAuthUnlink && (
+                <Text size="xs" c="dimmed">
+                  Последняя отвязка в компании: {lastOAuthUnlink.details?.provider ?? '—'}
+                  {lastOAuthUnlink.created_at
+                    ? ` · ${new Date(lastOAuthUnlink.created_at).toLocaleString('ru-RU')}`
+                    : ''}
+                </Text>
+              )}
               {oauthProviders.length === 0 ? (
                 <Text size="sm" c="dimmed">
                   OAuth не настроен на сервере

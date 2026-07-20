@@ -12,13 +12,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.redis import get_redis
-from app.models import AuditLog, User, UserOAuthIdentity
+from app.models import AuditLog, CompanyMember, User, UserOAuthIdentity
 from app.services import auth as auth_service
 from app.services import oauth_providers as op
 from app.services.legal import record_consents
 
 OAUTH_STATE_PREFIX = "oauth_state:"
 REQUIRED_CONSENTS = frozenset({"terms", "privacy", "offer", "rights", "nsfw_rules"})
+
+
+async def _resolve_oauth_company_id(
+    db: AsyncSession,
+    user_id: int,
+    company_id: int | None,
+) -> int | None:
+    if not company_id:
+        return None
+    ok = await db.scalar(
+        select(CompanyMember.id).where(
+            CompanyMember.company_id == company_id,
+            CompanyMember.user_id == user_id,
+        )
+    )
+    return company_id if ok else None
 
 
 async def _audit_oauth(
@@ -28,11 +44,12 @@ async def _audit_oauth(
     action: str,
     provider: str,
     platform: str | None = None,
+    company_id: int | None = None,
 ) -> None:
     details: dict = {"provider": provider}
     if platform:
         details["platform"] = platform
-    db.add(AuditLog(user_id=user_id, action=action, details=details))
+    db.add(AuditLog(user_id=user_id, company_id=company_id, action=action, details=details))
 
 
 def default_redirect_uri(platform: str) -> str:
@@ -50,6 +67,7 @@ async def _store_state(
     consents: list[str] | None,
     user_id: int | None = None,
     platform: str = "web",
+    company_id: int | None = None,
 ) -> None:
     redis = await get_redis()
     payload = {
@@ -59,6 +77,7 @@ async def _store_state(
         "consents": consents or [],
         "user_id": user_id,
         "platform": platform,
+        "company_id": company_id,
     }
     await redis.set(
         f"{OAUTH_STATE_PREFIX}{state}",
@@ -88,6 +107,7 @@ async def start_oauth(
     platform: str,
     mode: str,
     consents: list[str] | None,
+    company_id: int | None = None,
 ) -> dict:
     if provider not in op.OAUTH_PROVIDERS:
         raise HTTPException(400, "Неизвестный провайдер")
@@ -108,6 +128,7 @@ async def start_oauth(
         mode=mode,
         consents=consents,
         platform=platform,
+        company_id=company_id,
     )
     return {"authorize_url": op.build_authorize_url(cfg, redirect_uri=uri, state=state), "state": state}
 
@@ -231,7 +252,18 @@ async def complete_oauth(
         from app.services.analytics_ingest import record_screen_event
 
         await record_screen_event(db, user_id=user.id, screen=f"oauth_login_{provider}")
-    await _audit_oauth(db, user_id=user.id, action="oauth_login", provider=provider, platform=platform)
+    stored_cid = stored.get("company_id")
+    audit_company_id = await _resolve_oauth_company_id(
+        db, user.id, int(stored_cid) if stored_cid else None
+    )
+    await _audit_oauth(
+        db,
+        user_id=user.id,
+        action="oauth_login",
+        provider=provider,
+        platform=platform,
+        company_id=audit_company_id,
+    )
     await db.commit()
     access, refresh = await auth_service.issue_tokens_for_user(db, user, remember_me=True)
     return user, access, refresh
@@ -261,6 +293,7 @@ async def start_oauth_link(
     *,
     redirect_uri: str | None,
     platform: str,
+    company_id: int | None = None,
 ) -> dict:
     if provider not in op.OAUTH_PROVIDERS:
         raise HTTPException(400, "Неизвестный провайдер")
@@ -277,6 +310,7 @@ async def start_oauth_link(
         consents=None,
         user_id=user_id,
         platform=platform,
+        company_id=company_id,
     )
     return {"authorize_url": op.build_authorize_url(cfg, redirect_uri=uri, state=state), "state": state}
 
@@ -334,7 +368,18 @@ async def complete_oauth_link(
             from app.services.analytics_ingest import record_screen_event
 
             await record_screen_event(db, user_id=user.id, screen=f"oauth_link_{provider}")
-        await _audit_oauth(db, user_id=user.id, action="oauth_link", provider=provider, platform=platform)
+        stored_cid = stored.get("company_id")
+        audit_company_id = await _resolve_oauth_company_id(
+            db, user.id, int(stored_cid) if stored_cid else None
+        )
+        await _audit_oauth(
+            db,
+            user_id=user.id,
+            action="oauth_link",
+            provider=provider,
+            platform=platform,
+            company_id=audit_company_id,
+        )
         await db.commit()
         return {"linked": True, "provider": provider}
 
@@ -362,12 +407,25 @@ async def complete_oauth_link(
         from app.services.analytics_ingest import record_screen_event
 
         await record_screen_event(db, user_id=user.id, screen=f"oauth_link_{provider}")
-    await _audit_oauth(db, user_id=user.id, action="oauth_link", provider=provider, platform=platform)
+    stored_cid = stored.get("company_id")
+    audit_company_id = await _resolve_oauth_company_id(
+        db, user.id, int(stored_cid) if stored_cid else None
+    )
+    await _audit_oauth(
+        db,
+        user_id=user.id,
+        action="oauth_link",
+        provider=provider,
+        platform=platform,
+        company_id=audit_company_id,
+    )
     await db.commit()
     return {"linked": True, "provider": provider}
 
 
-async def unlink_oauth(db: AsyncSession, user: User, provider: str) -> dict:
+async def unlink_oauth(
+    db: AsyncSession, user: User, provider: str, *, company_id: int | None = None
+) -> dict:
     if provider not in op.OAUTH_PROVIDERS:
         raise HTTPException(400, "Неизвестный провайдер")
     identity = await db.scalar(
@@ -391,7 +449,14 @@ async def unlink_oauth(db: AsyncSession, user: User, provider: str) -> dict:
             "Нельзя отвязать единственный способ входа. Сначала задайте пароль.",
         )
 
-    await _audit_oauth(db, user_id=user.id, action="oauth_unlink", provider=provider)
+    audit_company_id = await _resolve_oauth_company_id(db, user.id, company_id)
+    await _audit_oauth(
+        db,
+        user_id=user.id,
+        action="oauth_unlink",
+        provider=provider,
+        company_id=audit_company_id,
+    )
     await db.delete(identity)
     await db.commit()
     return {"unlinked": True, "provider": provider}
