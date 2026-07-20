@@ -1,7 +1,7 @@
 'use client';
 
-import { Badge, Button, Group, Pagination, Select, Table, Text } from '@mantine/core';
-import { IconArrowBack, IconTrash } from '@tabler/icons-react';
+import { Badge, Button, Group, Pagination, Select, Table, Text, TextInput } from '@mantine/core';
+import { IconArrowBack, IconSearch, IconTrash } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { notifications } from '@mantine/notifications';
@@ -52,6 +52,7 @@ export default function ModelsTrashPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [publishFilter, setPublishFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -59,7 +60,7 @@ export default function ModelsTrashPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [publishFilter]);
+  }, [publishFilter, search]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,6 +70,7 @@ export default function ModelsTrashPage() {
           limit: PAGE_SIZE,
           offset: (page - 1) * PAGE_SIZE,
           ...(publishFilter ? { publish_filter: publishFilter } : {}),
+          ...(search.trim() ? { search: search.trim() } : {}),
         },
       });
       setItems(data.items ?? []);
@@ -78,7 +80,7 @@ export default function ModelsTrashPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, publishFilter]);
+  }, [page, publishFilter, search]);
 
   useEffect(() => {
     void load();
@@ -97,9 +99,9 @@ export default function ModelsTrashPage() {
     }
   }
 
-  const emptyTitle = publishFilter ? 'Нет моделей по фильтру' : 'Корзина пуста';
-  const emptyDescription = publishFilter
-    ? 'Смените фильтр публикации или очистите его'
+  const emptyTitle = publishFilter || search.trim() ? 'Нет моделей по фильтру' : 'Корзина пуста';
+  const emptyDescription = publishFilter || search.trim()
+    ? 'Смените фильтр или очистите поиск'
     : 'Удалённые модели появятся здесь на 30 дней';
 
   return (
@@ -115,6 +117,13 @@ export default function ModelsTrashPage() {
       />
       <Surface>
         <FilterRow>
+          <TextInput
+            label="Поиск UUID"
+            placeholder="Первые символы UUID"
+            leftSection={<IconSearch size={16} />}
+            value={search}
+            onChange={(e) => setSearch(e.currentTarget.value)}
+          />
           <Select
             label="Публикация"
             placeholder="Все"

@@ -335,6 +335,7 @@ async def list_trash_models(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
     publish_filter: str | None = Query(default=None, pattern=r"^(published|draft)$"),
+    search: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -342,7 +343,7 @@ async def list_trash_models(
     from app.services import model_storage as ms
 
     items, total = await ms.list_trash(
-        db, user, limit=limit, offset=offset, publish_filter=publish_filter
+        db, user, limit=limit, offset=offset, publish_filter=publish_filter, search=search
     )
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 

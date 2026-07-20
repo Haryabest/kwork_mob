@@ -27,6 +27,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   int? _sessionMemberId;
   List<Map<String, dynamic>> _memberSessions = [];
   List<Map<String, dynamic>> _invitations = [];
+  List<Map<String, dynamic>> _webhooks = [];
   Map<String, dynamic>? _marketplaceStatus;
   int? _companyId;
   int _membersTotal = 0;
@@ -117,6 +118,11 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
       if (widget.session.isOwner) {
         _accessLog = await widget.api.listCompanyAccessLog();
         try {
+          _webhooks = await widget.api.listCompanyWebhooks();
+        } catch (_) {
+          _webhooks = [];
+        }
+        try {
           final funnel = await widget.api.companyPublicationFunnel();
           _funnelTotals = Map<String, dynamic>.from(funnel['totals'] as Map? ?? {});
         } catch (_) {
@@ -124,6 +130,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
         }
       } else {
         _accessLog = [];
+        _webhooks = [];
         _funnelTotals = null;
       }
       if (widget.session.canManageTeam && _companyId != null) {
@@ -541,6 +548,27 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                       title: Text(r['model_uuid']?.toString().substring(0, 8) ?? '—'),
                                       subtitle: Text(
                                         '${r['action'] ?? '—'} · user ${r['user_id'] ?? '—'}\n${r['timestamp'] ?? ''}',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                const Divider(height: 24),
+                                Text('B2B Webhooks §14.5', style: context.theme.typography.sm),
+                                const SizedBox(height: 8),
+                                if (_webhooks.isEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Text(
+                                      'Webhooks не настроены',
+                                      style: const TextStyle(color: AppColors.textSecondary),
+                                    ),
+                                  )
+                                else
+                                  for (final w in _webhooks)
+                                    FTile(
+                                      title: Text(w['url']?.toString() ?? '—'),
+                                      subtitle: Text(
+                                        (w['events'] as List?)?.join(', ') ?? '—',
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                       ),

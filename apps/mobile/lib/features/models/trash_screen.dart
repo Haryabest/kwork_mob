@@ -24,6 +24,7 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
   String? _busyUuid;
   int _total = 0;
   String? _publishFilter;
+  final _searchCtrl = TextEditingController();
   static const _pageSize = 20;
 
   @override
@@ -31,6 +32,12 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
     super.initState();
     AnalyticsService.instance.track('screen_view', {'screen': 'trash'});
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load({bool append = false}) async {
@@ -47,6 +54,7 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
         limit: _pageSize,
         offset: append ? _items.length : 0,
         publishFilter: _publishFilter,
+        search: _searchCtrl.text.trim().isEmpty ? null : _searchCtrl.text.trim(),
       );
       final items = (page['items'] as List).cast<Map<String, dynamic>>();
       _total = (page['total'] as num?)?.toInt() ?? items.length;
@@ -95,32 +103,43 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
   Widget _filterBar(AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Wrap(
-        spacing: 8,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          FButton(
-            style: _publishFilter == null ? .primary : .outline,
-            onPress: () {
-              setState(() => _publishFilter = null);
-              _load();
-            },
-            child: const Text('Все'),
+          FTextField(
+            control: FTextFieldControl.managed(controller: _searchCtrl),
+            label: const Text('Поиск UUID'),
+            onSubmit: (_) => _load(),
           ),
-          FButton(
-            style: _publishFilter == 'published' ? .primary : .outline,
-            onPress: () {
-              setState(() => _publishFilter = 'published');
-              _load();
-            },
-            child: const Text('Опублик.'),
-          ),
-          FButton(
-            style: _publishFilter == 'draft' ? .primary : .outline,
-            onPress: () {
-              setState(() => _publishFilter = 'draft');
-              _load();
-            },
-            child: const Text('Черновики'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              FButton(
+                style: _publishFilter == null ? .primary : .outline,
+                onPress: () {
+                  setState(() => _publishFilter = null);
+                  _load();
+                },
+                child: const Text('Все'),
+              ),
+              FButton(
+                style: _publishFilter == 'published' ? .primary : .outline,
+                onPress: () {
+                  setState(() => _publishFilter = 'published');
+                  _load();
+                },
+                child: const Text('Опублик.'),
+              ),
+              FButton(
+                style: _publishFilter == 'draft' ? .primary : .outline,
+                onPress: () {
+                  setState(() => _publishFilter = 'draft');
+                  _load();
+                },
+                child: const Text('Черновики'),
+              ),
+            ],
           ),
         ],
       ),
@@ -164,7 +183,9 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
                             SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
                             Center(
                               child: Text(
-                                _publishFilter != null ? 'Нет моделей по фильтру' : l10n.trashEmpty,
+                                _publishFilter != null || _searchCtrl.text.trim().isNotEmpty
+                                    ? 'Нет моделей по фильтру'
+                                    : l10n.trashEmpty,
                                 textAlign: TextAlign.center,
                               ),
                             ),

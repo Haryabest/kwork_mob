@@ -129,8 +129,12 @@ async def list_trash(
     limit: int = 20,
     offset: int = 0,
     publish_filter: str | None = None,
+    search: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     where: list[Any] = [Model3D.trashed_at.is_not(None), Model3D.user_id == user.id]
+    if search and search.strip():
+        q = f"%{search.strip()}%"
+        where.append(or_(Model3D.uuid.ilike(q), Model3D.display_name.ilike(q)))
     if publish_filter == "published":
         where.append(
             or_(

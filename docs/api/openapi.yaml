@@ -9196,6 +9196,15 @@ paths:
           - type: 'null'
           title: Publish Filter
       - in: query
+        name: search
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 120
+            type: string
+          - type: 'null'
+          title: Search
+      - in: query
         name: limit
         required: false
         schema:

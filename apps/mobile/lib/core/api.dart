@@ -547,6 +547,12 @@ class ApiClient {
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  Future<List<Map<String, dynamic>>> listCompanyWebhooks() async {
+    final res = await _dio.get('/company/webhooks');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   Future<Map<String, dynamic>> companyPublicationFunnel() async {
     final res = await _dio.get('/company/publication-funnel');
     return Map<String, dynamic>.from(res.data as Map);
@@ -907,11 +913,13 @@ class ApiClient {
     int limit = 20,
     int offset = 0,
     String? publishFilter,
+    String? search,
   }) async {
     final res = await _dio.get('/models/trash', queryParameters: {
       'limit': limit,
       'offset': offset,
       if (publishFilter != null && publishFilter.isNotEmpty) 'publish_filter': publishFilter,
+      if (search != null && search.isNotEmpty) 'search': search,
     });
     final data = Map<String, dynamic>.from(res.data as Map);
     final items = (data['items'] as List? ?? [])

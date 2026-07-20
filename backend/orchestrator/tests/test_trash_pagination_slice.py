@@ -10,3 +10,4 @@ def test_trash_list_has_pagination_params():
     assert "limit" in sig.parameters
     assert "offset" in sig.parameters
     assert "publish_filter" in sig.parameters
+    assert "search" in sig.parameters
