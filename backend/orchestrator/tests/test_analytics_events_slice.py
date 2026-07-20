@@ -149,3 +149,30 @@ def test_screen_view_support_ticket_open():
         props={"screen": "support_ticket_open", "ticket_id": 99},
     )
     assert item.props["ticket_id"] == 99
+
+
+def test_screen_view_support_ticket_open_missing_ticket_id():
+    with pytest.raises(ValidationError):
+        AnalyticsEventItem(
+            event="screen_view",
+            ts="2026-07-17T10:00:00Z",
+            props={"screen": "support_ticket_open"},
+        )
+
+
+def test_screen_view_support_ticket_reply():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "support_ticket_reply", "ticket_id": 12},
+    )
+    assert item.props["screen"] == "support_ticket_reply"
+
+
+def test_screen_view_faq_question_send():
+    item = AnalyticsEventItem(
+        event="screen_view",
+        ts="2026-07-17T10:00:00Z",
+        props={"screen": "faq_question_send"},
+    )
+    assert item.props["screen"] == "faq_question_send"

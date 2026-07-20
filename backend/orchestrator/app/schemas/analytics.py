@@ -27,6 +27,8 @@ ALLOWED_SCREENS = frozenset(
         "queue_cancel_ack",
         "notifications_clear",
         "support_ticket_open",
+        "support_ticket_reply",
+        "faq_question_send",
         "balance",
         "storage",
         "notifications",
@@ -92,6 +94,10 @@ class AnalyticsEventItem(BaseModel):
             bid = props.get("banner_id")
             if bid is not None and not isinstance(bid, int):
                 raise ValueError("props.banner_id must be int")
+            if screen in {"support_ticket_open", "support_ticket_reply"}:
+                tid = props.get("ticket_id")
+                if not isinstance(tid, int) or tid < 1:
+                    raise ValueError(f"{screen} requires props.ticket_id int")
         elif self.event == "shoot_complete":
             uuid = props.get("model_uuid")
             if not isinstance(uuid, str) or not uuid.strip():

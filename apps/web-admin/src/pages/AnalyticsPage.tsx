@@ -8,6 +8,14 @@ import { api, getApiError } from '../services/api';
 
 const CHART_COLORS = ['#0381E9', '#9403fd', '#2e7d32', '#f57c00', '#c62828', '#6d6c77', '#00897b', '#5e35b1'];
 
+const ANALYTICS_EVENT_TYPES = [
+  'screen_view',
+  'shoot_complete',
+  'checkout_pay',
+  'shoot_step',
+  'shoot_step_retry',
+];
+
 type ScreenRow = { screen: string; views: number };
 type ScreensData = {
   days: number;
@@ -45,6 +53,7 @@ export default function AnalyticsPage() {
   const [userId, setUserId] = useState<number | string>('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [eventFilter, setEventFilter] = useState<string | null>(null);
   const [events, setEvents] = useState<RawEvent[]>([]);
   const [eventsTotal, setEventsTotal] = useState(0);
   const [eventsOffset, setEventsOffset] = useState(0);
@@ -104,6 +113,7 @@ export default function AnalyticsPage() {
   function eventParams(extra: Record<string, string | number> = {}) {
     const params: Record<string, string | number> = { ...extra };
     if (userId !== '') params.user_id = Number(userId);
+    if (eventFilter) params.event = eventFilter;
     if (dateFrom) params.date_from = `${dateFrom}T00:00:00Z`;
     if (dateTo) params.date_to = `${dateTo}T23:59:59Z`;
     return params;
@@ -269,6 +279,15 @@ export default function AnalyticsPage() {
         />
         <TextInput type="date" label="С" value={dateFrom} onChange={(e) => setDateFrom(e.currentTarget.value)} w={160} />
         <TextInput type="date" label="По" value={dateTo} onChange={(e) => setDateTo(e.currentTarget.value)} w={160} />
+        <Select
+          label="Event"
+          placeholder="все"
+          clearable
+          data={ANALYTICS_EVENT_TYPES.map((e) => ({ value: e, label: e }))}
+          value={eventFilter}
+          onChange={setEventFilter}
+          w={180}
+        />
         <Button loading={eventsLoading} onClick={() => void loadEvents(0)}>
           Загрузить
         </Button>

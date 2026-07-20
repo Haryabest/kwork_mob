@@ -2681,6 +2681,15 @@ paths:
           - type: 'null'
           title: User Id
       - in: query
+        name: event
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          title: Event
+      - in: query
         name: date_from
         required: false
         schema:

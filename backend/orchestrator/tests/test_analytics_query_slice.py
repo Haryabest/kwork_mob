@@ -68,3 +68,30 @@ async def test_screen_timeseries_pg_fallback(monkeypatch):
     data2 = await screen_timeseries(object(), days=7, top=5, screen="queue")
     assert data2["screen"] == "queue"
     assert data2["screens"] == ["queue"]
+
+
+async def test_list_raw_events_event_filter():
+    from datetime import datetime, timezone
+
+    from app.services.analytics_query import list_raw_events
+
+    class FakeRow:
+        id = 1
+        user_id = 2
+        event = "screen_view"
+        event_ts = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        props = {"screen": "home"}
+        ingested_at = None
+        ch_synced_at = None
+
+    class FakeDb:
+        async def scalar(self, *_a, **_k):
+            return 1
+
+        async def scalars(self, *_a, **_k):
+            return SimpleNamespace(all=lambda: [FakeRow()])
+
+    data = await list_raw_events(FakeDb(), event="screen_view", limit=10, offset=0)
+    assert data["event"] == "screen_view"
+    assert data["total"] == 1
+    assert data["items"][0]["event"] == "screen_view"

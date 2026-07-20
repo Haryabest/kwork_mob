@@ -98,6 +98,7 @@ class _FaqSupportScreenState extends State<FaqSupportScreen>
         subject: _subject.text.trim().isEmpty ? l10n.faqDefaultSubject : _subject.text.trim(),
         message: _message.text.trim(),
       );
+      AnalyticsService.instance.track('screen_view', {'screen': 'faq_question_send'});
       _subject.clear();
       _message.clear();
       await _load();
@@ -298,6 +299,10 @@ class _TicketThreadSheetState extends State<_TicketThreadSheet> {
     setState(() => _busy = true);
     try {
       await widget.api.replySupport(widget.ticketId, _reply.text.trim());
+      AnalyticsService.instance.track('screen_view', {
+        'screen': 'support_ticket_reply',
+        'ticket_id': widget.ticketId,
+      });
       _reply.clear();
       await _load();
     } catch (e) {

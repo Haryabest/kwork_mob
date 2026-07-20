@@ -90,6 +90,7 @@ async def list_raw_events(
     db: AsyncSession,
     *,
     user_id: int | None = None,
+    event: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     limit: int = 500,
@@ -98,6 +99,8 @@ async def list_raw_events(
     filters = [MobileAnalyticsEvent.id.isnot(None)]
     if user_id is not None:
         filters.append(MobileAnalyticsEvent.user_id == user_id)
+    if event is not None:
+        filters.append(MobileAnalyticsEvent.event == event)
     if date_from is not None:
         filters.append(MobileAnalyticsEvent.event_ts >= date_from)
     if date_to is not None:
@@ -128,6 +131,7 @@ async def list_raw_events(
     ]
     return {
         "user_id": user_id,
+        "event": event,
         "date_from": date_from.isoformat() if date_from else None,
         "date_to": date_to.isoformat() if date_to else None,
         "limit": limit,
