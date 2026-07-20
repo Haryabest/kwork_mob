@@ -63,6 +63,17 @@ const PUBLISH_LABEL: Record<string, string> = {
   verified_ozon: 'Верифицировано Ozon',
 };
 
+type UploadLog = {
+  id: number;
+  marketplace: string;
+  sku: string;
+  status: string;
+  attempt: number;
+  error_message?: string | null;
+  external_ref?: string | null;
+  created_at?: string | null;
+};
+
 export default function ModelDetailPage() {
   const params = useParams<{ uuid: string }>();
   const uuid = params.uuid;
@@ -83,6 +94,8 @@ export default function ModelDetailPage() {
   const [mpStatus, setMpStatus] = useState<{
     upload_enabled: boolean;
     credentials: { wb: boolean; ozon: boolean };
+    last_attempt?: { wb?: UploadLog | null; ozon?: UploadLog | null };
+    recent_logs?: UploadLog[];
   } | null>(null);
 
   const load = useCallback(async () => {
@@ -109,11 +122,21 @@ export default function ModelDetailPage() {
   useEffect(() => {
     void load();
     api
-      .get<{ upload_enabled: boolean; credentials: { wb: boolean; ozon: boolean } }>(
-        '/company/marketplace/status',
-      )
+      .get<{
+        upload_enabled: boolean;
+        credentials: { wb: boolean; ozon: boolean };
+        last_attempt?: { wb?: UploadLog | null; ozon?: UploadLog | null };
+        recent_logs?: UploadLog[];
+      }>(`/models/${uuid}/marketplace-upload/status`)
       .then(({ data }) => setMpStatus(data))
-      .catch(() => undefined);
+      .catch(() =>
+        api
+          .get<{ upload_enabled: boolean; credentials: { wb: boolean; ozon: boolean } }>(
+            '/company/marketplace/status',
+          )
+          .then(({ data }) => setMpStatus(data))
+          .catch(() => undefined),
+      );
     return () => {
       setPreviewUrl((prev) => {
         revokeModelPreviewUrl(prev);
@@ -130,6 +153,24 @@ export default function ModelDetailPage() {
         { params: { format } },
       );
       if (data.message) notifications.show({ color: 'yellow', message: data.message });
+      window.open(data.download_url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function exportPublishZip() {
+    setBusy(true);
+    try {
+      const { data } = await api.post<{ download_url: string; message?: string }>(
+        `/models/${uuid}/export-publish-zip`,
+      );
+      notifications.show({
+        color: 'teal',
+        message: data.message || 'ZIP для публикации готов',
+      });
       window.open(data.download_url, '_blank', 'noopener,noreferrer');
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
@@ -348,6 +389,14 @@ export default function ModelDetailPage() {
             >
               Скачать USDZ (Wildberries)
             </Button>
+            <Button
+              variant="light"
+              leftSection={<IconDownload size={16} />}
+              loading={busy}
+              onClick={() => void exportPublishZip()}
+            >
+              Экспортировать всё (ZIP)
+            </Button>
             <Button variant="light" leftSection={<IconDownload size={16} />} loading={busy} onClick={() => void restoreSources()}>
               Восстановить исходники из облака
             </Button>
@@ -484,6 +533,23 @@ export default function ModelDetailPage() {
           <Button loading={busy} onClick={() => void apiUpload()} disabled={sku.trim().length < 1}>
             Отправить 3D-модель
           </Button>
+          {(mpStatus?.recent_logs || []).length > 0 && (
+            <Stack gap={4}>
+              <Text size="sm" fw={600}>
+                Последние попытки API
+              </Text>
+              {mpStatus!.recent_logs!.slice(0, 5).map((l) => (
+                <Group key={l.id} justify="space-between" wrap="nowrap">
+                  <Text size="xs" lineClamp={1} style={{ flex: 1 }}>
+                    {l.marketplace} · {l.sku} · попытка {l.attempt}
+                  </Text>
+                  <Badge size="sm" color={l.status === 'success' ? 'teal' : 'red'}>
+                    {l.status}
+                  </Badge>
+                </Group>
+              ))}
+            </Stack>
+          )}
         </Stack>
       </Modal>
 

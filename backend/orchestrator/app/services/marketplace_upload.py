@@ -358,6 +358,30 @@ async def upload_model_to_marketplace(
     )
 
 
+async def model_upload_status(
+    db: AsyncSession,
+    *,
+    model: Model3D,
+) -> dict[str, Any]:
+    """Статус API-публикации для селлера: credentials + последние попытки."""
+    creds: dict[str, bool] = {}
+    for mp in MARKETPLACES:
+        creds[mp] = (await get_credential(db, marketplace=mp, company_id=model.company_id)) is not None
+    logs = await list_upload_logs(db, model_uuid=model.uuid, limit=20)
+    last_by_mp: dict[str, dict | None] = {"wb": None, "ozon": None}
+    for row in logs:
+        mp = row.get("marketplace")
+        if mp in last_by_mp and last_by_mp[mp] is None:
+            last_by_mp[mp] = row
+    return {
+        "upload_enabled": settings.MARKETPLACE_UPLOAD_ENABLED,
+        "credentials": creds,
+        "publish_status": model.publish_status,
+        "last_attempt": last_by_mp,
+        "recent_logs": logs[:10],
+    }
+
+
 async def list_upload_logs(
     db: AsyncSession,
     *,

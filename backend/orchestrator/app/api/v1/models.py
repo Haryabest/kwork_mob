@@ -625,6 +625,52 @@ async def restore_model_sources(
     return result
 
 
+@router.post("/{model_uuid}/export-publish-zip")
+async def export_publish_zip(
+    model_uuid: str,
+    request: Request,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """ZIP: glb + usdz + инструкция для ручной публикации (§7.7)."""
+    from app.services import seller_export as export_svc
+
+    model = await _get_owned_model(db, model_uuid, user)
+    await require_company_permission(db, user, model.company_id, "can_download_models")
+    assert_download_allowed(request)
+    result = await export_svc.export_publish_zip(db, model=model, user=user, request=request)
+    await db.commit()
+    return result
+
+
+@router.get("/{model_uuid}/marketplace-upload/status")
+async def marketplace_upload_status(
+    model_uuid: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Статус API-публикации и история попыток (§7.6 / §14.6)."""
+    from app.services import marketplace_upload as mp_svc
+
+    model = await _get_owned_model(db, model_uuid, user)
+    return await mp_svc.model_upload_status(db, model=model)
+
+
+@router.get("/{model_uuid}/marketplace-upload/logs")
+async def marketplace_upload_logs(
+    model_uuid: str,
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Журнал попыток API-публикации."""
+    from app.services import marketplace_upload as mp_svc
+
+    await _get_owned_model(db, model_uuid, user)
+    items = await mp_svc.list_upload_logs(db, model_uuid=model_uuid, limit=limit)
+    return {"items": items}
+
+
 @router.post("/{model_uuid}/extend-storage")
 async def extend_model_storage(
     model_uuid: str,

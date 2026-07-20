@@ -14,6 +14,7 @@ EVENT_DEFAULTS: dict[str, str] = {
     "generation_done": "owner_manager",
     "photographer_uploaded": "owner_manager",
     "source_expire": "all",
+    "publish_reminder": "owner_manager",
     "low_balance": "owner_only",
 }
 
@@ -93,6 +94,7 @@ async def notify_company_event(
         "generation_done": "generation_done",
         "photographer_uploaded": "generation_done",  # reuse order-ish
         "source_expire": "source_expire",
+        "publish_reminder": "publish_reminder",
         "low_balance": "email_balance",
     }.get(event)
     filtered: list[int] = []

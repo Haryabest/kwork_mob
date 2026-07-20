@@ -375,6 +375,27 @@ celery_app.conf.beat_schedule["source-expire-daily"] = {
 }
 
 
+@celery_app.task(name="app.tasks.celery_app.notify_publish_reminder")
+def notify_publish_reminder():
+    """Напоминание опубликовать модель через 3/14 дней (§7.5.3)."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services import publish_reminder as pr
+
+    async def _run():
+        async with async_session() as db:
+            return await pr.notify_publish_reminders(db)
+
+    return asyncio.run(_run())
+
+
+celery_app.conf.beat_schedule["publish-reminder-daily"] = {
+    "task": "app.tasks.celery_app.notify_publish_reminder",
+    "schedule": crontab(hour=10, minute=0),
+}
+
+
 @celery_app.task(name="app.tasks.celery_app.sample_storage_health")
 def sample_storage_health():
     """Node heartbeat timeline + disk usage sample (§11.16.3 / §23.7)."""

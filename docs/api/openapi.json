@@ -8359,6 +8359,31 @@
         ]
       }
     },
+    "/api/v1/admin/publish-reminder/notify": {
+      "post": {
+        "description": "Ручной прогон напоминаний о публикации §7.5.3.",
+        "operationId": "publish_reminder_notify_now_api_v1_admin_publish_reminder_notify_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Publish Reminder Notify Now",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/quality-alerts/check": {
       "post": {
         "description": "Ручная проверка publication conversion / fallback segmentation §12.4.1.",
@@ -15506,6 +15531,52 @@
         ]
       }
     },
+    "/api/v1/models/{model_uuid}/export-publish-zip": {
+      "post": {
+        "description": "ZIP: glb + usdz + инструкция для ручной публикации (§7.7).",
+        "operationId": "export_publish_zip_api_v1_models__model_uuid__export_publish_zip_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_uuid",
+            "required": true,
+            "schema": {
+              "title": "Model Uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Export Publish Zip",
+        "tags": [
+          "Модели"
+        ]
+      }
+    },
     "/api/v1/models/{model_uuid}/extend-storage": {
       "post": {
         "description": "Продлить хранение исходников ещё на TTL (лимит 3×) §9.1.2.",
@@ -15603,6 +15674,110 @@
           }
         ],
         "summary": "Marketplace Upload",
+        "tags": [
+          "Модели"
+        ]
+      }
+    },
+    "/api/v1/models/{model_uuid}/marketplace-upload/logs": {
+      "get": {
+        "description": "Журнал попыток API-публикации.",
+        "operationId": "marketplace_upload_logs_api_v1_models__model_uuid__marketplace_upload_logs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_uuid",
+            "required": true,
+            "schema": {
+              "title": "Model Uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Marketplace Upload Logs",
+        "tags": [
+          "Модели"
+        ]
+      }
+    },
+    "/api/v1/models/{model_uuid}/marketplace-upload/status": {
+      "get": {
+        "description": "Статус API-публикации и история попыток (§7.6 / §14.6).",
+        "operationId": "marketplace_upload_status_api_v1_models__model_uuid__marketplace_upload_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_uuid",
+            "required": true,
+            "schema": {
+              "title": "Model Uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Marketplace Upload Status",
         "tags": [
           "Модели"
         ]

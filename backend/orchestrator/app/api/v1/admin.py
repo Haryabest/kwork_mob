@@ -1620,6 +1620,17 @@ async def source_expire_notify_now(
     return await se.notify_expiring_sources(db)
 
 
+@router.post("/publish-reminder/notify")
+async def publish_reminder_notify_now(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручной прогон напоминаний о публикации §7.5.3."""
+    from app.services import publish_reminder as pr
+
+    return await pr.notify_publish_reminders(db)
+
+
 @router.get("/storage/node-timeline")
 async def storage_node_timeline(
     days: int = Query(7, ge=1, le=90),
