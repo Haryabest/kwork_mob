@@ -378,6 +378,16 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                 ),
                                 const SizedBox(height: 16),
                               ],
+                              if (widget.session.isOwner && _marketplaceStatus != null) ...[
+                                Text('Marketplace API §7.6', style: context.theme.typography.sm),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'WB: ${(_marketplaceStatus!['credentials'] as Map?)?['wb'] == true ? 'настроен' : 'нет'} · '
+                                  'Ozon: ${(_marketplaceStatus!['credentials'] as Map?)?['ozon'] == true ? 'настроен' : 'нет'}',
+                                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                                ),
+                                const SizedBox(height: 16),
+                              ],
                               FTextField(
                                 control: FTextFieldControl.managed(controller: _memberSearchCtrl),
                                 label: Text(l10n.teamSearchHint),
