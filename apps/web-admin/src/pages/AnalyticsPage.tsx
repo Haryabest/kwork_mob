@@ -43,11 +43,27 @@ type TimeseriesData = {
   screens: string[];
   series: Array<Record<string, string | number>>;
 };
+type OAuthAuditSummary = {
+  days: number;
+  oauth_login: number;
+  oauth_link: number;
+  oauth_unlink: number;
+  total: number;
+};
+type AuditRow = {
+  id: number;
+  user_id?: number | null;
+  action: string;
+  details?: Record<string, unknown>;
+  created_at?: string | null;
+};
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState('7');
   const [chartScreen, setChartScreen] = useState<string | null>(null);
   const [screens, setScreens] = useState<ScreensData | null>(null);
+  const [oauthAudit, setOauthAudit] = useState<OAuthAuditSummary | null>(null);
+  const [oauthAuditLogs, setOauthAuditLogs] = useState<AuditRow[]>([]);
   const [timeseries, setTimeseries] = useState<TimeseriesData | null>(null);
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,14 +86,20 @@ export default function AnalyticsPage() {
     if (chartScreen) tsParams.screen = chartScreen;
     const scParams: Record<string, string | number> = { days: d };
     if (screenCategory) scParams.screen_category = screenCategory;
-    const [sc, st, ts] = await Promise.all([
+    const [sc, st, ts, oa, al] = await Promise.all([
       api.get<ScreensData>('/admin/analytics/screens', { params: scParams }),
       api.get<SyncStatus>('/admin/analytics/status'),
       api.get<TimeseriesData>('/admin/analytics/screens/timeseries', { params: tsParams }),
+      api.get<OAuthAuditSummary>('/admin/audit/oauth-summary', { params: { days: d } }),
+      api.get<{ items: AuditRow[] }>('/admin/audit', {
+        params: { action_prefix: 'oauth_', days: d, limit: 20 },
+      }),
     ]);
     setScreens(sc.data);
     setSync(st.data);
     setTimeseries(ts.data);
+    setOauthAudit(oa.data);
+    setOauthAuditLogs(al.data.items ?? []);
   }, [days, chartScreen, screenCategory]);
 
   const chartScreens = useMemo(() => {
@@ -215,6 +237,9 @@ export default function AnalyticsPage() {
           { label: 'Views', value: String(screens?.total_views ?? 0), hint: `${screens?.days ?? days}д` },
           { label: 'oauth_login', value: String(screens?.oauth_login_views ?? 0) },
           { label: 'oauth_link', value: String(screens?.oauth_link_views ?? 0) },
+          { label: 'audit oauth_login', value: String(oauthAudit?.oauth_login ?? 0) },
+          { label: 'audit oauth_link', value: String(oauthAudit?.oauth_link ?? 0) },
+          { label: 'audit oauth_unlink', value: String(oauthAudit?.oauth_unlink ?? 0) },
           { label: 'Source', value: screens?.source ?? '—' },
           { label: 'Screens', value: String(screens?.items?.length ?? 0) },
         ]}
@@ -287,6 +312,19 @@ export default function AnalyticsPage() {
       <ShellTable
         headers={['Screen', 'Views']}
         rows={(screens?.items ?? []).map((r) => [r.screen, String(r.views)])}
+      />
+
+      <PageHeader title="OAuth audit_log" description="audit_log oauth_* §2.2.3" />
+      <ShellTable
+        headers={['ID', 'User', 'Action', 'Provider', 'Platform', 'Created']}
+        rows={oauthAuditLogs.map((r) => [
+          String(r.id),
+          String(r.user_id ?? '—'),
+          r.action,
+          String((r.details?.provider as string) ?? '—'),
+          String((r.details?.platform as string) ?? '—'),
+          r.created_at ? new Date(r.created_at).toLocaleString('ru-RU') : '—',
+        ])}
       />
 
       <PageHeader title="Raw events" description="Фильтр user_id / даты · export CSV" />

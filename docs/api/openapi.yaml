@@ -3016,6 +3016,80 @@ paths:
       summary: Analytics Sync Ch
       tags:
       - Администрирование
+  /api/v1/admin/audit:
+    get:
+      description: Глобальный audit_log §2.2.3 / §10.7.7.
+      operationId: admin_audit_log_api_v1_admin_audit_get
+      parameters:
+      - in: query
+        name: action
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Action
+      - description: Например oauth_
+        in: query
+        name: action_prefix
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Например oauth_
+          title: Action Prefix
+      - in: query
+        name: user_id
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: User Id
+      - in: query
+        name: days
+        required: false
+        schema:
+          default: 30
+          maximum: 365
+          minimum: 1
+          title: Days
+          type: integer
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          maximum: 500
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          title: Offset
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Admin Audit Log
+      tags:
+      - Администрирование
   /api/v1/admin/audit-export/run:
     post:
       description: Ручной запуск экспорта в MinIO audit-logs §10.7.7.
@@ -3052,6 +3126,37 @@ paths:
       security:
       - HTTPBearer: []
       summary: Run Audit Export
+      tags:
+      - Администрирование
+  /api/v1/admin/audit/oauth-summary:
+    get:
+      description: Сводка oauth_* в audit_log для AnalyticsPage §2.2.3.
+      operationId: admin_audit_oauth_summary_api_v1_admin_audit_oauth_summary_get
+      parameters:
+      - in: query
+        name: days
+        required: false
+        schema:
+          default: 7
+          maximum: 90
+          minimum: 1
+          title: Days
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Admin Audit Oauth Summary
       tags:
       - Администрирование
   /api/v1/admin/campaigns:

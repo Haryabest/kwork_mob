@@ -1170,6 +1170,43 @@ async def analytics_sync_ch(
     return result
 
 
+@router.get("/audit")
+async def admin_audit_log(
+    action: str | None = Query(None),
+    action_prefix: str | None = Query(None, description="Например oauth_"),
+    user_id: int | None = Query(None),
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Глобальный audit_log §2.2.3 / §10.7.7."""
+    from app.services import audit_query as aq
+
+    return await aq.list_audit_logs(
+        db,
+        action=action,
+        action_prefix=action_prefix,
+        user_id=user_id,
+        days=days,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/audit/oauth-summary")
+async def admin_audit_oauth_summary(
+    days: int = Query(7, ge=1, le=90),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сводка oauth_* в audit_log для AnalyticsPage §2.2.3."""
+    from app.services import audit_query as aq
+
+    return await aq.oauth_audit_summary(db, days=days)
+
+
 @router.get("/access-log")
 async def admin_access_log(
     date_from: datetime | None = Query(None),

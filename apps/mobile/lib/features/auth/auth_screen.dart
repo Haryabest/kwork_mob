@@ -134,12 +134,20 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> _refreshMeOAuth() async {
+    try {
+      final me = await widget.api.me();
+      widget.session.applyMe(me);
+    } catch (_) {}
+  }
+
   Future<void> _onOAuthPending(String provider, String code, String state, OAuthFlow flow) async {
     if (flow == OAuthFlow.link) {
       if (await widget.api.hasToken) {
         try {
           await widget.api.oauthLinkComplete(provider: provider, code: code, state: state);
           AnalyticsService.instance.track('screen_view', {'screen': 'oauth_link_$provider'});
+          await _refreshMeOAuth();
         } catch (e) {
           if (mounted) setState(() => _error = formatApiError(e));
         }
@@ -160,6 +168,7 @@ class _AuthScreenState extends State<AuthScreen> {
       final data = await widget.api.oauthCallback(provider: provider, code: code, state: state);
       AnalyticsService.instance.track('screen_view', {'screen': 'oauth_login_$provider'});
       OAuthPending.instance.clear();
+      await _refreshMeOAuth();
       if (data['status'] == 'pending_type') {
         if (!mounted) return;
         setState(() => _step = _AuthStep.accountType);

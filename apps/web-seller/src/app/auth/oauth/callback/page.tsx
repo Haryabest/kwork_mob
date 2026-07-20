@@ -31,6 +31,8 @@ function OAuthCallbackInner() {
         const flow = getOAuthFlow();
         if (flow === 'link') {
           await completeOAuthLinkCallback(code, state);
+          const { data: meData } = await api.get<{ oauth_providers?: string[] }>('/user/me');
+          sessionStorage.setItem('oauth_link_me', JSON.stringify(meData));
           notifications.show({ color: 'teal', message: 'Соцсеть привязана' });
           router.replace('/settings');
           return;

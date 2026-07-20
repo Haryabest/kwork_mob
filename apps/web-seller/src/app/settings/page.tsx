@@ -97,10 +97,13 @@ export default function SettingsPage() {
   }, []);
 
   const load = useCallback(async () => {
-    const [m, s] = await Promise.all([
-      api.get<Me>('/user/me'),
-      api.get<TwoFaStatus>('/auth/2fa/status'),
-    ]);
+    const cachedMe =
+      typeof window !== 'undefined' ? sessionStorage.getItem('oauth_link_me') : null;
+    if (cachedMe) sessionStorage.removeItem('oauth_link_me');
+    const mePromise = cachedMe
+      ? Promise.resolve({ data: JSON.parse(cachedMe) as Me })
+      : api.get<Me>('/user/me');
+    const [m, s] = await Promise.all([mePromise, api.get<TwoFaStatus>('/auth/2fa/status')]);
     setMe(m.data);
     setFullName(m.data.full_name || '');
     setPhone(m.data.phone || '');
