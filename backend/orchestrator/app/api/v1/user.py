@@ -715,6 +715,31 @@ async def list_user_models(
     }
 
 
+@router.get("/devices")
+async def list_devices(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Зарегистрированные push-устройства §3.4.3."""
+    rows = (
+        await db.scalars(
+            select(DeviceToken).where(DeviceToken.user_id == user.id).order_by(DeviceToken.id.desc()).limit(50)
+        )
+    ).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "platform": r.platform,
+                "app_version": r.app_version,
+                "token_prefix": (r.token[:12] + "…") if len(r.token) > 12 else r.token,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
 @router.post("/devices")
 async def register_device(
     body: DeviceTokenRequest,

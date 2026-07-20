@@ -9,3 +9,4 @@ def test_trash_list_has_pagination_params():
     sig = inspect.signature(list_trash_models)
     assert "limit" in sig.parameters
     assert "offset" in sig.parameters
+    assert "publish_filter" in sig.parameters

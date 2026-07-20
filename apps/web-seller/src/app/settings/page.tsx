@@ -142,6 +142,9 @@ export default function SettingsPage() {
   const [accessLogRows, setAccessLogRows] = useState<
     Array<{ id: number; model_uuid: string; action?: string; file_format?: string; timestamp?: string }>
   >([]);
+  const [pushDevices, setPushDevices] = useState<
+    Array<{ id: number; platform?: string; app_version?: string; token_prefix?: string; updated_at?: string }>
+  >([]);
   const [busy, setBusy] = useState(false);
   const oauthLinkedProviders = me?.oauth_providers ?? [];
 
@@ -205,6 +208,12 @@ export default function SettingsPage() {
       setAccessLogRows(data.items ?? []);
     } catch {
       setAccessLogRows([]);
+    }
+    try {
+      const { data } = await api.get<{ items: typeof pushDevices }>('/user/devices');
+      setPushDevices(data.items ?? []);
+    } catch {
+      setPushDevices([]);
     }
   }, [loadSessions]);
 
@@ -640,6 +649,45 @@ export default function SettingsPage() {
                   Завершить все, кроме текущей
                 </Button>
               </Group>
+
+              <Text fw={600} mt="md">
+                Push-устройства
+              </Text>
+              <Text size="sm" c="#6d6c77">
+                Зарегистрированные токены для уведомлений §2.5.5
+              </Text>
+              {pushDevices.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  Нет зарегистрированных устройств
+                </Text>
+              ) : (
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Платформа</Table.Th>
+                      <Table.Th>Версия</Table.Th>
+                      <Table.Th>Токен</Table.Th>
+                      <Table.Th>Обновлено</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {pushDevices.map((d) => (
+                      <Table.Tr key={d.id}>
+                        <Table.Td>{d.platform ?? '—'}</Table.Td>
+                        <Table.Td>{d.app_version ?? '—'}</Table.Td>
+                        <Table.Td>
+                          <Text size="sm" ff="monospace">
+                            {d.token_prefix ?? '—'}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          {d.updated_at ? new Date(d.updated_at).toLocaleString('ru-RU') : '—'}
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              )}
             </Stack>
           </Surface>
         </Tabs.Panel>

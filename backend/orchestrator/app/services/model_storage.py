@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -128,8 +128,23 @@ async def list_trash(
     *,
     limit: int = 20,
     offset: int = 0,
+    publish_filter: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
-    where = (Model3D.trashed_at.is_not(None), Model3D.user_id == user.id)
+    where: list[Any] = [Model3D.trashed_at.is_not(None), Model3D.user_id == user.id]
+    if publish_filter == "published":
+        where.append(
+            or_(
+                Model3D.publish_status.ilike("%published%"),
+                Model3D.publish_status.ilike("%verified%"),
+            )
+        )
+    elif publish_filter == "draft":
+        where.append(
+            or_(
+                Model3D.publish_status.is_(None),
+                Model3D.publish_status.in_(["", "none", "not_published"]),
+            )
+        )
     total = await db.scalar(select(func.count(Model3D.id)).where(*where)) or 0
     rows = (
         await db.scalars(

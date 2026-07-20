@@ -15246,6 +15246,23 @@
         "parameters": [
           {
             "in": "query",
+            "name": "publish_filter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(published|draft)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Publish Filter"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -18230,6 +18247,29 @@
           }
         ],
         "summary": "Unregister Device",
+        "tags": [
+          "Пользователь"
+        ]
+      },
+      "get": {
+        "description": "Зарегистрированные push-устройства §3.4.3.",
+        "operationId": "list_devices_api_v1_user_devices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Devices",
         "tags": [
           "Пользователь"
         ]

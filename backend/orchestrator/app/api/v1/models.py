@@ -334,13 +334,16 @@ async def bulk_import_models(
 async def list_trash_models(
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
+    publish_filter: str | None = Query(default=None, pattern=r"^(published|draft)$"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
     """Корзина моделей §3.3.1 (30 дней)."""
     from app.services import model_storage as ms
 
-    items, total = await ms.list_trash(db, user, limit=limit, offset=offset)
+    items, total = await ms.list_trash(
+        db, user, limit=limit, offset=offset, publish_filter=publish_filter
+    )
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 

@@ -1282,6 +1282,12 @@ class ApiClient {
     });
   }
 
+  Future<List<Map<String, dynamic>>> listUserDevices() async {
+    final res = await _dio.get('/user/devices');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   Future<List<Map<String, dynamic>>> getFaq() async {
     final res = await _dio.get('/faq');
     final items = (res.data as Map)['items'] as List? ?? [];

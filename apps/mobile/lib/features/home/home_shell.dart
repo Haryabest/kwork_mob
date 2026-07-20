@@ -715,6 +715,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   List<Map<String, String>> _oauthProviders = [];
   bool _oauthLinking = false;
   List<Map<String, dynamic>> _accessLog = [];
+  List<Map<String, dynamic>> _pushDevices = [];
 
   static String _prefLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -797,6 +798,11 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
       _accessLog = await widget.api.listUserAccessLog();
     } catch (_) {
       _accessLog = [];
+    }
+    try {
+      _pushDevices = await widget.api.listUserDevices();
+    } catch (_) {
+      _pushDevices = [];
     }
     if (mounted) setState(() => _prefs = prefs);
   }
@@ -1608,6 +1614,24 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
             ),
           ),
         ),
+        const SizedBox(height: 24),
+        Text('Push-устройства', style: context.theme.typography.sm),
+        const SizedBox(height: 8),
+        if (_pushDevices.isEmpty)
+          Text('Нет зарегистрированных устройств', style: TextStyle(color: AppColors.textSecondary))
+        else
+          ..._pushDevices.take(10).map((d) {
+            final platform = d['platform']?.toString() ?? '—';
+            final ver = d['app_version']?.toString();
+            final prefix = d['token_prefix']?.toString() ?? '—';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '$platform${ver != null && ver.isNotEmpty ? ' · $ver' : ''} · $prefix',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            );
+          }),
         const SizedBox(height: 24),
         Text(l10n.profileSessionsSection, style: context.theme.typography.sm),
         const SizedBox(height: 8),
