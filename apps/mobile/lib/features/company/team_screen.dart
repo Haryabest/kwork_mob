@@ -28,6 +28,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
   List<Map<String, dynamic>> _memberSessions = [];
   List<Map<String, dynamic>> _invitations = [];
   List<Map<String, dynamic>> _webhooks = [];
+  List<Map<String, dynamic>> _webhookDeliveries = [];
   Map<String, dynamic>? _marketplaceStatus;
   int? _companyId;
   int _membersTotal = 0;
@@ -123,6 +124,11 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
           _webhooks = [];
         }
         try {
+          _webhookDeliveries = await widget.api.listCompanyWebhookDeliveries();
+        } catch (_) {
+          _webhookDeliveries = [];
+        }
+        try {
           final funnel = await widget.api.companyPublicationFunnel();
           _funnelTotals = Map<String, dynamic>.from(funnel['totals'] as Map? ?? {});
         } catch (_) {
@@ -131,6 +137,7 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
       } else {
         _accessLog = [];
         _webhooks = [];
+        _webhookDeliveries = [];
         _funnelTotals = null;
       }
       if (widget.session.canManageTeam && _companyId != null) {
@@ -573,6 +580,20 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
+                                if (_webhookDeliveries.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  Text('Последние доставки', style: context.theme.typography.xs),
+                                  const SizedBox(height: 8),
+                                  for (final d in _webhookDeliveries.take(10))
+                                    FTile(
+                                      title: Text('${d['event'] ?? '—'} · #${d['webhook_id'] ?? '—'}'),
+                                      subtitle: Text(
+                                        '${d['status'] ?? '—'} · ${d['status_code'] ?? '—'}\n${d['created_at'] ?? ''}',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                ],
                                 const Divider(height: 24),
                                 Text(l10n.teamAudit, style: context.theme.typography.sm),
                                 const SizedBox(height: 8),

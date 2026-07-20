@@ -11126,6 +11126,34 @@ paths:
       summary: Prepare Draft Backup
       tags:
       - Пользователь
+  /api/v1/user/draft-backups/{model_uuid}:
+    delete:
+      description: Удаление облачного черновика §3.3.2.
+      operationId: delete_draft_backup_api_v1_user_draft_backups__model_uuid__delete
+      parameters:
+      - in: path
+        name: model_uuid
+        required: true
+        schema:
+          title: Model Uuid
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Delete Draft Backup
+      tags:
+      - Пользователь
   /api/v1/user/draft-backups/{model_uuid}/restore:
     get:
       description: Presigned download для восстановления черновика §3.3.2.

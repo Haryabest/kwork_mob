@@ -718,6 +718,7 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _pushDevices = [];
   List<Map<String, dynamic>> _draftBackups = [];
   int? _revokingDeviceId;
+  String? _deletingDraftUuid;
 
   static String _prefLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -832,6 +833,27 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
       }
     } finally {
       if (mounted) setState(() => _revokingDeviceId = null);
+    }
+  }
+
+  Future<void> _deleteDraftBackup(String uuid) async {
+    setState(() => _deletingDraftUuid = uuid);
+    try {
+      await widget.api.deleteDraftBackup(uuid);
+      _draftBackups = await widget.api.listDraftBackups();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Черновик удалён')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(formatApiError(e)), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _deletingDraftUuid = null);
     }
   }
 
@@ -1681,16 +1703,29 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
           Text('Нет сохранённых черновиков', style: TextStyle(color: AppColors.textSecondary))
         else
           ..._draftBackups.take(10).map((b) {
-            final uuid = b['model_uuid']?.toString() ?? '—';
+            final uuid = b['model_uuid']?.toString() ?? '';
             final exp = b['expires_at']?.toString();
             final cat = b['category']?.toString();
+            final busy = uuid.isNotEmpty && _deletingDraftUuid == uuid;
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                '${uuid.length > 8 ? '${uuid.substring(0, 8)}…' : uuid}'
-                '${cat != null && cat.isNotEmpty ? ' · $cat' : ''}'
-                '${exp != null && exp.length >= 10 ? ' · до ${exp.substring(0, 10)}' : ''}',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${uuid.length > 8 ? '${uuid.substring(0, 8)}…' : uuid}'
+                      '${cat != null && cat.isNotEmpty ? ' · $cat' : ''}'
+                      '${exp != null && exp.length >= 10 ? ' · до ${exp.substring(0, 10)}' : ''}',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ),
+                  if (uuid.isNotEmpty)
+                    FButton(
+                      variant: .outline,
+                      onPress: busy ? null : () => _deleteDraftBackup(uuid),
+                      child: Text(busy ? '…' : 'Удалить'),
+                    ),
+                ],
               ),
             );
           }),

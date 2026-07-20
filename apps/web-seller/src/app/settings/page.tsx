@@ -244,6 +244,20 @@ export default function SettingsPage() {
     }
   }
 
+  async function deleteDraftBackup(modelUuid: string) {
+    setBusy(true);
+    try {
+      await api.delete(`/user/draft-backups/${modelUuid}`);
+      const { data } = await api.get<{ items: typeof draftBackups }>('/user/draft-backups');
+      setDraftBackups(data.items ?? []);
+      notifications.show({ color: 'teal', message: 'Черновик удалён' });
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function unlinkOAuthProvider(provider: string) {
     setBusy(true);
     try {
@@ -742,6 +756,7 @@ export default function SettingsPage() {
                       <Table.Th>Категория</Table.Th>
                       <Table.Th>Ракурсы</Table.Th>
                       <Table.Th>Истекает</Table.Th>
+                      <Table.Th />
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -755,6 +770,17 @@ export default function SettingsPage() {
                         <Table.Td>{b.category ?? '—'}</Table.Td>
                         <Table.Td>{b.captured_count ?? '—'}</Table.Td>
                         <Table.Td>{b.expires_at ? b.expires_at.slice(0, 10) : '—'}</Table.Td>
+                        <Table.Td>
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            color="red"
+                            disabled={busy}
+                            onClick={() => void deleteDraftBackup(b.model_uuid)}
+                          >
+                            Удалить
+                          </Button>
+                        </Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>

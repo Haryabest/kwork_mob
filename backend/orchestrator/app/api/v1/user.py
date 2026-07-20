@@ -832,6 +832,17 @@ async def prepare_draft_backup(
     )
 
 
+@router.delete("/draft-backups/{model_uuid}")
+async def delete_draft_backup(
+    model_uuid: str,
+    user: User = Depends(get_current_db_user),
+):
+    """Удаление облачного черновика §3.3.2."""
+    from app.services import draft_backup as dbk
+
+    return dbk.delete_backup(user.id, model_uuid)
+
+
 @router.get("/draft-backups/{model_uuid}/restore")
 async def restore_draft_backup(
     model_uuid: str,

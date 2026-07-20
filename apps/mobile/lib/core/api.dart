@@ -466,6 +466,10 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<void> deleteDraftBackup(String modelUuid) async {
+    await _dio.delete('/user/draft-backups/$modelUuid');
+  }
+
   Future<Map<String, dynamic>> patchMe(Map<String, dynamic> payload) async {
     final res = await _dio.patch('/user/me', data: payload);
     return Map<String, dynamic>.from(res.data as Map);
@@ -549,6 +553,12 @@ class ApiClient {
 
   Future<List<Map<String, dynamic>>> listCompanyWebhooks() async {
     final res = await _dio.get('/company/webhooks');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listCompanyWebhookDeliveries({int limit = 20}) async {
+    final res = await _dio.get('/company/webhooks/deliveries', queryParameters: {'limit': limit});
     final items = (res.data as Map)['items'] as List? ?? [];
     return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }

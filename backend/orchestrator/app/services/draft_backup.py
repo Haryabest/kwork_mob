@@ -127,3 +127,14 @@ def restore_download(user_id: int, model_uuid: str) -> dict[str, Any]:
         "metadata": meta_raw,
         "expires_in": 3600,
     }
+
+
+def delete_backup(user_id: int, model_uuid: str) -> dict[str, Any]:
+    bucket = settings.MINIO_BUCKET_BACKUPS
+    zip_k = draft_key(user_id, model_uuid)
+    mk = meta_key(user_id, model_uuid)
+    if not minio_service.object_exists(bucket, zip_k) and not minio_service.object_exists(bucket, mk):
+        raise HTTPException(404, "Бэкап не найден или истёк")
+    prefix = f"{_prefix(user_id)}{model_uuid}/"
+    deleted = minio_service.delete_prefix(bucket, prefix)
+    return {"ok": True, "deleted_objects": deleted}
