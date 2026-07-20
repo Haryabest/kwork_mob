@@ -550,9 +550,12 @@ def sync_analytics_to_clickhouse():
             await db.commit()
             from app.services.metrics import record_analytics_ch_pending
 
+            from app.services.alert_thresholds import threshold_sync
+
             pending = int(result.get("pending") or 0)
             record_analytics_ch_pending(pending)
-            if pending > 1000:
+            max_pending = int(threshold_sync("analytics_ch_sync_pending_max", 1000))
+            if pending > max_pending:
                 logger.warning("analytics CH sync backlog: pending_ch_sync=%s", pending)
             from app.services import analytics_alerts as aa
 

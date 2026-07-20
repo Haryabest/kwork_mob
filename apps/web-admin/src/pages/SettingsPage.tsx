@@ -57,6 +57,7 @@ const THRESHOLD_LABELS: Record<string, string> = {
   cloud_monthly_budget_rub: 'Cloud GPU budget месяц, ₽ (0=∞)',
   cloud_daily_budget_rub: 'Cloud GPU budget день, ₽ (0=∞)',
   cloud_burn_alert_rub_per_hour: 'Cloud burn alert, ₽/ч',
+  analytics_ch_sync_pending_max: 'Analytics CH sync backlog max',
 };
 
 export default function SettingsPage() {

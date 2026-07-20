@@ -146,14 +146,16 @@ def raw_events_to_csv(data: dict) -> str:
 
 
 async def analytics_sync_status(db: AsyncSession) -> dict:
+    from app.services.alert_thresholds import threshold_async
     from app.services.analytics_sync import count_pending
 
     pending = await count_pending(db)
-    alert = pending > 1000
+    alert_threshold = int(await threshold_async("analytics_ch_sync_pending_max", 1000))
+    alert = pending > alert_threshold
     return {
         "pending_ch_sync": pending,
         "alert": alert,
-        "alert_threshold": 1000,
+        "alert_threshold": alert_threshold,
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
 

@@ -34,7 +34,11 @@ async def test_analytics_sync_status(monkeypatch):
     async def fake_count(_db):
         return 42
 
+    async def fake_threshold(_key, default):
+        return 1000
+
     monkeypatch.setattr("app.services.analytics_sync.count_pending", fake_count)
+    monkeypatch.setattr("app.services.alert_thresholds.threshold_async", fake_threshold)
     from app.services.analytics_query import analytics_sync_status
 
     class FakeDb:
@@ -43,6 +47,7 @@ async def test_analytics_sync_status(monkeypatch):
     data = await analytics_sync_status(FakeDb())
     assert data["pending_ch_sync"] == 42
     assert data["alert"] is False
+    assert data["alert_threshold"] == 1000
 
 
 async def test_screen_timeseries_pg_fallback(monkeypatch):

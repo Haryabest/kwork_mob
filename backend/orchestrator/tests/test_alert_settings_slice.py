@@ -14,6 +14,7 @@ def test_merge_thresholds_defaults():
     assert m["queue_alert_length"] == 20
     assert m["all_busy_alert_minutes"] == 5
     assert m["shoot_link_mass_limit_per_hour"] == 100
+    assert m["analytics_ch_sync_pending_max"] == 1000
 
 
 def test_merge_thresholds_patch():

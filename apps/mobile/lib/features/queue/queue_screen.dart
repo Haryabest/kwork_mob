@@ -133,6 +133,7 @@ class _QueueScreenState extends State<QueueScreen> {
       );
       if (ok != true) return;
     }
+    AnalyticsService.instance.track('screen_view', {'screen': 'queue_cancel'});
     await widget.api.cancelOrder(widget.orderId!);
     await _refresh();
   }

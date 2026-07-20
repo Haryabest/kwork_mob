@@ -135,6 +135,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             onPress: _items.isEmpty
                 ? null
                 : () async {
+                    AnalyticsService.instance.track('screen_view', {'screen': 'notifications_clear'});
                     try {
                       await widget.api.clearNotifications();
                     } catch (_) {}

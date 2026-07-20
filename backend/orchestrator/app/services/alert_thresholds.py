@@ -38,6 +38,7 @@ THRESHOLD_KEYS: dict[str, Any] = {
     "cloud_monthly_budget_rub": 0,
     "cloud_daily_budget_rub": 0,
     "cloud_burn_alert_rub_per_hour": 500,
+    "analytics_ch_sync_pending_max": 1000,
 }
 
 REDIS_HASH = "alerts:thresholds"
@@ -77,6 +78,9 @@ def env_defaults() -> dict[str, Any]:
         "cloud_monthly_budget_rub": int(getattr(settings, "CLOUD_MONTHLY_BUDGET_RUB", 0) or 0),
         "cloud_daily_budget_rub": int(getattr(settings, "CLOUD_DAILY_BUDGET_RUB", 0) or 0),
         "cloud_burn_alert_rub_per_hour": int(getattr(settings, "CLOUD_BURN_ALERT_RUB_PER_HOUR", 500) or 500),
+        "analytics_ch_sync_pending_max": int(
+            getattr(settings, "ANALYTICS_CH_SYNC_PENDING_MAX", 1000) or 1000
+        ),
     }
 
 

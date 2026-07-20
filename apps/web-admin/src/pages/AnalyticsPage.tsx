@@ -1,4 +1,4 @@
-import { Badge, Button, Card, Center, Group, Loader, NumberInput, Select, Stack, Text, Title } from '@mantine/core';
+import { Badge, Button, Card, Center, Group, Loader, NumberInput, Select, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconDownload, IconRefresh } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -42,6 +42,8 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [userId, setUserId] = useState<number | string>('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [events, setEvents] = useState<RawEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
 
@@ -88,12 +90,20 @@ export default function AnalyticsPage() {
     }
   }
 
+  function eventParams(extra: Record<string, string | number> = {}) {
+    const params: Record<string, string | number> = { ...extra };
+    if (userId !== '') params.user_id = Number(userId);
+    if (dateFrom) params.date_from = `${dateFrom}T00:00:00Z`;
+    if (dateTo) params.date_to = `${dateTo}T23:59:59Z`;
+    return params;
+  }
+
   async function loadEvents() {
     setEventsLoading(true);
     try {
-      const params: Record<string, string | number> = { limit: 200 };
-      if (userId !== '') params.user_id = Number(userId);
-      const { data } = await api.get<{ items: RawEvent[] }>('/admin/analytics/events', { params });
+      const { data } = await api.get<{ items: RawEvent[] }>('/admin/analytics/events', {
+        params: eventParams({ limit: 200 }),
+      });
       setEvents(data.items ?? []);
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
@@ -104,10 +114,8 @@ export default function AnalyticsPage() {
 
   async function exportEventsCsv() {
     try {
-      const params: Record<string, string | number> = { format: 'csv', limit: 2000 };
-      if (userId !== '') params.user_id = Number(userId);
       const { data } = await api.get('/admin/analytics/events', {
-        params,
+        params: eventParams({ format: 'csv', limit: 2000 }),
         responseType: 'blob',
       });
       const url = URL.createObjectURL(data as Blob);
@@ -223,7 +231,7 @@ export default function AnalyticsPage() {
         rows={(screens?.items ?? []).map((r) => [r.screen, String(r.views)])}
       />
 
-      <PageHeader title="Raw events" description="Фильтр по user_id · export CSV" />
+      <PageHeader title="Raw events" description="Фильтр user_id / даты · export CSV" />
       <Group mb="md" align="flex-end">
         <NumberInput
           label="User ID"
@@ -233,6 +241,8 @@ export default function AnalyticsPage() {
           min={1}
           w={160}
         />
+        <TextInput type="date" label="С" value={dateFrom} onChange={(e) => setDateFrom(e.currentTarget.value)} w={160} />
+        <TextInput type="date" label="По" value={dateTo} onChange={(e) => setDateTo(e.currentTarget.value)} w={160} />
         <Button loading={eventsLoading} onClick={() => void loadEvents()}>
           Загрузить
         </Button>

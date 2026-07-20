@@ -37,8 +37,12 @@ async def _recent_ok(db: AsyncSession, fingerprint: str) -> bool:
     return any((r.payload or {}).get("fingerprint") == fingerprint for r in rows)
 
 
-async def check_and_alert(db: AsyncSession, *, threshold: int = DEFAULT_THRESHOLD) -> dict[str, Any]:
+async def check_and_alert(db: AsyncSession, *, threshold: int | None = None) -> dict[str, Any]:
     """Telegram + email если pending_ch_sync > threshold (cooldown 1ч)."""
+    if threshold is None:
+        from app.services import alert_thresholds as ath
+
+        threshold = int(await ath.threshold_async("analytics_ch_sync_pending_max", DEFAULT_THRESHOLD))
     pending = await count_pending(db)
     if pending <= threshold:
         return {"pending_ch_sync": pending, "threshold": threshold, "alert_sent": False}
