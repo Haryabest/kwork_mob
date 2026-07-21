@@ -359,12 +359,13 @@ async def _pg_dashboard() -> dict:
 
         nsfw_blocked = int(by_status.get("nsfw_blocked", 0) + by_status.get("blocked_nsfw", 0))
 
+        hour_bucket = func.date_trunc("hour", Order.created_at).label("hour_bucket")
         hourly = (
             await db.execute(
-                select(func.date_trunc("hour", Order.created_at), func.count())
+                select(hour_bucket, func.count())
                 .where(Order.created_at >= datetime.now(timezone.utc) - timedelta(hours=48))
-                .group_by(func.date_trunc("hour", Order.created_at))
-                .order_by(func.date_trunc("hour", Order.created_at))
+                .group_by(hour_bucket)
+                .order_by(hour_bucket)
             )
         ).all()
 

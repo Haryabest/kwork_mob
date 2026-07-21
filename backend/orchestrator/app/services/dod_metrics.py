@@ -124,11 +124,12 @@ async def compute_dod_metrics(db: AsyncSession, *, days: int = 7) -> dict[str, A
         or 0
     )
 
+    hour_bucket = func.date_trunc("hour", Order.created_at).label("hour_bucket")
     hourly = (
         await db.execute(
-            select(func.date_trunc("hour", Order.created_at), func.count())
+            select(hour_bucket, func.count())
             .where(Order.created_at >= since)
-            .group_by(func.date_trunc("hour", Order.created_at))
+            .group_by(hour_bucket)
         )
     ).all()
     peak_hourly = max((int(c) for _, c in hourly), default=0)

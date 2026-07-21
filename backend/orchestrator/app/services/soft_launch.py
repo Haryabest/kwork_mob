@@ -99,12 +99,13 @@ async def soft_launch_kpi(db: AsyncSession, *, days: int = 7) -> dict[str, Any]:
         float(funnel.get("verified") or 0) / max(float(funnel.get("generated") or 0), 1) >= 0.6
     )
 
+    day_bucket = func.date_trunc("day", Order.created_at).label("day_bucket")
     daily = (
         await db.execute(
-            select(func.date_trunc("day", Order.created_at), func.count())
+            select(day_bucket, func.count())
             .where(Order.created_at >= since)
-            .group_by(func.date_trunc("day", Order.created_at))
-            .order_by(func.date_trunc("day", Order.created_at))
+            .group_by(day_bucket)
+            .order_by(day_bucket)
         )
     ).all()
 

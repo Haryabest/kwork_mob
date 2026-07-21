@@ -259,6 +259,7 @@ async def test_deliver_push_broadcast_sets_dedup_keys(db, monkeypatch):
         password_hash="x",
         status="active",
         marketing_opt_in=True,
+        region="dedup-broadcast-test-only",
     )
     db.add(user)
     await db.flush()
@@ -279,7 +280,13 @@ async def test_deliver_push_broadcast_sets_dedup_keys(db, monkeypatch):
 
     from app.models import PushBroadcast as PB
 
-    broadcast = PB(title="T", body="B", segment={}, status="sending", stats={})
+    broadcast = PB(
+        title="T",
+        body="B",
+        segment={"region": "dedup-broadcast-test-only"},
+        status="sending",
+        stats={},
+    )
     db.add(broadcast)
     await db.flush()
 
@@ -294,9 +301,11 @@ async def test_company_data_export_list(db):
     from app.models import Company, CompanyDataExport, User
     from app.services import company_data_export as cde_svc
 
-    company = Company(name="Export Co", inn="7700000000", status="active")
     user = User(email="owner@export.co", password_hash="x", status="active")
-    db.add_all([company, user])
+    db.add(user)
+    await db.flush()
+    company = Company(name="Export Co", inn="7700000000", owner_id=user.id, status="active")
+    db.add(company)
     await db.flush()
 
     row = CompanyDataExport(
@@ -319,9 +328,11 @@ async def test_company_data_export_pending_dedup(db):
     from app.models import Company, User
     from app.services import company_data_export as cde_svc
 
-    company = Company(name="Pending Co", inn="7700000001", status="active")
     user = User(email="pending@export.co", password_hash="x", status="active")
-    db.add_all([company, user])
+    db.add(user)
+    await db.flush()
+    company = Company(name="Pending Co", inn="7700000001", owner_id=user.id, status="active")
+    db.add(company)
     await db.flush()
 
     first = await cde_svc.request_export(db, company=company, user=user)
@@ -492,9 +503,11 @@ async def test_presign_export_download(db, monkeypatch):
     from app.models import Company, CompanyDataExport, User
     from app.services import company_data_export as cde_svc
 
-    company = Company(name="Presign Co", inn="7700000099", status="active")
     user = User(email="presign@co.ru", password_hash="x", status="active")
-    db.add_all([company, user])
+    db.add(user)
+    await db.flush()
+    company = Company(name="Presign Co", inn="7700000099", owner_id=user.id, status="active")
+    db.add(company)
     await db.flush()
     row = CompanyDataExport(
         company_id=company.id,

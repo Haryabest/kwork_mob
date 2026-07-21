@@ -6,8 +6,6 @@ import pytest
 
 from app.services.analytics_query import screen_breakdown, screens_to_csv
 
-pytestmark = pytest.mark.asyncio
-
 
 def test_screens_to_csv():
     body = screens_to_csv({"items": [{"screen": "home", "views": 10}]})
@@ -15,6 +13,7 @@ def test_screens_to_csv():
     assert "10" in body
 
 
+@pytest.mark.asyncio
 async def test_screen_breakdown_pg_fallback(monkeypatch):
     class FakeDb:
         async def execute(self, *_a, **_k):
@@ -30,6 +29,7 @@ async def test_screen_breakdown_pg_fallback(monkeypatch):
     assert data["items"][0]["screen"] == "queue"
 
 
+@pytest.mark.asyncio
 async def test_analytics_sync_status(monkeypatch):
     async def fake_count(_db):
         return 42
@@ -50,6 +50,7 @@ async def test_analytics_sync_status(monkeypatch):
     assert data["alert_threshold"] == 1000
 
 
+@pytest.mark.asyncio
 async def test_screen_timeseries_pg_fallback(monkeypatch):
     from app.services.analytics_query import screen_timeseries
 
@@ -70,6 +71,7 @@ async def test_screen_timeseries_pg_fallback(monkeypatch):
     assert data2["screens"] == ["queue"]
 
 
+@pytest.mark.asyncio
 async def test_list_raw_events_event_filter():
     from datetime import datetime, timezone
 
@@ -97,6 +99,7 @@ async def test_list_raw_events_event_filter():
     assert data["items"][0]["event"] == "screen_view"
 
 
+@pytest.mark.asyncio
 async def test_list_raw_events_screen_filter():
     from datetime import datetime, timezone
 
@@ -123,6 +126,7 @@ async def test_list_raw_events_screen_filter():
     assert data["items"][0]["props"]["screen"] == "queue"
 
 
+@pytest.mark.asyncio
 async def test_list_raw_events_screen_category_oauth():
     from datetime import datetime, timezone
 
@@ -149,6 +153,7 @@ async def test_list_raw_events_screen_category_oauth():
     assert data["items"][0]["props"]["screen"] == "oauth_login_vk"
 
 
+@pytest.mark.asyncio
 async def test_screen_breakdown_oauth_totals(monkeypatch):
     from app.services.analytics_query import screen_breakdown
 
