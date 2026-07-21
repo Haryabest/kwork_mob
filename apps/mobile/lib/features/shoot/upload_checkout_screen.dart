@@ -206,10 +206,10 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
       progress['upload_mode'] = 'zip';
       await _progressSvc.save(draft.modelUuid, progress);
     }
-    totalChunks ??= (zipBytes.length + chunkSize - 1) ~/ chunkSize;
+    final total = totalChunks ?? (zipBytes.length + chunkSize - 1) ~/ chunkSize;
 
     final uploaded = _progressSvc.uploadedZipParts(progress).toSet();
-    for (var part = 0; part < totalChunks; part++) {
+    for (var part = 0; part < total; part++) {
       if (uploaded.contains(part)) continue;
       final start = part * chunkSize;
       final end = start + chunkSize > zipBytes.length ? zipBytes.length : start + chunkSize;
@@ -218,7 +218,7 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         uploadId: uploadId!,
         partIndex: part,
         bytes: chunk,
-        total: totalChunks,
+        total: total,
       );
       uploaded.add(part);
       progress['uploaded_parts'] = uploaded.toList()..sort();
@@ -226,8 +226,8 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
       if (mounted) {
         setState(() {
           _statusKey = 'progress';
-          _statusExtra = '${uploaded.length}/$totalChunks';
-          _progress = 0.1 + (uploaded.length / totalChunks) * 0.85;
+          _statusExtra = '${uploaded.length}/$total';
+          _progress = 0.1 + (uploaded.length / total) * 0.85;
         });
       }
     }

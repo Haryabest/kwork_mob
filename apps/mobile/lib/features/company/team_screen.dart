@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:forui/forui.dart';
+import 'package:go_router/go_router.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
@@ -323,72 +324,6 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
         );
         setState(() {});
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _editMember(Map<String, dynamic> m) async {
-    final l10n = AppLocalizations.of(context)!;
-    var role = m['role']?.toString() ?? 'photographer';
-    var limit = (m['max_concurrent_orders'] as num?)?.toInt() ?? 3;
-    final limitCtrl = TextEditingController(text: '$limit');
-    final ok = await showFDialog<bool>(
-      context: context,
-      builder: (ctx, style, animation) => FDialog(
-        title: Text(m['email']?.toString() ?? l10n.teamMemberFallback),
-        body: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FSelect<String>(
-              label: Text(l10n.teamRole),
-              control: FSelectControl.managed(
-                initial: role,
-                onChange: (v) {
-                  if (v != null) role = v;
-                },
-              ),
-              items: const {
-                'Manager': 'manager',
-                'Photographer': 'photographer',
-                'Viewer': 'viewer',
-              },
-            ),
-            const SizedBox(height: 8),
-            FTextField(
-              control: FTextFieldControl.managed(controller: limitCtrl),
-              label: Text(l10n.teamActiveOrdersLimit),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
-          FButton(onPress: () => Navigator.pop(ctx, true), child: Text(l10n.save)),
-        ],
-      ),
-    );
-    if (ok != true) {
-      limitCtrl.dispose();
-      return;
-    }
-    final userId = m['user_id'] as int?;
-    final parsedLimit = int.tryParse(limitCtrl.text.trim());
-    limitCtrl.dispose();
-    if (userId == null) return;
-    setState(() => _busy = true);
-    try {
-      await widget.api.changeMemberRole(userId: userId, role: role);
-      if (parsedLimit != null) {
-        await widget.api.changeMemberLimits(userId: userId, maxConcurrentOrders: parsedLimit);
-      }
-      await _load();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

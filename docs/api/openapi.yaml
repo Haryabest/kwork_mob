@@ -43,6 +43,10 @@ components:
           - type: string
           - type: 'null'
           title: Company Name
+        confirm_mismatch:
+          default: false
+          title: Confirm Mismatch
+          type: boolean
         corr_account:
           anyOf:
           - type: string
@@ -552,6 +556,14 @@ components:
       - name
       - template
       title: CampaignCreate
+      type: object
+    CancelOrderBody:
+      properties:
+        ack_no_refund:
+          default: false
+          title: Ack No Refund
+          type: boolean
+      title: CancelOrderBody
       type: object
     CompanyBalanceFilterPresetBody:
       properties:
@@ -2328,6 +2340,27 @@ components:
           title: Weight
           type: number
       title: WorkerUpsert
+      type: object
+    ZipUploadInitBody:
+      properties:
+        chunk_size:
+          default: 524288
+          title: Chunk Size
+          type: integer
+        sha256:
+          title: Sha256
+          type: string
+        task_uuid:
+          title: Task Uuid
+          type: string
+        total_size:
+          title: Total Size
+          type: integer
+      required:
+      - task_uuid
+      - total_size
+      - sha256
+      title: ZipUploadInitBody
       type: object
   securitySchemes:
     HTTPBearer:
@@ -6718,6 +6751,37 @@ paths:
       summary: Account Type
       tags:
       - Аутентификация
+  /api/v1/auth/inn-lookup:
+    get:
+      description: Подстановка реквизитов по ИНН через DaData (§2.2.2).
+      operationId: inn_lookup_api_v1_auth_inn_lookup_get
+      parameters:
+      - in: query
+        name: inn
+        required: true
+        schema:
+          maxLength: 12
+          minLength: 10
+          pattern: ^\d{10,12}$
+          title: Inn
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Inn Lookup
+      tags:
+      - Аутентификация
   /api/v1/auth/login:
     post:
       description: Вход. Owner с 2FA → challenge; иначе JWT.
@@ -9271,7 +9335,7 @@ paths:
       - Модели
   /api/v1/models/share/{short_hash}:
     get:
-      description: Публичный viewer без auth (§7 / §2.4).
+      description: 'Публичный viewer без auth (§3.12): rate-limit + watermark.'
       operationId: public_share_api_v1_models_share__short_hash__get
       parameters:
       - in: path
@@ -10130,6 +10194,120 @@ paths:
       summary: Upload Order Photos
       tags:
       - Заказы
+  /api/v1/orders/photos/zip/init:
+    post:
+      description: Resumable ZIP upload — init (§3.4.1).
+      operationId: zip_upload_init_api_v1_orders_photos_zip_init_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZipUploadInitBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Zip Upload Init
+      tags:
+      - Заказы
+  /api/v1/orders/photos/zip/{upload_id}/chunk/{part_index}:
+    put:
+      operationId: zip_upload_chunk_api_v1_orders_photos_zip__upload_id__chunk__part_index__put
+      parameters:
+      - in: path
+        name: upload_id
+        required: true
+        schema:
+          title: Upload Id
+          type: string
+      - in: path
+        name: part_index
+        required: true
+        schema:
+          title: Part Index
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Zip Upload Chunk
+      tags:
+      - Заказы
+  /api/v1/orders/photos/zip/{upload_id}/complete:
+    post:
+      operationId: zip_upload_complete_api_v1_orders_photos_zip__upload_id__complete_post
+      parameters:
+      - in: path
+        name: upload_id
+        required: true
+        schema:
+          title: Upload Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Zip Upload Complete
+      tags:
+      - Заказы
+  /api/v1/orders/photos/zip/{upload_id}/status:
+    get:
+      operationId: zip_upload_status_api_v1_orders_photos_zip__upload_id__status_get
+      parameters:
+      - in: path
+        name: upload_id
+        required: true
+        schema:
+          title: Upload Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Zip Upload Status
+      tags:
+      - Заказы
   /api/v1/orders/tariffs:
     get:
       description: Публичные тарифы для checkout §19.8.
@@ -10192,6 +10370,14 @@ paths:
         schema:
           title: Order Id
           type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/CancelOrderBody'
+              - type: 'null'
+              title: Body
       responses:
         '200':
           content:

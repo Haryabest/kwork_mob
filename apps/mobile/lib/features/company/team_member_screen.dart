@@ -44,9 +44,9 @@ class _TeamMemberScreenState extends State<TeamMemberScreen> {
         widget.api.listMemberTasks(widget.userId),
         widget.api.listMemberSessions(widget.userId),
       ]);
-      _member = results[0];
-      _tasks = results[1];
-      _sessions = results[2];
+      _member = results[0] as Map<String, dynamic>;
+      _tasks = results[1] as List<Map<String, dynamic>>;
+      _sessions = results[2] as List<Map<String, dynamic>>;
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }

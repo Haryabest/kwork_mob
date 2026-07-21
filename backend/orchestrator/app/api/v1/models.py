@@ -87,7 +87,6 @@ async def public_share(short_hash: str, request: Request, db: AsyncSession = Dep
     url = _presign_glb(model, expires=1800)
     if not url:
         raise HTTPException(404, "GLB отсутствует")
-    owner = await db.get(User, link.user_id)
     watermark = f"ID {link.user_id}"
     if model.company_id:
         watermark = f"ID C{model.company_id}"
