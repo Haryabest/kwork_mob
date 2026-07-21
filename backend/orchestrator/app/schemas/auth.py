@@ -83,6 +83,7 @@ class AccountTypeRequest(BaseModel):
     corr_account: str | None = None
     director_name: str | None = None
     docs_email: str | None = None
+    confirm_mismatch: bool = False
 
 
 class RefreshRequest(BaseModel):

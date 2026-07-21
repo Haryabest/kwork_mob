@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Alert,
   Button,
   Card,
   Checkbox,
@@ -14,17 +15,31 @@ import {
 import { IconBuilding, IconUser } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { AuthPage } from '../../../components/AuthPage';
 import { api, apiMessage } from '../../../services/api';
+
+type InnLookup = {
+  found: boolean;
+  company_name?: string | null;
+  kpp?: string | null;
+  ogrn?: string | null;
+  legal_address?: string | null;
+  director_name?: string | null;
+};
+
+type Mismatch = { field: string; expected: string; actual: string };
 
 export default function AccountTypePage() {
   const router = useRouter();
   const [selected, setSelected] = useState<'individual' | 'legal'>('individual');
   const [loading, setLoading] = useState(false);
+  const [lookupBusy, setLookupBusy] = useState(false);
   const [fullName, setFullName] = useState('');
   const [inn, setInn] = useState('');
   const [sameAddress, setSameAddress] = useState(true);
+  const [confirmMismatch, setConfirmMismatch] = useState(false);
+  const [mismatches, setMismatches] = useState<Mismatch[]>([]);
   const [legal, setLegal] = useState({
     company_name: '',
     inn: '',
@@ -39,6 +54,34 @@ export default function AccountTypePage() {
     director_name: '',
     docs_email: '',
   });
+
+  const lookupInn = useCallback(async (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length !== 10 && digits.length !== 12) return;
+    setLookupBusy(true);
+    setMismatches([]);
+    setConfirmMismatch(false);
+    try {
+      const { data } = await api.get<InnLookup>('/auth/inn-lookup', { params: { inn: digits } });
+      if (!data.found) {
+        notifications.show({ color: 'yellow', message: 'ИНН не найден в реестре' });
+        return;
+      }
+      setLegal((prev) => ({
+        ...prev,
+        inn: digits,
+        company_name: data.company_name || prev.company_name,
+        kpp: data.kpp || prev.kpp,
+        ogrn: data.ogrn || prev.ogrn,
+        legal_address: data.legal_address || prev.legal_address,
+        director_name: data.director_name || prev.director_name,
+      }));
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setLookupBusy(false);
+    }
+  }, []);
 
   async function submit() {
     try {
@@ -58,10 +101,21 @@ export default function AccountTypePage() {
               ...legal,
               actual_address: sameAddress ? legal.legal_address : legal.actual_address,
               full_name: legal.director_name || null,
+              confirm_mismatch: confirmMismatch,
             };
       await api.post('/auth/account-type', payload);
       router.replace('/dashboard');
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { detail?: { mismatches?: Mismatch[]; message?: string } } } };
+      const detail = err.response?.data?.detail;
+      if (detail?.mismatches?.length) {
+        setMismatches(detail.mismatches);
+        notifications.show({
+          color: 'orange',
+          message: detail.message || 'Данные не совпадают с реестром',
+        });
+        return;
+      }
       notifications.show({ color: 'red', message: apiMessage(error) });
     } finally {
       setLoading(false);
@@ -147,7 +201,25 @@ export default function AccountTypePage() {
                 required
                 value={legal.inn}
                 onChange={(e) => setLegal({ ...legal, inn: e.currentTarget.value })}
+                onBlur={(e) => void lookupInn(e.currentTarget.value)}
+                description={lookupBusy ? 'Проверка в реестре…' : 'Автозаполнение через DaData'}
               />
+              {mismatches.length > 0 && (
+                <Alert color="orange" title="Расхождение с реестром">
+                  <Stack gap={4}>
+                    {mismatches.map((m) => (
+                      <Text key={m.field} size="xs">
+                        {m.field}: в реестре «{m.expected}», у вас «{m.actual}»
+                      </Text>
+                    ))}
+                    <Checkbox
+                      checked={confirmMismatch}
+                      onChange={(e) => setConfirmMismatch(e.currentTarget.checked)}
+                      label="Подтверждаю расхождение и продолжаю"
+                    />
+                  </Stack>
+                </Alert>
+              )}
               <TextInput
                 label="КПП"
                 description="Только для ООО"

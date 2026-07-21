@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     JWT_RSA_PUBLIC_KEY: str = ""
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 30
+    JWT_REFRESH_SESSION_DAYS: int = 7  # без «Запомнить меня» (§2.3)
+
+    # §2.2.2 DaData / ФНС
+    DADATA_API_KEY: str = ""
+    DADATA_SECRET: str = ""
 
     # reCAPTCHA v3 (§20.10.2 / §10)
     RECAPTCHA_SECRET_KEY: str = ""

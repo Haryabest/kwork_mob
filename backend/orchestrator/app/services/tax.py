@@ -371,6 +371,7 @@ async def export_transactions_xlsx(
 
 async def invoice_for_order(db: AsyncSession, order_id: int, user: User, doc_type: str) -> bytes:
     from app.models import Company
+    from app.services import dadata as dadata_svc
 
     order = await db.get(Order, order_id)
     if not order or order.user_id != user.id:
@@ -379,6 +380,13 @@ async def invoice_for_order(db: AsyncSession, order_id: int, user: User, doc_typ
             raise HTTPException(404, "Заказ не найден")
         if order.user_id != user.id and not user.staff_role:
             raise HTTPException(403, "Нет доступа")
+    if order.company_id:
+        company = await db.get(Company, order.company_id)
+        if company and not dadata_svc.company_verification_allowed(company.settings):
+            raise HTTPException(
+                403,
+                "Счёт недоступен: реквизиты юрлица не прошли верификацию (DaData)",
+            )
     tax = await get_settings(db)
     buyer = await db.get(User, order.user_id)
     buyer_name = None

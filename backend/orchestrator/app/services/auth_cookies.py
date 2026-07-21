@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import Request, Response
 
 from app.core.config import settings
+from app.core.security import refresh_token_expire_days
 
 ACCESS_COOKIE = "kwork_access"
 REFRESH_COOKIE = "kwork_refresh"
@@ -35,7 +36,7 @@ def set_auth_cookies(
     remember_me: bool,
 ) -> None:
     access_max = settings.JWT_ACCESS_EXPIRE_MINUTES * 60
-    refresh_days = settings.JWT_REFRESH_EXPIRE_DAYS if remember_me else min(settings.JWT_REFRESH_EXPIRE_DAYS, 7)
+    refresh_days = refresh_token_expire_days(remember_me)
     refresh_max = refresh_days * 86400
     common = {
         "httponly": True,

@@ -50,7 +50,7 @@ async def _issue_tokens(db: AsyncSession, user: User) -> TokenResponse:
     await auth_service.revoke_other_refresh_sessions(db, user.id)
     access = create_access_token(user.id, role=user.staff_role or "", extra={"staff": True})
     refresh, jti, expires_at = create_refresh_token(user.id, remember_me=True)
-    db.add(RefreshToken(user_id=user.id, jti=jti, expires_at=expires_at))
+    db.add(RefreshToken(user_id=user.id, jti=jti, expires_at=expires_at, remember_me=True))
     return TokenResponse(access_token=access, refresh_token=refresh)
 
 

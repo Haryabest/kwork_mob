@@ -34,6 +34,15 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         logger.warning("Queue sync skipped: %s", exc)
 
+    try:
+        from app.core.crypto import ensure_pii_encryption_ready
+
+        ensure_pii_encryption_ready()
+    except Exception as exc:  # noqa: BLE001
+        if not settings.is_development:
+            raise
+        logger.warning("PII encryption check skipped: %s", exc)
+
     start_dispatcher()
     yield
     await stop_dispatcher()
@@ -84,7 +93,11 @@ async def public_android_assetlinks():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "orchestrator"}
+    from app.core.crypto import pii_encryption_status
+
+    pii = pii_encryption_status()
+    status = "ok" if pii.get("ok") else "degraded"
+    return {"status": status, "service": "orchestrator", "pii_encryption": pii}
 
 
 @app.get("/metrics")

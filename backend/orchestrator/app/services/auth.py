@@ -155,7 +155,7 @@ async def issue_tokens_for_user(
         revoked = await revoke_other_refresh_sessions(db, user.id)
     access_token = create_access_token(user.id, role=user.staff_role or UserRole.USER.value)
     refresh_token, jti, expires_at = create_refresh_token(user.id, remember_me=remember_me)
-    db.add(RefreshToken(user_id=user.id, jti=jti, expires_at=expires_at))
+    db.add(RefreshToken(user_id=user.id, jti=jti, expires_at=expires_at, remember_me=remember_me))
     await db.commit()
     if revoked > 0:
         await _notify_other_sessions_revoked(db, user)
@@ -196,10 +196,11 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str) -> tuple[str, str
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Пользователь недоступен")
 
     user.last_login_at = datetime.now(timezone.utc)
+    remember = bool(token_row.remember_me)
     token_row.revoked = True
     access_token = create_access_token(user.id, role=user.staff_role or "user")
-    new_refresh, new_jti, expires_at = create_refresh_token(user.id)
-    db.add(RefreshToken(user_id=user.id, jti=new_jti, expires_at=expires_at))
+    new_refresh, new_jti, expires_at = create_refresh_token(user.id, remember_me=remember)
+    db.add(RefreshToken(user_id=user.id, jti=new_jti, expires_at=expires_at, remember_me=remember))
     await db.commit()
     return access_token, new_refresh
 
@@ -210,6 +211,8 @@ def _validate_inn(inn: str) -> None:
 
 
 async def set_account_type(db: AsyncSession, user: User, body: AccountTypeRequest) -> User:
+    from app.core.config import settings
+
     account_type = body.account_type
     if account_type not in ("individual", "legal"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Неверный тип аккаунта")
@@ -246,6 +249,38 @@ async def set_account_type(db: AsyncSession, user: User, body: AccountTypeReques
     if not checking.isdigit() or len(checking) != 20:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Расчётный счёт — 20 цифр")
 
+    from app.services import dadata as dadata_svc
+
+    verify = await dadata_svc.verify_legal_entity(
+        inn=body.inn.strip(),
+        company_name=body.company_name,
+        kpp=body.kpp,
+        ogrn=ogrn,
+        legal_address=body.legal_address,
+        director_name=body.director_name,
+    )
+    if not verify.lookup or not verify.lookup.found:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "ИНН не найден в реестре (DaData). Проверьте номер.",
+        )
+    if verify.mismatches and not body.confirm_mismatch:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "inn_mismatch",
+                "message": "Данные не совпадают с реестром. Подтвердите расхождение или исправьте поля.",
+                "mismatches": verify.mismatches,
+            },
+        )
+    verification_status = (
+        "dadata_verified"
+        if verify.verified
+        else ("mismatch_confirmed" if body.confirm_mismatch else "dadata_failed")
+    )
+    if not dadata_svc.configured() and settings.is_development:
+        verification_status = "dev_skipped"
+
     company = Company(
         name=body.company_name.strip(),
         inn=body.inn.strip(),
@@ -263,7 +298,11 @@ async def set_account_type(db: AsyncSession, user: User, body: AccountTypeReques
                 "corr_account": body.corr_account,
                 "director_name": body.director_name,
                 "docs_email": body.docs_email or user.email,
-                "verification": "manual_confirmed",
+                "verification": {
+                    "status": verification_status,
+                    "mismatches": verify.mismatches,
+                    "checked_at": datetime.now(timezone.utc).isoformat(),
+                },
             }
         ),
     )

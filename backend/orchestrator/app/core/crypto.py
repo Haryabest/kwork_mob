@@ -52,6 +52,46 @@ def _load_key_from_vault() -> bytes:
     return _decode_key(str(key_b64))
 
 
+def invalidate_pd_key_cache() -> None:
+    """Сброс кэша ключа после ротации в Vault (§2.7)."""
+    get_pd_encryption_key.cache_clear()
+
+
+def pii_encryption_status() -> dict[str, object]:
+    uses_vault = bool(settings.VAULT_ADDR and settings.VAULT_TOKEN and not settings.PD_ENCRYPTION_KEY)
+    uses_env = bool(settings.PD_ENCRYPTION_KEY)
+    source = "missing"
+    if uses_vault:
+        source = "vault"
+    elif uses_env:
+        source = "env"
+    elif settings.is_development:
+        source = "dev_fallback"
+    ok = False
+    error: str | None = None
+    try:
+        get_pd_encryption_key()
+        ok = True
+    except CryptoConfigError as exc:
+        error = str(exc)
+    return {
+        "ok": ok,
+        "source": source,
+        "vault_path": settings.VAULT_PD_KEY_PATH if uses_vault else None,
+        "error": error,
+    }
+
+
+def ensure_pii_encryption_ready() -> None:
+    """Prod: ключ ПД обязателен (Vault или PD_ENCRYPTION_KEY)."""
+    if settings.is_development:
+        get_pd_encryption_key()
+        return
+    if not settings.PD_ENCRYPTION_KEY and not (settings.VAULT_ADDR and settings.VAULT_TOKEN):
+        raise CryptoConfigError("Production: задайте PD_ENCRYPTION_KEY или VAULT_ADDR+VAULT_TOKEN")
+    get_pd_encryption_key()
+
+
 @lru_cache(maxsize=1)
 def get_pd_encryption_key() -> bytes:
     if settings.PD_ENCRYPTION_KEY:

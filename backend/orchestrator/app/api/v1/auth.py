@@ -265,6 +265,29 @@ async def verify_email(
     )
 
 
+@router.get("/inn-lookup")
+async def inn_lookup(
+    inn: str = Query(..., min_length=10, max_length=12, pattern=r"^\d{10,12}$"),
+    user: User = Depends(get_current_db_user),
+):
+    """Подстановка реквизитов по ИНН через DaData (§2.2.2)."""
+    from app.services import dadata as dadata_svc
+
+    _ = user
+    result = await dadata_svc.lookup_inn(inn)
+    return {
+        "found": result.found,
+        "inn": result.inn,
+        "company_name": result.company_name,
+        "kpp": result.kpp,
+        "ogrn": result.ogrn,
+        "legal_address": result.legal_address,
+        "director_name": result.director_name,
+        "party_type": result.party_type,
+        "configured": dadata_svc.configured(),
+    }
+
+
 @router.post("/account-type")
 async def account_type(
     body: AccountTypeRequest,

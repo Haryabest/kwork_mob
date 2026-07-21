@@ -92,17 +92,25 @@ def create_access_token(
     return _encode_token(payload)
 
 
+def refresh_token_expire_days(remember_me: bool) -> int:
+    """TTL refresh-токена: 30 дней с «Запомнить меня», иначе сессия (§2.3)."""
+    if remember_me:
+        return settings.JWT_REFRESH_EXPIRE_DAYS
+    return settings.JWT_REFRESH_SESSION_DAYS
+
+
 def create_refresh_token(
     user_id: int, jti: str | None = None, remember_me: bool = False
 ) -> tuple[str, str, datetime]:
     token_jti = jti or str(uuid.uuid4())
-    days = settings.JWT_REFRESH_EXPIRE_DAYS if remember_me else min(settings.JWT_REFRESH_EXPIRE_DAYS, 7)
+    days = refresh_token_expire_days(remember_me)
     expires_at = datetime.now(timezone.utc) + timedelta(days=days)
     token = _encode_token(
         {
             "sub": str(user_id),
             "type": TokenType.REFRESH.value,
             "jti": token_jti,
+            "remember": remember_me,
             "exp": expires_at,
         }
     )
