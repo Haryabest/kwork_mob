@@ -602,6 +602,21 @@ async def admin_get_company_data_export(
     return cde_svc.export_to_dict(row)
 
 
+@router.get("/companies/{company_id}/data-export/{export_id}/presign")
+async def admin_presign_company_data_export(
+    company_id: int,
+    export_id: int,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Свежий presigned URL §11.14."""
+    from app.services import company_data_export as cde_svc
+
+    out = await cde_svc.presign_export_download(db, company_id=company_id, export_id=export_id)
+    await db.commit()
+    return out
+
+
 @router.post("/companies/{company_id}/dedicated-bucket")
 async def enable_company_dedicated_bucket(
     company_id: int,

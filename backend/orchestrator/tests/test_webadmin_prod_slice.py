@@ -57,12 +57,14 @@ def test_admin_company_export_routes():
     from app.api.v1.admin import (
         admin_get_company_data_export,
         admin_list_company_data_exports,
+        admin_presign_company_data_export,
         admin_request_company_data_export,
     )
 
     assert admin_request_company_data_export.__name__ == "admin_request_company_data_export"
     assert admin_list_company_data_exports.__name__ == "admin_list_company_data_exports"
     assert admin_get_company_data_export.__name__ == "admin_get_company_data_export"
+    assert admin_presign_company_data_export.__name__ == "admin_presign_company_data_export"
 
 
 def test_admin_sprint1_routes():
@@ -483,6 +485,36 @@ def test_metrics_dashboard_quality_keys():
 
     src = inspect.getsource(metrics.dashboard_aggregates)
     assert "qs_pass_rate_7d" in src
+
+
+@pytest.mark.asyncio
+async def test_presign_export_download(db, monkeypatch):
+    from app.models import Company, CompanyDataExport, User
+    from app.services import company_data_export as cde_svc
+
+    company = Company(name="Presign Co", inn="7700000099", status="active")
+    user = User(email="presign@co.ru", password_hash="x", status="active")
+    db.add_all([company, user])
+    await db.flush()
+    row = CompanyDataExport(
+        company_id=company.id,
+        requested_by_user_id=user.id,
+        status="completed",
+        storage_bucket="backups",
+        storage_key=f"exports/company_{company.id}/export_1.zip",
+    )
+    db.add(row)
+    await db.commit()
+
+    monkeypatch.setattr(
+        cde_svc.minio_service,
+        "generate_presigned_url",
+        lambda bucket, key, expires=3600, method="get_object": f"https://minio/{bucket}/{key}?sig=1",
+    )
+
+    out = await cde_svc.presign_export_download(db, company_id=company.id, export_id=row.id)
+    assert out["download_url"].startswith("https://minio/")
+    assert out["export_id"] == row.id
 
 
 def test_celery_scheduled_push_task_registered():

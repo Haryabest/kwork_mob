@@ -84,6 +84,39 @@ def export_to_dict(row: CompanyDataExport) -> dict[str, Any]:
     }
 
 
+async def presign_export_download(
+    db: AsyncSession,
+    *,
+    company_id: int,
+    export_id: int,
+) -> dict[str, Any]:
+    """Свежий presigned URL для скачивания §9.5.2 / §11.14."""
+    from fastapi import HTTPException
+
+    row = await get_export(db, company_id=company_id, export_id=export_id)
+    if not row:
+        raise HTTPException(404, "Экспорт не найден")
+    if row.status != "completed" or not row.storage_bucket or not row.storage_key:
+        raise HTTPException(409, "Экспорт ещё не готов")
+
+    ttl_sec = max(3600, int(settings.COMPANY_DATA_EXPORT_URL_TTL_DAYS or EXPORT_EXPIRES_DAYS) * 86400)
+    url = minio_service.generate_presigned_url(
+        row.storage_bucket,
+        row.storage_key,
+        expires=ttl_sec,
+        method="get_object",
+    )
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_sec)
+    row.download_url = url
+    row.expires_at = expires_at
+    await db.flush()
+    return {
+        "export_id": row.id,
+        "download_url": url,
+        "expires_at": expires_at.isoformat(),
+    }
+
+
 async def build_company_export_zip(db: AsyncSession, company_id: int) -> bytes:
     company = await db.get(Company, company_id)
     if not company:

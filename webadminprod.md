@@ -10,6 +10,8 @@
 | UI vs ТЗ §11 | ~92% | 100% |
 | Prod-ready | ~85% | 100% |
 
+**Статус:** все пункты §11 закрыты.
+
 ---
 
 ## План
@@ -24,9 +26,9 @@ Ops, user events, QS dashboard, push schedule, legal/tax/forbidden, ACL
 - [x] Company data export UI §11.14 (`/admin/companies/{id}/data-export`)
 - [x] Удалены stub-страницы в `AdminPages.tsx`, `PageStub.tsx`
 
-### Остаток
-- [ ] Push open tracking в mobile (read_at на inbox)
-- [ ] §11.14 presign download refresh в UI
+### Спринт 4 — DONE
+- [x] Push open tracking в mobile (`notification_id` → `markNotificationRead`)
+- [x] §11.14 presign download refresh (`GET .../data-export/{id}/presign`, poll pending)
 
 ---
 

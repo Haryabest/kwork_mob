@@ -1057,6 +1057,27 @@ export function CompanyDetailPage() {
     load().catch((e) => notifications.show({ color: 'red', message: getApiError(e) }));
   }, [id]);
 
+  useEffect(() => {
+    const pending = dataExports.some((e) => e.status === 'pending' || e.status === 'processing');
+    if (!pending) return;
+    const t = window.setInterval(() => {
+      void load();
+    }, 5000);
+    return () => window.clearInterval(t);
+  }, [dataExports, id]);
+
+  async function downloadExport(exportId: number) {
+    try {
+      const { data } = await api.get<{ download_url?: string }>(
+        `/admin/companies/${company!.id}/data-export/${exportId}/presign`,
+      );
+      if (data.download_url) window.open(data.download_url, '_blank');
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
   async function savePrices() {
     try {
       await api.put(`/admin/companies/${company!.id}/price-overrides`, {
@@ -1176,30 +1197,23 @@ export function CompanyDetailPage() {
         <Card withBorder>
           <Text fw={600} mb="sm">Экспорты §11.14</Text>
           <ShellTable
-            headers={['ID', 'Статус', 'Создан', 'Ссылка']}
+            headers={['ID', 'Статус', 'Создан', 'Истекает', 'Скачать']}
             rows={
               dataExports.length
                 ? dataExports.map((e) => [
                     String(e.id),
                     e.status,
                     e.created_at ? new Date(e.created_at).toLocaleString('ru-RU') : '—',
-                    e.download_url ? (
-                      <Button
-                        key={`dl${e.id}`}
-                        size="xs"
-                        variant="light"
-                        component="a"
-                        href={e.download_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Скачать
+                    e.expires_at ? new Date(e.expires_at).toLocaleString('ru-RU') : '—',
+                    e.status === 'completed' ? (
+                      <Button key={`dl${e.id}`} size="xs" variant="light" onClick={() => void downloadExport(e.id)}>
+                        Presign
                       </Button>
                     ) : (
                       '—'
                     ),
                   ])
-                : [['—', 'Нет экспортов', '—', '—']]
+                : [['—', 'Нет экспортов', '—', '—', '—']]
             }
           />
         </Card>

@@ -4264,6 +4264,40 @@ paths:
       summary: Admin Get Company Data Export
       tags:
       - Администрирование
+  /api/v1/admin/companies/{company_id}/data-export/{export_id}/presign:
+    get:
+      description: Свежий presigned URL §11.14.
+      operationId: admin_presign_company_data_export_api_v1_admin_companies__company_id__data_export__export_id__presign_get
+      parameters:
+      - in: path
+        name: company_id
+        required: true
+        schema:
+          title: Company Id
+          type: integer
+      - in: path
+        name: export_id
+        required: true
+        schema:
+          title: Export Id
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Admin Presign Company Data Export
+      tags:
+      - Администрирование
   /api/v1/admin/companies/{company_id}/data-exports:
     get:
       operationId: admin_list_company_data_exports_api_v1_admin_companies__company_id__data_exports_get
