@@ -44,6 +44,17 @@ class OrderPayRequest(BaseModel):
     customer_name: str | None = None
 
 
+class ZipUploadInitBody(BaseModel):
+    task_uuid: str
+    total_size: int
+    sha256: str
+    chunk_size: int = 524288
+
+
+class CancelOrderBody(BaseModel):
+    ack_no_refund: bool = False
+
+
 @router.get("/tariffs")
 async def list_tariffs(
     db: AsyncSession = Depends(get_db),
@@ -148,6 +159,56 @@ async def register_photo_encryption_key(
         "task_uuid": body.task_uuid,
         "ttl_sec": photo_enc.KEY_TTL_SEC,
     }
+
+
+@router.post("/photos/zip/init")
+async def zip_upload_init(
+    body: ZipUploadInitBody,
+    user: User = Depends(get_current_db_user),
+):
+    """Resumable ZIP upload — init (§3.4.1)."""
+    from app.services import photos_zip_upload as zip_up
+
+    return await zip_up.init_upload(
+        task_uuid=body.task_uuid,
+        user_id=user.id,
+        total_size=body.total_size,
+        sha256=body.sha256,
+        chunk_size=body.chunk_size,
+    )
+
+
+@router.get("/photos/zip/{upload_id}/status")
+async def zip_upload_status(
+    upload_id: str,
+    user: User = Depends(get_current_db_user),
+):
+    from app.services import photos_zip_upload as zip_up
+
+    return await zip_up.get_status(upload_id, user.id)
+
+
+@router.put("/photos/zip/{upload_id}/chunk/{part_index}")
+async def zip_upload_chunk(
+    upload_id: str,
+    part_index: int,
+    request: Request,
+    user: User = Depends(get_current_db_user),
+):
+    from app.services import photos_zip_upload as zip_up
+
+    data = await request.body()
+    return await zip_up.save_chunk(upload_id, user.id, part_index, data)
+
+
+@router.post("/photos/zip/{upload_id}/complete")
+async def zip_upload_complete(
+    upload_id: str,
+    user: User = Depends(get_current_db_user),
+):
+    from app.services import photos_zip_upload as zip_up
+
+    return await zip_up.complete_upload(upload_id, user.id)
 
 
 @router.post("/photos/upload")
@@ -540,19 +601,33 @@ async def order_status(
 @router.post("/{order_id}/cancel")
 async def cancel_order(
     order_id: int,
+    body: CancelOrderBody | None = None,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
     from app.models import AuditLog
+    from app.services import task_lifecycle as tl
 
     order = await db.get(Order, order_id)
     if not order:
         raise HTTPException(404, "Заказ не найден")
     await assert_order_cancel(db, order, user)
-    if order.status not in ("pending", "queued", "paid", "awaiting_payment"):
+    ack = bool(body.ack_no_refund) if body else False
+    processing = order.status in ("processing", "generating")
+    if processing:
+        if not ack:
+            raise HTTPException(
+                400,
+                "Отмена во время генерации требует подтверждения (без возврата средств)",
+            )
+        prev = order.status
+        await tl.cancel_processing_order(db, order)
+    elif order.status in ("pending", "queued", "paid", "awaiting_payment"):
+        prev = order.status
+        order.status = "cancelled"
+        await queue_service.remove_from_redis(order.task_uuid)
+    else:
         raise HTTPException(400, "Заказ нельзя отменить")
-    prev = order.status
-    order.status = "cancelled"
     db.add(
         AuditLog(
             company_id=order.company_id,
@@ -562,9 +637,10 @@ async def cancel_order(
                 "order_id": order.id,
                 "task_uuid": order.task_uuid,
                 "previous_status": prev,
-                "stage": "queue" if prev in ("queued", "paid", "pending") else prev,
+                "stage": "processing" if processing else ("queue" if prev in ("queued", "paid", "pending") else prev),
                 "cancelled_by": user.id,
                 "amount": order.amount,
+                "no_refund": processing,
             },
         )
     )

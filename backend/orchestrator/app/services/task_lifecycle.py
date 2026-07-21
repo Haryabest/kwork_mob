@@ -452,3 +452,22 @@ async def try_queue_awaiting_orders(db: AsyncSession, user_id: int) -> list[int]
         )
     await db.commit()
     return queued_ids
+
+
+async def cancel_processing_order(db: AsyncSession, order: Order) -> None:
+    """Отмена во время генерации — без возврата (§3.4.2)."""
+    from app.services.worker_hub import worker_hub
+
+    row = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == order.task_uuid))
+    if row:
+        row.status = "cancelled"
+        if row.worker_id:
+            conn = await worker_hub.get(row.worker_id)
+            if conn:
+                try:
+                    await conn.websocket.send_json({"type": "stop", "task_id": order.task_uuid})
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("worker stop on cancel failed: %s", exc)
+    order.status = "cancelled"
+    await db.flush()
+

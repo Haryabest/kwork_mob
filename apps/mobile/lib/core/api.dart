@@ -833,8 +833,67 @@ class ApiClient {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> cancelOrder(int orderId) async {
-    final res = await _dio.post('/orders/$orderId/cancel');
+  Future<Map<String, dynamic>> cancelOrder(int orderId, {bool ackNoRefund = false}) async {
+    final res = await _dio.post('/orders/$orderId/cancel', data: {
+      'ack_no_refund': ackNoRefund,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// Resumable multipart ZIP upload §3.4.1.
+  Future<Map<String, dynamic>> initZipUpload({
+    required String taskUuid,
+    required int totalSize,
+    required String sha256,
+    int chunkSize = 524288,
+  }) async {
+    final res = await _dio.post('/orders/photos/zip/init', data: {
+      'task_uuid': taskUuid,
+      'total_size': totalSize,
+      'sha256': sha256,
+      'chunk_size': chunkSize,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> zipUploadStatus(String uploadId) async {
+    final res = await _dio.get('/orders/photos/zip/$uploadId/status');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> uploadZipChunk({
+    required String uploadId,
+    required int partIndex,
+    required Uint8List bytes,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    final res = await _dio.put(
+      '/orders/photos/zip/$uploadId/chunk/$partIndex',
+      data: Stream.fromIterable(_chunkBytes(bytes, 64 * 1024)),
+      options: Options(
+        headers: {'Content-Type': 'application/octet-stream'},
+        contentType: 'application/octet-stream',
+        sendTimeout: const Duration(minutes: 10),
+      ),
+      onSendProgress: onProgress,
+    );
+    if (res.statusCode == null || res.statusCode! < 200 || res.statusCode! >= 300) {
+      throw DioException(
+        requestOptions: res.requestOptions,
+        message: 'ZIP chunk upload failed: ${res.statusCode}',
+      );
+    }
+  }
+
+  Iterable<List<int>> _chunkBytes(Uint8List bytes, int size) sync* {
+    for (var i = 0; i < bytes.length; i += size) {
+      final end = i + size > bytes.length ? bytes.length : i + size;
+      yield bytes.sublist(i, end);
+    }
+  }
+
+  Future<Map<String, dynamic>> completeZipUpload(String uploadId) async {
+    final res = await _dio.post('/orders/photos/zip/$uploadId/complete');
     return Map<String, dynamic>.from(res.data as Map);
   }
 

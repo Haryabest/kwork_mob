@@ -73,6 +73,10 @@ class _QueueScreenState extends State<QueueScreen> {
         'ewt_sec': ev['ewt_sec'] ?? ev['estimated_wait_seconds'] ?? _order?['ewt_sec'],
       };
     });
+    if (ev['status'] == 'cancelled' || _order?['status'] == 'cancelled') {
+      context.go('/home');
+      return;
+    }
     if (ev['status'] == 'completed' || _order?['status'] == 'completed') {
       final model = _order?['model'] as Map?;
       final uuid = model?['uuid']?.toString();
@@ -135,8 +139,10 @@ class _QueueScreenState extends State<QueueScreen> {
       AnalyticsService.instance.track('screen_view', {'screen': 'queue_cancel_ack'});
     }
     AnalyticsService.instance.track('screen_view', {'screen': 'queue_cancel'});
-    await widget.api.cancelOrder(widget.orderId!);
-    await _refresh();
+    final processing = status == 'processing' || status == 'generating';
+    await widget.api.cancelOrder(widget.orderId!, ackNoRefund: processing);
+    if (!mounted) return;
+    context.go('/home');
   }
 
   Future<void> _reconnectWs() async {

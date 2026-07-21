@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     # §2.2.2 DaData / ФНС
     DADATA_API_KEY: str = ""
     DADATA_SECRET: str = ""
+    SHARE_VIEW_RATE_LIMIT: int = 30
 
     # reCAPTCHA v3 (§20.10.2 / §10)
     RECAPTCHA_SECRET_KEY: str = ""

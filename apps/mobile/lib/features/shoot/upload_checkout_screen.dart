@@ -99,7 +99,6 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
       } catch (_) {}
 
       var progress = resume ? await _progressSvc.load(widget.modelUuid) : null;
-      var uploaded = _progressSvc.uploadedIndices(progress).toSet();
 
       if (!resume || progress == null) {
         setState(() {
@@ -112,7 +111,8 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         progress = {
           'model_uuid': draft.modelUuid,
           'zip_sha256': zip.sha256,
-          'uploaded_indices': <int>[],
+          'upload_mode': 'zip',
+          'uploaded_parts': <int>[],
           'completed': false,
         };
         await _progressSvc.save(draft.modelUuid, progress);
@@ -125,87 +125,28 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         draft.zipSha256 = progress['zip_sha256']?.toString() ?? draft.zipSha256;
       }
 
-      String taskUuid = progress['task_uuid']?.toString() ?? draft.modelUuid;
-      List<Map<String, dynamic>> uploads;
-      var encryptionRequired = progress['encryption_required'] == true;
+      final prepared = await widget.api.preparePhotos(
+        taskUuid: progress['task_uuid']?.toString() ?? draft.modelUuid,
+        companyId: widget.session.companyId,
+      );
+      final taskUuid = prepared['task_uuid'] as String;
+      final encryptionRequired = prepared['encryption_required'] == true ||
+          widget.session.e2ePhotoEncryption;
+      progress!['task_uuid'] = taskUuid;
+      progress['photos_prefix'] = prepared['photos_prefix'];
+      progress['encryption_required'] = encryptionRequired;
+      await _progressSvc.save(draft.modelUuid, progress);
 
-      if (progress['prepared'] != true) {
-        setState(() {
-          _statusKey = 'presigned';
-          _statusExtra = '';
-        });
-        final prepared = await widget.api.preparePhotos(
-          taskUuid: draft.modelUuid,
-          companyId: widget.session.companyId,
-        );
-        taskUuid = prepared['task_uuid'] as String;
-        encryptionRequired = prepared['encryption_required'] == true ||
-            widget.session.e2ePhotoEncryption;
-        uploads = (prepared['uploads'] as List)
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-        progress!['task_uuid'] = taskUuid;
-        progress['prepared'] = true;
-        progress['encryption_required'] = encryptionRequired;
-        progress['photos_prefix'] = prepared['photos_prefix'];
-        await _progressSvc.save(draft.modelUuid, progress);
-      } else {
-        final prepared = await widget.api.preparePhotos(
-          taskUuid: taskUuid,
-          companyId: widget.session.companyId,
-        );
-        uploads = (prepared['uploads'] as List)
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
-        encryptionRequired = progress['encryption_required'] == true;
-      }
-
-      String? encKeyB64;
       if (encryptionRequired) {
-        encKeyB64 = await _progressSvc.loadEncKey(draft.modelUuid);
-        if (encKeyB64 == null && progress['enc_registered'] != true) {
-          encKeyB64 = PhotoEncryptionService.instance.generateKeyB64();
-          await widget.api.registerPhotoEncryptionKey(
-            taskUuid: taskUuid,
-            keyB64: encKeyB64,
-          );
-          await _progressSvc.saveEncKey(draft.modelUuid, encKeyB64);
-          progress['enc_registered'] = true;
-          await _progressSvc.save(draft.modelUuid, progress);
-        }
-        setState(() {
-          _statusKey = 'encrypting';
-          _statusExtra = '';
-        });
-      }
-
-      final photos = await ShootStorage.instance.listPhotos(draft.modelUuid);
-
-      for (var i = 0; i < uploads.length; i++) {
-        if (uploaded.contains(i)) continue;
-
-        final file = photos[i];
-        if (file == null) throw StateError(l10n.ucNoViewFile('$i'));
-
-        await _uploadWithRetry(
-          index: i,
-          total: uploads.length,
-          upload: uploads[i],
-          file: file,
+        await _runPresignedUpload(
+          draft: draft,
+          progress: progress,
+          prepared: prepared,
+          taskUuid: taskUuid,
           encryptionRequired: encryptionRequired,
-          encKeyB64: encKeyB64,
         );
-
-        uploaded.add(i);
-        progress!['uploaded_indices'] = uploaded.toList()..sort();
-        await _progressSvc.save(draft.modelUuid, progress);
-        if (mounted) {
-          setState(() {
-            _statusKey = 'uploaded';
-            _statusExtra = '${uploaded.length}';
-            _progress = 0.1 + (uploaded.length / 12) * 0.85;
-          });
-        }
+      } else {
+        await _runZipUpload(draft: draft, progress: progress, taskUuid: taskUuid);
       }
 
       draft.photosPrefix = progress['photos_prefix']?.toString();
@@ -229,6 +170,163 @@ class _UploadCheckoutScreenState extends State<UploadCheckoutScreen> {
         });
       }
     }
+  }
+
+  Future<void> _runZipUpload({
+    required ShootDraft draft,
+    required Map<String, dynamic> progress,
+    required String taskUuid,
+  }) async {
+    final zip = await ShootStorage.instance.buildZip(draft);
+    final zipBytes = await zip.zip.readAsBytes();
+    final sha256 = zip.sha256;
+    progress['zip_sha256'] = sha256;
+
+    var uploadId = progress['upload_id']?.toString();
+    var chunkSize = (progress['chunk_size'] as num?)?.toInt() ?? 524288;
+    var totalChunks = (progress['total_chunks'] as num?)?.toInt();
+
+    if (uploadId == null || uploadId.isEmpty) {
+      setState(() {
+        _statusKey = 'presigned';
+        _statusExtra = '';
+      });
+      final init = await widget.api.initZipUpload(
+        taskUuid: taskUuid,
+        totalSize: zipBytes.length,
+        sha256: sha256,
+        chunkSize: chunkSize,
+      );
+      uploadId = init['upload_id'] as String;
+      chunkSize = (init['chunk_size'] as num).toInt();
+      totalChunks = (init['total_chunks'] as num).toInt();
+      progress['upload_id'] = uploadId;
+      progress['chunk_size'] = chunkSize;
+      progress['total_chunks'] = totalChunks;
+      progress['upload_mode'] = 'zip';
+      await _progressSvc.save(draft.modelUuid, progress);
+    }
+    totalChunks ??= (zipBytes.length + chunkSize - 1) ~/ chunkSize;
+
+    final uploaded = _progressSvc.uploadedZipParts(progress).toSet();
+    for (var part = 0; part < totalChunks; part++) {
+      if (uploaded.contains(part)) continue;
+      final start = part * chunkSize;
+      final end = start + chunkSize > zipBytes.length ? zipBytes.length : start + chunkSize;
+      final chunk = Uint8List.sublistView(zipBytes, start, end);
+      await _uploadZipChunkWithRetry(
+        uploadId: uploadId!,
+        partIndex: part,
+        bytes: chunk,
+        total: totalChunks,
+      );
+      uploaded.add(part);
+      progress['uploaded_parts'] = uploaded.toList()..sort();
+      await _progressSvc.save(draft.modelUuid, progress);
+      if (mounted) {
+        setState(() {
+          _statusKey = 'progress';
+          _statusExtra = '${uploaded.length}/$totalChunks';
+          _progress = 0.1 + (uploaded.length / totalChunks) * 0.85;
+        });
+      }
+    }
+
+    await widget.api.completeZipUpload(uploadId!);
+  }
+
+  Future<void> _runPresignedUpload({
+    required ShootDraft draft,
+    required Map<String, dynamic> progress,
+    required Map<String, dynamic> prepared,
+    required String taskUuid,
+    required bool encryptionRequired,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+    final uploads = (prepared['uploads'] as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    var uploaded = _progressSvc.uploadedIndices(progress).toSet();
+
+    String? encKeyB64;
+    if (encryptionRequired) {
+      encKeyB64 = await _progressSvc.loadEncKey(draft.modelUuid);
+      if (encKeyB64 == null && progress['enc_registered'] != true) {
+        encKeyB64 = PhotoEncryptionService.instance.generateKeyB64();
+        await widget.api.registerPhotoEncryptionKey(
+          taskUuid: taskUuid,
+          keyB64: encKeyB64,
+        );
+        await _progressSvc.saveEncKey(draft.modelUuid, encKeyB64);
+        progress['enc_registered'] = true;
+        await _progressSvc.save(draft.modelUuid, progress);
+      }
+      setState(() {
+        _statusKey = 'encrypting';
+        _statusExtra = '';
+      });
+    }
+
+    setState(() {
+      _statusKey = 'presigned';
+      _statusExtra = '';
+    });
+
+    final photos = await ShootStorage.instance.listPhotos(draft.modelUuid);
+    for (var i = 0; i < uploads.length; i++) {
+      if (uploaded.contains(i)) continue;
+      final file = photos[i];
+      if (file == null) throw StateError(l10n.ucNoViewFile('$i'));
+      await _uploadWithRetry(
+        index: i,
+        total: uploads.length,
+        upload: uploads[i],
+        file: file,
+        encryptionRequired: encryptionRequired,
+        encKeyB64: encKeyB64,
+      );
+      uploaded.add(i);
+      progress['uploaded_indices'] = uploaded.toList()..sort();
+      await _progressSvc.save(draft.modelUuid, progress);
+      if (mounted) {
+        setState(() {
+          _statusKey = 'uploaded';
+          _statusExtra = '${uploaded.length}';
+          _progress = 0.1 + (uploaded.length / 12) * 0.85;
+        });
+      }
+    }
+  }
+
+  Future<void> _uploadZipChunkWithRetry({
+    required String uploadId,
+    required int partIndex,
+    required Uint8List bytes,
+    required int total,
+  }) async {
+    Object? lastError;
+    for (var attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(Duration(seconds: attempt * 2));
+        if (mounted) {
+          setState(() {
+            _statusKey = 'retry';
+            _statusExtra = '${partIndex + 1}/$total';
+          });
+        }
+      }
+      try {
+        await widget.api.uploadZipChunk(
+          uploadId: uploadId,
+          partIndex: partIndex,
+          bytes: bytes,
+        );
+        return;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError ?? StateError('zip chunk upload failed');
   }
 
   Future<void> _uploadWithRetry({

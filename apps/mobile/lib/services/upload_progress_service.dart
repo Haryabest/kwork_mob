@@ -42,13 +42,24 @@ class UploadProgressService {
     await _secure.write(key: '$_encKeyPrefix$modelUuid', value: keyB64);
   }
 
-  /// Индексы 0..11 уже загруженные на сервер.
+  /// Индексы 0..11 уже загруженные на сервер (presigned path).
   List<int> uploadedIndices(Map<String, dynamic>? progress) {
     if (progress == null) return [];
     final raw = progress['uploaded_indices'];
     if (raw is! List) return [];
     return raw.map((e) => (e as num).toInt()).toList();
   }
+
+  /// Индексы чанков ZIP (multipart path §3.4.1).
+  List<int> uploadedZipParts(Map<String, dynamic>? progress) {
+    if (progress == null) return [];
+    final raw = progress['uploaded_parts'];
+    if (raw is! List) return [];
+    return raw.map((e) => (e as num).toInt()).toList();
+  }
+
+  bool usesZipMode(Map<String, dynamic>? progress) =>
+      progress?['upload_mode'] == 'zip' || progress?['upload_id'] != null;
 
   Future<Map<String, dynamic>?> findPending() async {
     final prefs = await SharedPreferences.getInstance();

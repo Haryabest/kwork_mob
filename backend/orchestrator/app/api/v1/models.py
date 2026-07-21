@@ -78,18 +78,29 @@ async def _get_owned_model(db: AsyncSession, model_uuid: str, user: User) -> Mod
 
 
 @router.get("/share/{short_hash}")
-async def public_share(short_hash: str, db: AsyncSession = Depends(get_db)):
-    """Публичный viewer без auth (§7 / §2.4)."""
-    _link, model = await pub_svc.resolve_share(db, short_hash)
+async def public_share(short_hash: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Публичный viewer без auth (§3.12): rate-limit + watermark."""
+    from app.services import share_rate_limit as share_rl
+
+    await share_rl.assert_share_allowed(request, short_hash)
+    link, model = await pub_svc.resolve_share(db, short_hash)
     url = _presign_glb(model, expires=1800)
     if not url:
         raise HTTPException(404, "GLB отсутствует")
+    owner = await db.get(User, link.user_id)
+    watermark = f"ID {link.user_id}"
+    if model.company_id:
+        watermark = f"ID C{model.company_id}"
     return {
         "short_hash": short_hash,
         "model_uuid": model.uuid,
         "preview_url": url,
         "expires_in": 1800,
         "publish_status": model.publish_status,
+        "watermark": watermark,
+        "seller_id": link.user_id,
+        "company_id": model.company_id,
+        "no_download": True,
     }
 
 
