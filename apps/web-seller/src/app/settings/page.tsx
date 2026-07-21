@@ -10,6 +10,7 @@ import {
   Image,
   Modal,
   PasswordInput,
+  Select,
   Stack,
   Switch,
   Table,
@@ -46,6 +47,9 @@ type Me = {
   phone?: string | null;
   avatar_url?: string | null;
   marketing_opt_in?: boolean;
+  gender?: string | null;
+  region?: string | null;
+  card_bank_issuer?: string | null;
   totp_enabled?: boolean;
   notification_prefs?: Record<string, boolean>;
   oauth_providers?: string[];
@@ -135,6 +139,8 @@ export default function SettingsPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [gender, setGender] = useState<string | null>(null);
+  const [region, setRegion] = useState('');
   const [oldPass, setOldPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
@@ -186,6 +192,8 @@ export default function SettingsPage() {
     setMe(m.data);
     setFullName(m.data.full_name || '');
     setPhone(m.data.phone || '');
+    setGender(m.data.gender || null);
+    setRegion(m.data.region || '');
     setMarketing(m.data.marketing_opt_in !== false);
     setPrefs({
       push_enabled: true,
@@ -360,7 +368,7 @@ export default function SettingsPage() {
   async function saveProfile() {
     setBusy(true);
     try {
-      await api.patch('/user/me', { full_name: fullName, phone });
+      await api.patch('/user/me', { full_name: fullName, phone, gender, region: region || null });
       notifications.show({ color: 'teal', message: t.settings.profileSaved });
       await load();
     } catch (e) {
@@ -544,6 +552,30 @@ export default function SettingsPage() {
               <TextInput label={t.settings.email} value={me?.email || ''} disabled size="md" />
               <TextInput label={t.settings.fullName} value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} size="md" />
               <TextInput label={t.settings.phone} value={phone} onChange={(e) => setPhone(e.currentTarget.value)} size="md" />
+              <Select
+                label="Пол"
+                placeholder="Не указано"
+                clearable
+                data={[
+                  { value: 'male', label: 'Мужской' },
+                  { value: 'female', label: 'Женский' },
+                  { value: 'unspecified', label: 'Не указано' },
+                ]}
+                value={gender}
+                onChange={setGender}
+              />
+              <TextInput
+                label="Регион"
+                description="Для маркетинговых акций и налогообложения"
+                value={region}
+                onChange={(e) => setRegion(e.currentTarget.value)}
+                size="md"
+              />
+              {me?.card_bank_issuer ? (
+                <Text size="sm" c="dimmed">
+                  Банк карты: {me.card_bank_issuer}
+                </Text>
+              ) : null}
               <Button loading={busy} w={{ base: '100%', sm: 'fit-content' }} onClick={() => void saveProfile()}>
                 {t.settings.saveProfile}
               </Button>

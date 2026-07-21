@@ -188,6 +188,10 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
         if not user:
             raise HTTPException(400, "user not found")
 
+        from app.services import marketing_profile as mp_svc
+
+        mp_svc.apply_card_issuer(user, payment)
+
         channel = _payment_channel_label(meta, payment)
 
         if purpose == "company_topup":

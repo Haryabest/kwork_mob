@@ -60,6 +60,9 @@ def _user_payload(user: User) -> dict:
         "export_format": (user.notification_prefs or {}).get("export_format", "glb"),
         "avatar_url": av_svc.presigned_avatar_url(getattr(user, "avatar_key", None)),
         "preferred_locale": normalize_locale(getattr(user, "preferred_locale", None)),
+        "gender": getattr(user, "gender", None),
+        "region": getattr(user, "region", None),
+        "card_bank_issuer": getattr(user, "card_bank_issuer", None),
     }
 
 
@@ -214,6 +217,13 @@ async def update_me(
         from app.services.locale import normalize_locale
 
         user.preferred_locale = normalize_locale(str(payload["preferred_locale"]))
+    if "gender" in payload:
+        from app.services.marketing_profile import normalize_gender
+
+        if user.marketing_opt_in:
+            user.gender = normalize_gender(str(payload["gender"]) if payload["gender"] is not None else None)
+    if "region" in payload and payload["region"] is not None:
+        user.region = str(payload["region"]).strip()[:128] or None
     if changed:
         ip = request.client.host if request.client else None
         await pii_svc.audit_pii_change(
@@ -428,13 +438,17 @@ async def export_user_transactions(
 @router.post("/balance/topup")
 async def topup_balance(
     body: TopupRequest,
+    request: Request,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Пополнение: карта (redirect) или СБП QR + фискальный чек (§8.12 / §8.6.4)."""
     from app.core.config import settings
+    from app.services import marketing_profile as mp_svc
     from app.services.tax import build_receipt_for_payment
     from app.services.yookassa import yookassa_service
+
+    mp_svc.apply_region_from_request(user, request, force=True)
 
     amount = body.amount
 

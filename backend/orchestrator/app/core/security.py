@@ -41,20 +41,55 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
+def _normalize_pem(pem: str) -> str:
+    if not pem:
+        return ""
+    return pem.replace("\\n", "\n").strip()
+
+
+def jwt_uses_rs256() -> bool:
+    return bool(_normalize_pem(settings.JWT_RSA_PRIVATE_KEY) and _normalize_pem(settings.JWT_RSA_PUBLIC_KEY))
+
+
+def _signing_key() -> tuple[str, str]:
+    if jwt_uses_rs256():
+        return _normalize_pem(settings.JWT_RSA_PRIVATE_KEY), "RS256"
+    return settings.JWT_SECRET, "HS256"
+
+
+def _decode_algorithms() -> list[str]:
+    if jwt_uses_rs256():
+        return ["RS256", "HS256"]
+    return ["HS256"]
+
+
+def _verification_key_for_alg(alg: str) -> str:
+    if alg == "RS256":
+        return _normalize_pem(settings.JWT_RSA_PUBLIC_KEY)
+    return settings.JWT_SECRET
+
+
 def _encode_token(payload: dict[str, Any]) -> str:
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+    key, alg = _signing_key()
+    return jwt.encode(payload, key, algorithm=alg)
 
 
-def create_access_token(user_id: int, role: str = UserRole.USER.value) -> str:
+def create_access_token(
+    user_id: int,
+    role: str = UserRole.USER.value,
+    *,
+    extra: dict[str, Any] | None = None,
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES)
-    return _encode_token(
-        {
-            "sub": str(user_id),
-            "type": TokenType.ACCESS.value,
-            "role": role,
-            "exp": expire,
-        }
-    )
+    payload: dict[str, Any] = {
+        "sub": str(user_id),
+        "type": TokenType.ACCESS.value,
+        "role": role,
+        "exp": expire,
+    }
+    if extra:
+        payload.update(extra)
+    return _encode_token(payload)
 
 
 def create_refresh_token(
@@ -75,10 +110,16 @@ def create_refresh_token(
 
 
 def decode_token(token: str, expected_type: TokenType | None = None) -> dict:
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-    except JWTError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительный токен") from exc
+    last_exc: JWTError | None = None
+    payload: dict[str, Any] | None = None
+    for alg in _decode_algorithms():
+        try:
+            payload = jwt.decode(token, _verification_key_for_alg(alg), algorithms=[alg])
+            break
+        except JWTError as exc:
+            last_exc = exc
+    if payload is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Недействительный токен") from last_exc
 
     if expected_type and payload.get("type") != expected_type.value:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный тип токена")

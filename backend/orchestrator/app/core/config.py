@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     CLICKHOUSE_DB: str = "kwork_metrics"
 
     JWT_SECRET: str = "change-me-jwt"
+    JWT_RSA_PRIVATE_KEY: str = ""
+    JWT_RSA_PUBLIC_KEY: str = ""
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 30
 

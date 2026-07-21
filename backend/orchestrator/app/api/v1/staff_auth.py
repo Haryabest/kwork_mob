@@ -1,9 +1,6 @@
 """Staff login: VPN + пароль + TOTP 2FA (§11)."""
 
-from datetime import datetime, timedelta, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from jose import jwt
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import (
-    TokenType,
     UserRole,
+    create_access_token,
     create_refresh_token,
     verify_password,
 )
@@ -47,19 +44,11 @@ class StaffTotpSetupStart(BaseModel):
     challenge_token: str
 
 
-def _issue_tokens(db: AsyncSession, user: User) -> TokenResponse:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.STAFF_JWT_ACCESS_EXPIRE_MINUTES)
-    access = jwt.encode(
-        {
-            "sub": str(user.id),
-            "type": TokenType.ACCESS.value,
-            "role": user.staff_role,
-            "staff": True,
-            "exp": expire,
-        },
-        settings.JWT_SECRET,
-        algorithm="HS256",
-    )
+async def _issue_tokens(db: AsyncSession, user: User) -> TokenResponse:
+    from app.services import auth as auth_service
+
+    await auth_service.revoke_other_refresh_sessions(db, user.id)
+    access = create_access_token(user.id, role=user.staff_role or "", extra={"staff": True})
     refresh, jti, expires_at = create_refresh_token(user.id, remember_me=True)
     db.add(RefreshToken(user_id=user.id, jti=jti, expires_at=expires_at))
     return TokenResponse(access_token=access, refresh_token=refresh)
@@ -111,7 +100,7 @@ async def staff_login(body: StaffLoginRequest, request: Request, db: AsyncSessio
             "message": "Введите код из приложения-аутентификатора",
         }
 
-    tokens = _issue_tokens(db, user)
+    tokens = await _issue_tokens(db, user)
     await db.commit()
     return {"status": "ok", **tokens.model_dump()}
 
@@ -153,7 +142,7 @@ async def staff_2fa_confirm(body: StaffTotpConfirm, request: Request, db: AsyncS
         raise HTTPException(400, "Неверный код 2FA")
 
     user.totp_enabled = True
-    tokens = _issue_tokens(db, user)
+    tokens = await _issue_tokens(db, user)
     await db.commit()
     return tokens
 
@@ -169,6 +158,6 @@ async def staff_2fa_verify(body: StaffTotpConfirm, request: Request, db: AsyncSe
     if not verify_totp(user.totp_secret, body.code):
         raise HTTPException(401, "Неверный код 2FA")
 
-    tokens = _issue_tokens(db, user)
+    tokens = await _issue_tokens(db, user)
     await db.commit()
     return tokens

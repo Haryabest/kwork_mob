@@ -8,12 +8,11 @@ import logging
 import os
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
-from jose import JWTError, jwt
 
 from app.core.config import settings
 from app.core.database import async_session
 from app.core.redis import get_redis, release_task_lock
-from app.core.security import TokenType
+from app.core.security import TokenType, decode_token
 from app.models import WorkerNode
 from app.services.events import user_channel
 from app.services.queue import queue_service
@@ -71,13 +70,11 @@ async def queue_ws(websocket: WebSocket, user_id: int):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-        if payload.get("type") != TokenType.ACCESS.value:
-            raise JWTError("bad type")
+        payload = decode_token(token, TokenType.ACCESS)
         if int(payload.get("sub", 0)) != user_id:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
-    except (JWTError, ValueError, TypeError):
+    except Exception:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 

@@ -105,13 +105,60 @@ async def verify_email(db: AsyncSession, email: str, code: str) -> User:
     return user
 
 
+async def revoke_other_refresh_sessions(
+    db: AsyncSession,
+    user_id: int,
+    *,
+    except_jti: str | None = None,
+) -> int:
+    q = select(RefreshToken).where(
+        RefreshToken.user_id == user_id,
+        RefreshToken.revoked.is_(False),
+    )
+    if except_jti:
+        q = q.where(RefreshToken.jti != except_jti)
+    rows = (await db.scalars(q)).all()
+    for row in rows:
+        row.revoked = True
+    return len(rows)
+
+
+async def _notify_other_sessions_revoked(db: AsyncSession, user: User) -> None:
+    from app.services import email as email_svc
+    from app.services import push as push_svc
+    from app.services.email_templates import render_template
+    from app.services.locale import normalize_locale
+
+    locale = normalize_locale(getattr(user, "preferred_locale", None))
+    rendered = render_template("session_revoked", locale)
+    title = rendered["subject"]
+    body = rendered["body"]
+    try:
+        await push_svc.send_to_user(
+            db,
+            user.id,
+            title,
+            body,
+            data={"type": "session_revoked"},
+            respect_prefs=False,
+            email_fallback=True,
+        )
+    except Exception:
+        await email_svc.send_notification_email(user.email, title, body, locale=locale)
+
+
 async def issue_tokens_for_user(
-    db: AsyncSession, user: User, remember_me: bool = False
+    db: AsyncSession, user: User, remember_me: bool = False, *, revoke_others: bool = True
 ) -> tuple[str, str]:
+    revoked = 0
+    if revoke_others:
+        revoked = await revoke_other_refresh_sessions(db, user.id)
     access_token = create_access_token(user.id, role=user.staff_role or UserRole.USER.value)
     refresh_token, jti, expires_at = create_refresh_token(user.id, remember_me=remember_me)
     db.add(RefreshToken(user_id=user.id, jti=jti, expires_at=expires_at))
     await db.commit()
+    if revoked > 0:
+        await _notify_other_sessions_revoked(db, user)
     return access_token, refresh_token
 
 

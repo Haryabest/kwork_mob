@@ -44,6 +44,13 @@ async def resolve_segment(db: AsyncSession, segment: dict[str, Any]) -> list[Use
         q = q.where(User.marketing_opt_in.is_(True))
     if segment.get("account_type"):
         q = q.where(User.account_type == segment["account_type"])
+    if segment.get("gender"):
+        q = q.where(User.gender == segment["gender"])
+    if segment.get("region"):
+        q = q.where(User.region == segment["region"])
+    if segment.get("card_bank") or segment.get("card_bank_issuer"):
+        bank = segment.get("card_bank") or segment.get("card_bank_issuer")
+        q = q.where(User.card_bank_issuer.ilike(f"%{bank}%"))
     users = list((await db.scalars(q.limit(int(segment.get("limit", 5000))))).all())
 
     if segment.get("min_balance") is not None:

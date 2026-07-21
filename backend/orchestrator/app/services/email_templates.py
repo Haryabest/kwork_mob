@@ -84,6 +84,24 @@ _TEMPLATES: dict[str, dict[str, dict[str, str]]] = {
             "cta": "打开余额",
         },
     },
+    "session_revoked": {
+        "ru": {
+            "subject": "3DVektor — вход с другого устройства",
+            "body": "Выполнен вход в ваш аккаунт с другого устройства. Предыдущая сессия завершена.",
+        },
+        "en": {
+            "subject": "3DVektor — sign-in from another device",
+            "body": "Your account was signed in from another device. The previous session was ended.",
+        },
+        "kk": {
+            "subject": "3DVektor — басқа құрылғыдан кіру",
+            "body": "Аккаунтыңызға басқа құрылғыдан кіру орындалды. Алдыңғы сессия аяқталды.",
+        },
+        "zh-CN": {
+            "subject": "3DVektor — 其他设备登录",
+            "body": "您的账号在其他设备上登录，之前的会话已结束。",
+        },
+    },
 }
 
 
