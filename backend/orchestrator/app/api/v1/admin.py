@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1381,6 +1381,49 @@ async def b2b_api_usage(
     from app.services import b2b_api_usage as usage_svc
 
     return await usage_svc.summary(db, days=days)
+
+
+@router.post("/companies/import-csv")
+async def import_companies_csv(
+    file: UploadFile = File(...),
+    admin: User = Depends(get_current_db_user),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Массовый импорт B2B компаний §11.14."""
+    from app.services import admin_csv_import as imp
+
+    raw = (await file.read()).decode("utf-8-sig", errors="replace")
+    result = await imp.import_companies_csv(db, raw, admin_id=admin.id)
+    await db.commit()
+    return result
+
+
+@router.post("/promocodes/import-csv")
+async def import_promocodes_csv(
+    file: UploadFile = File(...),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Массовый импорт промокодов §11.14."""
+    from app.services import admin_csv_import as imp
+
+    raw = (await file.read()).decode("utf-8-sig", errors="replace")
+    result = await imp.import_promocodes_csv(db, raw)
+    await db.commit()
+    return result
+
+
+@router.get("/segmentation/metrics")
+async def segmentation_metrics(
+    days: int = Query(7, ge=1, le=90),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Метрики DeepLab/SAM fallback §11.2.5."""
+    from app.services import segmentation_metrics as sm
+
+    return await sm.dashboard_metrics(db, days=days)
 
 
 @router.post("/storage-alerts/check")

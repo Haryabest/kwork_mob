@@ -17,6 +17,7 @@ from app.core.security import get_current_db_user, get_current_db_user_optional
 from app.models import Company, CompanyInvitation, CompanyMember, Order, ShootLink, Transaction, User
 from app.schemas.balance_filters import CompanyBalanceFilterPresetBody, CompanyBalanceFiltersBody
 from app.services import api_keys as api_keys_svc
+from app.services import pii as pii_svc
 from app.services import photos as photos_service
 from app.services import tariffs as tariff_svc
 from app.services import upsells as upsell_svc
@@ -277,17 +278,42 @@ async def accept_invitation(
     if user.email.lower() != inv.email.lower():
         raise HTTPException(403, "Войдите под email из приглашения")
 
-    if inv.company_id:
+    company_id = inv.company_id
+    if not company_id:
+        meta = inv.meta or {}
+        imp = meta.get("import_company")
+        if imp and inv.role == "owner":
+            dup = await db.scalar(select(Company).where(Company.inn == imp.get("inn")))
+            if dup:
+                raise HTTPException(400, "Компания с таким ИНН уже существует")
+            company = Company(
+                name=str(imp.get("name") or "Company"),
+                inn=str(imp.get("inn") or ""),
+                owner_id=user.id,
+                status="active",
+                settings=pii_svc.encrypt_company_settings(
+                    {"kpp": imp.get("kpp"), "ogrn": imp.get("ogrn")}
+                ),
+            )
+            db.add(company)
+            await db.flush()
+            company_id = company.id
+            inv.company_id = company_id
+            db.add(CompanyMember(company_id=company.id, user_id=user.id, role="owner"))
+            user.account_type = "legal"
+            user.status = "active_legal"
+
+    if company_id:
         existing = await db.scalar(
             select(CompanyMember).where(
-                CompanyMember.company_id == inv.company_id,
+                CompanyMember.company_id == company_id,
                 CompanyMember.user_id == user.id,
             )
         )
         if not existing:
             db.add(
                 CompanyMember(
-                    company_id=inv.company_id,
+                    company_id=company_id,
                     user_id=user.id,
                     role=inv.role,
                     max_concurrent_orders=inv.max_concurrent_orders,
@@ -298,7 +324,7 @@ async def accept_invitation(
 
             db.add(
                 AuditLog(
-                    company_id=inv.company_id,
+                    company_id=company_id,
                     user_id=user.id,
                     action="company_member_joined",
                     details={

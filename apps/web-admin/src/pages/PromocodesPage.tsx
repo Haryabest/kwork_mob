@@ -29,6 +29,7 @@ export default function PromocodesPage() {
   const [maxUses, setMaxUses] = useState<number | string | undefined>(100);
   const [tier, setTier] = useState<string | null>(null);
   const [plainCode, setPlainCode] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   async function load() {
     const { data } = await api.get<{ items: Promo[] }>('/admin/promocodes');
@@ -67,6 +68,28 @@ export default function PromocodesPage() {
     }
   }
 
+  async function importCsv(file: File) {
+    setImporting(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const { data } = await api.post<{ created: Array<{ code: string }>; errors: unknown[] }>(
+        '/admin/promocodes/import-csv',
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      notifications.show({
+        color: 'teal',
+        message: `Импорт: ${data.created?.length ?? 0} промокодов`,
+      });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   if (loading) {
     return (
       <Center py="xl">
@@ -81,9 +104,24 @@ export default function PromocodesPage() {
         title="Промокоды"
         description="Хэш в БД, код показывается один раз (§8.5)"
         action={
-          <Button leftSection={<IconPlus size={16} />} onClick={() => { setPlainCode(null); setOpened(true); }}>
-            Создать
-          </Button>
+          <Group>
+            <Button component="label" variant="light" loading={importing}>
+              Импорт CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importCsv(f);
+                  e.target.value = '';
+                }}
+              />
+            </Button>
+            <Button leftSection={<IconPlus size={16} />} onClick={() => { setPlainCode(null); setOpened(true); }}>
+              Создать
+            </Button>
+          </Group>
         }
       />
       <ShellTable

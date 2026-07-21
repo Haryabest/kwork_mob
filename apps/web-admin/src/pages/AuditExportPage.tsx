@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Center, Group, Loader, Stack, Text, Title } from '@mantine/core';
+import { Button, Card, Center, Group, Loader, Stack } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { PageHeader, ShellTable } from '../components/Panel';
 import { api, getApiError } from '../services/api';

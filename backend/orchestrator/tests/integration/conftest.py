@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import uuid
 
+import pyotp
+
 LEGAL_COMPANY_TEMPLATE = {
     "account_type": "legal",
     "company_name": "Dev Org {inn}",
@@ -16,6 +18,21 @@ LEGAL_COMPANY_TEMPLATE = {
     "bik": "044525225",
     "checking_account": "40702810123456789012",
 }
+
+
+async def enable_owner_2fa(client, headers: dict) -> None:
+    """Owner legal account требует TOTP для corp-операций (§10)."""
+    setup = await client.post("/api/v1/auth/2fa/setup", headers=headers)
+    assert setup.status_code == 200, setup.text
+    data = setup.json()
+    secret = data["secret"]
+    code = pyotp.TOTP(secret).now()
+    confirm = await client.post(
+        "/api/v1/auth/2fa/confirm",
+        headers=headers,
+        json={"code": code, "challenge_token": data.get("challenge_token")},
+    )
+    assert confirm.status_code == 200, confirm.text
 
 
 async def login_owner_with_company(client, unique_email):
@@ -45,4 +62,5 @@ async def login_owner_with_company(client, unique_email):
     body = {k: v.format(inn=inn) if isinstance(v, str) and "{inn}" in v else v for k, v in LEGAL_COMPANY_TEMPLATE.items()}
     at = await client.post("/api/v1/auth/account-type", headers=headers, json=body)
     assert at.status_code == 200, at.text
+    await enable_owner_2fa(client, headers)
     return headers

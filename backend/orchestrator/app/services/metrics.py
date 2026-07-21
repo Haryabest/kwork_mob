@@ -396,7 +396,7 @@ async def _pg_dashboard() -> dict:
 
 
 async def dashboard_aggregates() -> dict:
-    """Дашборд §11.2: ClickHouse workers/queues + PostgreSQL ops/finance/quality."""
+    """Дашборд §11.2/§11.4: finance keys upsell_revenue_7d_rub, nsfw_withheld_7d_rub."""
     ch = {"source": "unavailable", "workers": [], "queues": []}
     client = _ch()
     if client:

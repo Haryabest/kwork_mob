@@ -39,6 +39,7 @@ import {
   IconUpload,
   IconHistory,
   IconShieldCheck,
+  IconScan,
 } from '@tabler/icons-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -65,6 +66,7 @@ const NAV: {
   { path: '/grafana', label: 'Grafana', roles: ['admin'], icon: IconChartBar },
   { path: '/audit-export', label: 'Audit export', roles: ['admin'], icon: IconHistory },
   { path: '/b2b-api-usage', label: 'B2B API usage', roles: ['admin'], icon: IconBuilding },
+  { path: '/segmentation', label: 'Сегментация', roles: ['admin'], icon: IconScan },
   { path: '/promocodes', label: 'Промокоды', roles: ['admin'], icon: IconDiscount2 },
   { path: '/campaigns', label: 'Кампании', roles: ['admin'], icon: IconStack2 },
   { path: '/analytics', label: 'Аналитика', roles: ['admin'], icon: IconChartBar },

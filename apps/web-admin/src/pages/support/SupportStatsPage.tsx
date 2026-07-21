@@ -25,12 +25,18 @@ function fmtDuration(sec: number | null): string {
 
 export default function SupportStatsPage() {
   const [stats, setStats] = useState<SupportStats | null>(null);
+  const [ollama, setOllama] = useState<{ ok?: boolean; model?: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .get<SupportStats>('/admin/support/stats')
-      .then(({ data }) => setStats(data))
+    Promise.all([
+      api.get<SupportStats>('/admin/support/stats'),
+      api.get<{ ok?: boolean; model?: string }>('/admin/support/ollama/status').catch(() => ({ data: null })),
+    ])
+      .then(([statsRes, ollamaRes]) => {
+        setStats(statsRes.data);
+        setOllama(ollamaRes.data);
+      })
       .catch((e) => notifications.show({ color: 'red', message: getApiError(e) }))
       .finally(() => setLoading(false));
   }, []);
@@ -69,6 +75,15 @@ export default function SupportStatsPage() {
           </Text>
           <Text mt="sm">
             Текущий средний первый ответ: <b>{fmtDuration(stats.avg_first_response_sec)}</b>
+          </Text>
+        </Card>
+        <Card withBorder>
+          <Text fw={600}>ИИ-помощник (Ollama)</Text>
+          <Text size="sm" mt="sm" c={ollama?.ok ? 'teal' : 'orange'}>
+            {ollama?.ok ? `Доступен · ${ollama.model ?? 'model'}` : 'Недоступен — проверьте OLLAMA_URL'}
+          </Text>
+          <Text size="xs" c="dimmed" mt="xs">
+            Кнопка «Предложить ответ ИИ» в карточке обращения §11.6
           </Text>
         </Card>
       </SimpleGrid>

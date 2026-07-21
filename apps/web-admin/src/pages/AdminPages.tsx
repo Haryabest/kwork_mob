@@ -755,20 +755,70 @@ export function UserDetailPage() {
 export function CompaniesPage() {
   const [items, setItems] = useState<Array<{ id: number; name: string; members_count: number; balance: number; status: string }>>([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
+
+  async function load() {
+    const { data } = await api.get<{ items: typeof items }>('/admin/companies');
+    setItems(data.items ?? []);
+  }
 
   useEffect(() => {
-    api
-      .get<{ items: typeof items }>('/admin/companies')
-      .then(({ data }) => setItems(data.items ?? []))
+    load()
       .catch((e) => notifications.show({ color: 'red', message: getApiError(e) }))
       .finally(() => setLoading(false));
   }, []);
+
+  async function importCsv(file: File) {
+    setImporting(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const { data } = await api.post<{ created: unknown[]; invited: unknown[]; errors: unknown[] }>(
+        '/admin/companies/import-csv',
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      notifications.show({
+        color: 'teal',
+        message: `Импорт: +${data.created?.length ?? 0} компаний, ${data.invited?.length ?? 0} приглашений`,
+      });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setImporting(false);
+    }
+  }
 
   if (loading) return <Center py="xl"><Loader color="brand" /></Center>;
 
   return (
     <>
-      <PageHeader title="B2B-клиенты" description="Компании, лимиты, персональные цены и API-ключи" />
+      <PageHeader
+        title="B2B-клиенты"
+        description="Компании, лимиты, персональные цены и API-ключи"
+        action={
+          <Group>
+            <Button
+              component="label"
+              variant="light"
+              loading={importing}
+            >
+              Импорт CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importCsv(f);
+                  e.target.value = '';
+                }}
+              />
+            </Button>
+          </Group>
+        }
+      />
       <ShellTable
         headers={['ID', 'Компания', 'Сотрудники', 'Баланс', 'Статус', '']}
         rows={items.map((c) => [
