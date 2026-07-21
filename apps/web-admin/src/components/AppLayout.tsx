@@ -89,7 +89,7 @@ function isActive(pathname: string, path: string): boolean {
 }
 
 export default function AppLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, vpnStatus } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [opened, { toggle, close }] = useDisclosure();
@@ -131,6 +131,15 @@ export default function AppLayout() {
             </Box>
           </Group>
           <Group gap="xs" wrap="nowrap">
+            {vpnStatus && (
+              <Badge
+                variant="light"
+                color={vpnStatus.vpn_required && !vpnStatus.vpn_ok ? 'red' : 'teal'}
+                title={vpnStatus.ip ? `IP: ${vpnStatus.ip}` : undefined}
+              >
+                VPN {vpnStatus.vpn_ok || !vpnStatus.vpn_required ? 'OK' : '—'}
+              </Badge>
+            )}
             <Badge variant="light" color="brand" visibleFrom="sm" maw={180} style={{ overflow: 'hidden' }}>
               {user?.email}
             </Badge>

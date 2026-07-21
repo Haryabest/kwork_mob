@@ -1,8 +1,9 @@
 import { ActionIcon, Badge, Button, Card, Center, Code, Group, Loader, Modal, NumberInput, ScrollArea, Select, SimpleGrid, Slider, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
 import { IconDownload, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { HealthCard, MetricGrid, PageHeader, SaveButton, ShellTable, StateBadge } from '../components/Panel';
 import { VirtualShellTable } from '../components/VirtualShellTable';
 import { api, getApiError } from '../services/api';
@@ -111,6 +112,26 @@ export function WorkersPage() {
     load().catch((e) => notifications.show({ color: 'red', message: getApiError(e) })).finally(() => setLoading(false));
   }, []);
 
+  const gpuChart = useMemo(
+    () =>
+      items
+        .filter((w) => w.gpu_load != null)
+        .map((w) => ({
+          id: w.id.length > 12 ? `${w.id.slice(0, 10)}…` : w.id,
+          load: Math.round(w.gpu_load ?? 0),
+        })),
+    [items],
+  );
+
+  const costChart = useMemo(
+    () =>
+      (costs.hourly_cost_rub ?? []).map((p) => ({
+        hour: (p.hour ?? '').toString().slice(5, 16).replace('T', ' '),
+        rub: p.rub,
+      })),
+    [costs.hourly_cost_rub],
+  );
+
   async function downloadDeploy(role: string) {
     try {
       const { data } = await api.get<Record<string, unknown>>('/admin/deploy/bundle', {
@@ -163,6 +184,42 @@ export function WorkersPage() {
             : []),
         ]}
       />
+      {(gpuChart.length > 0 || costChart.length > 0) && (
+        <SimpleGrid cols={{ base: 1, lg: 2 }} mb="md">
+          {gpuChart.length > 0 && (
+            <Card withBorder p="md">
+              <Text fw={600} mb="sm">
+                Загрузка GPU по воркерам §11.2.6
+              </Text>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={gpuChart} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,87,184,0.12)" />
+                  <XAxis dataKey="id" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
+                  <Tooltip />
+                  <Bar dataKey="load" fill="#0057b8" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          )}
+          {costChart.length > 0 && (
+            <Card withBorder p="md">
+              <Text fw={600} mb="sm">
+                Cloud burn по часам §11.2.6
+              </Text>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={costChart} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,87,184,0.12)" />
+                  <XAxis dataKey="hour" tick={{ fontSize: 10 }} minTickGap={20} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Bar dataKey="rub" fill="#0381E9" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          )}
+        </SimpleGrid>
+      )}
       <Card withBorder mb="md">
         <Stack gap="sm">
           <Group justify="space-between">
