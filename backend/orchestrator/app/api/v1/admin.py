@@ -1587,6 +1587,42 @@ async def write_activity_check(
     return await wa.check_and_alert(db)
 
 
+@router.get("/storage/minio-replication")
+async def minio_replication_status(_: dict = Depends(require_admin)):
+    """MinIO replication status §14.4."""
+    from app.services.minio_replication import replication_status
+
+    return replication_status()
+
+
+@router.post("/storage/minio-replication/apply")
+async def minio_replication_apply(
+    staff: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply / force-sync MinIO replication prod path §14.4."""
+    from app.services.minio_replication import apply_prod_replication
+
+    uid = int(staff["sub"]) if staff.get("sub") else None
+    return await apply_prod_replication(db, user_id=uid)
+
+
+@router.get("/storage/cluster-health")
+async def storage_cluster_health(_: dict = Depends(require_admin)):
+    """2-node storage cluster cards §23.4."""
+    from app.services.storage_cluster_health import storage_cluster_health as _health
+
+    return _health()
+
+
+@router.get("/ha/readiness")
+async def ha_readiness_check(_: dict = Depends(require_admin)):
+    """Prod HA readiness checklist §22.1."""
+    from app.services.ha_readiness import ha_readiness
+
+    return ha_readiness()
+
+
 @router.post("/storage/force-resync-minio")
 async def force_resync_minio(
     staff: dict = Depends(require_admin),

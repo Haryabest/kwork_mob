@@ -3,13 +3,14 @@
 import { Badge, Button, Group, Pagination, SegmentedControl, Select, Text, TextInput, Table } from '@mantine/core';
 import { IconPlus, IconSearch } from '@tabler/icons-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { SellerShell } from '../../components/SellerShell';
 import { ModelsGridView } from '../../components/ModelsGridView';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
 import { api, apiMessage } from '../../services/api';
+import { useModelsList } from '../../hooks/useModelsList';
 
 type Model = {
   uuid: string;
@@ -96,8 +97,6 @@ const MANAGE_ROLES = new Set(['owner', 'manager']);
 const PAGE_SIZE = 20;
 
 export default function ModelsPage() {
-  const [items, setItems] = useState<Model[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
@@ -108,13 +107,31 @@ export default function ModelsPage() {
   const [dateTo, setDateTo] = useState('');
   const [authorId, setAuthorId] = useState<string | null>(null);
   const [sort, setSort] = useState<string | null>('newest');
-  const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
   const [massBusy, setMassBusy] = useState(false);
   const [company, setCompany] = useState<CompanyCtx | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const isMobile = useMediaQuery('(max-width: 767px)');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+
+  const { data: modelsData, isLoading: loading, refetch } = useModelsList(
+    {
+      companyId: company?.id,
+      page,
+      pageSize: PAGE_SIZE,
+      search,
+      publishFilter,
+      category,
+      tier,
+      dateFrom,
+      dateTo,
+      authorId,
+      sort,
+    },
+    company != null,
+  );
+  const items = (modelsData?.items ?? []) as Model[];
+  const total = modelsData?.total ?? 0;
 
   const canFilterAuthors = company != null && MANAGE_ROLES.has(company.role);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -165,36 +182,6 @@ export default function ModelsPage() {
       .catch(() => undefined);
   }, [canFilterAuthors]);
 
-  const loadModels = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params: Record<string, string | number> = {
-        limit: PAGE_SIZE,
-        offset: (page - 1) * PAGE_SIZE,
-        sort: sort || 'newest',
-      };
-      if (company) params.company_id = company.id;
-      if (search) params.search = search;
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      if (tier) params.tier = tier;
-      if (category) params.category = category;
-      if (publishFilter) params.publish_filter = publishFilter;
-      if (authorId) params.author_id = Number(authorId);
-      const { data } = await api.get<ModelsResponse>('/user/models', { params });
-      setItems(data.items ?? []);
-      setTotal(data.total ?? 0);
-    } catch (e) {
-      notifications.show({ color: 'red', message: apiMessage(e) });
-    } finally {
-      setLoading(false);
-    }
-  }, [page, search, publishFilter, category, tier, dateFrom, dateTo, authorId, sort, company]);
-
-  useEffect(() => {
-    void loadModels();
-  }, [loadModels]);
-
   async function massExtendAll() {
     if (!window.confirm('Продлить хранение исходников для всех моделей компании? (лимит 3× на модель)')) {
       return;
@@ -208,6 +195,7 @@ export default function ModelsPage() {
         color: 'teal',
         message: data.message || `Продлено: ${data.extended ?? 0}`,
       });
+      void refetch();
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
     } finally {

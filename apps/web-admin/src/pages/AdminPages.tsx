@@ -1616,6 +1616,16 @@ export function StoragePage() {
     }>;
     wearout_alert?: boolean;
   } | null>(null);
+  const [clusterCards, setClusterCards] = useState<{
+    overall?: string;
+    nodes?: Array<{
+      node_id?: string;
+      hostname?: string;
+      status?: string;
+      last_seen_age_sec?: number | null;
+      disk?: { device?: string; health?: string; used_percent?: number; temp_c?: number };
+    }>;
+  } | null>(null);
 
   async function check() {
     try {
@@ -1657,6 +1667,12 @@ export function StoragePage() {
     try {
       const { data } = await api.get('/admin/storage/disk-forecast', { params: { days: 14 } });
       setForecast(data);
+    } catch {
+      /* optional */
+    }
+    try {
+      const { data } = await api.get('/admin/storage/cluster-health');
+      setClusterCards(data);
     } catch {
       /* optional */
     }
@@ -1887,6 +1903,31 @@ export function StoragePage() {
           Last alert check: {lastCheck}
         </Text>
       ) : null}
+      {(clusterCards?.nodes || []).length > 0 && (
+        <SimpleGrid cols={{ base: 1, sm: 2 }} mb="lg">
+          {(clusterCards?.nodes || []).map((n) => (
+            <Card key={n.node_id || n.hostname} withBorder>
+              <Group justify="space-between">
+                <Text fw={600}>{n.hostname || n.node_id}</Text>
+                <Badge
+                  color={
+                    n.status === 'healthy' ? 'green' : n.status === 'offline' ? 'red' : 'orange'
+                  }
+                >
+                  {n.status || '—'}
+                </Badge>
+              </Group>
+              <Text size="sm" mt="sm">
+                disk: {n.disk?.device || '—'} · health={n.disk?.health || '—'} · used=
+                {n.disk?.used_percent != null ? `${n.disk.used_percent}%` : '—'}
+              </Text>
+              <Text size="xs" c="dimmed" mt={4}>
+                heartbeat age: {n.last_seen_age_sec != null ? `${n.last_seen_age_sec}s` : '—'}
+              </Text>
+            </Card>
+          ))}
+        </SimpleGrid>
+      )}
       <SimpleGrid cols={{ base: 1, sm: 2 }} mb="lg">
         <HealthCard name="MinIO" status={health.ok ? 'Онлайн' : 'Ошибка'} load={health.ok ? 50 : 0} />
         <Card withBorder>

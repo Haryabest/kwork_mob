@@ -20,6 +20,7 @@ import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/services/gyro_guide.dart';
 import 'package:kwork_mobile/services/quality_analyzer.dart';
 import 'package:kwork_mobile/services/analytics_service.dart';
+import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/thermal_monitor.dart';
 import 'package:kwork_mobile/widgets/native_ar_preview.dart';

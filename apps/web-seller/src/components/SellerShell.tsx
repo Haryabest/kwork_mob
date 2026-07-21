@@ -38,6 +38,7 @@ import { AuthGuard } from './AuthGuard';
 import { api } from '../services/api';
 import { GRADIENT_PRIMARY } from '../theme/brand';
 import { useT } from '../i18n/I18nProvider';
+import { QueueWsProvider, useQueueWs } from '../context/QueueWsContext';
 
 const NAV_KEYS = [
   { href: '/dashboard', key: 'dashboard' as const, icon: IconHome2 },
@@ -50,6 +51,16 @@ const NAV_KEYS = [
 ] as const;
 
 export function SellerShell({ children }: { children: ReactNode }) {
+  return (
+    <AuthGuard>
+      <QueueWsProvider>
+        <SellerShellInner>{children}</SellerShellInner>
+      </QueueWsProvider>
+    </AuthGuard>
+  );
+}
+
+function SellerShellInner({ children }: { children: ReactNode }) {
   const t = useT();
   const pathname = usePathname();
   const router = useRouter();
@@ -59,6 +70,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [userLabel, setUserLabel] = useState('3D');
   const isMobile = useMediaQuery('(max-width: 767px)');
+  const { live: queueLive, pendingCount: queuePending, clearPending } = useQueueWs();
 
   useEffect(() => {
     api
@@ -77,8 +89,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   return (
-    <AuthGuard>
-      <AppShell
+    <AppShell
         header={{ height: isMobile ? 56 : 64 }}
         navbar={{ width: 248, breakpoint: 'sm', collapsed: { mobile: !opened } }}
         padding={0}
@@ -168,6 +179,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
               {NAV_KEYS.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const showQueueDot = item.key === 'orders' && queuePending > 0;
                 return (
                   <NavLink
                     key={item.href}
@@ -175,8 +187,20 @@ export function SellerShell({ children }: { children: ReactNode }) {
                     href={item.href}
                     label={t.nav[item.key]}
                     leftSection={<Icon size={18} stroke={1.5} />}
+                    rightSection={
+                      showQueueDot ? (
+                        <Badge size="xs" color="teal" circle>
+                          {queuePending > 99 ? '99+' : queuePending}
+                        </Badge>
+                      ) : item.key === 'orders' && queueLive ? (
+                        <Badge size="xs" color="green" variant="dot" />
+                      ) : null
+                    }
                     active={active}
-                    onClick={() => close()}
+                    onClick={() => {
+                      if (item.key === 'orders') clearPending();
+                      close();
+                    }}
                   />
                 );
               })}
@@ -205,7 +229,6 @@ export function SellerShell({ children }: { children: ReactNode }) {
             {children}
           </Box>
         </AppShell.Main>
-      </AppShell>
-    </AuthGuard>
+    </AppShell>
   );
 }

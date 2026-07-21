@@ -2,10 +2,29 @@
 
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from app.core.config import settings
 from app.services.locale import normalize_locale
+
+_TEMPLATES_ROOT = Path(__file__).resolve().parents[2] / "templates" / "email"
+
+
+@lru_cache(maxsize=128)
+def _load_file_pack(key: str, locale: str) -> dict[str, str] | None:
+    path = _TEMPLATES_ROOT / locale / f"{key}.json"
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return {str(k): str(v) for k, v in data.items()}
+    except Exception:  # noqa: BLE001
+        return None
+    return None
 
 _TEMPLATES: dict[str, dict[str, dict[str, str]]] = {
     "verification": {
@@ -108,10 +127,15 @@ _TEMPLATES: dict[str, dict[str, dict[str, str]]] = {
 def render_template(key: str, locale: str | None, **kwargs: Any) -> dict[str, str]:
     loc = normalize_locale(locale)
     pack = _TEMPLATES.get(key, {})
-    tpl = pack.get(loc) or pack.get("ru") or {"subject": "", "body": ""}
+    tpl = _load_file_pack(key, loc) or pack.get(loc) or pack.get("ru") or {"subject": "", "body": ""}
     out = {k: v.format(**kwargs) for k, v in tpl.items()}
     out["locale"] = loc
     return out
+
+
+def templates_root() -> Path:
+    """§15.3 — каталог templates/{lang}/ на диске."""
+    return _TEMPLATES_ROOT
 
 
 def verification_email(locale: str | None, *, code: str) -> tuple[str, str]:

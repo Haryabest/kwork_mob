@@ -7344,6 +7344,31 @@
         ]
       }
     },
+    "/api/v1/admin/ha/readiness": {
+      "get": {
+        "description": "Prod HA readiness checklist §22.1.",
+        "operationId": "ha_readiness_check_api_v1_admin_ha_readiness_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ha Readiness Check",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/invitations": {
       "get": {
         "description": "Список приглашений по всем компаниям (§11.6, страница «Приглашения»).",
@@ -9385,6 +9410,31 @@
         ]
       }
     },
+    "/api/v1/admin/storage/cluster-health": {
+      "get": {
+        "description": "2-node storage cluster cards §23.4.",
+        "operationId": "storage_cluster_health_api_v1_admin_storage_cluster_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Storage Cluster Health",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/storage/disk-forecast": {
       "get": {
         "description": "Прогноз заполнения диска + wearout §23.7.",
@@ -9629,6 +9679,56 @@
           }
         ],
         "summary": "Force Resync Minio",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/storage/minio-replication": {
+      "get": {
+        "description": "MinIO replication status §14.4.",
+        "operationId": "minio_replication_status_api_v1_admin_storage_minio_replication_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Minio Replication Status",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/storage/minio-replication/apply": {
+      "post": {
+        "description": "Apply / force-sync MinIO replication prod path §14.4.",
+        "operationId": "minio_replication_apply_api_v1_admin_storage_minio_replication_apply_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Minio Replication Apply",
         "tags": [
           "Администрирование"
         ]

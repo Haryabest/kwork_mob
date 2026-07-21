@@ -207,6 +207,75 @@ services:
       - ./infra/grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro
       - grafana_data:/var/lib/grafana
 
+  # ClickHouse HA §22.2.3 — Keeper + 2 replicas (ReplicatedMergeTree overlay)
+  clickhouse-keeper:
+    image: clickhouse/clickhouse-keeper:24.8-alpine
+    hostname: clickhouse-keeper
+    ports:
+      - "9181:9181"
+    volumes:
+      - ch_keeper_data:/var/lib/clickhouse
+      - ./infra/ha/clickhouse/keeper_config.xml:/etc/clickhouse-keeper/keeper_config.xml:ro
+
+  clickhouse-1:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    hostname: clickhouse-1
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: kwork_metrics
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    volumes:
+      - ch1_data:/var/lib/clickhouse
+      - ./infra/ha/clickhouse/server-1.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
+      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    depends_on:
+      - clickhouse-keeper
+
+  clickhouse-2:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    hostname: clickhouse-2
+    ports:
+      - "8124:8123"
+      - "9001:9000"
+    environment:
+      CLICKHOUSE_DB: kwork_metrics
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    volumes:
+      - ch2_data:/var/lib/clickhouse
+      - ./infra/ha/clickhouse/server-2.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
+      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    depends_on:
+      - clickhouse-keeper
+
+  # node_exporter на узлах хранения §23.1 (textfile SMART)
+  node-exporter-a:
+    image: prom/node-exporter:v1.8.2
+    hostname: node-exporter-a
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.textfile.directory=/textfile'
+    volumes:
+      - /:/host:ro,rslave
+      - ./infra/agents/minio_smart_exporter:/textfile:ro
+    ports:
+      - "9100:9100"
+
+  node-exporter-b:
+    image: prom/node-exporter:v1.8.2
+    hostname: node-exporter-b
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.textfile.directory=/textfile'
+    volumes:
+      - /:/host:ro,rslave
+      - ./infra/agents/minio_smart_exporter:/textfile:ro
+    ports:
+      - "9101:9100"
+
 volumes:
   etcd_data:
   pg_primary_data:
@@ -216,3 +285,6 @@ volumes:
   minio1_data:
   minio2_data:
   grafana_data:
+  ch_keeper_data:
+  ch1_data:
+  ch2_data:

@@ -14,6 +14,9 @@ docker compose -f docker-compose.ha.yml --profile patroni up -d --build
 | redis-master + replica | 6379 | AOF |
 | redis-sentinel ×3 | 26379 | failover `mymaster` |
 | minio-1 / minio-2 | 9010/9012 | replication |
+| clickhouse-keeper | 9181 | Keeper (ZooKeeper-compatible) |
+| clickhouse-1 / clickhouse-2 | 8123 / 8124 | ReplicatedMergeTree §22.2.3 |
+| node-exporter-a / b | 9100 / 9101 | SMART textfile §23.1 |
 | grafana | 3002 | dashboards + datasources auto-provision |
 
 ## Env оркестратора (после cutover)
@@ -78,6 +81,15 @@ python3 infra/agents/minio_smart_exporter/exporter.py
 
 Prometheus scrape node_exporter textfile → метрики `minio_node_disk_smart_*`.
 Admin UI читает `smart_disks[]` через `MINIO_SMART_JSON` на оркестраторе.
+
+## ClickHouse HA (§22.2.3)
+
+```bash
+docker compose -f docker-compose.ha.yml up -d clickhouse-keeper clickhouse-1 clickhouse-2
+clickhouse-client --host clickhouse-1 --multiquery < infra/clickhouse/replicated_merge_tree.sql
+```
+
+Оркестратор: `CLICKHOUSE_HOST=clickhouse-1`. Readiness: `GET /api/v1/admin/ha/readiness`.
 
 ## Grafana datasources
 
