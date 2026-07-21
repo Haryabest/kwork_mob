@@ -1,6 +1,6 @@
 import { AxiosError } from 'axios';
 import { describe, expect, it } from 'vitest';
-import { getApiError } from './api';
+import { getApiError, authStorage } from './api';
 
 describe('getApiError', () => {
   it('возвращает строковый detail из ответа API', () => {
@@ -23,5 +23,17 @@ describe('getApiError', () => {
 
   it('фолбэк для неизвестных значений', () => {
     expect(getApiError('strange')).toBe('Ошибка запроса');
+  });
+});
+
+describe('authStorage', () => {
+  it('save и clear', () => {
+    localStorage.setItem('staff_refresh_token', 'old');
+    authStorage.save('access-1', 'refresh-1');
+    expect(localStorage.getItem('staff_access_token')).toBe('access-1');
+    expect(localStorage.getItem('staff_refresh_token')).toBe('refresh-1');
+    authStorage.clear();
+    expect(localStorage.getItem('staff_access_token')).toBeNull();
+    expect(localStorage.getItem('staff_refresh_token')).toBeNull();
   });
 });

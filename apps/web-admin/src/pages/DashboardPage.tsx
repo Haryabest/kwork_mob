@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { api, getApiError } from '../services/api';
 import { useAdminDashboardLive } from '../hooks/useAdminDashboardLive';
+import { isPgQueueSynced } from '../utils/queueHealth';
 
 type Dashboard = {
   source: string;
@@ -219,8 +220,9 @@ export default function DashboardPage() {
   const fin = data?.finance;
   const share45 = Math.round((data?.quality.rating_share_4_5 ?? 0) * 100);
   const qsPass = Math.round((data?.quality.qs_pass_rate_7d ?? 0) * 100);
-  const redisTotal = (queueHealth?.redis.normal ?? 0) + (queueHealth?.redis.high ?? 0);
-  const pgSynced = queueHealth ? queueHealth.pg_queued === redisTotal : false;
+  const pgSynced = queueHealth
+    ? isPgQueueSynced(queueHealth.pg_queued, queueHealth.redis)
+    : false;
 
   return (
     <div className="vz-page">
