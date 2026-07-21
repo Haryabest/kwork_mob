@@ -40,14 +40,29 @@ def resolve_kms_key_id() -> str | None:
 
 class MinioService:
     def __init__(self) -> None:
-        self.client = boto3.client(
+        self._primary_endpoint = settings.MINIO_ENDPOINT
+        self._replica_endpoint = (getattr(settings, "MINIO_REPLICA_ENDPOINT", "") or "").strip()
+        self.client = self._make_client(self._primary_endpoint)
+        self._replica_client = (
+            self._make_client(self._replica_endpoint) if self._replica_endpoint else None
+        )
+
+    @staticmethod
+    def _make_client(endpoint: str):
+        return boto3.client(
             "s3",
-            endpoint_url=settings.MINIO_ENDPOINT,
+            endpoint_url=endpoint,
             aws_access_key_id=settings.MINIO_ACCESS_KEY,
             aws_secret_access_key=settings.MINIO_SECRET_KEY,
             config=Config(signature_version="s3v4"),
             region_name="us-east-1",
         )
+
+    def _clients_for_read(self) -> list[Any]:
+        clients = [self.client]
+        if self._replica_client is not None:
+            clients.append(self._replica_client)
+        return clients
 
     @property
     def buckets(self) -> list[str]:
@@ -167,16 +182,33 @@ class MinioService:
                 pass
 
     def health(self) -> dict[str, Any]:
-        try:
-            buckets = [b["Name"] for b in self.client.list_buckets().get("Buckets", [])]
-            return {
-                "ok": True,
-                "endpoint": settings.MINIO_ENDPOINT,
-                "buckets": buckets,
-                "encryption": self.encryption_status(),
-            }
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "endpoint": settings.MINIO_ENDPOINT, "error": str(exc)}
+        replica = self._replica_endpoint or None
+        for label, client, endpoint in (
+            ("primary", self.client, self._primary_endpoint),
+            ("replica", self._replica_client, replica),
+        ):
+            if client is None:
+                continue
+            try:
+                buckets = [b["Name"] for b in client.list_buckets().get("Buckets", [])]
+                return {
+                    "ok": True,
+                    "endpoint": endpoint,
+                    "active": label,
+                    "replica_endpoint": replica,
+                    "buckets": buckets,
+                    "encryption": self.encryption_status(),
+                }
+            except Exception as exc:  # noqa: BLE001
+                if label == "primary" and self._replica_client is not None:
+                    continue
+                return {
+                    "ok": False,
+                    "endpoint": endpoint,
+                    "replica_endpoint": replica,
+                    "error": str(exc),
+                }
+        return {"ok": False, "endpoint": self._primary_endpoint, "replica_endpoint": replica}
 
     def _load_smart_disks(self) -> list[dict[str, Any]]:
         """JSON sidecar с узла MinIO (minio_smart_exporter)."""
@@ -360,21 +392,31 @@ class MinioService:
         return f"s3://{bucket}/{key}"
 
     def object_exists(self, bucket: str, key: str) -> bool:
-        try:
-            self.client.head_object(Bucket=bucket, Key=key)
-            return True
-        except ClientError:
-            return False
+        for client in self._clients_for_read():
+            try:
+                client.head_object(Bucket=bucket, Key=key)
+                return True
+            except ClientError:
+                continue
+        return False
 
     def download_bytes(self, bucket: str, key: str) -> bytes:
-        obj = self.client.get_object(Bucket=bucket, Key=key)
-        try:
-            return obj["Body"].read()
-        finally:
+        last_exc: Exception | None = None
+        for client in self._clients_for_read():
             try:
-                obj["Body"].close()
-            except Exception:  # noqa: BLE001
-                pass
+                obj = client.get_object(Bucket=bucket, Key=key)
+                try:
+                    return obj["Body"].read()
+                finally:
+                    try:
+                        obj["Body"].close()
+                    except Exception:  # noqa: BLE001
+                        pass
+            except ClientError as exc:
+                last_exc = exc
+        if last_exc:
+            raise last_exc
+        raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
 
     def list_objects(self, bucket: str, prefix: str = "") -> list[str]:
         keys: list[str] = []

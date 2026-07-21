@@ -16,9 +16,11 @@ def ha_readiness() -> dict[str, Any]:
     pg_ok = pg_role in ("", "primary", "master", "leader", "replica")
     sentinel_ok = bool((settings.REDIS_SENTINELS or "").strip())
     ha_json_ok = bool((settings.MINIO_HA_JSON or "").strip())
+    replica_ok = bool((getattr(settings, "MINIO_REPLICA_ENDPOINT", "") or "").strip())
     checks: dict[str, Any] = {
         "minio_online": bool(smart.get("ok")),
         "minio_replication_ok": not bool(smart.get("alert_replication_failed")),
+        "minio_read_failover": replica_ok,
         "postgres_role_ok": pg_ok,
         "redis_sentinel_configured": sentinel_ok,
         "ha_json_sidecar": ha_json_ok,

@@ -276,6 +276,46 @@ services:
     ports:
       - "9101:9100"
 
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER:-kwork}:${POSTGRES_PASSWORD:-kwork_secret}@postgres-primary:5432/${POSTGRES_DB:-kwork_mob}?sslmode=disable
+    ports:
+      - "9187:9187"
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    environment:
+      REDIS_ADDR: redis://redis-master:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+  clickhouse-exporter:
+    image: f1yegor/clickhouse_exporter:latest
+    command: ["-scrape_uri=http://clickhouse-1:8123/"]
+    ports:
+      - "9116:9116"
+    depends_on:
+      - clickhouse-1
+
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - node-exporter-a
+      - postgres-exporter
+      - redis-exporter
+      - clickhouse-exporter
+
 volumes:
   etcd_data:
   pg_primary_data:

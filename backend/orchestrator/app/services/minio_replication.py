@@ -29,6 +29,7 @@ def replication_status() -> dict[str, Any]:
         (getattr(settings, "MINIO_FORCE_RESYNC_URL", "") or "").strip()
         or (getattr(settings, "MINIO_FORCE_RESYNC_SCRIPT", "") or "").strip()
     )
+    replica = (getattr(settings, "MINIO_REPLICA_ENDPOINT", "") or "").strip()
     return {
         "ok": smart.get("ok", False) and not bool(failed),
         "buckets": list(_BUCKETS),
@@ -37,6 +38,8 @@ def replication_status() -> dict[str, Any]:
         "alert_replication_failed": smart.get("alert_replication_failed", False),
         "source": ha.get("source"),
         "prod_path": prod_hooks or bool((getattr(settings, "MINIO_HA_JSON", "") or "").strip()),
+        "replica_endpoint": replica or None,
+        "read_failover": bool(replica),
         "setup_script": "infra/ha/minio/setup-replication.sh",
         "compose_service": "minio-replicate",
     }

@@ -17,6 +17,10 @@ docker compose -f docker-compose.ha.yml --profile patroni up -d --build
 | clickhouse-keeper | 9181 | Keeper (ZooKeeper-compatible) |
 | clickhouse-1 / clickhouse-2 | 8123 / 8124 | ReplicatedMergeTree §22.2.3 |
 | node-exporter-a / b | 9100 / 9101 | SMART textfile §23.1 |
+| postgres-exporter | 9187 | PG metrics §23.2 |
+| redis-exporter | 9121 | Redis metrics §23.2 |
+| clickhouse-exporter | 9116 | CH metrics §23.2 |
+| prometheus | 9090 | HA scrape §23.5 |
 | grafana | 3002 | dashboards + datasources auto-provision |
 
 ## Env оркестратора (после cutover)
@@ -90,6 +94,10 @@ clickhouse-client --host clickhouse-1 --multiquery < infra/clickhouse/replicated
 ```
 
 Оркестратор: `CLICKHOUSE_HOST=clickhouse-1`. Readiness: `GET /api/v1/admin/ha/readiness`.
+
+Env failover MinIO: `MINIO_REPLICA_ENDPOINT=http://minio-2:9000`.
+
+Tailscale sidecar: `TAILSCALE_STATUS_JSON=/var/lib/tailscale/status.json` → `GET /api/v1/admin/ha/tailscale`.
 
 ## Grafana datasources
 

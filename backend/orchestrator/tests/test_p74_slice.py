@@ -1,7 +1,5 @@
 """§14.4 MinIO replication, §15.3 email templates, §20.7 React Query deps."""
 
-from pathlib import Path
-
 from app.services.email_templates import render_template, templates_root
 from app.services.minio_replication import replication_status
 

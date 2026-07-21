@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str = ""
 
     MINIO_ENDPOINT: str = "http://localhost:9000"
+    MINIO_REPLICA_ENDPOINT: str = ""  # §22.2.4 read-failover при недоступности primary
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET_PHOTOS: str = "photos"
@@ -51,6 +52,7 @@ class Settings(BaseSettings):
     MINIO_FORCE_RESYNC_SCRIPT: str = ""
     PATRONI_RESTART_REPL_URL: str = ""
     PATRONI_RESTART_REPL_SCRIPT: str = ""
+    PATRONI_REST_URL: str = "http://patroni-1:8008"
     # §11.16.4 FIO disk test (10 sec)
     FIO_TEST_URL: str = ""
     FIO_TEST_SCRIPT: str = ""
@@ -58,6 +60,7 @@ class Settings(BaseSettings):
     LOKI_URL: str = ""  # http://loki:3100
     DOCKER_LOGS_PROXY_URL: str = ""  # agent POST /logs
     DOCKER_LOG_CONTAINERS: str = "postgres,minio,patroni,redis,clickhouse,orchestrator,haproxy"
+    TAILSCALE_STATUS_JSON: str = ""  # §23.3 tailscale status --json sidecar
 
     CLICKHOUSE_HOST: str = "localhost"
     CLICKHOUSE_PORT: int = 8123

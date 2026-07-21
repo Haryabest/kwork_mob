@@ -4486,6 +4486,21 @@ paths:
       summary: Grafana Embed Config
       tags:
       - Администрирование
+  /api/v1/admin/ha/patroni-status:
+    get:
+      description: Patroni cluster status §22.2.1.
+      operationId: ha_patroni_status_api_v1_admin_ha_patroni_status_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Ha Patroni Status
+      tags:
+      - Администрирование
   /api/v1/admin/ha/readiness:
     get:
       description: Prod HA readiness checklist §22.1.
@@ -4499,6 +4514,36 @@ paths:
       security:
       - HTTPBearer: []
       summary: Ha Readiness Check
+      tags:
+      - Администрирование
+  /api/v1/admin/ha/redis-sentinel:
+    get:
+      description: Redis Sentinel status §22.2.2.
+      operationId: ha_redis_sentinel_api_v1_admin_ha_redis_sentinel_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Ha Redis Sentinel
+      tags:
+      - Администрирование
+  /api/v1/admin/ha/tailscale:
+    get:
+      description: Tailscale mesh status §23.3.
+      operationId: ha_tailscale_status_api_v1_admin_ha_tailscale_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Ha Tailscale Status
       tags:
       - Администрирование
   /api/v1/admin/invitations:

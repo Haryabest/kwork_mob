@@ -1623,6 +1623,30 @@ async def ha_readiness_check(_: dict = Depends(require_admin)):
     return ha_readiness()
 
 
+@router.get("/ha/patroni-status")
+async def ha_patroni_status(_: dict = Depends(require_admin)):
+    """Patroni cluster status §22.2.1."""
+    from app.services.patroni_status import patroni_status
+
+    return patroni_status()
+
+
+@router.get("/ha/redis-sentinel")
+async def ha_redis_sentinel(_: dict = Depends(require_admin)):
+    """Redis Sentinel status §22.2.2."""
+    from app.services.redis_sentinel_status import redis_sentinel_status
+
+    return redis_sentinel_status()
+
+
+@router.get("/ha/tailscale")
+async def ha_tailscale_status(_: dict = Depends(require_admin)):
+    """Tailscale mesh status §23.3."""
+    from app.services.tailscale_metrics import tailscale_status
+
+    return tailscale_status()
+
+
 @router.post("/storage/force-resync-minio")
 async def force_resync_minio(
     staff: dict = Depends(require_admin),
