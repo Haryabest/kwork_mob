@@ -6365,6 +6365,103 @@ paths:
       summary: Patch Upsell
       tags:
       - Тарифы и алерты
+  /api/v1/admin/user-events:
+    get:
+      description: §12.1 user_events из PostgreSQL.
+      operationId: admin_user_events_api_v1_admin_user_events_get
+      parameters:
+      - in: query
+        name: user_id
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: User Id
+      - in: query
+        name: company_id
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Company Id
+      - in: query
+        name: event_type
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          title: Event Type
+      - in: query
+        name: date_from
+        required: false
+        schema:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Date From
+      - in: query
+        name: date_to
+        required: false
+        schema:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Date To
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 200
+          maximum: 2000
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          title: Offset
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Admin User Events
+      tags:
+      - Администрирование
+  /api/v1/admin/user-events/taxonomy:
+    get:
+      description: Список допустимых event_type §12.1.1.
+      operationId: admin_user_events_taxonomy_api_v1_admin_user_events_taxonomy_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Admin User Events Taxonomy
+      tags:
+      - Администрирование
   /api/v1/admin/users:
     get:
       operationId: list_users_api_v1_admin_users_get

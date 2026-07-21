@@ -1,0 +1,32 @@
+# Vector → ClickHouse app logs §12.5 (docker stdout / json logs)
+# Mount: docker-compose -f docker-compose.yml -f docker-compose.vector.yml
+
+data_dir = "/var/lib/vector"
+
+[sources.docker_logs]
+type = "docker_logs"
+include_containers = ["orchestrator", "worker", "celery"]
+
+[transforms.parse_json]
+type = "remap"
+inputs = ["docker_logs"]
+source = '''
+.level = to_string(.level) ?? "info"
+.message = to_string(.message) ?? slice!(to_string(.), 0, 4000)
+'''
+
+[sinks.clickhouse_logs]
+type = "clickhouse"
+inputs = ["parse_json"]
+endpoint = "http://clickhouse:8123"
+database = "kwork_metrics"
+table = "service_logs"
+compression = "gzip"
+skip_unknown_fields = true
+
+[sinks.clickhouse_logs.encoding]
+timestamp_format = "unix"
+
+[sinks.clickhouse_logs.batch]
+max_events = 500
+timeout_secs = 5

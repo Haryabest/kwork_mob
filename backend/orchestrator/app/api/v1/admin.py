@@ -1170,6 +1170,41 @@ async def analytics_raw_events(
     return data
 
 
+@router.get("/user-events")
+async def admin_user_events(
+    user_id: int | None = Query(default=None),
+    company_id: int | None = Query(default=None),
+    event_type: str | None = Query(default=None, max_length=64),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=2000),
+    offset: int = Query(default=0, ge=0),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """§12.1 user_events из PostgreSQL."""
+    from app.services import user_events as ue
+
+    return await ue.list_events(
+        db,
+        user_id=user_id,
+        company_id=company_id,
+        event_type=event_type,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/user-events/taxonomy")
+async def admin_user_events_taxonomy(_: dict = Depends(require_admin)):
+    """Список допустимых event_type §12.1.1."""
+    from app.services.user_events import USER_EVENT_TYPES
+
+    return {"items": sorted(USER_EVENT_TYPES), "count": len(USER_EVENT_TYPES)}
+
+
 @router.get("/analytics/screens/timeseries")
 async def analytics_screen_timeseries(
     days: int = Query(default=14, ge=1, le=90),

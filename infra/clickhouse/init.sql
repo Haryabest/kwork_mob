@@ -86,7 +86,32 @@ CREATE TABLE IF NOT EXISTS service_logs (
     task_id String,
     details String
 ) ENGINE = MergeTree()
-ORDER BY (timestamp, source);
+ORDER BY (timestamp, source)
+TTL timestamp + INTERVAL 3 MONTH;
+
+-- §12.1 user_events (PG trigger sync + celery mirror)
+CREATE TABLE IF NOT EXISTS user_events (
+    event_id UUID,
+    user_id UInt64,
+    company_id Nullable(UInt64),
+    member_role LowCardinality(String),
+    event_type LowCardinality(String),
+    event_ts DateTime,
+    payload String
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(event_ts)
+ORDER BY (event_ts, event_type, user_id)
+TTL event_ts + INTERVAL 1 YEAR;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS user_events_daily
+ENGINE = SummingMergeTree()
+ORDER BY (day, event_type)
+AS SELECT
+    toDate(event_ts) AS day,
+    event_type,
+    count() AS events
+FROM user_events
+GROUP BY day, event_type;
 
 -- Mobile analytics ingest mirror §19.20 (PG source of truth)
 CREATE TABLE IF NOT EXISTS mobile_analytics_events (

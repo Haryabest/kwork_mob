@@ -119,6 +119,19 @@ async def mark_processing(db: AsyncSession, task_id: str, worker_id: str) -> Ord
         order = await db.get(Order, row.order_id)
         if order and order.status in ("queued", "paid"):
             order.status = "processing"
+        if order:
+            try:
+                from app.services.user_events import record_event
+
+                await record_event(
+                    db,
+                    event_type="order_created",
+                    user_id=order.user_id,
+                    company_id=order.company_id,
+                    payload={"order_id": order.id, "task_id": task_id, "status": "processing"},
+                )
+            except Exception:  # noqa: BLE001
+                pass
         await db.commit()
         if order:
             await publish_order_status(
@@ -126,7 +139,7 @@ async def mark_processing(db: AsyncSession, task_id: str, worker_id: str) -> Ord
                 order_id=order.id,
                 task_id=task_id,
                 status="processing",
-                extra={"worker_id": worker_id},
+                extra={"worker_id": worker_id, "company_id": order.company_id},
             )
     return order
 
@@ -260,13 +273,25 @@ async def mark_completed(
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("user push generation_done: %s", exc)
+    try:
+        from app.services.user_events import record_event
+
+        await record_event(
+            db,
+            event_type="model_generated",
+            user_id=order.user_id,
+            company_id=order.company_id,
+            payload={"order_id": order.id, "task_id": task_id, "model_uuid": model_uuid},
+        )
+    except Exception:  # noqa: BLE001
+        pass
     await db.commit()
     await publish_order_status(
         user_id=order.user_id,
         order_id=order.id,
         task_id=task_id,
         status="completed",
-        extra={"glb_url": glb_url},
+        extra={"glb_url": glb_url, "company_id": order.company_id},
     )
     return order
 

@@ -611,3 +611,26 @@ celery_app.conf.beat_schedule["analytics-ch-sync-every-15-min"] = {
     "task": "app.tasks.celery_app.sync_analytics_to_clickhouse",
     "schedule": crontab(minute="*/15"),
 }
+
+
+@celery_app.task(name="app.tasks.celery_app.sync_user_events_to_clickhouse")
+def sync_user_events_to_clickhouse():
+    """PG→CH mirror для user_events §12.2."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services import user_events_sync as ues
+
+    async def _run():
+        async with async_session() as db:
+            result = await ues.sync_unsynced(db)
+            await db.commit()
+            return result
+
+    return asyncio.run(_run())
+
+
+celery_app.conf.beat_schedule["user-events-ch-sync-every-15-min"] = {
+    "task": "app.tasks.celery_app.sync_user_events_to_clickhouse",
+    "schedule": crontab(minute="*/15"),
+}

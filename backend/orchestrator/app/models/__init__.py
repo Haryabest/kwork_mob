@@ -1,9 +1,10 @@
 """SQLAlchemy-модели PostgreSQL."""
 
 from datetime import date, datetime
+import uuid
 
 from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func, text
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -952,6 +953,22 @@ class UserNotification(Base):
     model_uuid: Mapped[str | None] = mapped_column(String(36))
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class UserEvent(Base):
+    """§12.1 user actions — PG (+ CH mirror)."""
+
+    __tablename__ = "user_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), unique=True, default=uuid.uuid4)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"), index=True)
+    member_role: Mapped[str | None] = mapped_column(String(50))
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    payload: Mapped[dict | None] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    ch_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class MobileAnalyticsEvent(Base):

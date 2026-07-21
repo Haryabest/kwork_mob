@@ -122,6 +122,13 @@ async def execute_deletion(
 
     objects_deleted = await _purge_minio_for_user(db, user_id)
 
+    try:
+        from app.services.clickhouse_erasure import purge_user_data
+
+        purge_user_data(user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ClickHouse erasure user=%s: %s", user_id, exc)
+
     # отзыв сессий и device tokens
     tokens = (await db.scalars(select(RefreshToken).where(RefreshToken.user_id == user_id))).all()
     for t in tokens:
