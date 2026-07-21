@@ -255,6 +255,7 @@ class Settings(BaseSettings):
     DOWNLOAD_REFERER_CHECK: bool = True
     DOWNLOAD_ALLOW_EMPTY_REFERER: bool = True  # native mobile без Referer
     DOWNLOAD_REFERER_HOSTS: str = ""  # доп. хосты через запятую
+    MODEL_DOWNLOAD_LIMIT_PER_HOUR: int = 5
 
     @property
     def download_referer_hosts(self) -> list[str]:

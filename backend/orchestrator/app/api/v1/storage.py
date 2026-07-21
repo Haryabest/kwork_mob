@@ -56,6 +56,22 @@ async def apply_bucket_encryption(_: dict = Depends(require_admin)):
     return {"ok": True, "encryption": minio_service.encryption_status()}
 
 
+@router.get("/lifecycle")
+async def storage_lifecycle_status(_: dict = Depends(require_admin)):
+    """Статус native lifecycle policies §9.5."""
+    from app.services import minio_lifecycle as mlc
+
+    return mlc.get_lifecycle_status()
+
+
+@router.post("/lifecycle/apply")
+async def storage_lifecycle_apply(_: dict = Depends(require_admin)):
+    """Применить lifecycle policies (photos/models/backups) §9.5."""
+    from app.services import minio_lifecycle as mlc
+
+    return mlc.apply_default_lifecycle()
+
+
 @router.post("/presign-upload")
 async def presign_upload(
     body: PresignUploadRequest,

@@ -73,3 +73,40 @@ def assert_download_allowed(request: Request, *, company_domains: list[str] | No
             403,
             "Скачивание запрещено: Referer/Origin не в allowlist (§10.3)",
         )
+
+
+async def assert_model_download_rate(
+    db,
+    *,
+    user_id: int,
+    model_uuid: str,
+) -> None:
+    """Не более N presign/download на модель в час (§10.3)."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import func, select
+
+    from app.models import AccessLog
+
+    limit = max(1, int(settings.MODEL_DOWNLOAD_LIMIT_PER_HOUR or 5))
+    since = datetime.now(timezone.utc) - timedelta(hours=1)
+    count = await db.scalar(
+        select(func.count())
+        .select_from(AccessLog)
+        .where(
+            AccessLog.user_id == user_id,
+            AccessLog.model_uuid == model_uuid,
+            AccessLog.action.in_(("download", "presign_get")),
+            AccessLog.created_at >= since,
+        )
+    )
+    if int(count or 0) >= limit:
+        raise HTTPException(
+            429,
+            detail={
+                "code": "download_rate_limit",
+                "message": f"Не более {limit} скачиваний модели в час (§10.3)",
+                "limit": limit,
+                "window_hours": 1,
+            },
+        )

@@ -15,7 +15,7 @@ from app.models import Model3D, ModelPublicationLink, User
 from app.schemas.models import ModelRateRequest
 from app.services import publication as pub_svc
 from app.services.access import get_accessible_model, require_company_permission
-from app.services.download_guard import assert_download_allowed
+from app.services.download_guard import assert_download_allowed, assert_model_download_rate
 from app.services.minio import minio_service
 
 router = APIRouter()
@@ -398,6 +398,7 @@ async def download_model(
 
     assert_download_allowed(request)
     model = await _get_owned_model(db, model_uuid, user)
+    await assert_model_download_rate(db, user_id=user.id, model_uuid=model_uuid)
     await require_company_permission(db, user, model.company_id, "can_download_models")
     mp = marketplace or "ozon"
     dl_meta = mp_dl.download_meta(mp, format)

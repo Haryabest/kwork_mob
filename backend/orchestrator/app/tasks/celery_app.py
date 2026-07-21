@@ -396,6 +396,27 @@ celery_app.conf.beat_schedule["publish-reminder-daily"] = {
 }
 
 
+@celery_app.task(name="app.tasks.celery_app.process_company_deletions")
+def process_company_deletions():
+    """Удаление компаний после grace 30 дней §9.8."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services.company_deletion import process_due_deletions
+
+    async def _run():
+        async with async_session() as db:
+            return await process_due_deletions(db)
+
+    return asyncio.run(_run())
+
+
+celery_app.conf.beat_schedule["company-deletion-daily"] = {
+    "task": "app.tasks.celery_app.process_company_deletions",
+    "schedule": crontab(hour=4, minute=0),
+}
+
+
 @celery_app.task(name="app.tasks.celery_app.sample_storage_health")
 def sample_storage_health():
     """Node heartbeat timeline + disk usage sample (§11.16.3 / §23.7)."""

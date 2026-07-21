@@ -36,6 +36,44 @@ async def list_prices(db: AsyncSession) -> list[dict]:
     ]
 
 
+async def list_all_prices(db: AsyncSession) -> list[dict]:
+    """Все апсейлы для admin UI §8.4."""
+    await ensure_defaults(db)
+    rows = (await db.scalars(select(UpsellPrice).order_by(UpsellPrice.code))).all()
+    return [
+        {
+            "code": r.code,
+            "title": r.title,
+            "amount_rub": r.amount_rub,
+            "is_active": r.is_active,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in rows
+    ]
+
+
+async def set_amount(
+    db: AsyncSession,
+    *,
+    code: str,
+    amount_rub: int,
+    is_active: bool | None = None,
+) -> UpsellPrice:
+    if code not in VALID:
+        raise HTTPException(404, "Апсейл не найден")
+    if amount_rub < 0:
+        raise HTTPException(400, "Цена не может быть отрицательной")
+    await ensure_defaults(db)
+    row = await db.get(UpsellPrice, code)
+    if not row:
+        raise HTTPException(404, "Апсейл не найден")
+    row.amount_rub = amount_rub
+    if is_active is not None:
+        row.is_active = is_active
+    await db.flush()
+    return row
+
+
 async def calc_upsell_amount(db: AsyncSession, options: list[str]) -> tuple[list[str], int]:
     await ensure_defaults(db)
     cleaned: list[str] = []

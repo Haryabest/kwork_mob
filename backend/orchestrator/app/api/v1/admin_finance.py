@@ -13,6 +13,7 @@ from app.core.vpn import require_vpn
 from app.models import NsfwBlock, TaskQueue, User
 from app.services import alerts as alerts_svc
 from app.services import tariffs as tariff_svc
+from app.services import upsells as upsell_svc
 
 
 def _vpn(request: Request) -> None:
@@ -25,6 +26,11 @@ router = APIRouter(dependencies=[Depends(_vpn), Depends(require_admin)])
 class TariffUpdate(BaseModel):
     amount_rub: int = Field(ge=0)
     note: str | None = None
+
+
+class UpsellUpdate(BaseModel):
+    amount_rub: int = Field(ge=0)
+    is_active: bool | None = None
 
 
 class AlertSettingsBody(BaseModel):
@@ -64,6 +70,32 @@ async def patch_tariff(
 @router.get("/tariffs/history")
 async def tariffs_history(code: str | None = None, db: AsyncSession = Depends(get_db)):
     return {"items": await tariff_svc.price_history(db, code=code)}
+
+
+@router.get("/upsells")
+async def get_upsells(db: AsyncSession = Depends(get_db)):
+    """Цены апсейл-опций для admin UI §8.4."""
+    return {"items": await upsell_svc.list_all_prices(db)}
+
+
+@router.patch("/upsells/{code}")
+async def patch_upsell(
+    code: str,
+    body: UpsellUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    row = await upsell_svc.set_amount(
+        db,
+        code=code,
+        amount_rub=body.amount_rub,
+        is_active=body.is_active,
+    )
+    await db.commit()
+    return {
+        "code": row.code,
+        "amount_rub": row.amount_rub,
+        "is_active": row.is_active,
+    }
 
 
 @router.get("/alerts/settings")

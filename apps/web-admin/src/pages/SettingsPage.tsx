@@ -19,6 +19,7 @@ import { PageHeader, ShellTable, StateBadge } from '../components/Panel';
 import { api, getApiError } from '../services/api';
 
 type Tariff = { code: string; title: string; amount_rub: number };
+type Upsell = { code: string; title: string; amount_rub: number; is_active: boolean };
 type Hist = { id: number; tariff_code: string; old_amount: number; new_amount: number; created_at?: string };
 type Esc = {
   task_id: string;
@@ -80,9 +81,11 @@ export default function SettingsPage() {
   const [bonusTtl, setBonusTtl] = useState<number | string>(30);
   const [bonusMaxUses, setBonusMaxUses] = useState<number | string>(1);
   const [bonusActive, setBonusActive] = useState(false);
+  const [upsells, setUpsells] = useState<Upsell[]>([]);
+  const [upsellDraft, setUpsellDraft] = useState<Record<string, number | string>>({});
 
   async function load() {
-    const [t, h, a, e, b] = await Promise.all([
+    const [t, h, a, e, b, u] = await Promise.all([
       api.get<{ items: Tariff[] }>('/admin/tariffs'),
       api.get<{ items: Hist[] }>('/admin/tariffs/history'),
       api.get<{
@@ -102,6 +105,7 @@ export default function SettingsPage() {
         max_uses: number;
         is_active: boolean;
       }>('/admin/cloud/publication/bonus-settings'),
+      api.get<{ items: Upsell[] }>('/admin/upsells'),
     ]);
     setTariffs(t.data.items ?? []);
     const sm = t.data.items?.find((x) => x.code === 'small');
@@ -129,6 +133,9 @@ export default function SettingsPage() {
     setBonusTtl(b.data.promocode_ttl_days ?? 30);
     setBonusMaxUses(b.data.max_uses ?? 1);
     setBonusActive(Boolean(b.data.is_active));
+    const ups = u.data.items ?? [];
+    setUpsells(ups);
+    setUpsellDraft(Object.fromEntries(ups.map((x) => [x.code, x.amount_rub])));
   }
 
   useEffect(() => {
@@ -162,6 +169,22 @@ export default function SettingsPage() {
         thresholds,
       });
       notifications.show({ color: 'teal', message: 'Алерты и пороги сохранены' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function saveUpsells() {
+    try {
+      for (const row of upsells) {
+        const val = Number(upsellDraft[row.code] ?? row.amount_rub);
+        await api.patch(`/admin/upsells/${row.code}`, {
+          amount_rub: val,
+          is_active: row.is_active,
+        });
+      }
+      notifications.show({ color: 'teal', message: 'Цены апсейлов сохранены' });
       await load();
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
@@ -255,6 +278,26 @@ export default function SettingsPage() {
                 : [['—', 'Нет изменений', '—', '—']]
             }
           />
+        </Card>
+
+        <Card withBorder>
+          <Text fw={600} mb="sm">
+            Апсейл-опции §8.4
+          </Text>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+            {upsells.map((row) => (
+              <NumberInput
+                key={row.code}
+                label={`${row.title} (${row.code})`}
+                value={upsellDraft[row.code] ?? row.amount_rub}
+                onChange={(v) => setUpsellDraft((d) => ({ ...d, [row.code]: v }))}
+                min={0}
+              />
+            ))}
+          </SimpleGrid>
+          <Button mt="md" onClick={() => void saveUpsells()}>
+            Сохранить апсейлы
+          </Button>
         </Card>
 
         <Card withBorder>

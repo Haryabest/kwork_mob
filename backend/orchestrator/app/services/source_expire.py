@@ -85,8 +85,13 @@ async def notify_expiring_sources(db: AsyncSession, *, limit: int = 500) -> dict
             continue
 
         title = "Облачная копия исходников истекает"
+        label = (
+            (model.display_name or "").strip()
+            or (order.model_display_name or "").strip()
+            or f"заказ #{order.id}"
+        )
         body = (
-            f"Облачная копия исходников модели будет удалена через {days_left} "
+            f"Облачная копия исходников «{label}» будет удалена через {days_left} "
             f"{'день' if days_left == 1 else 'дня' if days_left < 5 else 'дней'}. "
             f"Скачайте или продлите хранение (заказ #{order.id})."
         )

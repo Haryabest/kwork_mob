@@ -340,6 +340,49 @@ async def company_tariffs(
     return {"company_id": company.id, "items": out}
 
 
+@router.post("/delete-request")
+async def request_company_deletion(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Запрос удаления компании (grace 30 дней) §9.8."""
+    from app.services.company_deletion import request_deletion
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    out = await request_deletion(db, company, user_id=user.id)
+    await db.commit()
+    return out
+
+
+@router.post("/delete-cancel")
+async def cancel_company_deletion(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отмена запланированного удаления компании §9.8."""
+    from app.services.company_deletion import cancel_deletion
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    out = await cancel_deletion(db, company, user_id=user.id)
+    await db.commit()
+    return out
+
+
+@router.get("/backup-insurance/status")
+async def company_backup_insurance_status(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Покрытие страхующих копий B2B §9.9."""
+    from app.services.backup_insurance import company_backup_status
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    return await company_backup_status(db, company.id)
+
+
 @router.get("/members")
 async def list_members(
     user: User = Depends(get_current_db_user),

@@ -3419,6 +3419,31 @@
         "title": "UpsellOption",
         "type": "string"
       },
+      "UpsellUpdate": {
+        "properties": {
+          "amount_rub": {
+            "minimum": 0.0,
+            "title": "Amount Rub",
+            "type": "integer"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "required": [
+          "amount_rub"
+        ],
+        "title": "UpsellUpdate",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -10042,6 +10067,86 @@
         ]
       }
     },
+    "/api/v1/admin/upsells": {
+      "get": {
+        "description": "Цены апсейл-опций для admin UI §8.4.",
+        "operationId": "get_upsells_api_v1_admin_upsells_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Upsells",
+        "tags": [
+          "Тарифы и алерты"
+        ]
+      }
+    },
+    "/api/v1/admin/upsells/{code}": {
+      "patch": {
+        "operationId": "patch_upsell_api_v1_admin_upsells__code__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsellUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Upsell",
+        "tags": [
+          "Тарифы и алерты"
+        ]
+      }
+    },
     "/api/v1/admin/users": {
       "get": {
         "operationId": "list_users_api_v1_admin_users_get",
@@ -13070,6 +13175,31 @@
         ]
       }
     },
+    "/api/v1/company/backup-insurance/status": {
+      "get": {
+        "description": "Покрытие страхующих копий B2B §9.9.",
+        "operationId": "company_backup_insurance_status_api_v1_company_backup_insurance_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Company Backup Insurance Status",
+        "tags": [
+          "Компания"
+        ]
+      }
+    },
     "/api/v1/company/balance": {
       "get": {
         "operationId": "company_balance_api_v1_company_balance_get",
@@ -13359,6 +13489,56 @@
           }
         ],
         "summary": "Company Topup",
+        "tags": [
+          "Компания"
+        ]
+      }
+    },
+    "/api/v1/company/delete-cancel": {
+      "post": {
+        "description": "Отмена запланированного удаления компании §9.8.",
+        "operationId": "cancel_company_deletion_api_v1_company_delete_cancel_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Company Deletion",
+        "tags": [
+          "Компания"
+        ]
+      }
+    },
+    "/api/v1/company/delete-request": {
+      "post": {
+        "description": "Запрос удаления компании (grace 30 дней) §9.8.",
+        "operationId": "request_company_deletion_api_v1_company_delete_request_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Request Company Deletion",
         "tags": [
           "Компания"
         ]
@@ -18226,6 +18406,56 @@
           }
         ],
         "summary": "Init Buckets",
+        "tags": [
+          "Хранилище MinIO"
+        ]
+      }
+    },
+    "/api/v1/storage/lifecycle": {
+      "get": {
+        "description": "Статус native lifecycle policies §9.5.",
+        "operationId": "storage_lifecycle_status_api_v1_storage_lifecycle_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Storage Lifecycle Status",
+        "tags": [
+          "Хранилище MinIO"
+        ]
+      }
+    },
+    "/api/v1/storage/lifecycle/apply": {
+      "post": {
+        "description": "Применить lifecycle policies (photos/models/backups) §9.5.",
+        "operationId": "storage_lifecycle_apply_api_v1_storage_lifecycle_apply_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Storage Lifecycle Apply",
         "tags": [
           "Хранилище MinIO"
         ]
