@@ -16,7 +16,6 @@ def test_user_audit_export_route_exists():
 
 @pytest.mark.asyncio
 async def test_user_audit_export_csv_body():
-    from app.services import audit_query as aq
 
     row = AuditLog(
         id=2,

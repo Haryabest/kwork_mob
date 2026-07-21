@@ -54,12 +54,19 @@ export function SellerShell({ children }: { children: ReactNode }) {
   const [opened, { toggle, close }] = useDisclosure();
   const [balance, setBalance] = useState<number | null>(null);
   const [unread, setUnread] = useState(0);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [userLabel, setUserLabel] = useState('3D');
   const isMobile = useMediaQuery('(max-width: 767px)');
 
   useEffect(() => {
     api
-      .get<{ balance: number }>('/user/me')
-      .then(({ data }) => setBalance(data.balance ?? 0))
+      .get<{ balance: number; avatar_url?: string | null; full_name?: string | null; email?: string }>('/user/me')
+      .then(({ data }) => {
+        setBalance(data.balance ?? 0);
+        setAvatarUrl(data.avatar_url || null);
+        const label = (data.full_name || data.email || '3D').slice(0, 2).toUpperCase();
+        setUserLabel(label);
+      })
       .catch(() => setBalance(null));
     api
       .get<{ unread?: number }>('/user/notifications', { params: { limit: 1, offset: 0 } })
@@ -122,8 +129,8 @@ export function SellerShell({ children }: { children: ReactNode }) {
               <Menu shadow="md" width={190}>
                 <Menu.Target>
                   <UnstyledButton style={{ minHeight: 44 }}>
-                    <Avatar radius="xl" style={{ backgroundImage: GRADIENT_PRIMARY, color: '#fff' }}>
-                      3D
+                    <Avatar src={avatarUrl || undefined} radius="xl" style={{ backgroundImage: avatarUrl ? undefined : GRADIENT_PRIMARY, color: '#fff' }}>
+                      {userLabel}
                     </Avatar>
                   </UnstyledButton>
                 </Menu.Target>

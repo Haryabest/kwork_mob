@@ -8,9 +8,9 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuditLog, Company, CompanyMember, RefreshToken, User
+from app.models import Company, CompanyMember, RefreshToken, User
 from app.services.company_members import audit
-from app.services.company_policies import extract_policies, policies_for_company
+from app.services.company_policies import policies_for_company
 
 OWNER_ROLES = frozenset({"owner"})
 

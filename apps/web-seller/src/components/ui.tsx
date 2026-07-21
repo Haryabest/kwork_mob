@@ -36,13 +36,16 @@ export function Surface({
   children,
   className = '',
   style,
+  mb,
 }: {
   children: ReactNode;
   className?: string;
   style?: React.CSSProperties;
+  mb?: string;
 }) {
+  const marginStyle = mb ? { marginBottom: `var(--mantine-spacing-${mb}, ${mb})` } : {};
   return (
-    <section className={`vz-surface ${className}`.trim()} style={style}>
+    <section className={`vz-surface ${className}`.trim()} style={{ ...marginStyle, ...style }}>
       {children}
     </section>
   );
@@ -90,8 +93,13 @@ export function SubNav({ items }: { items: { href: string; label: string }[] }) 
   );
 }
 
-export function FilterRow({ children }: { children: ReactNode }) {
-  return <div className="vz-filters">{children}</div>;
+export function FilterRow({ children, mb }: { children: ReactNode; mb?: string }) {
+  const marginStyle = mb ? { marginBottom: `var(--mantine-spacing-${mb}, ${mb})` } : undefined;
+  return (
+    <div className="vz-filters" style={marginStyle}>
+      {children}
+    </div>
+  );
 }
 
 export function ScrollTable({ children }: { children: ReactNode }) {

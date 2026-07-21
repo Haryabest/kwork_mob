@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_db_user, require_admin
 from app.core.vpn import require_vpn
-from app.models import AlertSettings, NsfwBlock, TaskQueue, User
+from app.models import NsfwBlock, TaskQueue, User
 from app.services import alerts as alerts_svc
 from app.services import tariffs as tariff_svc
 

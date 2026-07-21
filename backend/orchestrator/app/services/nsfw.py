@@ -222,7 +222,7 @@ class NsfwService:
             from app.services.refunds import refund_order
 
             refund_meta = await refund_order(
-                db, order, reason=f"NSFW auto block", user=user, prefer_card=True
+                db, order, reason="NSFW auto block", user=user, prefer_card=True
             )
             refunded = bool(refund_meta.get("refunded"))
         elif refund and not charged:

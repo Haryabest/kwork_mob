@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Avatar,
   Badge,
   Button,
   Checkbox,
@@ -41,6 +42,7 @@ type Me = {
   email: string;
   full_name?: string | null;
   phone?: string | null;
+  avatar_url?: string | null;
   marketing_opt_in?: boolean;
   totp_enabled?: boolean;
   notification_prefs?: Record<string, boolean>;
@@ -322,6 +324,36 @@ export default function SettingsPage() {
     }
   }
 
+  async function uploadAvatar(file: File) {
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      await api.post('/user/me/avatar', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      notifications.show({ color: 'teal', message: 'Аватар обновлён' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteAvatar() {
+    setBusy(true);
+    try {
+      await api.delete('/user/me/avatar');
+      notifications.show({ color: 'teal', message: 'Аватар удалён' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveProfile() {
     setBusy(true);
     try {
@@ -475,6 +507,36 @@ export default function SettingsPage() {
         <Tabs.Panel value="profile">
           <Surface style={{ maxWidth: 560 }}>
             <Stack gap="md">
+              <Group>
+                <Avatar src={me?.avatar_url || undefined} radius="xl" size={72}>
+                  {(me?.full_name || me?.email || '?').slice(0, 2).toUpperCase()}
+                </Avatar>
+                <Stack gap={4}>
+                  <Button
+                    component="label"
+                    variant="light"
+                    size="xs"
+                    loading={busy}
+                  >
+                    Загрузить фото
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      hidden
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void uploadAvatar(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </Button>
+                  {me?.avatar_url ? (
+                    <Button variant="subtle" size="xs" color="red" loading={busy} onClick={() => void deleteAvatar()}>
+                      Удалить
+                    </Button>
+                  ) : null}
+                </Stack>
+              </Group>
               <TextInput label="Email" value={me?.email || ''} disabled size="md" />
               <TextInput label="ФИО" value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} size="md" />
               <TextInput label="Телефон" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} size="md" />

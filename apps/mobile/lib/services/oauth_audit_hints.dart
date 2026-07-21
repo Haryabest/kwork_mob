@@ -11,7 +11,7 @@ String? _oauthAuditHint(String prefix, Map<String, dynamic> row) {
 
 /// Личные oauth_* подсказки из `/user/audit` §16.
 class OAuthAuditHints {
-  static Future<void> refresh(AppApi api, AppSession session) async {
+  static Future<void> refresh(ApiClient api, AppSession session) async {
     String? login;
     String? link;
     String? unlink;

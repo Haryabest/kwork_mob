@@ -447,7 +447,6 @@ async def pay_order(
         return {"id": order.id, "status": "queued", "paid_from_balance": True}
 
     from app.services.tax import build_receipt_for_payment
-    from app.services.yookassa import yookassa_service
 
     receipt = await build_receipt_for_payment(
         db,

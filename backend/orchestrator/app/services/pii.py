@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_field, encrypt_field
-from app.models import AuditLog, Company, OwnerTaxSettings, User
+from app.models import AuditLog, OwnerTaxSettings, User
 
 USER_PII_FIELDS = ("full_name", "phone", "inn")
 

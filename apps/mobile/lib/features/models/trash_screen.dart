@@ -116,7 +116,7 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
             spacing: 8,
             children: [
               FButton(
-                style: _publishFilter == null ? .primary : .outline,
+                variant: _publishFilter == null ? .primary : .outline,
                 onPress: () {
                   setState(() => _publishFilter = null);
                   _load();
@@ -124,7 +124,7 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
                 child: const Text('Все'),
               ),
               FButton(
-                style: _publishFilter == 'published' ? .primary : .outline,
+                variant: _publishFilter == 'published' ? .primary : .outline,
                 onPress: () {
                   setState(() => _publishFilter = 'published');
                   _load();
@@ -132,7 +132,7 @@ class _ModelsTrashScreenState extends State<ModelsTrashScreen> {
                 child: const Text('Опублик.'),
               ),
               FButton(
-                style: _publishFilter == 'draft' ? .primary : .outline,
+                variant: _publishFilter == 'draft' ? .primary : .outline,
                 onPress: () {
                   setState(() => _publishFilter = 'draft');
                   _load();

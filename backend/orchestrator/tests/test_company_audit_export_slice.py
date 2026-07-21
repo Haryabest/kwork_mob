@@ -2,7 +2,6 @@
 
 import inspect
 
-import pytest
 
 from app.api.v1.company import audit_export
 

@@ -1,6 +1,5 @@
 """Analytics ingest persistence §19.20."""
 
-from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from app.schemas.analytics import AnalyticsEventItem

@@ -1,6 +1,5 @@
 """Models list filters §19.9."""
 
-from types import SimpleNamespace
 
 from app.api.v1.user import list_user_models
 

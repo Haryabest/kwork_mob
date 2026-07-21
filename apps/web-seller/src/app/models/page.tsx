@@ -1,11 +1,13 @@
 'use client';
 
-import { Badge, Button, Group, Pagination, Select, Text, TextInput, Table } from '@mantine/core';
+import { Badge, Button, Group, Pagination, SegmentedControl, Select, Text, TextInput, Table } from '@mantine/core';
 import { IconPlus, IconSearch } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { SellerShell } from '../../components/SellerShell';
+import { ModelsGridView } from '../../components/ModelsGridView';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
 import { api, apiMessage } from '../../services/api';
 
@@ -111,9 +113,27 @@ export default function ModelsPage() {
   const [massBusy, setMassBusy] = useState(false);
   const [company, setCompany] = useState<CompanyCtx | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const isMobile = useMediaQuery('(max-width: 767px)');
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
   const canFilterAuthors = company != null && MANAGE_ROLES.has(company.role);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const useVirtualGrid = viewMode === 'grid' && (total > 100 || items.length > 100);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('models_view_mode');
+    if (saved === 'grid' || saved === 'table') setViewMode(saved);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile) setViewMode('grid');
+  }, [isMobile]);
+
+  const onViewModeChange = (value: string) => {
+    const mode = value === 'grid' ? 'grid' : 'table';
+    setViewMode(mode);
+    localStorage.setItem('models_view_mode', mode);
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(q.trim()), 400);
@@ -308,6 +328,17 @@ export default function ModelsPage() {
           )}
         </FilterRow>
 
+        <Group justify="flex-end" mb="md">
+          <SegmentedControl
+            value={viewMode}
+            onChange={onViewModeChange}
+            data={[
+              { label: 'Таблица', value: 'table' },
+              { label: 'Сетка', value: 'grid' },
+            ]}
+          />
+        </Group>
+
         {!loading && items.length === 0 ? (
           <EmptyState
             title="Моделей пока нет"
@@ -315,6 +346,20 @@ export default function ModelsPage() {
             actionLabel="Создать заказ"
             actionHref="/orders/new"
           />
+        ) : viewMode === 'grid' ? (
+          <>
+            <ModelsGridView
+              items={items}
+              publishBadgeColor={publishBadgeColor}
+              publishLabel={publishLabel}
+              virtualized={useVirtualGrid}
+            />
+            {totalPages > 1 && (
+              <Group justify="center" mt="md">
+                <Pagination total={totalPages} value={page} onChange={setPage} />
+              </Group>
+            )}
+          </>
         ) : (
           <>
             <ScrollTable>

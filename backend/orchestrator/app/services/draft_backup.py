@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-import uuid as uuid_lib
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models import User
 from app.services.minio import minio_service
 
 TTL_DAYS = 7

@@ -2,7 +2,7 @@
 
 from datetime import date, datetime, time, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,8 +15,6 @@ from app.schemas.analytics import AnalyticsEventsBody
 from app.schemas.balance_filters import (
     BalanceFilterPresetBody,
     BalanceFiltersBody,
-    CompanyBalanceFilterPresetBody,
-    CompanyBalanceFiltersBody,
 )
 from app.services import auth as auth_service
 from app.services import pii as pii_svc
@@ -37,6 +35,8 @@ class DeviceTokenRequest(BaseModel):
 
 
 def _user_payload(user: User) -> dict:
+    from app.services import user_avatar as av_svc
+
     pii = pii_svc.user_public(user)
     return {
         "id": user.id,
@@ -57,6 +57,7 @@ def _user_payload(user: User) -> dict:
         "age_verified": bool(user.age_verified_at),
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "export_format": (user.notification_prefs or {}).get("export_format", "glb"),
+        "avatar_url": av_svc.presigned_avatar_url(getattr(user, "avatar_key", None)),
     }
 
 
@@ -216,6 +217,35 @@ async def update_me(
             fields=changed,
             ip=ip,
         )
+    await db.commit()
+    await db.refresh(user)
+    return _user_payload(user)
+
+
+@router.post("/me/avatar")
+async def upload_my_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Загрузка аватара §20.8.1 (JPG/PNG/WebP, до 2 МБ)."""
+    from app.services import user_avatar as av_svc
+
+    result = await av_svc.upload_avatar(db, user=user, file=file)
+    await db.commit()
+    await db.refresh(user)
+    return {**result, **_user_payload(user)}
+
+
+@router.delete("/me/avatar")
+async def delete_my_avatar(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удалить аватар §20.8.1."""
+    from app.services import user_avatar as av_svc
+
+    await av_svc.delete_avatar(db, user=user)
     await db.commit()
     await db.refresh(user)
     return _user_payload(user)

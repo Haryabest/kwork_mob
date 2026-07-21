@@ -11,6 +11,7 @@ def apple_app_site_association() -> dict[str, Any]:
     team = (settings.APPLE_TEAM_ID or "").strip() or "TEAMID"
     bundle = (settings.IOS_BUNDLE_ID or "com.kwork.mob.kworkMobile").strip()
     app_id = f"{team}.{bundle}"
+    team_configured = bool((settings.APPLE_TEAM_ID or "").strip())
     return {
         "applinks": {
             "apps": [],
@@ -29,6 +30,10 @@ def apple_app_site_association() -> dict[str, Any]:
                     ],
                 }
             ],
+        },
+        "_meta": {
+            "team_id_configured": team_configured,
+            "bundle_id": bundle,
         },
     }
 

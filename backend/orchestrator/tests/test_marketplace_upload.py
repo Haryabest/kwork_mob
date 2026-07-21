@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.core.config import settings
-from app.services.marketplace_upload import UploadResult, WildberriesUploader
+from app.services.marketplace_upload import WildberriesUploader
 
 
 @pytest.mark.asyncio

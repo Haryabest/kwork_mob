@@ -64,6 +64,7 @@ async def list_company_audit_logs(
     member_user_ids: list[int],
     action: str | None = None,
     action_prefix: str | None = None,
+    user_id: int | None = None,
     days: int = 30,
     limit: int = 200,
     offset: int = 0,
@@ -74,6 +75,8 @@ async def list_company_audit_logs(
         filters.append(AuditLog.action == action)
     elif action_prefix:
         filters.append(AuditLog.action.like(f"{action_prefix}%"))
+    if user_id is not None:
+        filters.append(AuditLog.user_id == user_id)
 
     if action_prefix and action_prefix.startswith("oauth"):
         if member_user_ids:

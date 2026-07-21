@@ -1,6 +1,6 @@
 """Модерация NSFW (§10.8, §11) — reports + verify 24ч + SLA + preview + blacklist."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field

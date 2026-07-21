@@ -309,7 +309,7 @@ async def worker_ws(websocket: WebSocket):
                 async with async_session() as db:
                     from sqlalchemy import select
 
-                    from app.models import TaskConflict, TaskQueue
+                    from app.models import TaskQueue
                     from app.services import quality_alerts as qa
 
                     existing = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))

@@ -336,6 +336,16 @@ components:
       - files
       title: Body_upload_by_link_api_v1_shoot__token__upload_post
       type: object
+    Body_upload_my_avatar_api_v1_user_me_avatar_post:
+      properties:
+        file:
+          contentMediaType: application/octet-stream
+          title: File
+          type: string
+      required:
+      - file
+      title: Body_upload_my_avatar_api_v1_user_me_avatar_post
+      type: object
     Body_upload_order_photos_api_v1_orders_photos_upload_post:
       properties:
         files:
@@ -973,6 +983,11 @@ components:
       type: object
     LoginRequest:
       properties:
+        captcha_token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Captcha Token
         email:
           format: email
           title: Email
@@ -997,10 +1012,10 @@ components:
     LogoutRequest:
       properties:
         refresh_token:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Refresh Token
-          type: string
-      required:
-      - refresh_token
       title: LogoutRequest
       type: object
     ManualBlockBody:
@@ -1154,15 +1169,19 @@ components:
     OAuthTokenResponse:
       properties:
         access_token:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Access Token
-          type: string
         owner_2fa_required:
           default: false
           title: Owner 2Fa Required
           type: boolean
         refresh_token:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Refresh Token
-          type: string
         status:
           anyOf:
           - type: string
@@ -1172,9 +1191,6 @@ components:
           default: bearer
           title: Token Type
           type: string
-      required:
-      - access_token
-      - refresh_token
       title: OAuthTokenResponse
       type: object
     OAuthUnlinkResponse:
@@ -1666,10 +1682,10 @@ components:
     RefreshRequest:
       properties:
         refresh_token:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Refresh Token
-          type: string
-      required:
-      - refresh_token
       title: RefreshRequest
       type: object
     RegisterRequest:
@@ -1718,10 +1734,10 @@ components:
     RevokeOthersBody:
       properties:
         refresh_token:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Refresh Token
-          type: string
-      required:
-      - refresh_token
       title: RevokeOthersBody
       type: object
     RoleBody:
@@ -1965,18 +1981,19 @@ components:
     TokenResponse:
       properties:
         access_token:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Access Token
-          type: string
         refresh_token:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Refresh Token
-          type: string
         token_type:
           default: bearer
           title: Token Type
           type: string
-      required:
-      - access_token
-      - refresh_token
       title: TokenResponse
       type: object
     TopupBody:
@@ -6726,6 +6743,32 @@ paths:
       summary: Login
       tags:
       - Аутентификация
+  /api/v1/auth/login/challenge:
+    get:
+      description: 'Проверка: нужна ли captcha перед login (§20.10.2).'
+      operationId: login_challenge_api_v1_auth_login_challenge_get
+      parameters:
+      - in: query
+        name: email
+        required: true
+        schema:
+          title: Email
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Login Challenge
+      tags:
+      - Аутентификация
   /api/v1/auth/logout:
     post:
       operationId: logout_api_v1_auth_logout_post
@@ -6733,8 +6776,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LogoutRequest'
-        required: true
+              anyOf:
+              - $ref: '#/components/schemas/LogoutRequest'
+              - type: 'null'
+              title: Body
       responses:
         '200':
           content:
@@ -7106,8 +7151,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RefreshRequest'
-        required: true
+              anyOf:
+              - $ref: '#/components/schemas/RefreshRequest'
+              - type: 'null'
+              title: Body
       responses:
         '200':
           content:
@@ -7173,8 +7220,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RevokeOthersBody'
-        required: true
+              anyOf:
+              - $ref: '#/components/schemas/RevokeOthersBody'
+              - type: 'null'
+              title: Body
       responses:
         '200':
           content:
@@ -7244,6 +7293,22 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Verify Email
+      tags:
+      - Аутентификация
+  /api/v1/auth/ws-token:
+    get:
+      description: Краткоживущий access для WebSocket (httpOnly cookie не передаётся
+        в query).
+      operationId: ws_token_api_v1_auth_ws_token_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Ws Token
       tags:
       - Аутентификация
   /api/v1/campaigns/{campaign_id}/click:
@@ -7517,6 +7582,14 @@ paths:
           - type: 'null'
           description: Например oauth_
           title: Action Prefix
+      - in: query
+        name: user_id
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: User Id
       - in: query
         name: days
         required: false
@@ -8122,6 +8195,32 @@ paths:
       security:
       - HTTPBearer: []
       summary: Remove Member
+      tags:
+      - Компания
+    get:
+      operationId: get_member_api_v1_company_members__user_id__get
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Get Member
       tags:
       - Компания
   /api/v1/company/members/{user_id}/limits:
@@ -11333,6 +11432,47 @@ paths:
       summary: Update Me
       tags:
       - Пользователь
+  /api/v1/user/me/avatar:
+    delete:
+      description: Удалить аватар §20.8.1.
+      operationId: delete_my_avatar_api_v1_user_me_avatar_delete
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Delete My Avatar
+      tags:
+      - Пользователь
+    post:
+      description: Загрузка аватара §20.8.1 (JPG/PNG/WebP, до 2 МБ).
+      operationId: upload_my_avatar_api_v1_user_me_avatar_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_my_avatar_api_v1_user_me_avatar_post'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Upload My Avatar
+      tags:
+      - Пользователь
   /api/v1/user/me/delete-request:
     post:
       description: 'Право на забвение: заявка, SLA 30 дней (§2.8.3).'
@@ -11346,6 +11486,21 @@ paths:
       security:
       - HTTPBearer: []
       summary: Request Account Deletion
+      tags:
+      - Пользователь
+  /api/v1/user/me/deletion-request:
+    get:
+      description: Статус заявки на удаление аккаунта (§20.8).
+      operationId: get_deletion_request_api_v1_user_me_deletion_request_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Get Deletion Request
       tags:
       - Пользователь
   /api/v1/user/models:

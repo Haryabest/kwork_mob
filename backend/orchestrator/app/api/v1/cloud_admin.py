@@ -11,6 +11,7 @@ from app.core.security import require_admin
 from app.models import PublicationBonusSettings
 from app.services import cloud_autoscaling as cloud_svc
 from app.services import publication as pub_svc
+from app.services.cloud_client import list_providers
 
 router = APIRouter(prefix="/cloud", tags=["Облако GPU"])
 

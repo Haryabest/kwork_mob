@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import async_session
 from app.core.redis import get_redis, release_task_lock
-from app.models import AuditLog, Order, TaskQueue, User
+from app.models import AuditLog, Order, TaskQueue
 from app.services.events import publish_order_status
 from app.services.queue import queue_service
 from app.services.worker_hub import worker_hub

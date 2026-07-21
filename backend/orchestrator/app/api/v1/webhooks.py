@@ -189,7 +189,6 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
             raise HTTPException(400, "user not found")
 
         channel = _payment_channel_label(meta, payment)
-        order_id_for_streak = meta.get("order_id")
 
         if purpose == "company_topup":
             company_id = int(meta.get("company_id") or 0)
@@ -214,7 +213,6 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
 
         if purpose == "order":
             order_id = int(meta.get("order_id") or 0)
-            order_id_for_streak = order_id
             order = await db.get(Order, order_id) if order_id else None
             if not order or order.user_id != user.id:
                 raise HTTPException(400, "order not found")

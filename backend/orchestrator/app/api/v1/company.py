@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_db_user, get_current_db_user_optional, get_current_user
+from app.core.security import get_current_db_user, get_current_db_user_optional
 from app.models import Company, CompanyInvitation, CompanyMember, Order, ShootLink, Transaction, User
 from app.schemas.balance_filters import CompanyBalanceFilterPresetBody, CompanyBalanceFiltersBody
 from app.services import api_keys as api_keys_svc
@@ -358,6 +358,36 @@ async def list_members(
     }
 
 
+@router.get("/members/{user_id}")
+async def get_member(
+    user_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.company_members import require_manager
+
+    company, _role = await require_manager(db, user)
+    m = await db.scalar(
+        select(CompanyMember).where(
+            CompanyMember.company_id == company.id,
+            CompanyMember.user_id == user_id,
+        )
+    )
+    if not m:
+        raise HTTPException(404, "Сотрудник не найден")
+    u = await db.get(User, m.user_id)
+    return {
+        "user_id": m.user_id,
+        "email": u.email if u else None,
+        "full_name": u.full_name if u else None,
+        "role": m.role,
+        "max_concurrent_orders": m.max_concurrent_orders,
+        "monthly_spending_limit": m.monthly_spending_limit,
+        "allowed_categories": m.allowed_categories,
+        "company_id": company.id,
+    }
+
+
 @router.delete("/members/{user_id}")
 async def remove_member(
     user_id: int,
@@ -634,6 +664,7 @@ async def revoke_sessions(
 async def audit_log(
     action: str | None = Query(None),
     action_prefix: str | None = Query(None, description="Например oauth_"),
+    user_id: int | None = Query(None),
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(200, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -653,6 +684,7 @@ async def audit_log(
         member_user_ids=member_ids,
         action=action,
         action_prefix=action_prefix,
+        user_id=user_id,
         days=days,
         limit=limit,
         offset=offset,
@@ -1230,7 +1262,6 @@ async def company_marketplace_status(
 ):
     """Статус API-публикации для seller UI §7.6."""
     from app.models import MarketplaceCredential
-    from app.services import marketplace_upload as mp_svc
     from app.services.company_members import get_owned_company
 
     company = await get_owned_company(db, user)

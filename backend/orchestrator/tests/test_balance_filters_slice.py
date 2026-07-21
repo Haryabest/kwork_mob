@@ -7,7 +7,6 @@ from app.services.balance_filters import (
     get_company_filters,
     get_personal_filters,
     list_presets,
-    save_company_filters,
     save_personal_filters,
     upsert_preset,
 )

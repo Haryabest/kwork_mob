@@ -13,7 +13,7 @@ import os
 import re
 import time
 import uuid
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass, field
 from typing import Any
 

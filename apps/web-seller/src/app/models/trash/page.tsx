@@ -137,7 +137,7 @@ export default function ModelsTrashPage() {
         {loading ? (
           <Text c="dimmed">Загрузка…</Text>
         ) : items.length === 0 ? (
-          <EmptyState title={emptyTitle} description={emptyDescription} />
+          <EmptyState title={emptyTitle} hint={emptyDescription} />
         ) : (
           <>
             <ScrollTable>

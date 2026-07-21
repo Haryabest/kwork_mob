@@ -1,6 +1,6 @@
 /** Бренд 3dvektor: синий → фиолетовый (Цвета и оформление 3dvektot.txt) */
 
-import { createTheme, type MantineColorsTuple, type MantineThemeOverride } from '@mantine/core';
+import { createTheme, type MantineColorsTuple, type MantineTheme, type MantineThemeOverride } from '@mantine/core';
 
 /** Глубокий синий #0057b8 как primary */
 export const brand: MantineColorsTuple = [
@@ -39,7 +39,7 @@ export const brandTheme: MantineThemeOverride = createTheme({
   components: {
     Button: {
       defaultProps: { radius: 'md' },
-      styles: (_theme, params) => {
+      styles: (_theme: MantineTheme, params: { variant?: string }) => {
         if (params.variant === 'gradient' || params.variant === 'filled') {
           return {
             root: {

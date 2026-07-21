@@ -20,6 +20,7 @@ import { IconCheck, IconCopy, IconLink, IconUserPlus } from '@tabler/icons-react
 import { notifications } from '@mantine/notifications';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, SubNav, Surface } from '../../components/ui';
 import { api, apiMessage } from '../../services/api';
@@ -66,6 +67,7 @@ const MEMBER_PAGE = 20;
 
 /** §20.5 Команда + shoot_link Owner */
 export default function TeamPage() {
+  const router = useRouter();
   const [inviteOpen, inviteHandlers] = useDisclosure(false);
   const [shootOpen, shootHandlers] = useDisclosure(false);
   const [members, setMembers] = useState<Member[]>([]);
@@ -498,7 +500,11 @@ export default function TeamPage() {
                 </Table.Tr>
               ) : (
                 members.map((m) => (
-                  <Table.Tr key={m.user_id}>
+                  <Table.Tr
+                    key={m.user_id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => router.push(`/team/${m.user_id}`)}
+                  >
                     <Table.Td fw={600}>{m.full_name || `User #${m.user_id}`}</Table.Td>
                     <Table.Td>{m.role}</Table.Td>
                     <Table.Td>{m.email}</Table.Td>

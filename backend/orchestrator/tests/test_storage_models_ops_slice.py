@@ -2,7 +2,6 @@
 
 from datetime import datetime, timedelta, timezone
 
-from app.services import disk_forecast as df
 from app.services import model_storage as ms
 from app.services.node_timeline import _node_status
 from app.services.company_webhooks import delivery_dashboard  # noqa: F401 — import check
