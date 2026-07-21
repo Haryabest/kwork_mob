@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 
 import pytest
@@ -30,32 +29,21 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
-def _prepare_schema_sync() -> bool:
-    """Создать схему в тестовой БД. Возвращает False, если Postgres недоступен."""
+@pytest_asyncio.fixture(scope="session")
+async def _schema():
+    """Схема БД в том же event loop, что и async-тесты (asyncpg не переносится между loop)."""
     import app.main  # noqa: F401 — регистрирует все ORM-модели в Base.metadata
     from sqlalchemy import text
 
     from app.core.database import Base, engine
 
-    async def _run() -> bool:
-        try:
-            async with engine.connect() as conn:
-                await conn.execute(text("SELECT 1"))
-        except Exception:
-            return False
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        # Освобождаем пул: соединения этого loop не должны утечь в тестовый loop.
-        await engine.dispose()
-        return True
-
-    return asyncio.run(_run())
-
-
-@pytest.fixture(scope="session")
-def _schema() -> None:
-    if not _prepare_schema_sync():
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
         pytest.skip("Postgres недоступен — интеграционные тесты пропущены")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     yield
 
 
