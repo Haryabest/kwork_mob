@@ -91,6 +91,19 @@ async def upsert_worker_heartbeat(
     if meta:
         node.meta = {**(node.meta or {}), **meta}
     await db.commit()
+    try:
+        from app.services.events import publish_admin_dashboard
+
+        await publish_admin_dashboard(
+            {
+                "type": "dashboard_refresh",
+                "reason": "worker_heartbeat",
+                "worker_id": worker_id,
+                "status": status,
+            }
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def mark_processing(db: AsyncSession, task_id: str, worker_id: str) -> Order | None:

@@ -14,7 +14,7 @@ from app.core.database import async_session
 from app.core.redis import get_redis, release_task_lock
 from app.core.security import TokenType, decode_token
 from app.models import WorkerNode
-from app.services.events import user_channel
+from app.services.events import user_channel, admin_dashboard_channel
 from app.services.queue import queue_service
 from app.services.task_lifecycle import (
     handle_quality_gate_failure,
@@ -125,6 +125,84 @@ async def queue_ws(websocket: WebSocket, user_id: int):
         pass
     finally:
         reader.cancel()
+        await pubsub.unsubscribe(channel)
+        await pubsub.close()
+
+
+@ws_router.websocket("/ws/admin/dashboard")
+async def admin_dashboard_ws(websocket: WebSocket):
+    """Живые обновления admin dashboard §11.15 (воркеры, очередь, заказы)."""
+    token = _extract_bearer(websocket)
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    try:
+        payload = decode_token(token, TokenType.ACCESS)
+        if payload.get("role") != "admin":
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+    except Exception:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await websocket.accept()
+    redis = await get_redis()
+    pubsub = redis.pubsub()
+    channel = admin_dashboard_channel()
+    await pubsub.subscribe(channel)
+
+    lengths = await queue_service.queue_lengths()
+    await websocket.send_json(
+        {
+            "type": "connected",
+            "queue": lengths,
+            "ewt_sec": await queue_service.estimate_wait_time(lengths["normal"] + lengths["high"]),
+        }
+    )
+
+    async def _reader():
+        async for message in pubsub.listen():
+            if message is None or message.get("type") != "message":
+                continue
+            data = message.get("data")
+            if isinstance(data, bytes):
+                data = data.decode()
+            try:
+                event = json.loads(data) if isinstance(data, str) else data
+            except json.JSONDecodeError:
+                continue
+            await websocket.send_json(event)
+
+    reader = asyncio.create_task(_reader())
+
+    async def _ticker():
+        while True:
+            await asyncio.sleep(10)
+            lengths = await queue_service.queue_lengths()
+            await websocket.send_json(
+                {
+                    "type": "dashboard_refresh",
+                    "reason": "tick",
+                    "queue": lengths,
+                }
+            )
+
+    ticker = asyncio.create_task(_ticker())
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("type") == "ping":
+                lengths = await queue_service.queue_lengths()
+                await websocket.send_json({"type": "pong", "queue": lengths})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        reader.cancel()
+        ticker.cancel()
         await pubsub.unsubscribe(channel)
         await pubsub.close()
 

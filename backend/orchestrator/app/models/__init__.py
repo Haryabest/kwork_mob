@@ -313,6 +313,19 @@ class UpsellPrice(Base):
     )
 
 
+class UpsellPriceHistory(Base):
+    __tablename__ = "upsell_price_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    upsell_code: Mapped[str] = mapped_column(ForeignKey("upsell_prices.code"))
+    old_amount: Mapped[int] = mapped_column(Integer)
+    new_amount: Mapped[int] = mapped_column(Integer)
+    old_active: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    new_active: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    changed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class OwnerTaxSettings(Base):
     __tablename__ = "owner_tax_settings"
 

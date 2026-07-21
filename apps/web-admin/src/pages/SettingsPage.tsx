@@ -21,6 +21,15 @@ import { api, getApiError } from '../services/api';
 type Tariff = { code: string; title: string; amount_rub: number };
 type Upsell = { code: string; title: string; amount_rub: number; is_active: boolean };
 type Hist = { id: number; tariff_code: string; old_amount: number; new_amount: number; created_at?: string };
+type UpsellHist = {
+  id: number;
+  upsell_code: string;
+  old_amount: number;
+  new_amount: number;
+  old_active?: boolean;
+  new_active?: boolean;
+  created_at?: string;
+};
 type Esc = {
   task_id: string;
   order_id: number;
@@ -83,9 +92,11 @@ export default function SettingsPage() {
   const [bonusActive, setBonusActive] = useState(false);
   const [upsells, setUpsells] = useState<Upsell[]>([]);
   const [upsellDraft, setUpsellDraft] = useState<Record<string, number | string>>({});
+  const [upsellActive, setUpsellActive] = useState<Record<string, boolean>>({});
+  const [upsellHistory, setUpsellHistory] = useState<UpsellHist[]>([]);
 
   async function load() {
-    const [t, h, a, e, b, u] = await Promise.all([
+    const [t, h, a, e, b, u, uh] = await Promise.all([
       api.get<{ items: Tariff[] }>('/admin/tariffs'),
       api.get<{ items: Hist[] }>('/admin/tariffs/history'),
       api.get<{
@@ -106,6 +117,7 @@ export default function SettingsPage() {
         is_active: boolean;
       }>('/admin/cloud/publication/bonus-settings'),
       api.get<{ items: Upsell[] }>('/admin/upsells'),
+      api.get<{ items: UpsellHist[] }>('/admin/upsells/history'),
     ]);
     setTariffs(t.data.items ?? []);
     const sm = t.data.items?.find((x) => x.code === 'small');
@@ -136,6 +148,8 @@ export default function SettingsPage() {
     const ups = u.data.items ?? [];
     setUpsells(ups);
     setUpsellDraft(Object.fromEntries(ups.map((x) => [x.code, x.amount_rub])));
+    setUpsellActive(Object.fromEntries(ups.map((x) => [x.code, x.is_active])));
+    setUpsellHistory(uh.data.items ?? []);
   }
 
   useEffect(() => {
@@ -181,7 +195,7 @@ export default function SettingsPage() {
         const val = Number(upsellDraft[row.code] ?? row.amount_rub);
         await api.patch(`/admin/upsells/${row.code}`, {
           amount_rub: val,
-          is_active: row.is_active,
+          is_active: upsellActive[row.code] ?? row.is_active,
         });
       }
       notifications.show({ color: 'teal', message: 'Цены апсейлов сохранены' });
@@ -286,18 +300,46 @@ export default function SettingsPage() {
           </Text>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             {upsells.map((row) => (
-              <NumberInput
-                key={row.code}
-                label={`${row.title} (${row.code})`}
-                value={upsellDraft[row.code] ?? row.amount_rub}
-                onChange={(v) => setUpsellDraft((d) => ({ ...d, [row.code]: v }))}
-                min={0}
-              />
+              <Stack key={row.code} gap="xs">
+                <NumberInput
+                  label={`${row.title} (${row.code})`}
+                  value={upsellDraft[row.code] ?? row.amount_rub}
+                  onChange={(v) => setUpsellDraft((d) => ({ ...d, [row.code]: v }))}
+                  min={0}
+                />
+                <Switch
+                  label="Активна"
+                  checked={upsellActive[row.code] ?? row.is_active}
+                  onChange={(e) =>
+                    setUpsellActive((d) => ({ ...d, [row.code]: e.currentTarget.checked }))
+                  }
+                />
+              </Stack>
             ))}
           </SimpleGrid>
           <Button mt="md" onClick={() => void saveUpsells()}>
             Сохранить апсейлы
           </Button>
+        </Card>
+
+        <Card withBorder>
+          <Text fw={600} mb="sm">
+            История цен апсейлов
+          </Text>
+          <ShellTable
+            headers={['Код', 'Было', 'Стало', 'Активна', 'Когда']}
+            rows={
+              upsellHistory.length
+                ? upsellHistory.slice(0, 20).map((h) => [
+                    h.upsell_code,
+                    String(h.old_amount),
+                    String(h.new_amount),
+                    h.new_active === false ? 'выкл' : 'вкл',
+                    h.created_at ?? '—',
+                  ])
+                : [['—', 'Нет изменений', '—', '—', '—']]
+            }
+          />
         </Card>
 
         <Card withBorder>

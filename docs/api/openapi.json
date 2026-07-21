@@ -530,6 +530,34 @@
         "title": "BlockUserBody",
         "type": "object"
       },
+      "Body_import_companies_csv_api_v1_admin_companies_import_csv_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_companies_csv_api_v1_admin_companies_import_csv_post",
+        "type": "object"
+      },
+      "Body_import_promocodes_csv_api_v1_admin_promocodes_import_csv_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_promocodes_csv_api_v1_admin_promocodes_import_csv_post",
+        "type": "object"
+      },
       "Body_upload_by_link_api_v1_shoot__token__upload_post": {
         "properties": {
           "files": {
@@ -6476,6 +6504,51 @@
         ]
       }
     },
+    "/api/v1/admin/companies/import-csv": {
+      "post": {
+        "description": "Массовый импорт B2B компаний §11.14.",
+        "operationId": "import_companies_csv_api_v1_admin_companies_import_csv_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_companies_csv_api_v1_admin_companies_import_csv_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Companies Csv",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/companies/{company_id}": {
       "get": {
         "operationId": "get_company_api_v1_admin_companies__company_id__get",
@@ -8761,6 +8834,51 @@
         ]
       }
     },
+    "/api/v1/admin/promocodes/import-csv": {
+      "post": {
+        "description": "Массовый импорт промокодов §11.14.",
+        "operationId": "import_promocodes_csv_api_v1_admin_promocodes_import_csv_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_promocodes_csv_api_v1_admin_promocodes_import_csv_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Import Promocodes Csv",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/promocodes/{promo_id}/deactivate": {
       "post": {
         "operationId": "admin_deactivate_api_v1_admin_promocodes__promo_id__deactivate_post",
@@ -8920,6 +9038,55 @@
           }
         ],
         "summary": "Queue Stats",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/segmentation/metrics": {
+      "get": {
+        "description": "Метрики DeepLab/SAM fallback §11.2.5.",
+        "operationId": "segmentation_metrics_api_v1_admin_segmentation_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Segmentation Metrics",
         "tags": [
           "Администрирование"
         ]
@@ -10242,6 +10409,59 @@
           }
         ],
         "summary": "Get Upsells",
+        "tags": [
+          "Тарифы и алерты"
+        ]
+      }
+    },
+    "/api/v1/admin/upsells/history": {
+      "get": {
+        "description": "История изменения цен апсейлов §11.9.",
+        "operationId": "upsells_history_api_v1_admin_upsells_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Upsells History",
         "tags": [
           "Тарифы и алерты"
         ]

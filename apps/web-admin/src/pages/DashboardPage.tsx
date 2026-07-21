@@ -21,6 +21,7 @@ import {
   YAxis,
 } from 'recharts';
 import { api, getApiError } from '../services/api';
+import { useAdminDashboardLive } from '../hooks/useAdminDashboardLive';
 
 type Dashboard = {
   source: string;
@@ -187,9 +188,11 @@ export default function DashboardPage() {
     }
   }, [funnelParams]);
 
+  const live = useAdminDashboardLive(load);
+
   useEffect(() => {
     load();
-    const t = window.setInterval(load, 15000);
+    const t = window.setInterval(load, 60000);
     return () => window.clearInterval(t);
   }, [load]);
 
@@ -211,10 +214,13 @@ export default function DashboardPage() {
         <div>
           <Title order={2}>Дашборд</Title>
           <Text c="#6d6c77" size="sm" mt={6}>
-            §11.2 · ClickHouse + PostgreSQL · авто-обновление 15с
+            §11.2 · ClickHouse + PostgreSQL · WebSocket {live ? 'live' : '…'} · fallback 60с
           </Text>
         </div>
         <Group>
+          <Badge variant="light" color={live ? 'teal' : 'gray'} radius="sm">
+            {live ? 'WS live' : 'WS offline'}
+          </Badge>
           <Badge variant="light" color="brand" radius="sm">
             {data?.source ?? '—'}
           </Badge>

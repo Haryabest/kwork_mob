@@ -78,10 +78,17 @@ async def get_upsells(db: AsyncSession = Depends(get_db)):
     return {"items": await upsell_svc.list_all_prices(db)}
 
 
+@router.get("/upsells/history")
+async def upsells_history(code: str | None = None, db: AsyncSession = Depends(get_db)):
+    """История изменения цен апсейлов §11.9."""
+    return {"items": await upsell_svc.price_history(db, code=code)}
+
+
 @router.patch("/upsells/{code}")
 async def patch_upsell(
     code: str,
     body: UpsellUpdate,
+    admin: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
     row = await upsell_svc.set_amount(
@@ -89,6 +96,7 @@ async def patch_upsell(
         code=code,
         amount_rub=body.amount_rub,
         is_active=body.is_active,
+        changed_by=admin.id,
     )
     await db.commit()
     return {
