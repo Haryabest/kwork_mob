@@ -195,6 +195,10 @@ components:
       type: object
     AutoscalingRuleBody:
       properties:
+        auto_launch:
+          default: false
+          title: Auto Launch
+          type: boolean
         gpu:
           default: rtx4090
           title: Gpu
@@ -3396,6 +3400,21 @@ paths:
       summary: Stop Campaign
       tags:
       - Кампании
+  /api/v1/admin/cloud/autoscaling/approve:
+    post:
+      operationId: approve_autoscaling_api_v1_admin_cloud_autoscaling_approve_post
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Approve Autoscaling
+      tags:
+      - Облако GPU
+      - Облако GPU
   /api/v1/admin/cloud/autoscaling/rules:
     get:
       operationId: list_rules_api_v1_admin_cloud_autoscaling_rules_get
@@ -3437,6 +3456,34 @@ paths:
       tags:
       - Облако GPU
       - Облако GPU
+  /api/v1/admin/cloud/autoscaling/rules/{rule_id}:
+    delete:
+      operationId: delete_rule_api_v1_admin_cloud_autoscaling_rules__rule_id__delete
+      parameters:
+      - in: path
+        name: rule_id
+        required: true
+        schema:
+          title: Rule Id
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Delete Rule
+      tags:
+      - Облако GPU
+      - Облако GPU
   /api/v1/admin/cloud/autoscaling/run:
     post:
       operationId: run_autoscaling_now_api_v1_admin_cloud_autoscaling_run_post
@@ -3449,6 +3496,21 @@ paths:
       security:
       - HTTPBearer: []
       summary: Run Autoscaling Now
+      tags:
+      - Облако GPU
+      - Облако GPU
+  /api/v1/admin/cloud/autoscaling/status:
+    get:
+      operationId: autoscaling_status_api_v1_admin_cloud_autoscaling_status_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Autoscaling Status
       tags:
       - Облако GPU
       - Облако GPU
@@ -3590,6 +3652,34 @@ paths:
       security:
       - HTTPBearer: []
       summary: Stop Instance
+      tags:
+      - Облако GPU
+      - Облако GPU
+  /api/v1/admin/cloud/instances/{instance_id}/terminate:
+    post:
+      operationId: terminate_instance_api_v1_admin_cloud_instances__instance_id__terminate_post
+      parameters:
+      - in: path
+        name: instance_id
+        required: true
+        schema:
+          title: Instance Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Terminate Instance
       tags:
       - Облако GPU
       - Облако GPU

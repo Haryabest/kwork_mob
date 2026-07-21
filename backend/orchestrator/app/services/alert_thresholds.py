@@ -39,6 +39,10 @@ THRESHOLD_KEYS: dict[str, Any] = {
     "cloud_daily_budget_rub": 0,
     "cloud_burn_alert_rub_per_hour": 500,
     "analytics_ch_sync_pending_max": 1000,
+    "gateway_ip_rate_limit_per_min": 1000,
+    "gateway_jwt_rate_limit_per_min": 100,
+    "gateway_rate_block_sec": 300,
+    "cloud_idle_stop_interval_min": 5,
 }
 
 REDIS_HASH = "alerts:thresholds"
@@ -80,6 +84,16 @@ def env_defaults() -> dict[str, Any]:
         "cloud_burn_alert_rub_per_hour": int(getattr(settings, "CLOUD_BURN_ALERT_RUB_PER_HOUR", 500) or 500),
         "analytics_ch_sync_pending_max": int(
             getattr(settings, "ANALYTICS_CH_SYNC_PENDING_MAX", 1000) or 1000
+        ),
+        "gateway_ip_rate_limit_per_min": int(
+            getattr(settings, "GATEWAY_IP_RATE_LIMIT_PER_MIN", 1000) or 1000
+        ),
+        "gateway_jwt_rate_limit_per_min": int(
+            getattr(settings, "GATEWAY_JWT_RATE_LIMIT_PER_MIN", 100) or 100
+        ),
+        "gateway_rate_block_sec": int(getattr(settings, "GATEWAY_RATE_BLOCK_SEC", 300) or 300),
+        "cloud_idle_stop_interval_min": int(
+            getattr(settings, "CLOUD_IDLE_STOP_INTERVAL_MIN", 5) or 5
         ),
     }
 

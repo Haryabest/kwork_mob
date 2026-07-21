@@ -187,6 +187,11 @@ class Settings(BaseSettings):
     SHOOT_LINK_MASS_BLOCK_HOURS: int = 1
     API_KEY_DEFAULT_RATE_LIMIT: int = 1000
     API_KEY_DEFAULT_DAILY_LIMIT: int = 100_000
+    # API Gateway §4.1.3 / §10.4
+    GATEWAY_IP_RATE_LIMIT_PER_MIN: int = 1000
+    GATEWAY_JWT_RATE_LIMIT_PER_MIN: int = 100
+    GATEWAY_RATE_BLOCK_SEC: int = 300
+    CLOUD_IDLE_STOP_INTERVAL_MIN: int = 5
 
     # Universal Links / App Links (§3.15)
     APPLE_TEAM_ID: str = ""

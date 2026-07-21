@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException
@@ -21,6 +22,9 @@ from app.services.cloud_client import (
 )
 
 logger = logging.getLogger(__name__)
+
+PENDING_SCALE_KEY = "cloud:scale_pending"
+IDLE_STOP_LAST_KEY = "cloud:idle_stop:last"
 
 
 def _client(provider: str) -> CloudProviderClient:
@@ -72,6 +76,22 @@ async def _raw_cost_summary(db: AsyncSession) -> dict:
     }
 
 
+async def _hourly_cost_series(db: AsyncSession, hours: int = 24) -> list[dict[str, Any]]:
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    rows = (
+        await db.execute(
+            select(
+                func.date_trunc("hour", CloudCost.created_at).label("h"),
+                func.coalesce(func.sum(CloudCost.amount_rub), 0).label("rub"),
+            )
+            .where(CloudCost.created_at >= since)
+            .group_by("h")
+            .order_by("h")
+        )
+    ).all()
+    return [{"hour": r.h.isoformat() if r.h else None, "rub": int(r.rub or 0)} for r in rows]
+
+
 async def budget_status(db: AsyncSession) -> dict[str, Any]:
     """Сводка бюджета облака для admin / soft-launch §11.3.3."""
     costs = await _raw_cost_summary(db)
@@ -91,6 +111,8 @@ async def budget_status(db: AsyncSession) -> dict[str, Any]:
         blocked = True
         reasons.append("daily_budget_exceeded")
     burn_over = burn_alert > 0 and burn > burn_alert
+    hourly = await _hourly_cost_series(db)
+    forecast_24h = burn * 24
     return {
         **costs,
         "cloud_monthly_budget_rub": monthly_limit,
@@ -101,6 +123,8 @@ async def budget_status(db: AsyncSession) -> dict[str, Any]:
         "burn_over_alert_threshold": burn_over,
         "monthly_remaining_rub": max(monthly_limit - month_rub, 0) if monthly_limit > 0 else None,
         "daily_remaining_rub": max(daily_limit - today_rub, 0) if daily_limit > 0 else None,
+        "forecast_24h_rub": forecast_24h,
+        "hourly_cost_rub": hourly,
     }
 
 
@@ -354,6 +378,56 @@ async def stop_instance(db: AsyncSession, instance_id: str) -> dict:
         raise HTTPException(502, str(exc)) from exc
 
 
+async def terminate_instance(db: AsyncSession, instance_id: str) -> dict:
+    """Остановить и удалить (terminate) облачный инстанс §11.3.3."""
+    row = await db.scalar(select(CloudInstanceRecord).where(CloudInstanceRecord.instance_id == instance_id))
+    if not row:
+        raise HTTPException(404, "Инстанс не найден")
+    client = _client(row.provider)
+    try:
+        res = client.stop_instance(instance_id, shelve=False)
+        started = row.started_at or row.created_at
+        hours = max((datetime.now(timezone.utc) - started).total_seconds() / 3600.0, 0.01)
+        cost = int(round(hours * (row.rub_per_hour or 0)))
+        db.add(
+            CloudCost(
+                provider=row.provider,
+                instance_id=instance_id,
+                worker_id=row.worker_id,
+                gpu=row.gpu,
+                hours=hours,
+                amount_rub=cost,
+            )
+        )
+        row.status = "terminated"
+        row.stopped_at = datetime.now(timezone.utc)
+        node = await db.get(WorkerNode, row.worker_id)
+        if node:
+            node.status = "offline"
+        db.add(
+            CloudOperation(
+                provider=row.provider,
+                instance_id=instance_id,
+                action="terminate",
+                ok=True,
+                details={"cost_rub": cost, "res": res},
+            )
+        )
+        await db.flush()
+        return {"instance_id": instance_id, "status": "terminated", "cost_rub": cost}
+    except Exception as exc:  # noqa: BLE001
+        db.add(
+            CloudOperation(
+                provider=row.provider,
+                instance_id=instance_id,
+                action="terminate",
+                ok=False,
+                details={"error": str(exc)[:300]},
+            )
+        )
+        raise HTTPException(502, str(exc)) from exc
+
+
 async def list_instances(db: AsyncSession) -> list[dict]:
     rows = (await db.scalars(select(CloudInstanceRecord).order_by(CloudInstanceRecord.id.desc()).limit(100))).all()
     return [
@@ -393,6 +467,7 @@ async def upsert_rule(db: AsyncSession, data: dict) -> AutoscalingRule:
         "idle_timeout_min",
         "max_cloud_workers",
         "is_active",
+        "auto_launch",
     ):
         if field in data and data[field] is not None:
             setattr(row, field, data[field])
@@ -414,9 +489,117 @@ async def list_rules(db: AsyncSession) -> list[dict]:
             "idle_timeout_min": r.idle_timeout_min,
             "max_cloud_workers": r.max_cloud_workers,
             "is_active": r.is_active,
+            "auto_launch": r.auto_launch,
         }
         for r in rows
     ]
+
+
+async def _get_pending_scale() -> dict | None:
+    try:
+        from app.core.redis import get_redis
+
+        redis = await get_redis()
+        raw = await redis.get(PENDING_SCALE_KEY)
+        if not raw:
+            return None
+        return json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def mark_scale_pending(*, queue: int, rule_id: int, reason: str) -> None:
+    payload = {
+        "queue": queue,
+        "rule_id": rule_id,
+        "reason": reason,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        from app.core.redis import get_redis
+
+        redis = await get_redis()
+        await redis.setex(PENDING_SCALE_KEY, 3600, json.dumps(payload))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("mark_scale_pending: %s", exc)
+
+
+async def clear_scale_pending() -> None:
+    try:
+        from app.core.redis import get_redis
+
+        redis = await get_redis()
+        await redis.delete(PENDING_SCALE_KEY)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def scaling_owner_status(db: AsyncSession) -> dict[str, Any]:
+    """Semi-auto owner loop §4.7: очередь, бюджет, pending approval."""
+    from app.services.queue import queue_service
+    from app.services.worker_hub import worker_hub
+
+    lengths = await queue_service.queue_lengths()
+    total_q = int(lengths.get("normal", 0) or 0) + int(lengths.get("high", 0) or 0)
+    snap = await worker_hub.list_snapshot()
+    live = [w for w in snap if w.get("status") not in ("offline",)]
+    busy = sum(1 for w in live if w.get("status") in ("busy", "overheated", "processing"))
+    online = len(live)
+    all_busy = online > 0 and busy >= online
+    pending = await _get_pending_scale()
+    budget = await budget_status(db)
+    return {
+        "queue": total_q,
+        "workers_online": online,
+        "workers_busy": busy,
+        "all_busy": all_busy,
+        "pending_approval": pending is not None,
+        "pending": pending,
+        "budget": budget,
+    }
+
+
+async def approve_pending_scale(db: AsyncSession) -> dict[str, Any]:
+    """Owner подтверждает запуск облачных воркеров (semi-auto §4.7)."""
+    pending = await _get_pending_scale()
+    if not pending:
+        raise HTTPException(404, "Нет ожидающего запроса на масштабирование")
+    rule_id = int(pending.get("rule_id") or 0)
+    rule = await db.get(AutoscalingRule, rule_id) if rule_id else None
+    if not rule:
+        rules = (await db.scalars(select(AutoscalingRule).where(AutoscalingRule.is_active.is_(True)))).all()
+        rule = rules[0] if rules else None
+    if not rule:
+        raise HTTPException(404, "Нет активного правила авто-масштаба")
+    await clear_scale_pending()
+    created = await create_cloud_workers(
+        db,
+        provider=rule.provider,
+        gpu=rule.gpu,
+        count=rule.launch_count,
+        image=rule.image,
+        vcpus=8,
+        ram_gb=32,
+        triggered_by=f"owner_approve:{rule.id}",
+    )
+    await _audit_scale_event(db, "cloud_scale_approved", rule_id=rule.id, launched=len(created))
+    await db.commit()
+    return {"launched": len(created), "rule_id": rule.id, "items": created}
+
+
+async def _audit_scale_event(db: AsyncSession, action: str, **details: Any) -> None:
+    try:
+        from app.services.log_writer import emit_log
+
+        await emit_log(
+            db,
+            source="cloud_autoscaling",
+            level="INFO",
+            message=action,
+            details=details,
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def run_autoscaling_once(db: AsyncSession) -> dict:
@@ -434,10 +617,22 @@ async def run_autoscaling_once(db: AsyncSession) -> dict:
     rules = (await db.scalars(select(AutoscalingRule).where(AutoscalingRule.is_active.is_(True)))).all()
     launched = 0
     stopped = 0
+    pending_set = False
     for rule in rules:
         if total_q > rule.queue_threshold and active_cloud < rule.max_cloud_workers:
             need = min(rule.launch_count, rule.max_cloud_workers - active_cloud)
             if need > 0:
+                if not rule.auto_launch:
+                    await mark_scale_pending(queue=total_q, rule_id=rule.id, reason="queue_threshold")
+                    pending_set = True
+                    await _audit_scale_event(
+                        db,
+                        "cloud_autoscaling_pending",
+                        rule_id=rule.id,
+                        queue=total_q,
+                        need=need,
+                    )
+                    break
                 try:
                     await assert_cloud_budget_ok(
                         db,
@@ -463,6 +658,13 @@ async def run_autoscaling_once(db: AsyncSession) -> dict:
                 )
                 launched += len(created)
                 active_cloud += len(created)
+                await _audit_scale_event(
+                    db,
+                    "cloud_autoscaling_triggered",
+                    rule_id=rule.id,
+                    queue=total_q,
+                    launched=len(created),
+                )
                 logger.info(
                     "cloud_autoscaling_triggered rule=%s queue=%s launched=%s",
                     rule.id,
@@ -472,25 +674,58 @@ async def run_autoscaling_once(db: AsyncSession) -> dict:
     # idle stop: облачные воркеры без heartbeat дольше idle_timeout
     now = datetime.now(timezone.utc)
     idle_min = min((r.idle_timeout_min for r in rules), default=30) if rules else 30
+    stop_interval_min = int(getattr(settings, "CLOUD_IDLE_STOP_INTERVAL_MIN", 5) or 5)
+    try:
+        from app.services.alert_thresholds import threshold_async
+
+        stop_interval_min = int(await threshold_async("cloud_idle_stop_interval_min", stop_interval_min))
+    except Exception:  # noqa: BLE001
+        pass
+    can_idle_stop = True
+    try:
+        from app.core.redis import get_redis
+
+        redis = await get_redis()
+        last_raw = await redis.get(IDLE_STOP_LAST_KEY)
+        if last_raw:
+            last_ts = float(last_raw.decode() if isinstance(last_raw, bytes) else last_raw)
+            if (now.timestamp() - last_ts) < stop_interval_min * 60:
+                can_idle_stop = False
+    except Exception:  # noqa: BLE001
+        pass
     cloud_rows = (
         await db.scalars(
             select(CloudInstanceRecord).where(CloudInstanceRecord.status.in_(("running", "active", "ready")))
         )
     ).all()
-    for row in cloud_rows:
-        node = await db.get(WorkerNode, row.worker_id)
-        last = node.last_heartbeat if node else None
-        if last and (now - last).total_seconds() > idle_min * 60 and total_q == 0:
-            try:
-                await stop_instance(db, row.instance_id)
-                stopped += 1
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("idle stop %s: %s", row.instance_id, exc)
-            # stop one per cycle (TZ: interval)
-            break
+    if can_idle_stop:
+        for row in cloud_rows:
+            node = await db.get(WorkerNode, row.worker_id)
+            last = node.last_heartbeat if node else None
+            if last and (now - last).total_seconds() > idle_min * 60 and total_q == 0:
+                try:
+                    await stop_instance(db, row.instance_id)
+                    stopped += 1
+                    try:
+                        from app.core.redis import get_redis
+
+                        redis = await get_redis()
+                        await redis.set(IDLE_STOP_LAST_KEY, str(now.timestamp()), ex=stop_interval_min * 60 + 60)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    await _audit_scale_event(db, "cloud_idle_stop", instance_id=row.instance_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("idle stop %s: %s", row.instance_id, exc)
+                break
 
     await db.commit()
-    return {"queue": total_q, "active_cloud": active_cloud, "launched": launched, "stopped": stopped}
+    return {
+        "queue": total_q,
+        "active_cloud": active_cloud,
+        "launched": launched,
+        "stopped": stopped,
+        "pending_approval": pending_set,
+    }
 
 
 async def cost_summary(db: AsyncSession) -> dict:

@@ -39,6 +39,7 @@ class AutoscalingRuleBody(BaseModel):
     idle_timeout_min: int = Field(default=30, ge=5)
     max_cloud_workers: int = Field(default=5, ge=1, le=50)
     is_active: bool = True
+    auto_launch: bool = False
 
 
 class BonusSettingsBody(BaseModel):
@@ -111,6 +112,37 @@ async def stop_instance(instance_id: str, _: dict = Depends(require_admin), db: 
     return result
 
 
+@router.post("/instances/{instance_id}/terminate")
+async def terminate_instance(instance_id: str, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    result = await cloud_svc.terminate_instance(db, instance_id)
+    await db.commit()
+    return result
+
+
+@router.get("/autoscaling/status")
+async def autoscaling_status(_: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    return await cloud_svc.scaling_owner_status(db)
+
+
+@router.post("/autoscaling/approve")
+async def approve_autoscaling(_: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    return await cloud_svc.approve_pending_scale(db)
+
+
+@router.delete("/autoscaling/rules/{rule_id}")
+async def delete_rule(rule_id: int, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    from app.models import AutoscalingRule
+
+    row = await db.get(AutoscalingRule, rule_id)
+    if not row:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "Правило не найдено")
+    await db.delete(row)
+    await db.commit()
+    return {"ok": True}
+
+
 @router.get("/autoscaling/rules")
 async def list_rules(_: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     return {"items": await cloud_svc.list_rules(db)}
@@ -134,6 +166,7 @@ async def upsert_rule(
         "idle_timeout_min": row.idle_timeout_min,
         "max_cloud_workers": row.max_cloud_workers,
         "is_active": row.is_active,
+        "auto_launch": row.auto_launch,
     }
 
 

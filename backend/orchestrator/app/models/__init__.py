@@ -673,6 +673,7 @@ class AutoscalingRule(Base):
     idle_timeout_min: Mapped[int] = mapped_column(Integer, default=30)
     max_cloud_workers: Mapped[int] = mapped_column(Integer, default=5)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    auto_launch: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

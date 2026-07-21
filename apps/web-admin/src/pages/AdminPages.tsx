@@ -47,6 +47,7 @@ export function WorkersPage() {
     idle_timeout_min: number;
     max_cloud_workers: number;
     is_active: boolean;
+    auto_launch: boolean;
   }>>([]);
   const [costs, setCosts] = useState({
     today_rub: 0,
@@ -56,6 +57,27 @@ export function WorkersPage() {
     budget_blocked: false,
     cloud_monthly_budget_rub: 0,
     cloud_daily_budget_rub: 0,
+    forecast_24h_rub: 0,
+    hourly_cost_rub: [] as Array<{ hour: string | null; rub: number }>,
+  });
+  const [scaleStatus, setScaleStatus] = useState<{
+    queue: number;
+    all_busy: boolean;
+    pending_approval: boolean;
+    pending?: { queue: number; reason: string } | null;
+  } | null>(null);
+  const [ruleOpen, setRuleOpen] = useState(false);
+  const [ruleDraft, setRuleDraft] = useState({
+    id: undefined as number | undefined,
+    name: 'default',
+    queue_threshold: 20,
+    launch_count: 1,
+    provider: 'intelion',
+    gpu: 'rtx4090',
+    idle_timeout_min: 30,
+    max_cloud_workers: 5,
+    is_active: true,
+    auto_launch: false,
   });
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -65,12 +87,13 @@ export function WorkersPage() {
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const [w, c, r, cost, tr] = await Promise.all([
+    const [w, c, r, cost, tr, st] = await Promise.all([
       api.get<{ summary: typeof summary; items: typeof items }>('/admin/workers'),
       api.get<{ items: typeof cloud }>('/admin/cloud/instances'),
       api.get<{ items: typeof rules }>('/admin/cloud/autoscaling/rules'),
       api.get<typeof costs>('/admin/cloud/costs'),
       api.get<typeof rollout>('/admin/trellis/rollout'),
+      api.get<typeof scaleStatus>('/admin/cloud/autoscaling/status'),
     ]);
     setSummary(w.data.summary);
     setItems(w.data.items ?? []);
@@ -80,6 +103,7 @@ export function WorkersPage() {
     setRollout(tr.data);
     setTargetVersion(tr.data.target_version ?? '2');
     setDefaultImage(tr.data.default_docker_image ?? '');
+    setScaleStatus(st.data);
   }
 
   useEffect(() => {
@@ -305,7 +329,35 @@ export function WorkersPage() {
         }
       />
 
-      <PageHeader title="Облачные инстансы" description={`Месяц: ${costs.month_rub} ₽ · running: ${costs.running_instances}`} />
+      <PageHeader title="Облачные инстансы" description={`Месяц: ${costs.month_rub} ₽ · прогноз 24ч: ${costs.forecast_24h_rub ?? 0} ₽ · running: ${costs.running_instances}`} />
+      {scaleStatus?.pending_approval ? (
+        <Card withBorder mb="md" p="md">
+          <Group justify="space-between">
+            <Text size="sm">
+              Semi-auto: очередь {scaleStatus.pending?.queue ?? scaleStatus.queue} — требуется подтверждение owner
+            </Text>
+            <Button
+              size="sm"
+              color="teal"
+              loading={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await api.post('/admin/cloud/autoscaling/approve');
+                  notifications.show({ color: 'teal', message: 'Облачные воркеры запущены' });
+                  await load();
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Подтвердить запуск
+            </Button>
+          </Group>
+        </Card>
+      ) : null}
       <ShellTable
         headers={['Провайдер', 'Instance', 'Worker', 'GPU', 'Статус', '₽/ч', '']}
         rows={
@@ -355,6 +407,25 @@ export function WorkersPage() {
                   >
                     Stop
                   </Button>
+                  <Button
+                    size="xs"
+                    color="red"
+                    variant="light"
+                    loading={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        await api.post(`/admin/cloud/instances/${c.instance_id}/terminate`);
+                        await load();
+                      } catch (e) {
+                        notifications.show({ color: 'red', message: getApiError(e) });
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Terminate
+                  </Button>
                 </Group>,
               ])
             : [['—', 'Нет облачных инстансов', '—', '—', '—', '—', '—']]
@@ -363,27 +434,51 @@ export function WorkersPage() {
 
       <PageHeader
         title="Авто-масштаб"
-        description="Celery каждые 30с · queue_threshold → create · idle → stop"
+        description="Celery каждые 30с · semi-auto owner approve · idle stop 5 мин"
         action={
-          <Button
-            size="sm"
-            variant="light"
-            onClick={async () => {
-              try {
-                const { data } = await api.post('/admin/cloud/autoscaling/run');
-                notifications.show({ color: 'teal', message: JSON.stringify(data) });
-                await load();
-              } catch (e) {
-                notifications.show({ color: 'red', message: getApiError(e) });
-              }
-            }}
-          >
-            Run once
-          </Button>
+          <Group>
+            <Button
+              size="sm"
+              variant="light"
+              leftSection={<IconPlus size={16} />}
+              onClick={() => {
+                setRuleDraft({
+                  id: undefined,
+                  name: 'default',
+                  queue_threshold: 20,
+                  launch_count: 1,
+                  provider: 'intelion',
+                  gpu: 'rtx4090',
+                  idle_timeout_min: 30,
+                  max_cloud_workers: 5,
+                  is_active: true,
+                  auto_launch: false,
+                });
+                setRuleOpen(true);
+              }}
+            >
+              Правило
+            </Button>
+            <Button
+              size="sm"
+              variant="light"
+              onClick={async () => {
+                try {
+                  const { data } = await api.post('/admin/cloud/autoscaling/run');
+                  notifications.show({ color: 'teal', message: JSON.stringify(data) });
+                  await load();
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                }
+              }}
+            >
+              Run once
+            </Button>
+          </Group>
         }
       />
       <ShellTable
-        headers={['Имя', 'Порог Q', 'Launch', 'Провайдер', 'GPU', 'Idle мин', 'Max', 'Active']}
+        headers={['Имя', 'Порог Q', 'Launch', 'Провайдер', 'GPU', 'Idle мин', 'Max', 'Auto', 'Active', '']}
         rows={
           rules.length
             ? rules.map((r) => [
@@ -394,11 +489,54 @@ export function WorkersPage() {
                 r.gpu,
                 String(r.idle_timeout_min),
                 String(r.max_cloud_workers),
+                r.auto_launch ? 'да' : 'semi',
                 r.is_active ? 'да' : 'нет',
+                <Group key={`re-${r.id}`} gap={4}>
+                  <Button size="xs" variant="subtle" onClick={() => {
+                    setRuleDraft({ ...r });
+                    setRuleOpen(true);
+                  }}>Edit</Button>
+                  <ActionIcon color="red" variant="subtle" onClick={async () => {
+                    try {
+                      await api.delete(`/admin/cloud/autoscaling/rules/${r.id}`);
+                      await load();
+                    } catch (e) {
+                      notifications.show({ color: 'red', message: getApiError(e) });
+                    }
+                  }}>
+                    <IconTrash size={14} />
+                  </ActionIcon>
+                </Group>,
               ])
-            : [['—', 'Правил нет — создайте через PUT /admin/cloud/autoscaling/rules', '—', '—', '—', '—', '—', '—']]
+            : [['—', 'Правил нет', '—', '—', '—', '—', '—', '—', '—', '—']]
         }
       />
+
+      <Modal opened={ruleOpen} onClose={() => setRuleOpen(false)} title="Правило авто-масштаба" centered>
+        <Stack>
+          <TextInput label="Имя" value={ruleDraft.name} onChange={(e) => setRuleDraft({ ...ruleDraft, name: e.currentTarget.value })} />
+          <NumberInput label="Порог очереди" value={ruleDraft.queue_threshold} onChange={(v) => setRuleDraft({ ...ruleDraft, queue_threshold: Number(v) || 20 })} />
+          <NumberInput label="Launch count" value={ruleDraft.launch_count} onChange={(v) => setRuleDraft({ ...ruleDraft, launch_count: Number(v) || 1 })} min={1} max={10} />
+          <Select label="Провайдер" data={[{ value: 'intelion', label: 'Intelion' }, { value: 'immers', label: 'Immers' }]} value={ruleDraft.provider} onChange={(v) => setRuleDraft({ ...ruleDraft, provider: v ?? 'intelion' })} />
+          <TextInput label="GPU" value={ruleDraft.gpu} onChange={(e) => setRuleDraft({ ...ruleDraft, gpu: e.currentTarget.value })} />
+          <NumberInput label="Idle timeout (мин)" value={ruleDraft.idle_timeout_min} onChange={(v) => setRuleDraft({ ...ruleDraft, idle_timeout_min: Number(v) || 30 })} />
+          <NumberInput label="Max cloud workers" value={ruleDraft.max_cloud_workers} onChange={(v) => setRuleDraft({ ...ruleDraft, max_cloud_workers: Number(v) || 5 })} />
+          <Select label="Auto launch" data={[{ value: 'false', label: 'Semi-auto (owner approve)' }, { value: 'true', label: 'Auto launch' }]} value={ruleDraft.auto_launch ? 'true' : 'false'} onChange={(v) => setRuleDraft({ ...ruleDraft, auto_launch: v === 'true' })} />
+          <Button loading={busy} onClick={async () => {
+            setBusy(true);
+            try {
+              await api.put('/admin/cloud/autoscaling/rules', ruleDraft);
+              notifications.show({ color: 'teal', message: 'Правило сохранено' });
+              setRuleOpen(false);
+              await load();
+            } catch (e) {
+              notifications.show({ color: 'red', message: getApiError(e) });
+            } finally {
+              setBusy(false);
+            }
+          }}>Сохранить</Button>
+        </Stack>
+      </Modal>
 
       <Modal opened={createOpen} onClose={() => setCreateOpen(false)} title="Создать облачный воркер" centered>
         <Stack>

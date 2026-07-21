@@ -103,6 +103,21 @@ async def check_and_alert(db: AsyncSession) -> dict[str, Any]:
             )
             if dual.get("telegram") or dual.get("email"):
                 sent.append("queue_length")
+            try:
+                from app.models import AutoscalingRule
+                from app.services import cloud_autoscaling as cas
+
+                rule_row = (
+                    await db.scalars(
+                        select(AutoscalingRule)
+                        .where(AutoscalingRule.is_active.is_(True), AutoscalingRule.auto_launch.is_(False))
+                        .limit(1)
+                    )
+                ).first()
+                if rule_row:
+                    await cas.mark_scale_pending(queue=total_q, rule_id=rule_row.id, reason="queue_alert")
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("scale pending on queue alert: %s", exc)
 
     # all workers busy > N minutes
     snap = await worker_hub.list_snapshot()

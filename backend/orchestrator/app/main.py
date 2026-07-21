@@ -43,6 +43,15 @@ async def lifespan(app: FastAPI):
             raise
         logger.warning("PII encryption check skipped: %s", exc)
 
+    try:
+        from app.core.security import ensure_jwt_gateway_ready
+
+        ensure_jwt_gateway_ready()
+    except Exception as exc:  # noqa: BLE001
+        if not settings.is_development:
+            raise
+        logger.warning("JWT gateway check skipped: %s", exc)
+
     start_dispatcher()
     yield
     await stop_dispatcher()
@@ -94,10 +103,27 @@ async def public_android_assetlinks():
 @app.get("/health")
 async def health():
     from app.core.crypto import pii_encryption_status
+    from app.core.security import jwt_gateway_status
 
     pii = pii_encryption_status()
-    status = "ok" if pii.get("ok") else "degraded"
-    return {"status": status, "service": "orchestrator", "pii_encryption": pii}
+    jwt_gw = jwt_gateway_status()
+    status = "ok" if pii.get("ok") and jwt_gw.get("production_ready") else "degraded"
+    return {
+        "status": status,
+        "service": "orchestrator",
+        "pii_encryption": pii,
+        "jwt_gateway": jwt_gw,
+    }
+
+
+@app.get("/.well-known/jwks.json", include_in_schema=False)
+async def public_jwks():
+    """JWT RS256 public key для API Gateway (§4.1.3)."""
+    from fastapi.responses import JSONResponse
+
+    from app.core.security import jwt_public_jwks
+
+    return JSONResponse(content=jwt_public_jwks())
 
 
 @app.get("/metrics")

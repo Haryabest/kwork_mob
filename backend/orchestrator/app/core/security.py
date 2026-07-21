@@ -59,7 +59,9 @@ def _signing_key() -> tuple[str, str]:
 
 def _decode_algorithms() -> list[str]:
     if jwt_uses_rs256():
-        return ["RS256", "HS256"]
+        if settings.is_development:
+            return ["RS256", "HS256"]
+        return ["RS256"]
     return ["HS256"]
 
 
@@ -200,3 +202,41 @@ async def require_staff(user: Annotated[dict, Depends(get_current_user)]) -> dic
     if user.get("role") not in (UserRole.ADMIN.value, UserRole.SUPPORT_AGENT.value):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Требуются права сотрудника")
     return user
+
+
+def jwt_gateway_status() -> dict[str, Any]:
+    """Статус JWT gateway для /health (§4.1.3 / §4.3)."""
+    rs256 = jwt_uses_rs256()
+    return {
+        "algorithm": "RS256" if rs256 else "HS256",
+        "rs256_configured": rs256,
+        "production_ready": rs256 or settings.is_development,
+    }
+
+
+def ensure_jwt_gateway_ready() -> None:
+    """Prod: RS256 обязателен на API Gateway (§4.1.3)."""
+    if settings.is_development:
+        return
+    if not jwt_uses_rs256():
+        raise RuntimeError(
+            "Production API Gateway requires JWT_RSA_PRIVATE_KEY and JWT_RSA_PUBLIC_KEY (RS256 §4.1.3)"
+        )
+
+
+def jwt_public_jwks() -> dict[str, Any]:
+    """Публичный ключ для верификации JWT (gateway / внешние сервисы)."""
+    if not jwt_uses_rs256():
+        return {"keys": []}
+    pem = _normalize_pem(settings.JWT_RSA_PUBLIC_KEY)
+    return {
+        "keys": [
+            {
+                "kty": "RSA",
+                "use": "sig",
+                "alg": "RS256",
+                "kid": "kwork-mob-1",
+                "pem": pem,
+            }
+        ]
+    }
