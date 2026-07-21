@@ -516,12 +516,12 @@ class _TeamScreenState extends State<TeamScreen> with SingleTickerProviderStateM
                                 FTile(
                                   title: Text(m['full_name']?.toString() ?? m['email']?.toString() ?? '—'),
                                   subtitle: Text(
-                                    l10n.teamMemberSubtitle(
-                                      '${m['role']}',
-                                      '${m['max_concurrent_orders'] ?? '—'}',
-                                    ),
+                                    '${l10n.teamMemberSubtitle('${m['role']}', '${m['max_concurrent_orders'] ?? '—'}')}'
+                                    '${m['active_orders_count'] != null ? ' · активных ${m['active_orders_count']}' : ''}',
                                   ),
-                                  onPress: _busy ? null : () => _editMember(m),
+                                  onPress: _busy
+                                      ? null
+                                      : () => context.push('/home/team/${m['user_id']}'),
                                 ),
                             ],
                           ),

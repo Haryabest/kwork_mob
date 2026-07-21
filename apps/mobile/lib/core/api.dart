@@ -153,6 +153,21 @@ class ApiClient {
   Future<bool> get hasToken async =>
       (await _storage.read(key: 'access_token')) != null;
 
+  Future<bool> pingHealth() async {
+    try {
+      final res = await _dio.get(
+        '/health',
+        options: Options(
+          receiveTimeout: const Duration(seconds: 5),
+          sendTimeout: const Duration(seconds: 5),
+        ),
+      );
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>> register({
     required String email,
     required String password,
@@ -1333,6 +1348,21 @@ class ApiClient {
       'offset': offset,
     });
     return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> getCompanyMember(int userId) async {
+    final res = await _dio.get('/company/members/$userId');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> listMemberTasks(int userId) async {
+    final res = await _dio.get('/company/members/$userId/tasks');
+    final items = (res.data as Map)['items'] as List? ?? [];
+    return items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<void> removeCompanyMember(int userId) async {
+    await _dio.delete('/company/members/$userId');
   }
 
   Future<Map<String, dynamic>> restoreFromTrash({required String modelUuid}) async {

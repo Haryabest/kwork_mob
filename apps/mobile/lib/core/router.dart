@@ -5,6 +5,7 @@ import 'package:kwork_mobile/core/api.dart';
 import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/features/auth/auth_screen.dart';
 import 'package:kwork_mobile/features/company/shoot_link_screen.dart';
+import 'package:kwork_mobile/features/company/team_member_screen.dart';
 import 'package:kwork_mobile/features/company/team_screen.dart';
 import 'package:kwork_mobile/features/profile/company_policies_screen.dart';
 import 'package:kwork_mobile/features/profile/company_topup_screen.dart';
@@ -129,13 +130,16 @@ GoRouter createRouter({
           final tab = q['tab'];
           int? initialTab;
           if (tab == 'profile') initialTab = 4;
+          if (tab == 'orders') initialTab = 2;
           if (tab == 'support' || ticketId != null) initialTab = 3;
+          final authorId = int.tryParse(q['author'] ?? '');
           return HomeShell(
             api: api,
             session: session,
             push: push,
             initialTab: initialTab,
             initialSupportTicketId: ticketId,
+            initialOrderAuthorId: authorId,
           );
         },
         routes: [
@@ -246,6 +250,16 @@ GoRouter createRouter({
           GoRoute(
             path: 'team',
             builder: (context, state) => TeamScreen(api: api, session: session),
+            routes: [
+              GoRoute(
+                path: ':userId',
+                builder: (context, state) => TeamMemberScreen(
+                  api: api,
+                  session: session,
+                  userId: int.parse(state.pathParameters['userId']!),
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: 'storage',

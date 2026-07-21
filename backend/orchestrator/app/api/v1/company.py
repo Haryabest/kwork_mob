@@ -336,9 +336,25 @@ async def list_members(
         )
     total = await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     members = (await db.scalars(stmt.order_by(CompanyMember.id).offset(offset).limit(limit))).all()
+    from app.models import Order
+
+    active_statuses = ("pending", "awaiting_payment", "paid", "queued", "processing", "generating")
     items = []
     for m in members:
         u = await db.get(User, m.user_id)
+        active_count = await db.scalar(
+            select(func.count()).select_from(Order).where(
+                Order.company_id == company.id,
+                Order.user_id == m.user_id,
+                Order.status.in_(active_statuses),
+            )
+        )
+        last_at = await db.scalar(
+            select(func.max(Order.created_at)).where(
+                Order.company_id == company.id,
+                Order.user_id == m.user_id,
+            )
+        )
         items.append(
             {
                 "user_id": m.user_id,
@@ -347,6 +363,8 @@ async def list_members(
                 "role": m.role,
                 "max_concurrent_orders": m.max_concurrent_orders,
                 "monthly_spending_limit": m.monthly_spending_limit,
+                "active_orders_count": int(active_count or 0),
+                "last_activity_at": last_at.isoformat() if last_at else None,
             }
         )
     return {

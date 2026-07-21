@@ -23,6 +23,7 @@ import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/oauth_audit_hints.dart';
 import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
+import 'package:kwork_mobile/services/offline_sync_service.dart';
 import 'package:kwork_mobile/services/upload_progress_service.dart';
 import 'package:kwork_mobile/widgets/campaign_banner.dart';
 
@@ -34,6 +35,7 @@ class HomeShell extends StatefulWidget {
     required this.push,
     this.initialTab,
     this.initialSupportTicketId,
+    this.initialOrderAuthorId,
   });
 
   final ApiClient api;
@@ -41,15 +43,17 @@ class HomeShell extends StatefulWidget {
   final PushService push;
   final int? initialTab;
   final int? initialSupportTicketId;
+  final int? initialOrderAuthorId;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   late int _index;
   int _unread = 0;
   int? _supportTicketId;
+  bool _offline = false;
   List<Map<String, dynamic>> _campaignBanners = [];
   final _dismissedBannerIds = <int>{};
   final _homeTabKey = GlobalKey<_HomeTabState>();
@@ -61,13 +65,14 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _index = widget.initialTab ?? 0;
     _supportTicketId = widget.initialSupportTicketId;
     widget.session.addListener(_onSession);
     _refresh();
     _loadUnread();
     _loadCampaignBanners();
-    AnalyticsService.instance.flush(widget.api);
+    _syncOnline();
     AnalyticsService.instance.track('screen_view', {'screen': _screenName(_index)});
     LocalModelLibrary.instance.runAutoCleanup();
     LocalModelLibrary.instance.syncPendingDownloads(
@@ -79,9 +84,29 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    OfflineSyncService.instance.removeListener(_onOfflineChanged);
     widget.push.bindForegroundNavigate(null);
     widget.session.removeListener(_onSession);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _syncOnline();
+    }
+  }
+
+  void _onOfflineChanged() {
+    if (mounted) setState(() => _offline = !OfflineSyncService.instance.isOnline);
+  }
+
+  Future<void> _syncOnline() async {
+    OfflineSyncService.instance.addListener(_onOfflineChanged);
+    await OfflineSyncService.instance.probe(widget.api);
+    await OfflineSyncService.instance.flush(widget.api);
+    if (mounted) setState(() => _offline = !OfflineSyncService.instance.isOnline);
   }
 
   void _handleForegroundNavigate(String route, {String? title}) {
@@ -252,7 +277,11 @@ class _HomeShellState extends State<HomeShell> {
         },
         unread: _unread,
       ),
-      _OrdersTab(api: widget.api, session: session),
+      _OrdersTab(
+        api: widget.api,
+        session: session,
+        initialAuthorId: widget.initialOrderAuthorId,
+      ),
       FaqSupportScreen(
         key: ValueKey('support-${_supportTicketId ?? 'list'}'),
         api: widget.api,
@@ -274,6 +303,26 @@ class _HomeShellState extends State<HomeShell> {
       color: Theme.of(context).scaffoldBackgroundColor,
       child: Stack(
         children: [
+          if (_offline)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Material(
+                color: AppColors.error.withValues(alpha: 0.92),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      l10n.errorNetwork,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           FScaffold(
             child: pages[_index],
             footer: FBottomNavigationBar(
@@ -540,9 +589,14 @@ class _HomeTabState extends State<_HomeTab> {
 }
 
 class _OrdersTab extends StatefulWidget {
-  const _OrdersTab({required this.api, required this.session});
+  const _OrdersTab({
+    required this.api,
+    required this.session,
+    this.initialAuthorId,
+  });
   final ApiClient api;
   final AppSession session;
+  final int? initialAuthorId;
 
   @override
   State<_OrdersTab> createState() => _OrdersTabState();
@@ -551,8 +605,15 @@ class _OrdersTab extends StatefulWidget {
 class _OrdersTabState extends State<_OrdersTab> {
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _members = [];
-  int _authorFilter = -1;
+  late int _authorFilter;
   bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _authorFilter = widget.initialAuthorId ?? -1;
+    _boot();
+  }
 
   static Map<String, String> _statusLabels(AppLocalizations l10n) => {
     'pending': l10n.orderStatusPending,
@@ -565,12 +626,6 @@ class _OrdersTabState extends State<_OrdersTab> {
     'paid': l10n.orderStatusPaid,
     'blocked_nsfw': l10n.orderStatusBlockedNsfw,
   };
-
-  @override
-  void initState() {
-    super.initState();
-    _boot();
-  }
 
   Future<void> _boot() async {
     if (widget.session.canFilterCompanyOrders) {

@@ -151,6 +151,10 @@ async def send_to_user(
         except Exception as exc:  # noqa: BLE001
             logger.warning("inbox record user=%s: %s", user_id, exc)
 
+    push_data = dict(data)
+    if notif_id is not None:
+        push_data["notification_id"] = str(notif_id)
+
     results: list[dict] = []
     delivered = False
     if push_allowed:
@@ -158,7 +162,7 @@ async def send_to_user(
             await db.scalars(select(DeviceToken).where(DeviceToken.user_id == user_id))
         ).all()
         for t in tokens:
-            res = send_fcm_to_token(t.token, title, body, data)
+            res = send_fcm_to_token(t.token, title, body, push_data)
             results.append({"token_suffix": t.token[-8:], "platform": t.platform, **res})
             if res.get("ok"):
                 delivered = True

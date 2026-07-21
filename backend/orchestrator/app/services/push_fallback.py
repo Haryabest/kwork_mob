@@ -97,3 +97,15 @@ async def process_due(
             logger.warning("push fallback email %s: %s", key, exc)
             skipped += 1
     return {"due": len(due), "sent": sent, "skipped": skipped}
+
+
+async def cancel_for_notification(redis, *, user_id: int, notif_id: int) -> bool:
+    """Отменить отложенный email-fallback после открытия push в приложении."""
+    key = f"{user_id}:{notif_id}"
+    try:
+        await redis.zrem(DUE_ZSET, key)
+        await redis.hdel(ITEM_HASH, key)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("push fallback cancel %s: %s", key, exc)
+        return False

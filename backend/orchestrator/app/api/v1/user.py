@@ -622,6 +622,16 @@ async def notification_mark_read(
     ok = await inbox_svc.mark_read(db, user.id, notification_id)
     if not ok:
         raise HTTPException(404, "Уведомление не найдено")
+    try:
+        from app.core.redis import get_redis
+        from app.services import push_fallback
+
+        redis = await get_redis()
+        await push_fallback.cancel_for_notification(
+            redis, user_id=user.id, notif_id=notification_id
+        )
+    except Exception:
+        pass
     await db.commit()
     return {"ok": True}
 

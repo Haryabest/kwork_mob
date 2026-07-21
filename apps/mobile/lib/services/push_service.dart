@@ -12,6 +12,7 @@ import 'package:kwork_mobile/core/deep_link_routes.dart';
 import 'package:kwork_mobile/core/push_route.dart';
 import 'package:kwork_mobile/firebase_options.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
+import 'package:kwork_mobile/services/offline_sync_service.dart';
 import 'package:kwork_mobile/services/push_deep_link.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -152,6 +153,24 @@ class PushService {
       bodyKey: data['body_key']?.toString() ?? data['bodyKey']?.toString(),
       id: msg.messageId,
     );
+    await _acknowledgePush(data);
+  }
+
+  /// Отметить push открытым → отмена email-fallback §3.4.3.
+  Future<void> _acknowledgePush(Map<String, dynamic> data) async {
+    final raw = data['notification_id']?.toString();
+    final notifId = int.tryParse(raw ?? '');
+    if (notifId == null) return;
+    try {
+      await _api.markNotificationRead(notifId);
+      await OfflineSyncService.instance.flush(_api);
+    } catch (e) {
+      if (isNetworkError(e)) {
+        await OfflineSyncService.instance.queueNotificationRead(notifId);
+      } else {
+        debugPrint('push ack failed: $e');
+      }
+    }
   }
 
   Future<void> _handleExternalUri(Uri uri) async {
@@ -165,6 +184,7 @@ class PushService {
     bool fromForeground = false,
     String? title,
   }) async {
+    await _acknowledgePush(data);
     final route = routeFromPushData(data);
     if (route == null) {
       if (fromForeground) debugPrint('FCM data без маршрута: $data');
