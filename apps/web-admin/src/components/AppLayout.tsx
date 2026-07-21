@@ -40,6 +40,7 @@ import {
   IconHistory,
   IconShieldCheck,
   IconScan,
+  IconActivity,
 } from '@tabler/icons-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -52,6 +53,7 @@ const NAV: {
   icon: typeof IconChartBar;
 }[] = [
   { path: '/', label: 'Дашборд', roles: ['admin'], icon: IconChartBar },
+  { path: '/ops', label: 'Ops / DoD', roles: ['admin'], icon: IconActivity },
   { path: '/workers', label: 'Воркеры', roles: ['admin'], icon: IconServer },
   { path: '/soft-launch', label: 'Soft launch', roles: ['admin'], icon: IconRocket },
   { path: '/maintenance', label: 'Обслуживание', roles: ['admin'], icon: IconTool },
@@ -76,6 +78,7 @@ const NAV: {
   { path: '/legal', label: 'Юр. документы', roles: ['admin'], icon: IconScale },
   { path: '/settings', label: 'Настройки', roles: ['admin'], icon: IconSettings },
   { path: '/logs', label: 'Логи', roles: ['admin'], icon: IconFileText },
+  { path: '/user-events', label: 'User events', roles: ['admin'], icon: IconHistory },
   { path: '/alert-log', label: 'Alert log', roles: ['admin'], icon: IconBell },
   { path: '/storage', label: 'Хранилище', roles: ['admin'], icon: IconServer },
   { path: '/support/tickets', label: 'Обращения', roles: ['admin', 'support_agent'], icon: IconMessages },

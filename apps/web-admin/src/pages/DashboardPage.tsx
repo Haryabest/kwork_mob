@@ -144,6 +144,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [queueHealth, setQueueHealth] = useState<{
+    pg_queued: number;
+    redis: { normal: number; high: number };
+  } | null>(null);
 
   const funnelParams = useCallback(() => {
     return {
@@ -171,8 +175,13 @@ export default function DashboardPage() {
 
   const load = useCallback(async () => {
     try {
-      const { data: dash } = await api.get<Dashboard>('/admin/metrics/dashboard');
+      const [dashRes, queueRes] = await Promise.all([
+        api.get<Dashboard>('/admin/metrics/dashboard'),
+        api.get<{ pg_queued: number; redis: { normal: number; high: number } }>('/admin/queue/stats'),
+      ]);
+      const dash = dashRes.data;
       setData(dash);
+      setQueueHealth(queueRes.data);
       if (dash.publication_funnel?.funnel) {
         setPubFunnel(dash.publication_funnel as PublicationFunnel);
       } else {
@@ -207,6 +216,8 @@ export default function DashboardPage() {
   const ops = data?.ops;
   const fin = data?.finance;
   const share45 = Math.round((data?.quality.rating_share_4_5 ?? 0) * 100);
+  const redisTotal = (queueHealth?.redis.normal ?? 0) + (queueHealth?.redis.high ?? 0);
+  const pgSynced = queueHealth ? queueHealth.pg_queued === redisTotal : false;
 
   return (
     <div className="vz-page">
@@ -218,6 +229,12 @@ export default function DashboardPage() {
           </Text>
         </div>
         <Group>
+          <Badge variant="light" color={queueHealth ? 'teal' : 'gray'} radius="sm">
+            Redis OK
+          </Badge>
+          <Badge variant="light" color={pgSynced ? 'teal' : 'orange'} radius="sm">
+            PG {pgSynced ? 'актуальна' : 'расхождение'}
+          </Badge>
           <Badge variant="light" color={live ? 'teal' : 'gray'} radius="sm">
             {live ? 'WS live' : 'WS offline'}
           </Badge>

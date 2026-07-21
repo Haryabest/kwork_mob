@@ -45,6 +45,9 @@ export default function MarketplacePage() {
   const [clientId, setClientId] = useState('');
   const [companyId, setCompanyId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploadModel, setUploadModel] = useState('');
+  const [uploadSku, setUploadSku] = useState('');
+  const [uploadMp, setUploadMp] = useState<string | null>('wb');
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +83,28 @@ export default function MarketplacePage() {
       });
       setApiKey('');
       notifications.show({ color: 'teal', message: 'Credentials сохранены' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function manualUpload() {
+    if (!uploadModel.trim() || !uploadSku.trim() || !uploadMp) {
+      return notifications.show({ color: 'red', message: 'model_uuid и SKU обязательны' });
+    }
+    setBusy(true);
+    try {
+      await api.post('/admin/marketplace/upload', {
+        model_uuid: uploadModel.trim(),
+        marketplace: uploadMp,
+        sku: uploadSku.trim(),
+      });
+      notifications.show({ color: 'teal', message: 'Upload запущен' });
+      setUploadModel('');
+      setUploadSku('');
       await load();
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
@@ -176,6 +201,32 @@ export default function MarketplacePage() {
             </Table.Tbody>
           </Table>
         </div>
+      </div>
+
+      <div className="vz-surface" style={{ marginTop: '1.5rem' }}>
+        <Text fw={600} mb="md">
+          Ручной upload §7.6
+        </Text>
+        <Stack maw={480}>
+          <TextInput
+            label="Model UUID"
+            value={uploadModel}
+            onChange={(e) => setUploadModel(e.currentTarget.value)}
+          />
+          <TextInput label="SKU" value={uploadSku} onChange={(e) => setUploadSku(e.currentTarget.value)} />
+          <Select
+            label="Маркетплейс"
+            data={[
+              { value: 'wb', label: 'Wildberries' },
+              { value: 'ozon', label: 'Ozon' },
+            ]}
+            value={uploadMp}
+            onChange={setUploadMp}
+          />
+          <Button loading={busy} onClick={() => void manualUpload()}>
+            Upload
+          </Button>
+        </Stack>
       </div>
 
       <div className="vz-surface" style={{ marginTop: '1.5rem' }}>

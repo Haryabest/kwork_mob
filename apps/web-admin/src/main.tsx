@@ -39,6 +39,8 @@ import GrafanaPage from './pages/GrafanaPage';
 import AuditExportPage from './pages/AuditExportPage';
 import B2bApiUsagePage from './pages/B2bApiUsagePage';
 import SegmentationPage from './pages/SegmentationPage';
+import OpsPage from './pages/OpsPage';
+import UserEventsPage from './pages/UserEventsPage';
 import TicketsPage from './pages/support/TicketsPage';
 import TicketDetailPage from './pages/support/TicketDetailPage';
 import FaqEditorPage from './pages/support/FaqEditorPage';
@@ -71,6 +73,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route path="/" element={<DashboardPage />} />
+                <Route path="/ops" element={<OpsPage />} />
                 <Route path="/workers" element={<WorkersPage />} />
                 <Route path="/soft-launch" element={<SoftLaunchPage />} />
                 <Route path="/maintenance" element={<MaintenancePage />} />
@@ -97,6 +100,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 <Route path="/legal" element={<LegalPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/logs" element={<LogsPage />} />
+                <Route path="/user-events" element={<UserEventsPage />} />
                 <Route path="/alert-log" element={<AlertLogPage />} />
                 <Route path="/storage" element={<StoragePage />} />
                 <Route path="/support/tickets" element={<TicketsPage />} />
