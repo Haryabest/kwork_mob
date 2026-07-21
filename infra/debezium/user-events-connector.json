@@ -1,0 +1,27 @@
+{
+  "name": "pg-user-events-to-ch",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "debezium",
+    "database.password": "${DEBEZIUM_DB_PASSWORD}",
+    "database.dbname": "kwork",
+    "database.server.name": "kwork_pg",
+    "plugin.name": "pgoutput",
+    "publication.name": "dbz_user_events",
+    "slot.name": "dbz_user_events",
+    "table.include.list": "public.user_events,public.orders,public.models_3d",
+    "topic.prefix": "kwork",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+    "transforms": "route",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "kwork\\.public\\.(.*)",
+    "transforms.route.replacement": "ch.$1",
+    "snapshot.mode": "initial",
+    "heartbeat.interval.ms": "10000"
+  }
+}

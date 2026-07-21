@@ -186,18 +186,19 @@ def process_one(
     img = Image.open(src)
     methods: list[tuple[str, tuple]] = []
 
-    rem = _rembg_remove(img)
-    if rem:
-        methods.append(("rembg", rem))
+    # §6.1.1: DeepLab primary, rembg fallback
     dl = _deeplab_remove(img)
     if dl:
         methods.append(("deeplab", dl))
+    rem = _rembg_remove(img)
+    if rem:
+        methods.append(("rembg", rem))
 
     # SAM: если DeepLab/rembg слабые по confidence — обязательный fallback §6.1.1
     need_sam = True
-    if rem and rem[2] >= conf_thr and min_ratio <= rem[1] <= max_ratio:
-        need_sam = False
     if dl and dl[2] >= conf_thr and min_ratio <= dl[1] <= max_ratio:
+        need_sam = False
+    if rem and rem[2] >= conf_thr and min_ratio <= rem[1] <= max_ratio:
         need_sam = False
     if need_sam:
         seed = None

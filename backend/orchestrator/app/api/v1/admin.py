@@ -1620,6 +1620,30 @@ async def soft_launch_kpi_export(
     )
 
 
+@router.get("/dod-metrics")
+async def dod_metrics(
+    days: int = Query(7, ge=1, le=90),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """§1.4 DoD metrics dashboard (staging/prod)."""
+    from app.services import dod_metrics as dm
+
+    return await dm.compute_dod_metrics(db, days=days)
+
+
+@router.post("/load-test/queue")
+async def load_test_queue(
+    count: int = Query(100, ge=1, le=500),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Enqueue N synthetic tasks for queue load test (no GPU)."""
+    from app.services import load_test as lt
+
+    return await lt.run_queue_load_test(db, count=count)
+
+
 @router.get("/write-activity")
 async def write_activity_status(
     _: dict = Depends(require_admin),

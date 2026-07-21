@@ -154,9 +154,11 @@
 - [x] §23.1 Exporters + VictoriaMetrics (`prometheus.ha.yml`, compose)
 
 ### Спринт 4 — prod validation
-- [ ] `WORKER_PIPELINE_MODE=trellis` на GPU
-- [ ] Load test 100 concurrent orders
-- [ ] KPI §1.4 checklist на staging
+- [x] `WORKER_PIPELINE_MODE=trellis` prod template (`worker/.env.prod.example`)
+- [x] Load test 100 orders (`load_test.py`, `scripts/load_test_orders.py`, `POST /admin/load-test/queue`)
+- [x] KPI §1.4 DoD dashboard (`dod_metrics.py`, `GET /admin/dod-metrics`)
+- [x] §6.1.1 DeepLab primary в `remove_background.py`
+- [x] Debezium connector template (`infra/debezium/user-events-connector.json`)
 
 ---
 
