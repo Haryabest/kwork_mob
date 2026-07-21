@@ -90,7 +90,34 @@ def _html_has_3d(marketplace: str, html: str) -> bool:
 async def verify_link(db: AsyncSession, link: ModelPublicationLink) -> ModelPublicationLink:
     link.check_attempts = int(link.check_attempts or 0) + 1
     link.last_check_at = datetime.now(timezone.utc)
+    model = await db.scalar(select(Model3D).where(Model3D.uuid == link.model_uuid))
+    method = "parser"
     try:
+        api_ok = False
+        if model:
+            from app.services import publication_api_verify as api_verify
+
+            api_ok, method = await api_verify.try_api_verify(db, link=link, model=model)
+        if api_ok:
+            link.status = "verified"
+            link.verified_at = datetime.now(timezone.utc)
+            link.error_message = None
+            if model:
+                model.publish_status = f"verified_{link.marketplace}"
+                await award_bonus(db, model=model, user_id=link.created_by_user_id or model.user_id)
+                from app.services.publication_funnel import emit_funnel_ch_event
+
+                emit_funnel_ch_event(
+                    model_uuid=model.uuid,
+                    event_type="verified",
+                    user_id=link.created_by_user_id or model.user_id,
+                    company_id=model.company_id,
+                    marketplace=link.marketplace,
+                )
+            await db.flush()
+            link.verification_method = method  # type: ignore[attr-defined]
+            return link
+
         async with httpx.AsyncClient(
             timeout=20.0,
             follow_redirects=True,
@@ -119,6 +146,7 @@ async def verify_link(db: AsyncSession, link: ModelPublicationLink) -> ModelPubl
         else:
             link.status = "failed"
             link.error_message = f"HTTP {resp.status_code}, 3D markers not found"
+        link.verification_method = method if ok else "parser"  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001
         link.status = "failed"
         link.error_message = str(exc)[:300]
@@ -237,6 +265,7 @@ async def list_links(db: AsyncSession, model_uuid: str) -> list[dict]:
             "verified_at": r.verified_at.isoformat() if r.verified_at else None,
             "check_attempts": r.check_attempts,
             "error_message": r.error_message,
+            "verification_method": getattr(r, "verification_method", None),
         }
         for r in rows
     ]

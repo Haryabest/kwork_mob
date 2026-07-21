@@ -954,7 +954,17 @@ async def post_analytics_events(
 
     accepted = await ai.persist_events(db, user, body.events)
     await db.commit()
-    return {"accepted": accepted, "user_id": user.id}
+    try:
+        from app.services.analytics_query import clickhouse_health
+
+        ch_health = clickhouse_health()
+    except Exception:
+        ch_health = {"ok": False}
+    return {
+        "accepted": accepted,
+        "user_id": user.id,
+        "clickhouse_ok": bool(ch_health.get("ok")),
+    }
 
 
 @router.get("/campaign_banners")

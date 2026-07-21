@@ -197,12 +197,48 @@ async def analytics_sync_status(db: AsyncSession) -> dict:
     pending = await count_pending(db)
     alert_threshold = int(await threshold_async("analytics_ch_sync_pending_max", 1000))
     alert = pending > alert_threshold
+    ch = clickhouse_health()
     return {
         "pending_ch_sync": pending,
         "alert": alert,
         "alert_threshold": alert_threshold,
+        "clickhouse": ch,
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def clickhouse_health() -> dict:
+    client = _ch()
+    if client is None:
+        return {"ok": False, "source": "unavailable"}
+    try:
+        client.query("SELECT 1")
+        rows = client.query(
+            """
+            SELECT count() FROM mobile_analytics_events
+            WHERE event_ts >= now() - INTERVAL 1 DAY
+            """
+        ).result_rows or []
+        events_24h = int(rows[0][0]) if rows else 0
+        funnel_rows = client.query(
+            """
+            SELECT event_type, count() FROM publication_funnel_events
+            WHERE timestamp >= now() - INTERVAL 30 DAY
+            GROUP BY event_type
+            ORDER BY count() DESC
+            LIMIT 20
+            """
+        ).result_rows or []
+        funnel = {str(r[0]): int(r[1]) for r in funnel_rows if r[0]}
+        return {
+            "ok": True,
+            "source": "clickhouse",
+            "events_24h": events_24h,
+            "publication_funnel_30d": funnel,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("clickhouse health failed: %s", exc)
+        return {"ok": False, "source": "error", "detail": str(exc)[:200]}
 
 
 def _campaign_banner_ctr_ch(*, days: int) -> dict[int, dict] | None:

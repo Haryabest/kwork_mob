@@ -48,6 +48,28 @@ async def worker_event(body: WorkerEvent, _: None = Depends(_verify_worker_token
     task_id = body.task_id
     worker_id = body.worker_id or "unknown"
 
+    if body.type == "already_processed":
+        task_id = body.task_id
+        result_url = str(body.result_url or body.glb_url or "")
+        cached = None
+        async with async_session() as db:
+            from app.services import task_idempotency as tidem
+
+            cached = await tidem.completed_result(db, task_id)
+            if not cached and result_url:
+                await mark_completed(db, task_id=task_id, glb_url=result_url)
+            elif cached:
+                await tidem.skip_if_completed(db, task_id)
+            await db.commit()
+        await release_task_lock(task_id)
+        await worker_hub.set_idle(worker_id)
+        return {
+            "ok": True,
+            "status": "already_processed",
+            "task_id": task_id,
+            "result_url": (cached or {}).get("result_url") if cached else result_url,
+        }
+
     if body.type == "task_completed":
         glb_url = str(body.result_url or body.glb_url or "")
         if not glb_url:

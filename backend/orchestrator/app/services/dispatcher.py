@@ -64,6 +64,13 @@ async def _assign_once() -> bool:
         order = await db.get(Order, item.get("order_id") or (row.order_id if row else 0))
         if not row or row.status not in ("queued", "failed"):
             return True
+        from app.services import task_idempotency as tidem
+
+        cached = await tidem.skip_if_completed(db, task_id)
+        if cached:
+            await db.commit()
+            logger.info("Skip dispatch %s — already completed", task_id)
+            return True
         if not order or order.status in ("cancelled", "completed", "failed", "blocked_nsfw"):
             row.status = "cancelled" if order and order.status == "cancelled" else row.status
             await db.commit()

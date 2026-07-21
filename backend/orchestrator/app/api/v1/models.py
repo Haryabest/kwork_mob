@@ -614,6 +614,7 @@ async def verify_publication_link(
         "status": link.status,
         "error_message": link.error_message,
         "verified_at": link.verified_at.isoformat() if link.verified_at else None,
+        "verification_method": getattr(link, "verification_method", None),
     }
 
 
