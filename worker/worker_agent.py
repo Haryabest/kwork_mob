@@ -114,6 +114,15 @@ def build_pipeline(upsell_options: list | None) -> list[str]:
     return steps
 
 
+def _texture_size_for_meta(meta: dict) -> int:
+    """§5.6 / §6: корп. / large tier → 2048, B2C → 1024."""
+    company_id = int(meta.get("company_id") or 0)
+    tier = str(meta.get("tier") or "").lower()
+    if company_id > 0 or tier == "large":
+        return 2048
+    return 1024
+
+
 class WorkerAgent:
     def __init__(self) -> None:
         self.worker_id = WORKER_ID
@@ -160,6 +169,14 @@ class WorkerAgent:
         owner = self.redis_client.get(f"task:{task_id}")
         if owner == self.worker_id:
             self.redis_client.delete(f"task:{task_id}")
+
+    def _existing_model_key(self, task_id: str, bucket: str) -> str | None:
+        key = f"models/{task_id}/model.glb"
+        try:
+            self.minio.head_object(Bucket=bucket, Key=key)
+            return key
+        except Exception:  # noqa: BLE001
+            return None
 
     def get_gpu_metrics(self) -> dict:
         try:
@@ -311,6 +328,8 @@ class WorkerAgent:
                 logger.info("[%s] %s", name, line)
         rc = process.wait()
         if rc != 0:
+            if name == "remove_background.py" and rc == 3:
+                raise RuntimeError(f"failed_segmentation: {name} failed ({rc})")
             raise RuntimeError(f"{name} failed ({rc})")
 
     def run_script(self, name: str, task_dir: Path) -> None:
@@ -331,6 +350,7 @@ class WorkerAgent:
                 env["TASK_USER_ID"] = str(meta.get("user_id") or 0)
                 env["TASK_ORDER_ID"] = str(meta.get("order_id") or 0)
                 env["TASK_COMPANY_ID"] = str(meta.get("company_id") or 0)
+                env["TRELLIS2_TEXTURE_SIZE"] = str(_texture_size_for_meta(meta))
             except Exception:  # noqa: BLE001
                 pass
         t0 = time.monotonic()
@@ -349,6 +369,8 @@ class WorkerAgent:
                 logger.info("[%s] %s", name, result.stdout.strip()[-500:])
             if result.returncode != 0:
                 err = (result.stderr or result.stdout or "script failed")[-1000:]
+                if name == "remove_background.py" and result.returncode == 3:
+                    raise RuntimeError(f"failed_segmentation: {name} failed ({result.returncode}): {err}")
                 raise RuntimeError(f"{name} failed ({result.returncode}): {err}")
         logger.info("Finished step %s in %.1fs", name, time.monotonic() - t0)
 
@@ -393,6 +415,26 @@ class WorkerAgent:
         self.current_task = task_id
         self.status = "processing"
         self._stop_task = False
+        models_bucket = payload.get("models_bucket") or "models"
+        cached_url = payload.get("cached_result_url")
+        if not cached_url:
+            existing_key = await asyncio.to_thread(self._existing_model_key, task_id, models_bucket)
+            if existing_key:
+                cached_url = f"s3://{models_bucket}/{existing_key}"
+        if cached_url:
+            await self._notify_event(
+                {
+                    "type": "already_processed",
+                    "task_id": task_id,
+                    "result_url": cached_url,
+                    "glb_url": cached_url,
+                }
+            )
+            self.release_lock(task_id)
+            self.current_task = None
+            self.status = "idle"
+            return
+
         task_dir = self.temp_dir / task_id
         checkpoint_path = payload.get("checkpoint_path")
         resume = bool(checkpoint_path) or self._remote_checkpoint_exists(task_id)
@@ -594,6 +636,9 @@ class WorkerAgent:
             shutil.rmtree(task_dir, ignore_errors=True)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Task %s failed", task_id)
+            err = str(exc)
+            if "failed_segmentation" not in err and "remove_background.py failed (3)" in err:
+                err = f"failed_segmentation: {err}"
             try:
                 cp = await asyncio.to_thread(self.save_checkpoint, task_dir, task_id, completed)
             except Exception:  # noqa: BLE001
@@ -602,7 +647,7 @@ class WorkerAgent:
                 {
                     "type": "task_failed",
                     "task_id": task_id,
-                    "error": str(exc),
+                    "error": err,
                     "checkpoint_path": cp,
                     "device_model": payload.get("device_model"),
                     "os_version": payload.get("os_version"),

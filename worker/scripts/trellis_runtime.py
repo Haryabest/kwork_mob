@@ -146,7 +146,23 @@ def get_pipeline():
         raise ImportError(f"TRELLIS v1 недоступен: {exc}") from exc
 
 
-def _export_trellis2_mesh(mesh, output: Path) -> None:
+def _texture_size_for_task(task_dir: Path) -> int:
+    meta_path = task_dir / "task_meta.json"
+    if meta_path.exists():
+        try:
+            import json
+
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            company_id = int(meta.get("company_id") or 0)
+            tier = str(meta.get("tier") or "").lower()
+            if company_id > 0 or tier == "large":
+                return 2048
+        except Exception:  # noqa: BLE001
+            pass
+    return int(os.getenv("TRELLIS2_TEXTURE_SIZE", "1024"))
+
+
+def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -> None:
     import o_voxel  # type: ignore
 
     if hasattr(mesh, "simplify"):
@@ -156,7 +172,7 @@ def _export_trellis2_mesh(mesh, output: Path) -> None:
             logger.warning("TRELLIS.2 mesh.simplify skipped: %s", exc)
 
     decimation = int(os.getenv("TRELLIS2_DECIMATION", "300000"))
-    texture_size = int(os.getenv("TRELLIS2_TEXTURE_SIZE", "2048"))
+    texture_size = _texture_size_for_task(task_dir) if task_dir else int(os.getenv("TRELLIS2_TEXTURE_SIZE", "1024"))
 
     glb = o_voxel.postprocess.to_glb(
         vertices=mesh.vertices,
@@ -222,7 +238,7 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
     if not meshes:
         raise RuntimeError("TRELLIS.2 вернул пустой результат")
 
-    _export_trellis2_mesh(meshes[0], output)
+    _export_trellis2_mesh(meshes[0], output, task_dir=task_dir)
     if not output.exists() or output.stat().st_size < 1000:
         raise RuntimeError(f"TRELLIS.2 GLB слишком мал: {output}")
     logger.info("TRELLIS.2 → %s (%s bytes)", output, output.stat().st_size)

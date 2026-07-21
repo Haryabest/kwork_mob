@@ -29,21 +29,30 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
-@pytest_asyncio.fixture(scope="session")
-async def _schema():
-    """Схема БД в том же event loop, что и async-тесты (asyncpg не переносится между loop)."""
+def _prepare_schema_sync() -> bool:
+    """Создать схему sync-драйвером — не трогаем async engine/event loop pytest-asyncio."""
     import app.main  # noqa: F401 — регистрирует все ORM-модели в Base.metadata
-    from sqlalchemy import text
+    from sqlalchemy import create_engine, text
 
-    from app.core.database import Base, engine
+    from app.core.config import settings
+    from app.core.database import Base
 
+    sync_url = settings.database_url.replace("postgresql+asyncpg", "postgresql+psycopg2", 1)
     try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
+        engine = create_engine(sync_url, pool_pre_ping=True)
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        Base.metadata.create_all(engine)
+        engine.dispose()
+        return True
     except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def _schema() -> None:
+    if not _prepare_schema_sync():
         pytest.skip("Postgres недоступен — интеграционные тесты пропущены")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
     yield
 
 
@@ -59,11 +68,15 @@ async def db(_schema):
 @pytest_asyncio.fixture
 async def client(_schema):
     """HTTP-клиент поверх ASGI-приложения с готовой схемой БД."""
+    import app.core.redis as redis_mod
+
+    redis_mod.redis_client = None
     from app.main import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+    redis_mod.redis_client = None
 
 
 @pytest_asyncio.fixture

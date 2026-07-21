@@ -61,6 +61,10 @@ def main() -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"photos lifecycle failed: {exc}", file=sys.stderr)
     try:
+        put_lifecycle("backups", PHOTOS_DAYS, prefix="backups/")
+    except Exception as exc:  # noqa: BLE001
+        print(f"backups user lifecycle failed: {exc}", file=sys.stderr)
+    try:
         put_lifecycle("backups", BACKUPS_DAYS, prefix="postgres/")
     except Exception as exc:  # noqa: BLE001
         print(f"backups lifecycle failed: {exc}", file=sys.stderr)

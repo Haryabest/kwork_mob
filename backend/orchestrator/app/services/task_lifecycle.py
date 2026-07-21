@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any
 
 from sqlalchemy import select
@@ -150,7 +149,7 @@ async def mark_completed(
     else:
         from app.services.model_storage import default_expires_at
 
-        model_uuid = str(uuid.uuid4())
+        model_uuid = task_id
         db.add(
             Model3D(
                 uuid=model_uuid,

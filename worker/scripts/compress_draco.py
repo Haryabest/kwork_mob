@@ -99,6 +99,27 @@ def _try_trimesh_simplify(src: Path, dst: Path, face_count: int) -> bool:
         return False
 
 
+def _try_gltf_webp(src: Path, dst: Path) -> bool:
+    cmd = shutil.which("gltf-transform")
+    if not cmd:
+        return False
+    try:
+        tmp = dst.with_suffix(".webp.glb")
+        r = subprocess.run(
+            [cmd, "webp", str(src), str(tmp)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if r.returncode != 0 or not tmp.exists():
+            return False
+        shutil.move(str(tmp), str(dst))
+        return True
+    except Exception as exc:  # noqa: BLE001
+        print(f"[compress_draco] webp failed: {exc}")
+        return False
+
+
 def main(task_dir: str) -> None:
     root = Path(task_dir)
     marketplace = _load_marketplace(root)
@@ -117,6 +138,14 @@ def main(task_dir: str) -> None:
         return
 
     current = src
+    if _try_gltf_webp(current, dst):
+        size = dst.stat().st_size
+        print(f"[compress_draco] webp textures → {size} bytes ({marketplace})")
+        if size <= max_limit:
+            _write_result(root, dst, marketplace)
+            return
+        current = dst
+
     for quantize in (14, 12, 10, 8):
         if _try_gltf_transform(current, dst, quantize):
             size = dst.stat().st_size

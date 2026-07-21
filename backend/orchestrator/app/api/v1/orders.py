@@ -280,6 +280,15 @@ async def create_order(
     integrity = compute_and_store_source_zip(
         body.task_uuid, client_sha256=body.zip_sha256, decryption_key=enc_key
     )
+    from app.services.source_insurance import store_insurance_copy
+
+    store_insurance_copy(
+        task_uuid=body.task_uuid,
+        user_id=user.id,
+        company_id=body.company_id,
+        zip_key=integrity["zip_key"],
+        meta_key=integrity.get("meta_key"),
+    )
 
     # §10.8: NSFW до списания и до очереди
     nsfw = await nsfw_service.check_task_photos(body.task_uuid, decryption_key=enc_key)

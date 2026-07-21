@@ -105,6 +105,10 @@ def _geometry_score(model_path: Path) -> tuple[float, dict]:
     if faces == 0 or vertices == 0:
         return 0.0, {**meta, "reason": "empty_geometry"}
     if faces >= MIN_FACES and vertices >= MIN_VERTICES:
+        watertight = all(getattr(g, "is_watertight", True) for g in geometries if hasattr(g, "faces"))
+        meta["watertight"] = watertight
+        if not watertight:
+            return 0.65, {**meta, "reason": "not_watertight"}
         return 1.0, meta
     # есть геометрия, но подозрительно мало полигонов
     return 0.5, {**meta, "reason": "low_poly"}
