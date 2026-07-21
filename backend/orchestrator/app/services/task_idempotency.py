@@ -28,13 +28,16 @@ def _parse_s3(url: str | None) -> tuple[str, str] | None:
     return None
 
 
-def presign_model_glb(model: Model3D, *, expires: int = 3600) -> str | None:
+def presign_model_glb(model: Model3D, *, expires: int | None = None) -> str | None:
+    from app.core.config import settings
+
+    ttl = expires if expires is not None else int(settings.MODEL_PRESIGN_TTL_SECONDS or 1800)
     parsed = _parse_s3(model.glb_url)
     if not parsed:
         return model.glb_url if model.glb_url and model.glb_url.startswith("http") else None
     bucket, key = parsed
     try:
-        return minio_service.generate_presigned_url(bucket, key, expires=expires)
+        return minio_service.generate_presigned_url(bucket, key, expires=ttl)
     except Exception as exc:  # noqa: BLE001
         logger.warning("presign glb %s: %s", model.uuid, exc)
         return None

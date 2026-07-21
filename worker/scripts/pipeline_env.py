@@ -26,7 +26,15 @@ def is_production_trellis() -> bool:
 
 
 def allow_stub_fallback() -> bool:
+    if os.getenv("ENVIRONMENT", "").strip().lower() == "production":
+        return False
     return os.getenv("TRELLIS_ALLOW_STUB_FALLBACK", "0").strip() in ("1", "true", "yes")
+
+
+def assert_production_pipeline() -> None:
+    """§6.6: stub pipeline запрещён в production."""
+    if os.getenv("ENVIRONMENT", "").strip().lower() == "production" and is_stub_pipeline():
+        raise RuntimeError("WORKER_PIPELINE_MODE=stub запрещён в production")
 
 
 def subprocess_stream_enabled() -> bool:

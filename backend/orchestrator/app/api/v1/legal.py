@@ -74,6 +74,18 @@ async def pending_consents(user: User = Depends(get_current_db_user), db: AsyncS
     return {"pending": pending}
 
 
+@router.get("/publish-guide/{marketplace}")
+async def publish_guide(
+    marketplace: str,
+    company_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Инструкции публикации §7.4 + корп. комментарий §7.5."""
+    from app.services.publish_guide import get_publish_guide
+
+    return await get_publish_guide(db, marketplace=marketplace, company_id=company_id)
+
+
 @router.get("/{slug}")
 async def get_document(slug: str, db: AsyncSession = Depends(get_db)):
     doc = await db.scalar(

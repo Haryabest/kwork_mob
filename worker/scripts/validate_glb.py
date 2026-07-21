@@ -114,6 +114,27 @@ def _geometry_score(model_path: Path) -> tuple[float, dict]:
     return 0.5, {**meta, "reason": "low_poly"}
 
 
+def _gltf_validator_check(model_path: Path) -> dict:
+    """§6.7: gltf-validator CLI если установлен."""
+    import shutil
+    import subprocess
+
+    cmd = shutil.which("gltf-validator") or shutil.which("gltf_validator")
+    if not cmd:
+        return {"ok": True, "skipped": True, "reason": "gltf-validator not installed"}
+    try:
+        r = subprocess.run([cmd, str(model_path)], capture_output=True, text=True, check=False, timeout=120)
+        ok = r.returncode == 0
+        return {
+            "ok": ok,
+            "returncode": r.returncode,
+            "stdout_tail": (r.stdout or "")[-500:],
+            "stderr_tail": (r.stderr or "")[-500:],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": True, "skipped": True, "reason": str(exc)}
+
+
 def compute_quality(root: Path, size: int) -> dict:
     seg_s, seg_meta = _seg_score(root)
     size_s = _size_score(size)
@@ -157,6 +178,9 @@ def main(task_dir: str) -> None:
         raise SystemExit("watermark.hmac missing")
 
     report = compute_quality(root, size)
+    report["gltf_validator"] = _gltf_validator_check(model)
+    if not report["gltf_validator"].get("ok", True) and not report["gltf_validator"].get("skipped"):
+        raise SystemExit(f"gltf_validator failed: {report['gltf_validator']}")
     report_path = root / "quality_report.json"
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(

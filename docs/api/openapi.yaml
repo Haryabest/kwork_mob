@@ -9301,6 +9301,40 @@ paths:
       summary: Pending Consents
       tags:
       - Юридические документы
+  /api/v1/legal/publish-guide/{marketplace}:
+    get:
+      description: Инструкции публикации §7.4 + корп. комментарий §7.5.
+      operationId: publish_guide_api_v1_legal_publish_guide__marketplace__get
+      parameters:
+      - in: path
+        name: marketplace
+        required: true
+        schema:
+          title: Marketplace
+          type: string
+      - in: query
+        name: company_id
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Company Id
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Publish Guide
+      tags:
+      - Юридические документы
   /api/v1/legal/{slug}:
     get:
       operationId: get_document_api_v1_legal__slug__get

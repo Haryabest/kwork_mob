@@ -1,11 +1,4 @@
-"""Общие фикстуры pytest: тестовая БД (Postgres) и Redis (§1.4 / Phase P).
-
-Фикстуры устроены так, чтобы:
-- unit/slice-тесты работали без внешних сервисов;
-- интеграционные тесты (`@pytest.mark.integration`) получали готовую схему БД
-  и живой Redis, а при их недоступности — аккуратно пропускались (skip),
-  что позволяет запускать набор и локально, и в CI (docker services).
-"""
+"""Общие фикстуры pytest: тестовая БД (Postgres) и Redis (§1.4 / Phase P)."""
 
 from __future__ import annotations
 
@@ -30,8 +23,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def _prepare_schema_sync() -> bool:
-    """Создать схему sync-драйвером — не трогаем async engine/event loop pytest-asyncio."""
-    import app.main  # noqa: F401 — регистрирует все ORM-модели в Base.metadata
+    """Схема через sync psycopg2 — не трогаем async engine до pytest event loop."""
+    import app.main  # noqa: F401
     from sqlalchemy import create_engine, text
 
     from app.core.config import settings
@@ -56,17 +49,40 @@ def _schema() -> None:
     yield
 
 
-@pytest_asyncio.fixture
-async def db(_schema):
-    """Сессия SQLAlchemy на тестовой БД."""
-    from app.core.database import async_session
+@pytest_asyncio.fixture(scope="session")
+async def _test_engine(_schema):
+    """NullPool + один event loop на сессию — asyncpg не переиспользует чужие loop."""
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
 
-    async with async_session() as session:
+    import app.core.database as db_mod
+    from app.core.config import settings
+
+    prev_engine = db_mod.engine
+    prev_factory = db_mod.async_session
+    engine = create_async_engine(settings.database_url, poolclass=NullPool)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    db_mod.engine = engine
+    db_mod.async_session = factory
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
+        db_mod.engine = prev_engine
+        db_mod.async_session = prev_factory
+
+
+@pytest_asyncio.fixture
+async def db(_test_engine):
+    """Сессия SQLAlchemy на тестовой БД."""
+    import app.core.database as db_mod
+
+    async with db_mod.async_session() as session:
         yield session
 
 
 @pytest_asyncio.fixture
-async def client(_schema):
+async def client(_test_engine):
     """HTTP-клиент поверх ASGI-приложения с готовой схемой БД."""
     import app.core.redis as redis_mod
 
@@ -80,11 +96,10 @@ async def client(_schema):
 
 
 @pytest_asyncio.fixture
-async def redis_client():
+async def redis_client(_test_engine):
     """Живой Redis c очисткой БД до и после теста; skip при недоступности."""
     import app.core.redis as redis_mod
 
-    # Пересоздаём singleton, чтобы клиент привязался к текущему event loop теста.
     redis_mod.redis_client = None
     try:
         redis = await redis_mod.get_redis()

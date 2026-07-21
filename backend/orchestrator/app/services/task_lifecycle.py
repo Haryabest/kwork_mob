@@ -135,6 +135,21 @@ async def mark_completed(
 
     is_import = (row.payload_json or {}).get("pipeline") == "import_validate"
     order.status = "completed"
+    file_digest: str | None = None
+    if glb_url:
+        try:
+            from app.core.config import settings as cfg
+            from app.services.integrity import sha256_bytes
+            from app.services.minio import minio_service
+
+            if glb_url.startswith("s3://"):
+                bucket, _, key = glb_url[5:].partition("/")
+            else:
+                bucket, key = cfg.MINIO_BUCKET_MODELS, glb_url.lstrip("/")
+            if bucket and key:
+                file_digest = sha256_bytes(minio_service.download_bytes(bucket, key))
+        except Exception:  # noqa: BLE001
+            file_digest = None
     existing = await db.scalar(select(Model3D).where(Model3D.order_id == order.id))
     model_uuid: str | None = None
     if existing:
@@ -143,6 +158,8 @@ async def mark_completed(
             existing.usdz_url = usdz_url
         if watermark_hmac:
             existing.watermark_hmac = watermark_hmac
+        if file_digest:
+            existing.file_sha256 = file_digest
         if is_import:
             existing.publish_status = "imported"
         model_uuid = existing.uuid
@@ -159,6 +176,7 @@ async def mark_completed(
                 glb_url=glb_url,
                 usdz_url=usdz_url,
                 watermark_hmac=watermark_hmac,
+                file_sha256=file_digest,
                 publish_status="not_published",
                 source_expires_at=default_expires_at(),
                 display_name=order.model_display_name,

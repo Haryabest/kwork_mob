@@ -8,13 +8,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from glb_stub import write_minimal_glb
-from pipeline_env import allow_stub_fallback, is_production_trellis
+from pipeline_env import allow_stub_fallback, assert_production_pipeline, is_production_trellis
 
 
 def main(task_dir: str) -> None:
     root = Path(task_dir)
     output = root / "raw_mesh.glb"
     mode = os.getenv("WORKER_PIPELINE_MODE", "trellis").lower()
+    assert_production_pipeline()
 
     if mode == "trellis":
         try:

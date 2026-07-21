@@ -166,6 +166,7 @@ class Settings(BaseSettings):
     SHOOT_LINK_PHOTO_TTL_DAYS: int = 7
     # §9.1.2 облачная копия исходников
     SOURCE_PHOTOS_TTL_DAYS: int = 30
+    MODEL_PRESIGN_TTL_SECONDS: int = 1800  # §4.6 / §6.5 — 30 мин для скачивания GLB
     # §23.7 maintenance
     SERVICE_LOG_RETENTION_DAYS: int = 14
     BACKUP_RESTORE_TEST_URL: str = ""

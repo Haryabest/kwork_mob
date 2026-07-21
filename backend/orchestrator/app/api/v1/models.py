@@ -56,7 +56,8 @@ def _parse_s3(url: str | None) -> tuple[str, str] | None:
     return None
 
 
-def _presign_glb(model: Model3D, expires: int = 3600, *, request=None) -> str | None:
+def _presign_glb(model: Model3D, expires: int | None = None, *, request=None) -> str | None:
+    ttl = expires if expires is not None else int(settings.MODEL_PRESIGN_TTL_SECONDS or 1800)
     parsed = _parse_s3(model.glb_url)
     if not parsed:
         return None
@@ -70,7 +71,7 @@ def _presign_glb(model: Model3D, expires: int = 3600, *, request=None) -> str | 
 
         digest = sha256_bytes(minio_service.download_bytes(bucket, key))
         model.file_sha256 = digest
-    return minio_service.generate_presigned_url(bucket, key, expires=expires, method="get_object")
+    return minio_service.generate_presigned_url(bucket, key, expires=ttl, method="get_object")
 
 
 async def _get_owned_model(db: AsyncSession, model_uuid: str, user: User) -> Model3D:
@@ -405,9 +406,10 @@ async def download_model(
         file_format=format,
         marketplace=marketplace,
     )
+    ttl = int(settings.MODEL_PRESIGN_TTL_SECONDS or 1800)
     raw = model.glb_url if format == "glb" else model.usdz_url
     if format == "usdz" and not raw and model.glb_url:
-        url = _presign_glb(model, expires=3600)
+        url = _presign_glb(model)
         if not url:
             raise HTTPException(404, "Файл модели отсутствует")
         await db.commit()
@@ -416,7 +418,7 @@ async def download_model(
             "format": "glb",
             "fallback": True,
             "message": "USDZ ещё не сгенерирован — отдан GLB",
-            "expires_in": 3600,
+            "expires_in": ttl,
             "file_sha256": model.file_sha256,
         }
     parsed = _parse_s3(raw)
@@ -424,7 +426,7 @@ async def download_model(
         raise HTTPException(404, f"Файл {format} отсутствует")
     bucket, key = parsed
     if format == "glb":
-        url = _presign_glb(model, expires=3600)
+        url = _presign_glb(model)
         await db.commit()
         if not url:
             raise HTTPException(404, "GLB отсутствует")
@@ -433,12 +435,16 @@ async def download_model(
             "format": format,
             "bucket": bucket,
             "key": key,
-            "expires_in": 3600,
+            "expires_in": ttl,
             "file_sha256": model.file_sha256,
         }
-    url = minio_service.generate_presigned_url(bucket, key, expires=3600, method="get_object")
+    from app.services.integrity import verify_object_sha256
+
+    if model.file_sha256:
+        verify_object_sha256(bucket, key, model.file_sha256)
+    url = minio_service.generate_presigned_url(bucket, key, expires=ttl, method="get_object")
     await db.commit()
-    return {"download_url": url, "format": format, "bucket": bucket, "key": key, "expires_in": 3600}
+    return {"download_url": url, "format": format, "bucket": bucket, "key": key, "expires_in": ttl}
 
 
 
@@ -538,6 +544,8 @@ async def mark_published(
     db: AsyncSession = Depends(get_db),
 ):
     """Отметка «Я опубликовал» на WB / Ozon (§7)."""
+    from app.services.publish_guide import get_publish_guide
+
     model = await _get_owned_model(db, model_uuid, user)
     await require_company_permission(db, user, model.company_id, "can_mark_published")
     model.publish_status = f"published_{body.marketplace}"
@@ -550,15 +558,13 @@ async def mark_published(
         company_id=model.company_id,
         marketplace=body.marketplace,
     )
+    guide = await get_publish_guide(db, marketplace=body.marketplace, company_id=model.company_id)
     await db.commit()
     return {
         "uuid": model.uuid,
         "publish_status": model.publish_status,
         "marketplace": body.marketplace,
-        "instructions": {
-            "wildberries": "WB → Товары → Карточка → загрузить 3D (USDZ/GLB)",
-            "ozon": "Ozon Seller → Контент → 3D-модель (GLB)",
-        },
+        "instructions": guide,
     }
 
 
