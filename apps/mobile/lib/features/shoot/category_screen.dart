@@ -303,7 +303,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
     final policy = _accessPolicy;
     if (policy == null || !policy.restrictsCategories) return all;
     return Map.fromEntries(
-      all.entries.where((e) => policy.isCategoryAllowed(e.key.api)),
+      all.entries.where((e) => policy.isCategoryAllowed(e.value.api)),
     );
   }
 

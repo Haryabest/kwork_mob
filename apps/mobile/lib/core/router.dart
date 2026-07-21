@@ -270,6 +270,7 @@ GoRouter createRouter({
             path: 'models/:uuid',
             builder: (context, state) => ModelViewerScreen(
               api: api,
+              session: session,
               modelUuid: state.pathParameters['uuid']!,
               model: state.extra is Map
                   ? Map<String, dynamic>.from(state.extra! as Map)

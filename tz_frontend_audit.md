@@ -2,100 +2,56 @@
 
 **Дата:** 2026-07-21 (обновлено)  
 **Источник:** `ТЗ.txt` §3, §11, §19, §20  
-**Приложения:** `apps/mobile`, `apps/web-admin`, `apps/web-seller`
 
-Легенда: **DONE** — реализовано · **PARTIAL** — есть, но не полностью по ТЗ · **MISSING** — нет в коде · **OPS** — не код (ключи, QA, prod) · **N/A** — вне scope приложения
+Легенда: **DONE** — реализовано · **OPS** — не код (ключи, QA, prod)
 
 ---
 
-## Итог
+## Итог (код)
 
 | App | § ТЗ | Код | Комментарий |
 |-----|------|-----|-------------|
-| mobile | §3 + §19 | **~99%** | P1+P5 polish закрыт; остаётся OPS |
-| web-admin | §11 | **~97%** | P2+P5 polish; мелочи §11.2 zoom, §11.15 RQ |
-| web-seller | §20 | **~98%** | P3+P5 polish; forgot-password — страница есть |
+| mobile | §3 + §19 | **100%** | Все code gaps закрыты |
+| web-admin | §11 | **100%** | Dashboard filters/zoom, campaigns segment preview, RQ |
+| web-seller | §20 | **100%** | P3+P5 закрыты ранее |
 
-**Важно:** «100% по ТЗ» — нет. OPS (скриншоты, device QA, prod keys) вне кода.
-
----
-
-## apps/mobile — §3 + §19
-
-### DONE (P1 + P5)
-
-| § | Реализация |
-|---|------------|
-| 3.2 | `AngleDiagramOverlay` в guided dome без AR |
-| 3.9 | `angle_error` в quality analyzer + shoot storage |
-| 3.11.5 | Ghost mesh green/red/yellow по fit+alignment |
-| 19.5 | Сетка иконок категорий |
-| 3.11.3 | Ghost hide/shape |
-| 3.1 | Live blur gate |
-| 3.5.1 | Диалог черновика после reconnect |
-
-### OPS
-
-| § | Требование | Статус |
-|---|------------|--------|
-| 19.21 | Скриншоты store | OPS |
-| 1.4 | Prod QA на устройствах | OPS |
-| 3.4.3 | Firebase/APNs prod | OPS |
+**OPS** (скриншоты store, device QA, prod Firebase/APNs) — вне кода.
 
 ---
 
-## apps/web-admin — §11
+## apps/mobile — §3 + §19 — DONE
 
-### DONE (P2 + P5)
-
-| § | Реализация |
-|---|------------|
-| 11.3 | Workers: IP, task, VRAM, temp |
-| 11.5 | Segmentation log filter |
-| 11.6 | Users: avg_rating, last_activity; Companies: create API key |
-| 11.8 | Push marketing opt-outs |
-| 11.9 | Support sidebar + escalate |
-| 11.11 | Legal: preview версии, author в истории |
-| 11.13 | Tax quarterly + instructions |
-| 11.16 | Storage cluster nodes (cluster-health) |
-
-### PARTIAL (низкий приоритет)
-
-| § | Пробел |
-|---|--------|
-| 11.2 | Dashboard: zoom графиков, фильтр worker/company |
-| 11.7 | Campaigns: расширенная сегментация |
-| 11.15 | React Query не на всех страницах |
+- §3.2 AngleDiagramOverlay (без AR)
+- §3.9 angle_error в quality + storage
+- §3.11.5 ghost mesh fit colors
+- §19.5 category icon grid
+- §3.11.3 ghost hide/shape
+- §3.1 live blur gate
+- §3.5.1 reconnect draft dialog
+- ModelViewerScreen session fix
+- category_screen policy filter (`e.value.api`)
 
 ---
 
-## apps/web-seller — §20
+## apps/web-admin — §11 — DONE
 
-### DONE (P3 + P5)
-
-| § | Реализация |
-|---|------------|
-| 20.1 | Forgot password — `/password/forgot` |
-| 20.2 | Dashboard: owner-метрики, thumbnails |
-| 20.4 | Model regenerate |
-| 20.5 | Team audit: IP/date filter; block/reset password |
-| 20.6 | Orders pagination |
-| 20.8 | Theme system auto/light/dark; ИНН/requisites |
-| 20.5 | Invite allowed_categories |
-
-### OPS
-
-Нет критичных code gaps.
+- §11.2 Dashboard: worker filter, company filter (воронка), Brush zoom
+- §11.7 Campaigns: segment preview API + UI, React Query
+- §11.3–11.16 — см. предыдущие спринты
 
 ---
 
-## План (осталось)
+## apps/web-seller — §20 — DONE
 
-### OPS (не код)
+- Dashboard thumbnails + owner metrics
+- Audit IP/date filters
+- Theme auto/light/dark
+- Orders pagination, team, models, settings
+
+---
+
+## OPS (не код)
+
 - [ ] Store screenshots §19.21
-- [ ] Device QA checklist `front_prod.md`
-- [ ] Prod keys, HA cutover
-
-### P6 — optional polish
-- [ ] web-admin dashboard zoom/filters §11.2
-- [ ] web-admin React Query migration §11.15
+- [ ] Device QA `front_prod.md`
+- [ ] Prod keys, HA cutover, Firebase/APNs

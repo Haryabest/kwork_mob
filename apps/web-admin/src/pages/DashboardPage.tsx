@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Center, Group, Loader, Progress, Table, Text, TextInput, Title } from '@mantine/core';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Badge, Button, Center, Group, Loader, NumberInput, Progress, Select, Table, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import {
   IconAlertTriangle,
@@ -10,6 +10,7 @@ import {
   IconStar,
 } from '@tabler/icons-react';
 import {
+  Brush,
   Bar,
   BarChart,
   CartesianGrid,
@@ -147,17 +148,21 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [workerFilter, setWorkerFilter] = useState<string | null>('all');
+  const [companyFilter, setCompanyFilter] = useState<number | string>('');
   const [queueHealth, setQueueHealth] = useState<{
     pg_queued: number;
     redis: { normal: number; high: number };
   } | null>(null);
 
   const funnelParams = useCallback(() => {
+    const cid = companyFilter === '' ? undefined : Number(companyFilter);
     return {
       date_from: dateFrom ? `${dateFrom}T00:00:00Z` : undefined,
       date_to: dateTo ? `${dateTo}T23:59:59Z` : undefined,
+      company_id: cid && !Number.isNaN(cid) ? cid : undefined,
     };
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, companyFilter]);
 
   const exportCsv = useCallback(async () => {
     try {
@@ -223,6 +228,29 @@ export default function DashboardPage() {
   const pgSynced = queueHealth
     ? isPgQueueSynced(queueHealth.pg_queued, queueHealth.redis)
     : false;
+
+  const workers = useMemo(() => {
+    const all = data?.workers ?? [];
+    if (!workerFilter || workerFilter === 'all') return all;
+    return all.filter((w) => w.worker_id === workerFilter);
+  }, [data?.workers, workerFilter]);
+
+  const workerOptions = useMemo(
+    () => [
+      { value: 'all', label: 'Все воркеры' },
+      ...(data?.workers ?? []).map((w) => ({ value: w.worker_id, label: w.worker_id })),
+    ],
+    [data?.workers],
+  );
+
+  const hourlyChart = useMemo(
+    () =>
+      (ops?.orders_hourly ?? []).map((p) => ({
+        hour: (p.hour ?? '').toString().slice(5, 16).replace('T', ' '),
+        count: p.count,
+      })),
+    [ops?.orders_hourly],
+  );
 
   return (
     <div className="vz-page">
@@ -352,13 +380,23 @@ export default function DashboardPage() {
             </Table>
           </div>
           <div className="vz-surface">
-            <Text fw={600}>Загрузка GPU (ClickHouse)</Text>
-            {(data?.workers ?? []).length === 0 ? (
+            <Group justify="space-between" mb="sm">
+              <Text fw={600}>Загрузка GPU (ClickHouse)</Text>
+              <Select
+                size="xs"
+                w={160}
+                data={workerOptions}
+                value={workerFilter}
+                onChange={setWorkerFilter}
+                placeholder="Воркер"
+              />
+            </Group>
+            {workers.length === 0 ? (
               <Text c="dimmed" mt="md">
                 Нет метрик за 15 мин
               </Text>
             ) : (
-              (data?.workers ?? []).map((w) => (
+              workers.map((w) => (
                 <div key={w.worker_id} style={{ marginTop: 12 }}>
                   <Group justify="space-between">
                     <Text size="sm">{w.worker_id}</Text>
@@ -390,19 +428,14 @@ export default function DashboardPage() {
                 Нет данных
               </Text>
             ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart
-                  data={(ops?.orders_hourly ?? []).map((p) => ({
-                    hour: (p.hour ?? '').toString().slice(5, 16).replace('T', ' '),
-                    count: p.count,
-                  }))}
-                  margin={{ top: 8, right: 8, left: -20, bottom: 0 }}
-                >
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={hourlyChart} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,87,184,0.12)" />
                   <XAxis dataKey="hour" tick={{ fontSize: 10 }} minTickGap={24} />
                   <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                   <Tooltip />
                   <Line type="monotone" dataKey="count" stroke="#0057b8" strokeWidth={2} dot={false} />
+                  <Brush dataKey="hour" height={20} stroke="#0057b8" travellerWidth={8} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -487,6 +520,14 @@ export default function DashboardPage() {
                 label="По"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.currentTarget.value)}
+              />
+              <NumberInput
+                label="Company ID"
+                placeholder="все"
+                value={companyFilter}
+                onChange={setCompanyFilter}
+                min={1}
+                w={120}
               />
               <Button variant="light" onClick={() => void load()}>
                 Применить период

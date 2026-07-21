@@ -47,6 +47,23 @@ async def templates():
     return {"items": [{"code": k, "title": v} for k, v in camp_svc.TEMPLATES.items()]}
 
 
+class SegmentPreview(BaseModel):
+    segment: dict = Field(default_factory=dict)
+
+
+@router.post("/segment/preview")
+async def segment_preview(body: SegmentPreview, db: AsyncSession = Depends(get_db)):
+    """Оценка аудитории сегмента §11.7."""
+    users = await camp_svc.resolve_segment(db, body.segment or {})
+    return {
+        "count": len(users),
+        "sample": [
+            {"id": u.id, "email": u.email, "account_type": u.account_type}
+            for u in users[:8]
+        ],
+    }
+
+
 @router.get("")
 async def list_campaigns(db: AsyncSession = Depends(get_db)):
     from app.services import analytics_query as aq

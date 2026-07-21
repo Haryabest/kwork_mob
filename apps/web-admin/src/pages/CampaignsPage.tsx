@@ -15,7 +15,8 @@ import {
   Textarea,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { MetricGrid, PageHeader, ShellTable, StateBadge } from '../components/Panel';
 import { api, getApiError } from '../services/api';
 
@@ -75,11 +76,14 @@ const TEMPLATE_HINTS: Record<string, string> = {
   custom_push: 'Произвольный push/email',
 };
 
+function segmentJson(useCustom: boolean, custom: string, preset: string | null) {
+  return useCustom
+    ? (JSON.parse(custom || '{}') as Record<string, unknown>)
+    : JSON.parse(preset || '{}');
+}
+
 /** §11.7 — кампании + A/B stats */
 export default function CampaignsPage() {
-  const [items, setItems] = useState<Campaign[]>([]);
-  const [templates, setTemplates] = useState<{ code: string; title: string }[]>([]);
-  const [loading, setLoading] = useState(true);
   const [opened, setOpened] = useState(false);
   const [name, setName] = useState('');
   const [template, setTemplate] = useState<string | null>('promo_discount');
@@ -93,31 +97,29 @@ export default function CampaignsPage() {
   const [abEnabled, setAbEnabled] = useState(false);
   const [ctaUrl, setCtaUrl] = useState('');
   const [stats, setStats] = useState<CampaignStats | null>(null);
+  const [audience, setAudience] = useState<{ count: number; sample: Array<{ email?: string }> } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
-  async function load() {
-    const [c, t] = await Promise.all([
-      api.get<{ items: Campaign[] }>('/admin/campaigns'),
-      api.get<{ items: { code: string; title: string }[] }>('/admin/campaigns/templates'),
-    ]);
-    setItems(c.data.items ?? []);
-    setTemplates(t.data.items ?? []);
-  }
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['admin', 'campaigns'],
+    queryFn: async () => {
+      const [c, t] = await Promise.all([
+        api.get<{ items: Campaign[] }>('/admin/campaigns'),
+        api.get<{ items: { code: string; title: string }[] }>('/admin/campaigns/templates'),
+      ]);
+      return { items: c.data.items ?? [], templates: t.data.items ?? [] };
+    },
+  });
 
-  useEffect(() => {
-    load()
-      .catch((e) => notifications.show({ color: 'red', message: getApiError(e) }))
-      .finally(() => setLoading(false));
-  }, []);
+  const items = data?.items ?? [];
+  const templates = data?.templates ?? [];
 
   async function createDraft() {
     try {
-      const segmentJson = useCustomSegment
-        ? (JSON.parse(customSegment || '{}') as Record<string, unknown>)
-        : JSON.parse(segment || '{}');
       await api.post('/admin/campaigns', {
         name,
         template,
-        segment: segmentJson,
+        segment: segmentJson(useCustomSegment, customSegment, segment),
         config: {
           title: title || name,
           body,
@@ -133,9 +135,24 @@ export default function CampaignsPage() {
       setAbEnabled(false);
       setCtaUrl('');
       notifications.show({ color: 'teal', message: 'Черновик создан' });
-      await load();
+      await refetch();
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function previewAudience() {
+    setPreviewing(true);
+    try {
+      const { data: res } = await api.post<{ count: number; sample: Array<{ email?: string }> }>(
+        '/admin/campaigns/segment/preview',
+        { segment: segmentJson(useCustomSegment, customSegment, segment) },
+      );
+      setAudience(res);
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setPreviewing(false);
     }
   }
 
@@ -143,7 +160,7 @@ export default function CampaignsPage() {
     try {
       await api.post(`/admin/campaigns/${id}/start`);
       notifications.show({ color: 'teal', message: 'Кампания запущена' });
-      await load();
+      await refetch();
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
     }
@@ -152,7 +169,7 @@ export default function CampaignsPage() {
   async function stop(id: number) {
     try {
       await api.post(`/admin/campaigns/${id}/stop`);
-      await load();
+      await refetch();
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
     }
@@ -160,14 +177,14 @@ export default function CampaignsPage() {
 
   async function showStats(id: number) {
     try {
-      const { data } = await api.get<CampaignStats>(`/admin/campaigns/${id}/stats`);
-      setStats(data);
+      const { data: s } = await api.get<CampaignStats>(`/admin/campaigns/${id}/stats`);
+      setStats(s);
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Center py="xl">
         <Loader color="brand" />
@@ -286,6 +303,19 @@ export default function CampaignsPage() {
           ) : (
             <Select label="Сегмент" value={segment} onChange={setSegment} data={SEGMENTS} />
           )}
+          <Group>
+            <Button variant="light" loading={previewing} onClick={() => void previewAudience()}>
+              Оценить аудиторию
+            </Button>
+            {audience != null && (
+              <Text size="sm" c="dimmed">
+                {audience.count} получателей
+                {audience.sample.length > 0
+                  ? ` · ${audience.sample.map((s) => s.email).filter(Boolean).slice(0, 3).join(', ')}`
+                  : ''}
+              </Text>
+            )}
+          </Group>
           <TextInput label="Заголовок письма" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
           <Textarea label="Текст" minRows={4} value={body} onChange={(e) => setBody(e.currentTarget.value)} />
           <TextInput

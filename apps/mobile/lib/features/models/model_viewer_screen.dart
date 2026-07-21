@@ -775,11 +775,13 @@ class ModelViewerScreen extends StatefulWidget {
   const ModelViewerScreen({
     super.key,
     required this.api,
+    required this.session,
     required this.modelUuid,
     this.model,
   });
 
   final ApiClient api;
+  final AppSession session;
   final String modelUuid;
   final Map<String, dynamic>? model;
 
