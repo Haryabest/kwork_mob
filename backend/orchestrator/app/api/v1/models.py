@@ -662,6 +662,41 @@ async def restore_model_sources(
     return result
 
 
+@router.post("/{model_uuid}/regenerate")
+async def regenerate_model(
+    model_uuid: str,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Перегенерация из ЛК §20.4 — копия исходников + новый task_uuid для /orders/create."""
+    import uuid as uuid_lib
+
+    from app.models import Order
+    from app.services import photos as photos_service
+
+    model = await _get_owned_model(db, model_uuid, user)
+    if not model.order_id:
+        raise HTTPException(400, "Нет связанного заказа")
+    order = await db.get(Order, model.order_id)
+    if not order:
+        raise HTTPException(404, "Заказ не найден")
+    try:
+        photos_service.require_all_photos(order.task_uuid)
+    except HTTPException as exc:
+        raise HTTPException(400, "Исходники недоступны — восстановите из облака") from exc
+
+    new_uuid = str(uuid_lib.uuid4())
+    photos_service.copy_task_photos(order.task_uuid, new_uuid)
+    return {
+        "ok": True,
+        "task_uuid": new_uuid,
+        "category": order.category,
+        "tier": order.tier,
+        "company_id": order.company_id,
+        "source_task_uuid": order.task_uuid,
+    }
+
+
 @router.post("/{model_uuid}/export-publish-zip")
 async def export_publish_zip(
     model_uuid: str,

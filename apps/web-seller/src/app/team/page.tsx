@@ -3,6 +3,7 @@
 import {
   Button,
   Group,
+  MultiSelect,
   Modal,
   NumberInput,
   Select,
@@ -80,6 +81,7 @@ export default function TeamPage() {
   const [limitOrders, setLimitOrders] = useState<number | string>(3);
   const [limitSpend, setLimitSpend] = useState<number | string>('');
   const [ttl, setTtl] = useState<string | null>('7');
+  const [inviteCategories, setInviteCategories] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [shootUrl, setShootUrl] = useState<string | null>(null);
   const [shootCategory, setShootCategory] = useState<string | null>('other');
@@ -197,6 +199,7 @@ export default function TeamPage() {
               ? limitSpend
               : Number(limitSpend),
         ttl_days: Number(ttl || 7),
+        allowed_categories: inviteCategories.length ? inviteCategories : undefined,
       });
       notifications.show({ color: 'teal', message: `Приглашение создано: ${data.url}` });
       inviteHandlers.close();
@@ -486,12 +489,13 @@ export default function TeamPage() {
                 <Table.Th>Сотрудник</Table.Th>
                 <Table.Th>Роль</Table.Th>
                 <Table.Th>Email</Table.Th>
+                <Table.Th>Действия</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {members.length === 0 ? (
                 <Table.Tr>
-                  <Table.Td colSpan={3}>
+                  <Table.Td colSpan={4}>
                     <EmptyState
                       title="В команде пока никого нет"
                       hint="Отправьте приглашение — сотрудник получит ссылку на email"
@@ -508,6 +512,43 @@ export default function TeamPage() {
                     <Table.Td fw={600}>{m.full_name || `User #${m.user_id}`}</Table.Td>
                     <Table.Td>{m.role}</Table.Td>
                     <Table.Td>{m.email}</Table.Td>
+                    <Table.Td onClick={(e) => e.stopPropagation()}>
+                      <Group gap={6}>
+                        <Button
+                          size="compact-xs"
+                          variant="light"
+                          onClick={async () => {
+                            try {
+                              await api.post(`/company/members/${m.user_id}/reset-password`);
+                              notifications.show({ color: 'teal', message: 'Ссылка сброса отправлена' });
+                            } catch (e) {
+                              notifications.show({ color: 'red', message: apiMessage(e) });
+                            }
+                          }}
+                        >
+                          Сброс пароля
+                        </Button>
+                        {m.role !== 'owner' && (
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="red"
+                            onClick={async () => {
+                              if (!window.confirm('Удалить сотрудника из команды?')) return;
+                              try {
+                                await api.delete(`/company/members/${m.user_id}`);
+                                notifications.show({ color: 'teal', message: 'Сотрудник удалён' });
+                                await load();
+                              } catch (e) {
+                                notifications.show({ color: 'red', message: apiMessage(e) });
+                              }
+                            }}
+                          >
+                            Блок
+                          </Button>
+                        )}
+                      </Group>
+                    </Table.Td>
                   </Table.Tr>
                 ))
               )}
@@ -607,6 +648,23 @@ export default function TeamPage() {
           />
           <NumberInput label="Лимит активных заказов" min={1} value={limitOrders} onChange={setLimitOrders} size="md" />
           <NumberInput label="Лимит расходов в месяц, ₽" min={0} value={limitSpend} onChange={setLimitSpend} size="md" />
+          <MultiSelect
+            label="Категории съёмки"
+            placeholder="Все категории"
+            clearable
+            value={inviteCategories}
+            onChange={setInviteCategories}
+            data={[
+              { value: 'clothing', label: 'Одежда' },
+              { value: 'shoes', label: 'Обувь' },
+              { value: 'electronics', label: 'Электроника' },
+              { value: 'furniture', label: 'Мебель' },
+              { value: 'decor', label: 'Декор' },
+              { value: 'toys', label: 'Игрушки' },
+              { value: 'other', label: 'Другое' },
+            ]}
+            size="md"
+          />
           <Select label="Срок" data={[{ value: '1', label: '1 день' }, { value: '7', label: '7 дней' }, { value: '30', label: '30 дней' }]} value={ttl} onChange={setTtl} size="md" />
           <Button fullWidth loading={busy} onClick={() => void sendInvite()}>
             Создать приглашение

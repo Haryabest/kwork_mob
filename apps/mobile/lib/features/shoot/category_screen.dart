@@ -40,6 +40,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
   final _birth = TextEditingController();
   final _modelName = TextEditingController();
   double _ghostScale = 1.0;
+  bool _ghostHidden = false;
+  GhostMeshShape? _ghostShape;
   CompanyAccessPolicy? _accessPolicy;
 
   @override
@@ -305,6 +307,74 @@ class _CategoryScreenState extends State<CategoryScreen> {
     );
   }
 
+  IconData _categoryIcon(ProductCategory c) {
+    switch (c) {
+      case ProductCategory.clothing:
+        return Icons.checkroom;
+      case ProductCategory.shoes:
+        return Icons.ice_skating;
+      case ProductCategory.electronics:
+        return Icons.smartphone;
+      case ProductCategory.furniture:
+        return Icons.chair;
+      case ProductCategory.decor:
+        return Icons.light;
+      case ProductCategory.toys:
+        return Icons.toys;
+      case ProductCategory.adult:
+        return Icons.shield;
+      case ProductCategory.other:
+        return Icons.category;
+    }
+  }
+
+  Widget _categoryGrid(Map<String, ProductCategory> items, AppLocalizations l10n) {
+    return GridView.count(
+      crossAxisCount: 4,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: 0.85,
+      children: items.values.map((cat) {
+        final selected = _category == cat;
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _onCategoryChange(cat),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: selected ? AppColors.ozonPrimary.withValues(alpha: 0.12) : AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? AppColors.ozonPrimary : AppColors.textSecondary.withValues(alpha: 0.35),
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(_categoryIcon(cat), size: 28, color: selected ? AppColors.ozonPrimary : null),
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    cat.localized(l10n),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.theme.typography.xs.copyWith(
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -318,14 +388,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          FSelect<ProductCategory>(
-            label: Text(l10n.shootCategoryLabel),
-            control: FSelectControl.managed(
-              initial: _category,
-              onChange: (v) => _onCategoryChange(v),
-            ),
-            items: _categoryItems(l10n),
-          ),
+          Text(l10n.shootCategoryLabel, style: context.theme.typography.lg),
+          const SizedBox(height: 8),
+          _categoryGrid(_categoryItems(l10n), l10n),
           const SizedBox(height: 20),
           Text(l10n.shootForbiddenCategories, style: context.theme.typography.lg),
           const SizedBox(height: 4),
@@ -421,7 +486,23 @@ class _CategoryScreenState extends State<CategoryScreen> {
           ),
           if (_category != null) ...[
             const SizedBox(height: 16),
-            Text(l10n.shootGhostMeshHint, style: context.theme.typography.sm),
+            Row(
+              children: [
+                Expanded(child: Text(l10n.shootGhostMeshHint, style: context.theme.typography.sm)),
+                IconButton(
+                  onPressed: () => setState(() => _ghostHidden = !_ghostHidden),
+                  icon: Icon(_ghostHidden ? Icons.visibility_off : Icons.visibility),
+                ),
+                PopupMenuButton<GhostMeshShape>(
+                  icon: const Icon(Icons.crop_free),
+                  onSelected: (s) => setState(() => _ghostShape = s),
+                  itemBuilder: (ctx) => [
+                    for (final s in GhostMeshShape.values)
+                      PopupMenuItem(value: s, child: Text(s.name)),
+                  ],
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             SizedBox(
               height: 180,
@@ -430,12 +511,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: GhostMeshOverlay(
-                  category: _category!,
-                  scale: _ghostScale,
-                  aligned: true,
-                  onScaleUpdate: (s) => setState(() => _ghostScale = s),
-                ),
+                child: _ghostHidden
+                    ? Center(child: Text(l10n.shootGhostMeshHint, style: TextStyle(color: AppColors.textSecondary)))
+                    : GhostMeshOverlay(
+                        category: _category!,
+                        scale: _ghostScale,
+                        shapeOverride: _ghostShape,
+                        aligned: true,
+                        onScaleUpdate: (s) => setState(() => _ghostScale = s),
+                      ),
               ),
             ),
           ],

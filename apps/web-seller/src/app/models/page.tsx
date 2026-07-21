@@ -108,6 +108,7 @@ export default function ModelsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [authorId, setAuthorId] = useState<string | null>(null);
+  const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const [sort, setSort] = useState<string | null>('newest');
   const [massBusy, setMassBusy] = useState(false);
   const isMobile = useMediaQuery('(max-width: 767px)');
@@ -131,6 +132,7 @@ export default function ModelsPage() {
       dateTo,
       authorId,
       sort,
+      orderStatus,
     },
     company != null,
   );
@@ -162,7 +164,7 @@ export default function ModelsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, publishFilter, category, tier, dateFrom, dateTo, authorId, sort, company?.id, pageSize]);
+  }, [search, publishFilter, category, tier, dateFrom, dateTo, authorId, sort, orderStatus, company?.id, pageSize]);
 
   async function massExtendAll() {
     if (!window.confirm('Продлить хранение исходников для всех моделей компании? (лимит 3× на модель)')) {
@@ -273,6 +275,19 @@ export default function ModelsPage() {
             clearable
             value={tier}
             onChange={setTier}
+          />
+          <Select
+            label="Статус генерации"
+            placeholder="Все"
+            clearable
+            value={orderStatus}
+            onChange={setOrderStatus}
+            data={[
+              { value: 'queued', label: 'В очереди' },
+              { value: 'processing', label: 'В обработке' },
+              { value: 'completed', label: 'Готово' },
+              { value: 'failed', label: 'Ошибка' },
+            ]}
           />
           <Select
             label="Сортировка"

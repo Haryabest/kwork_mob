@@ -19,6 +19,10 @@ export function WorkersPage() {
     trellis_version?: string | null;
     docker_image?: string | null;
     maintenance?: boolean;
+    tailscale_ip?: string | null;
+    current_task_id?: string | null;
+    gpu_temp?: number | null;
+    vram_used_gb?: number | null;
   }>>([]);
   const [rollout, setRollout] = useState({
     target_version: '2',
@@ -290,7 +294,7 @@ export function WorkersPage() {
         </Stack>
       </Card>
       <ShellTable
-        headers={['Воркер', 'Статус', 'TRELLIS', 'GPU', 'Вес', 'Grace', 'Действия']}
+        headers={['Воркер', 'Статус', 'IP', 'Task', 'TRELLIS', 'GPU', 'VRAM', '°C', 'Вес', 'Grace', 'Действия']}
         rows={
           items.length
             ? items.map((w) => [
@@ -299,8 +303,12 @@ export function WorkersPage() {
                   <StateBadge value={w.status} color={w.status === 'online' ? 'teal' : 'orange'} />
                   {w.maintenance && <StateBadge value="maint" color="orange" />}
                 </Group>,
+                w.tailscale_ip ?? '—',
+                w.current_task_id ? String(w.current_task_id).slice(0, 8) : '—',
                 `${w.trellis_version ?? '—'}${w.docker_image ? ` · ${w.docker_image}` : ''}`,
                 `${w.gpu_name ?? '—'} · ${w.gpu_load != null ? `${Math.round(w.gpu_load)}%` : '—'}`,
+                w.vram_used_gb != null ? `${w.vram_used_gb} GB` : '—',
+                w.gpu_temp != null ? `${Math.round(w.gpu_temp)}°` : '—',
                 <Slider
                   key={`w-${w.id}`}
                   defaultValue={Math.round((w.weight + 1) * 50)}
@@ -316,7 +324,23 @@ export function WorkersPage() {
                     }
                   }}
                 />,
-                `${w.grace_period}с`,
+                <Slider
+                  key={`gr-${w.id}`}
+                  min={25}
+                  max={30}
+                  step={1}
+                  defaultValue={w.grace_period}
+                  label={(v) => `${v}с`}
+                  w={100}
+                  onChangeEnd={async (v) => {
+                    try {
+                      await api.patch(`/admin/workers/${w.id}/grace_period`, { grace_period: v });
+                      await load();
+                    } catch (e) {
+                      notifications.show({ color: 'red', message: getApiError(e) });
+                    }
+                  }}
+                />,
                 <Group key={`g-${w.id}`} gap={4}>
                   <Button
                     size="xs"
@@ -330,7 +354,7 @@ export function WorkersPage() {
                       }
                     }}
                   >
-                    Grace 30
+                    30с
                   </Button>
                   <Button
                     size="xs"
@@ -693,7 +717,16 @@ export function WorkersPage() {
 }
 
 export function UsersPage() {
-  const [items, setItems] = useState<Array<{ id: number; email: string; full_name?: string | null; status: string }>>([]);
+  const [items, setItems] = useState<
+    Array<{
+      id: number;
+      email: string;
+      full_name?: string | null;
+      status: string;
+      avg_rating?: number | null;
+      last_activity?: string | null;
+    }>
+  >([]);
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -715,11 +748,13 @@ export function UsersPage() {
         <TextInput placeholder="Поиск по ID, email" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
       </Group>
       <VirtualShellTable
-        headers={['ID', 'Пользователь', 'Email', 'Статус', '']}
+        headers={['ID', 'Пользователь', 'Email', 'Рейтинг', 'Активность', 'Статус', '']}
         rows={filtered.map((user) => [
           String(user.id),
           user.full_name || '—',
           user.email,
+          user.avg_rating != null ? String(user.avg_rating) : '—',
+          user.last_activity ? new Date(user.last_activity).toLocaleString('ru-RU') : '—',
           <StateBadge key={user.id} value={user.status} color={user.status?.includes('active') ? 'teal' : 'orange'} />,
           <Button key={`b-${user.id}`} component={Link} to={`/users/${user.id}`} size="xs" variant="subtle">
             Карточка
@@ -1019,6 +1054,9 @@ export function CompanyDetailPage() {
     }>
   >([]);
   const [exportBusy, setExportBusy] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyPlain, setNewKeyPlain] = useState<string | null>(null);
+  const [creatingKey, setCreatingKey] = useState(false);
 
   async function load() {
     const [c, s, sl, keys, inv, lg, pr, ex] = await Promise.all([
@@ -1098,6 +1136,25 @@ export function CompanyDetailPage() {
       await load();
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function createApiKey() {
+    if (!newKeyName.trim()) return;
+    setCreatingKey(true);
+    try {
+      const { data } = await api.post<{ api_key?: string }>(`/admin/companies/${company!.id}/api-keys`, {
+        name: newKeyName.trim(),
+        scopes: ['order:create', 'order:read'],
+      });
+      setNewKeyPlain(data.api_key ?? null);
+      setNewKeyName('');
+      await load();
+      notifications.show({ color: 'teal', message: 'API-ключ создан' });
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setCreatingKey(false);
     }
   }
 
@@ -1296,6 +1353,18 @@ export function CompanyDetailPage() {
         </Card>
         <Card withBorder>
           <Text fw={600} mb="sm">API-ключи (§8.8)</Text>
+          <Group mb="sm" align="flex-end">
+            <TextInput
+              label="Новый ключ"
+              placeholder="Название"
+              value={newKeyName}
+              onChange={(e) => setNewKeyName(e.currentTarget.value)}
+              style={{ flex: 1 }}
+            />
+            <Button leftSection={<IconPlus size={16} />} loading={creatingKey} onClick={() => void createApiKey()}>
+              Создать
+            </Button>
+          </Group>
           <ShellTable
             headers={['Название', 'Prefix', 'Активен', '']}
             rows={
@@ -1408,6 +1477,13 @@ export function CompanyDetailPage() {
             : [['—', 'Нет ссылок', '—', '—', '—']]
         }
       />
+      <Modal opened={!!newKeyPlain} onClose={() => setNewKeyPlain(null)} title="API-ключ создан">
+        <Stack>
+          <Text size="sm">Сохраните ключ — повторно не показывается:</Text>
+          <Code block>{newKeyPlain}</Code>
+          <Button onClick={() => setNewKeyPlain(null)}>Закрыть</Button>
+        </Stack>
+      </Modal>
     </>
   );
 }
@@ -1519,8 +1595,9 @@ export function LegalPage() {
   const [body, setBody] = useState('');
   const [saving, setSaving] = useState(false);
   const [versions, setVersions] = useState<
-    Array<{ version: number; title: string; is_published: boolean; created_at?: string }>
+    Array<{ version: number; title: string; is_published: boolean; created_at?: string; author_email?: string | null }>
   >([]);
+  const [preview, setPreview] = useState<{ title: string; body: string; version: number; author_email?: string | null } | null>(null);
 
   async function load() {
     const [d, c] = await Promise.all([api.get('/legal'), api.get('/admin/legal/consents')]);
@@ -1589,12 +1666,28 @@ export function LegalPage() {
         </Tabs.Panel>
         <Tabs.Panel value="versions" pt="md">
           <ShellTable
-            headers={['Версия', 'Название', 'Опубликован', 'Дата']}
+            headers={['Версия', 'Название', 'Автор', 'Опубликован', 'Дата', '']}
             rows={versions.map((v) => [
               String(v.version),
               v.title,
+              v.author_email || '—',
               v.is_published ? 'да' : 'нет',
               v.created_at ? new Date(v.created_at).toLocaleString('ru-RU') : '—',
+              <Button
+                key={`pv${v.version}`}
+                size="xs"
+                variant="light"
+                onClick={async () => {
+                  try {
+                    const { data } = await api.get<typeof preview>(`/legal/admin/${slug}/versions/${v.version}`);
+                    setPreview(data);
+                  } catch (e) {
+                    notifications.show({ color: 'red', message: getApiError(e) });
+                  }
+                }}
+              >
+                Превью
+              </Button>,
             ])}
           />
         </Tabs.Panel>
@@ -1610,6 +1703,20 @@ export function LegalPage() {
           />
         </Tabs.Panel>
       </Tabs>
+      <Modal opened={!!preview} onClose={() => setPreview(null)} title={preview ? `${preview.title} (v${preview.version})` : ''} size="lg">
+        {preview && (
+          <Stack>
+            {preview.author_email && (
+              <Text size="sm" c="dimmed">
+                Автор: {preview.author_email}
+              </Text>
+            )}
+            <ScrollArea h={400}>
+              <Text style={{ whiteSpace: 'pre-wrap' }}>{preview.body}</Text>
+            </ScrollArea>
+          </Stack>
+        )}
+      </Modal>
     </>
   );
 }

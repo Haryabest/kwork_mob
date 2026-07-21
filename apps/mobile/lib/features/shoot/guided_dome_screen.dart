@@ -26,6 +26,7 @@ import 'package:kwork_mobile/services/thermal_monitor.dart';
 import 'package:kwork_mobile/widgets/native_ar_preview.dart';
 import 'package:kwork_mobile/widgets/ar_markers_overlay.dart';
 import 'package:kwork_mobile/widgets/ghost_mesh.dart';
+import 'package:kwork_mobile/widgets/angle_diagram_overlay.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:vibration/vibration.dart';
 
@@ -77,6 +78,10 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
   DateTime? _lastShutterAt;
   ProductCategory _category = ProductCategory.other;
   double _ghostScale = 1.0;
+  bool _ghostHidden = false;
+  GhostMeshShape? _ghostShape;
+  bool _ghostFitOk = true;
+  double? _lastAngleErrorDeg;
   File? _prevFrame;
   double _yawOffsetDeg = 0;
   int? _arTextureId;
@@ -390,9 +395,12 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         }
       } else {
         final gyro = _gyro?.check(kGuidedDomeAngles[_index], l10n);
-        if (gyro != null && !gyro.ok) {
-          setState(() => _gateMsg = gyro.hint);
-          return;
+        if (gyro != null) {
+          _lastAngleErrorDeg = gyro.deltaYawDeg.abs();
+          if (!gyro.ok) {
+            setState(() => _gateMsg = gyro.hint);
+            return;
+          }
         }
       }
     }
@@ -410,15 +418,21 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         await File(shot.path).delete().catchError((_) => File(shot.path));
       }
       final gate = QualityAnalyzer.instance.liveGate(bytes, l10n);
-      if (!_bypassQualityGate && (!gate.centered || !gate.fillOk)) {
+      if (!_bypassQualityGate && (!gate.centered || !gate.fillOk || gate.blurry)) {
         setState(() {
           _busy = false;
           _crosshairOk = false;
+          _ghostFitOk = gate.fillOk;
           _gateMsg = gate.message;
         });
         return;
       }
-      await ShootStorage.instance.savePhoto(widget.modelUuid, _index, bytes);
+      await ShootStorage.instance.savePhoto(
+        widget.modelUuid,
+        _index,
+        bytes,
+        angleErrorDeg: _lastAngleErrorDeg,
+      );
       final draft = await ShootStorage.instance.loadDraft(widget.modelUuid);
       if (draft != null && widget.api != null) {
         try {
@@ -455,6 +469,7 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
         _index++;
         _busy = false;
         _crosshairOk = true;
+        _ghostFitOk = true;
         _gateMsg = null;
       });
       _trackShootStep();
@@ -598,15 +613,23 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
                 ),
               ),
             // Ghost Mesh §3.11
-            if (!_thermal.effectsReduced)
+            if (!_thermal.effectsReduced && !_ghostHidden)
               GhostMeshOverlay(
                 category: _category,
                 scale: _ghostScale,
+                shapeOverride: _ghostShape,
                 aligned: _crosshairOk && _gyroOk,
+                fitOk: _ghostFitOk,
                 onScaleUpdate: (s) {
                   setState(() => _ghostScale = s);
                   _persistGhostScale();
                 },
+              ),
+            if (!_usesNativeAr && !_thermal.effectsReduced)
+              Positioned(
+                top: 72,
+                right: 12,
+                child: AngleDiagramOverlay(currentIndex: _index),
               ),
             // Перекрестие §3.1.3
             IgnorePointer(
@@ -656,6 +679,36 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
                         style: const TextStyle(color: Colors.white),
                       ),
                     ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 8,
+              right: 8,
+              bottom: 108,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    tooltip: _ghostHidden ? 'Ghost' : 'Hide',
+                    onPressed: () => setState(() => _ghostHidden = !_ghostHidden),
+                    icon: Icon(
+                      _ghostHidden ? Icons.visibility_off : Icons.visibility,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  PopupMenuButton<GhostMeshShape>(
+                    tooltip: 'Shape',
+                    icon: const Icon(Icons.crop_free, color: Colors.white70),
+                    onSelected: (s) => setState(() => _ghostShape = s),
+                    itemBuilder: (ctx) => [
+                      for (final s in GhostMeshShape.values)
+                        PopupMenuItem(
+                          value: s,
+                          child: Text(s.name),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),

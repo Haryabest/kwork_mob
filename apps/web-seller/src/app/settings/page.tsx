@@ -170,6 +170,12 @@ export default function SettingsPage() {
   const [deletion, setDeletion] = useState<DeletionRequest | null>(null);
   const [deleteModal, setDeleteModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [companyInn, setCompanyInn] = useState('');
+  const [legalName, setLegalName] = useState('');
+  const [legalAddress, setLegalAddress] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [bankBik, setBankBik] = useState('');
+  const [bankAccount, setBankAccount] = useState('');
   const oauthLinkedProviders = me?.oauth_providers ?? [];
 
   const loadSessions = useCallback(async () => {
@@ -195,6 +201,34 @@ export default function SettingsPage() {
     setGender(m.data.gender || null);
     setRegion(m.data.region || '');
     setMarketing(m.data.marketing_opt_in !== false);
+    if (s.data.is_company_owner) {
+      try {
+        const { data: mine } = await api.get<{
+          items: Array<{
+            inn?: string;
+            requisites?: {
+              legal_name?: string;
+              legal_address?: string;
+              bank_name?: string;
+              bank_bik?: string;
+              bank_account?: string;
+            };
+          }>;
+        }>('/company/mine');
+        const c = mine.items?.[0];
+        if (c) {
+          setCompanyInn(c.inn || '');
+          const r = c.requisites || {};
+          setLegalName(r.legal_name || '');
+          setLegalAddress(r.legal_address || '');
+          setBankName(r.bank_name || '');
+          setBankBik(r.bank_bik || '');
+          setBankAccount(r.bank_account || '');
+        }
+      } catch {
+        /* optional */
+      }
+    }
     setPrefs({
       push_enabled: true,
       email_enabled: true,
@@ -576,6 +610,45 @@ export default function SettingsPage() {
                   Банк карты: {me.card_bank_issuer}
                 </Text>
               ) : null}
+              {twoFa?.is_company_owner && (
+                <>
+                  <Text fw={600} mt="md">
+                    Реквизиты компании (Owner)
+                  </Text>
+                  <TextInput label="ИНН" value={companyInn} onChange={(e) => setCompanyInn(e.currentTarget.value)} />
+                  <TextInput label="Юр. наименование" value={legalName} onChange={(e) => setLegalName(e.currentTarget.value)} />
+                  <TextInput label="Юр. адрес" value={legalAddress} onChange={(e) => setLegalAddress(e.currentTarget.value)} />
+                  <TextInput label="Банк" value={bankName} onChange={(e) => setBankName(e.currentTarget.value)} />
+                  <Group grow>
+                    <TextInput label="БИК" value={bankBik} onChange={(e) => setBankBik(e.currentTarget.value)} />
+                    <TextInput label="Р/с" value={bankAccount} onChange={(e) => setBankAccount(e.currentTarget.value)} />
+                  </Group>
+                  <Button
+                    variant="light"
+                    loading={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        await api.patch('/company/requisites', {
+                          inn: companyInn || undefined,
+                          legal_name: legalName || undefined,
+                          legal_address: legalAddress || undefined,
+                          bank_name: bankName || undefined,
+                          bank_bik: bankBik || undefined,
+                          bank_account: bankAccount || undefined,
+                        });
+                        notifications.show({ color: 'teal', message: 'Реквизиты сохранены' });
+                      } catch (e) {
+                        notifications.show({ color: 'red', message: apiMessage(e) });
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Сохранить реквизиты
+                  </Button>
+                </>
+              )}
               <Button loading={busy} w={{ base: '100%', sm: 'fit-content' }} onClick={() => void saveProfile()}>
                 {t.settings.saveProfile}
               </Button>

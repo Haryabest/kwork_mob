@@ -31,6 +31,7 @@ const SOURCE_OPTIONS = [
   { value: 'api', label: 'API' },
   { value: 'audit', label: 'Аудит' },
   { value: 'orchestrator', label: 'Оркестратор' },
+  { value: 'segmentation', label: 'Segmentation' },
 ];
 
 const LEVEL_OPTIONS = [

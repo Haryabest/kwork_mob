@@ -1,6 +1,6 @@
 """Налоговый модуль: настройки владельца + PDF/Excel."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -162,4 +162,48 @@ async def admin_generate_act(
         content=data,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="act-{order_id}.pdf"'},
+    )
+
+
+@admin_router.get("/instructions")
+async def tax_payment_instructions():
+    """§11.13 — инструкция по уплате налогов."""
+    return {
+        "title": "Уплата налогов (НПД / ИП / ООО)",
+        "items": [
+            "Самозанятый (НПД): оплата через приложение «Мой налог» до 28-го числа месяца, следующего за отчётным кварталом.",
+            "ИП на УСН: авансовые платежи до 28-го числа после квартала; декларация до 25 апреля (год).",
+            "ООО на УСН: авансы до 28-го после квартала; годовая декларация до 31 марта.",
+            "НДС (если применимо): отражайте в счетах/актах по ставке из настроек модуля.",
+            "Excel-выгрузка транзакций — для сверки с банком и «Мой налог» / 1С.",
+        ],
+    }
+
+
+@admin_router.get("/quarterly/export")
+async def admin_quarterly_export(
+    year: int = Query(..., ge=2020, le=2100),
+    quarter: int = Query(..., ge=1, le=4),
+    db: AsyncSession = Depends(get_db),
+):
+    """§11.13 — квартальный отчёт транзакций (Excel)."""
+    from datetime import date
+
+    start_month = (quarter - 1) * 3 + 1
+    date_from = datetime(year, start_month, 1, tzinfo=timezone.utc)
+    if quarter == 4:
+        date_to = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+    else:
+        end_month = start_month + 2
+        last_day = 30 if end_month in (4, 6, 9, 11) else 31
+        if end_month == 2:
+            last_day = 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28
+        date_to = datetime(year, end_month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+    data = await tax_svc.export_transactions_xlsx(db, date_from=date_from, date_to=date_to)
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="transactions-{year}-Q{quarter}.xlsx"'
+        },
     )

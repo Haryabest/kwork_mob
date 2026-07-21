@@ -319,6 +319,53 @@ async def revoke_company_api_key(
     return {"message": "ok"}
 
 
+class AdminApiKeyCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    scopes: list[str] = Field(default_factory=lambda: ["order:read"])
+
+
+@router.post("/companies/{company_id}/api-keys")
+async def create_company_api_key_admin(
+    company_id: int,
+    body: AdminApiKeyCreate,
+    admin: User = Depends(get_current_db_user),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Создать API-ключ компании от имени админа (§11.6)."""
+    from app.models import CompanyApiKey
+    from app.services.api_keys import ALLOWED_SCOPES, generate_key
+
+    company = await db.scalar(select(Company).where(Company.id == company_id))
+    if not company:
+        raise HTTPException(404, "Компания не найдена")
+    scopes = [s for s in body.scopes if s in ALLOWED_SCOPES]
+    if not scopes:
+        raise HTTPException(400, f"scopes из: {', '.join(sorted(ALLOWED_SCOPES))}")
+    plain, prefix, kh = generate_key()
+    row = CompanyApiKey(
+        company_id=company_id,
+        name=body.name[:100],
+        key_prefix=prefix,
+        key_hash=kh,
+        scopes=scopes,
+        rate_limit_per_min=1000,
+        is_active=True,
+        created_by_user_id=admin.id,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return {
+        "id": row.id,
+        "name": row.name,
+        "key_prefix": prefix,
+        "api_key": plain,
+        "scopes": scopes,
+        "message": "Сохраните ключ — повторно не показывается",
+    }
+
+
 class MemberLimitsBody(BaseModel):
     max_concurrent_orders: int | None = Field(default=None, ge=0, le=1000)
     monthly_spending_limit: int | None = Field(default=None, ge=0)
@@ -674,9 +721,19 @@ async def get_company_dedicated_bucket(
 
 @router.get("/users")
 async def list_users(_: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    from app.models import ModelFeedback
+
     rows = (await db.scalars(select(User).order_by(User.id.desc()).limit(200))).all()
-    return {
-        "items": [
+    items = []
+    for u in rows:
+        avg_rating = await db.scalar(
+            select(func.avg(ModelFeedback.rating)).where(ModelFeedback.user_id == u.id)
+        )
+        last_order = await db.scalar(
+            select(func.max(Order.created_at)).where(Order.user_id == u.id)
+        )
+        last_activity = last_order or getattr(u, "updated_at", None) or u.created_at
+        items.append(
             {
                 "id": u.id,
                 "email": u.email,
@@ -686,9 +743,35 @@ async def list_users(_: dict = Depends(require_admin), db: AsyncSession = Depend
                 "staff_role": u.staff_role,
                 "balance": u.balance,
                 "created_at": u.created_at.isoformat() if u.created_at else None,
+                "avg_rating": round(float(avg_rating), 2) if avg_rating is not None else None,
+                "last_activity": last_activity.isoformat() if last_activity else None,
+            }
+        )
+    return {"items": items}
+
+
+@router.get("/users/marketing-opt-outs")
+async def marketing_opt_outs(_: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """§11.8 — пользователи с отключённым marketing_opt_in."""
+    rows = (
+        await db.scalars(
+            select(User)
+            .where(User.marketing_opt_in.is_(False))
+            .order_by(User.id.desc())
+            .limit(500)
+        )
+    ).all()
+    return {
+        "total": len(rows),
+        "items": [
+            {
+                "id": u.id,
+                "email": u.email,
+                "full_name": u.full_name,
+                "updated_at": u.updated_at.isoformat() if getattr(u, "updated_at", None) else None,
             }
             for u in rows
-        ]
+        ],
     }
 
 
@@ -818,9 +901,12 @@ async def delete_user(user_id: int, admin: dict = Depends(require_admin), db: As
 
 @router.get("/workers")
 async def list_workers(_: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    from app.services.worker_hub import worker_hub
+
     rows = (await db.scalars(select(WorkerNode).order_by(WorkerNode.id))).all()
     lengths = await queue_service.queue_lengths()
     online = sum(1 for w in rows if w.status == "online")
+    hub = {h["worker_id"]: h for h in await worker_hub.list_snapshot()}
     return {
         "summary": {
             "online": online,
@@ -840,6 +926,10 @@ async def list_workers(_: dict = Depends(require_admin), db: AsyncSession = Depe
                 "trellis_version": (w.meta or {}).get("trellis_version") or (w.meta or {}).get("version"),
                 "docker_image": (w.meta or {}).get("docker_image"),
                 "maintenance": bool((w.meta or {}).get("maintenance")),
+                "tailscale_ip": (w.meta or {}).get("tailscale_ip"),
+                "current_task_id": hub.get(w.id, {}).get("current_task_id"),
+                "gpu_temp": (w.meta or {}).get("gpu_temp") or (w.meta or {}).get("temperature"),
+                "vram_used_gb": (w.meta or {}).get("vram_used_gb"),
             }
             for w in rows
         ],
@@ -1045,6 +1135,21 @@ async def admin_support_list(_: dict = Depends(require_staff), db: AsyncSession 
             }
         )
     return {"items": items}
+
+
+@router.patch("/support/questions/{question_id}/escalate")
+async def admin_support_escalate(
+    question_id: int,
+    _: dict = Depends(require_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """§11.9 — эскалация обращения."""
+    req = await db.get(SupportRequest, question_id)
+    if not req:
+        raise HTTPException(404, "Не найдено")
+    req.status = "escalated"
+    await db.commit()
+    return {"ok": True, "status": req.status}
 
 
 @router.post("/support/questions/{question_id}/reply")

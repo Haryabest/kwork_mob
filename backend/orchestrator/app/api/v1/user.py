@@ -708,6 +708,7 @@ async def list_user_models(
     author_id: int | None = Query(default=None, ge=1),
     category: str | None = Query(default=None, max_length=32),
     publish_filter: str | None = Query(default=None, pattern=r"^(published|draft)$"),
+    order_status: str | None = Query(default=None, max_length=30),
     sort: str = Query(default="newest", pattern=r"^(newest|oldest)$"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
@@ -762,6 +763,9 @@ async def list_user_models(
                 Model3D.publish_status.in_(["", "none", "not_published"]),
             )
         )
+
+    if order_status:
+        where.append(Order.status == order_status)
 
     base = (
         select(Model3D, Order.category, Order.tier, Order.status)

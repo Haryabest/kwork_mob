@@ -197,6 +197,31 @@ export default function ModelDetailPage() {
     }
   }
 
+  async function regenerate() {
+    if (!window.confirm('Создать новый заказ на перегенерацию с теми же исходниками?')) return;
+    setBusy(true);
+    try {
+      const { data } = await api.post<{
+        task_uuid: string;
+        category: string;
+        tier: string;
+        company_id?: number;
+      }>(`/models/${uuid}/regenerate`);
+      const { data: order } = await api.post<{ id: number }>('/orders/create', {
+        task_uuid: data.task_uuid,
+        category: data.category,
+        tier: data.tier,
+        company_id: data.company_id,
+      });
+      notifications.show({ color: 'teal', message: `Заказ #${order.id} в очереди` });
+      window.location.href = `/orders/${order.id}`;
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function extendStorage() {
     setBusy(true);
     try {
@@ -399,6 +424,9 @@ export default function ModelDetailPage() {
             </Button>
             <Button variant="light" leftSection={<IconDownload size={16} />} loading={busy} onClick={() => void restoreSources()}>
               Восстановить исходники из облака
+            </Button>
+            <Button variant="light" loading={busy} onClick={() => void regenerate()}>
+              Перегенерировать модель
             </Button>
             <Text size="xs" c="#6d6c77">
               Облачная копия:{' '}

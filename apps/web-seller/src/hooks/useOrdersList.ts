@@ -24,18 +24,27 @@ const ACTIVE_STATUSES = new Set([
 
 const LIVE_POLL_MS = 15_000;
 
-export function useOrdersList(companyId?: number, authorId?: string | null) {
+export function useOrdersList(
+  companyId?: number,
+  authorId?: string | null,
+  page = 1,
+  pageSize = 20,
+) {
   return useQuery({
-    queryKey: ['orders', companyId, authorId],
+    queryKey: ['orders', companyId, authorId, page, pageSize],
     enabled: companyId != null,
     queryFn: async () => {
-      const params: Record<string, string | number> = { company_id: companyId as number };
+      const params: Record<string, string | number> = {
+        company_id: companyId as number,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+      };
       if (authorId) params.user_id = Number(authorId);
-      const { data } = await api.get<{ items: OrderItem[] }>('/orders', { params });
-      return data.items ?? [];
+      const { data } = await api.get<{ items: OrderItem[]; total: number }>('/orders', { params });
+      return { items: data.items ?? [], total: data.total ?? 0 };
     },
     refetchInterval: (query) => {
-      const items = query.state.data ?? [];
+      const items = query.state.data?.items ?? [];
       const hasActive = items.some((o) => ACTIVE_STATUSES.has(o.status));
       return hasActive ? LIVE_POLL_MS : false;
     },

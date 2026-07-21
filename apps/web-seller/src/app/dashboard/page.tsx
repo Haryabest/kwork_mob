@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Group, Stack, Text, Title, Skeleton } from '@mantine/core';
+import { Button, Group, Stack, Text, Title, Skeleton, Image } from '@mantine/core';
 import { IconBox, IconCash, IconCamera, IconUsers, IconShoppingCart } from '@tabler/icons-react';
 import Link from 'next/link';
 import { SellerShell } from '../../components/SellerShell';
@@ -12,6 +12,8 @@ export default function DashboardPage() {
   const me = data?.me ?? null;
   const orders = data?.orders ?? [];
   const models = data?.models ?? [];
+  const company = data?.company ?? null;
+  const thumbByUuid = data?.thumbByUuid ?? {};
 
   const activeOrders = orders.filter((o) => ['queued', 'processing', 'awaiting_payment', 'pending'].includes(o.status)).length;
   const monthSpend = orders
@@ -24,6 +26,18 @@ export default function DashboardPage() {
     { label: 'Активных заказов', value: String(activeOrders), Icon: IconShoppingCart },
     { label: 'Потрачено', value: `${monthSpend.toLocaleString('ru-RU')} ₽`, Icon: IconCash },
   ];
+
+  const ownerStats =
+    company?.is_owner || company?.role === 'owner'
+      ? [
+          { label: 'Команда', value: data?.teamCount != null ? String(data.teamCount) : '—', Icon: IconUsers },
+          {
+            label: 'Баланс компании',
+            value: company.balance != null ? `${company.balance.toLocaleString('ru-RU')} ₽` : '—',
+            Icon: IconCash,
+          },
+        ]
+      : [];
 
   return (
     <SellerShell>
@@ -51,7 +65,7 @@ export default function DashboardPage() {
                 <Skeleton height={28} width="55%" />
               </Surface>
             ))
-          : stats.map(({ label, value, Icon }) => (
+          : [...stats, ...ownerStats].map(({ label, value, Icon }) => (
               <Surface key={label}>
                 <Group justify="space-between" align="flex-start" wrap="nowrap">
                   <div>
@@ -73,6 +87,7 @@ export default function DashboardPage() {
           display: 'grid',
           gap: '1.5rem',
           gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          marginTop: '1.5rem',
         }}
       >
         <Surface>
@@ -105,15 +120,30 @@ export default function DashboardPage() {
                     borderRadius: 12,
                     background: 'rgba(0,87,184,0.04)',
                   }}
+                  wrap="nowrap"
                 >
-                  <div>
-                    <Text fw={600} size="sm">
-                      {m.uuid.slice(0, 8)}…
-                    </Text>
-                    <Text size="xs" c="#6d6c77">
-                      {m.publish_status || 'not_published'}
-                    </Text>
-                  </div>
+                  <Group gap="sm" wrap="nowrap">
+                    {thumbByUuid[m.uuid] ? (
+                      <Image src={thumbByUuid[m.uuid]!} alt="" w={48} h={48} radius="md" fit="cover" />
+                    ) : (
+                      <div
+                        style={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 8,
+                          background: 'rgba(0,87,184,0.08)',
+                        }}
+                      />
+                    )}
+                    <div>
+                      <Text fw={600} size="sm">
+                        {m.display_name || `${m.uuid.slice(0, 8)}…`}
+                      </Text>
+                      <Text size="xs" c="#6d6c77">
+                        {m.publish_status || 'not_published'}
+                      </Text>
+                    </div>
+                  </Group>
                   <Button component={Link} href={`/models/${m.uuid}`} size="xs" variant="light">
                     Открыть
                   </Button>

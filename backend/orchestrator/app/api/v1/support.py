@@ -118,7 +118,7 @@ async def get_question(
             select(SupportMessage).where(SupportMessage.request_id == question_id).order_by(SupportMessage.id)
         )
     ).all()
-    return _ticket_public(
+    out = _ticket_public(
         req,
         messages=[
             {
@@ -130,6 +130,25 @@ async def get_question(
             for m in messages
         ],
     )
+    if user.staff_role:
+        ticket_user = await db.get(User, req.user_id)
+        if ticket_user:
+            from sqlalchemy import func
+            from app.models import Order
+
+            orders_count = await db.scalar(
+                select(func.count()).select_from(Order).where(Order.user_id == ticket_user.id)
+            )
+            out["user"] = {
+                "id": ticket_user.id,
+                "email": ticket_user.email,
+                "full_name": ticket_user.full_name,
+                "account_type": ticket_user.account_type,
+                "status": ticket_user.status,
+                "orders_count": int(orders_count or 0),
+                "created_at": ticket_user.created_at.isoformat() if ticket_user.created_at else None,
+            }
+    return out
 
 
 @router.post("/questions/{question_id}/messages")

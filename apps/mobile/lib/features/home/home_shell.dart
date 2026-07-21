@@ -24,6 +24,9 @@ import 'package:kwork_mobile/services/oauth_audit_hints.dart';
 import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
 import 'package:kwork_mobile/services/offline_sync_service.dart';
+import 'package:kwork_mobile/services/shoot_storage.dart';
+import 'package:kwork_mobile/domain/guided_dome.dart';
+import 'package:kwork_mobile/services/upload_progress_service.dart';
 import 'package:kwork_mobile/services/upload_progress_service.dart';
 import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/widgets/campaign_banner.dart';
@@ -55,6 +58,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _unread = 0;
   int? _supportTicketId;
   bool _offline = false;
+  bool _wasOffline = false;
   List<Map<String, dynamic>> _campaignBanners = [];
   final _dismissedBannerIds = <int>{};
   final _homeQuickKey = GlobalKey<_HomeQuickPanelState>();
@@ -100,11 +104,54 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 
   void _onOfflineChanged() {
-    if (mounted) setState(() => _offline = !OfflineSyncService.instance.isOnline);
+    final nowOffline = !OfflineSyncService.instance.isOnline;
+    if (_wasOffline && !nowOffline) {
+      _promptDraftUploadAfterReconnect();
+    }
+    _wasOffline = nowOffline;
+    if (mounted) setState(() => _offline = nowOffline);
+  }
+
+  Future<void> _promptDraftUploadAfterReconnect() async {
+    final draft = await ShootStorage.instance.loadActiveDraft();
+    String? modelUuid;
+    var uploaded = 0;
+    if (draft != null) {
+      final count = await ShootStorage.instance.capturedCount(draft.modelUuid);
+      if (count >= kGuidedDomeCount && !draft.photosUploaded) {
+        modelUuid = draft.modelUuid;
+        uploaded = count;
+      }
+    }
+    if (modelUuid == null) {
+      final pending = await UploadProgressService.instance.findPending();
+      if (pending != null) {
+        modelUuid = pending['_model_uuid']?.toString();
+        uploaded = UploadProgressService.instance.uploadedIndices(pending).length;
+      }
+    }
+    if (modelUuid == null || !mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    final send = await showFDialog<bool>(
+      context: context,
+      builder: (ctx, style, animation) => FDialog(
+        title: Text(l10n.homePendingUploadTitle('$uploaded', '$kGuidedDomeCount')),
+        body: Text(l10n.homePendingUploadHint),
+        actions: [
+          FButton(variant: .outline, onPress: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+          FButton(onPress: () => Navigator.pop(ctx, true), child: Text(l10n.uploadContinue)),
+        ],
+      ),
+    );
+    if (send == true && mounted) {
+      await context.push('/home/shoot/upload', extra: modelUuid);
+      _homeQuickKey.currentState?.refreshPending();
+    }
   }
 
   Future<void> _syncOnline() async {
     OfflineSyncService.instance.addListener(_onOfflineChanged);
+    _wasOffline = !OfflineSyncService.instance.isOnline;
     await OfflineSyncService.instance.probe(widget.api);
     await OfflineSyncService.instance.flush(widget.api);
     if (mounted) setState(() => _offline = !OfflineSyncService.instance.isOnline);

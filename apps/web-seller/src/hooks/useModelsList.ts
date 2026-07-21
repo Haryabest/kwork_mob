@@ -15,6 +15,7 @@ export type ModelsListParams = {
   dateTo: string;
   authorId: string | null;
   sort: string | null;
+  orderStatus: string | null;
 };
 
 type ModelsResponse = {
@@ -37,6 +38,7 @@ export function useModelsList(params: ModelsListParams, enabled = true) {
     dateTo,
     authorId,
     sort,
+    orderStatus,
   } = params;
 
   return useQuery({
@@ -53,6 +55,7 @@ export function useModelsList(params: ModelsListParams, enabled = true) {
       dateTo,
       authorId,
       sort,
+      orderStatus,
     ],
     enabled: enabled && companyId != null,
     queryFn: async () => {
@@ -69,6 +72,7 @@ export function useModelsList(params: ModelsListParams, enabled = true) {
       if (category) q.category = category;
       if (publishFilter) q.publish_filter = publishFilter;
       if (authorId) q.author_id = Number(authorId);
+      if (orderStatus) q.order_status = orderStatus;
       const { data } = await api.get<ModelsResponse>('/user/models', { params: q });
       return data;
     },

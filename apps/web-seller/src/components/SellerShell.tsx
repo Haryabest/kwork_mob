@@ -30,6 +30,7 @@ import {
   IconShoppingCart,
   IconStack2,
   IconUsersGroup,
+  IconDeviceDesktop,
   IconMoon,
   IconSun,
 } from '@tabler/icons-react';
@@ -42,6 +43,7 @@ import { api } from '../services/api';
 import { GRADIENT_PRIMARY } from '../theme/brand';
 import { useT } from '../i18n/I18nProvider';
 import { useCompanyContext } from '../hooks/useCompanyContext';
+import { QueueWsProvider, useQueueWs } from '../context/QueueWsContext';
 
 const NAV_KEYS = [
   { href: '/dashboard', key: 'dashboard' as const, icon: IconHome2 },
@@ -74,7 +76,13 @@ function SellerShellInner({ children }: { children: ReactNode }) {
   const [userLabel, setUserLabel] = useState('3D');
   const isMobile = useMediaQuery('(max-width: 767px)');
   const { live: queueLive, pendingCount: queuePending, clearPending } = useQueueWs();
-  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
+  const cycleTheme = () => {
+    const next = colorScheme === 'auto' ? 'light' : colorScheme === 'light' ? 'dark' : 'auto';
+    setColorScheme(next);
+  };
+  const themeLabel =
+    colorScheme === 'auto' ? 'Системная тема' : colorScheme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
   const { data: companyCtx } = useCompanyContext();
   const isOwner = companyCtx?.role === 'owner';
 
@@ -121,11 +129,17 @@ function SellerShellInner({ children }: { children: ReactNode }) {
             <Group gap={6} wrap="nowrap">
               <ActionIcon
                 variant="subtle"
-                aria-label={colorScheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-                onClick={() => toggleColorScheme()}
+                aria-label={themeLabel}
+                onClick={cycleTheme}
                 visibleFrom="sm"
               >
-                {colorScheme === 'dark' ? <IconSun size={19} /> : <IconMoon size={19} />}
+                {colorScheme === 'auto' ? (
+                  <IconDeviceDesktop size={19} />
+                ) : colorScheme === 'dark' ? (
+                  <IconSun size={19} />
+                ) : (
+                  <IconMoon size={19} />
+                )}
               </ActionIcon>
               <Badge
                 component={Link}

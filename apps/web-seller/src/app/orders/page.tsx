@@ -6,6 +6,7 @@ import {
   Center,
   Group,
   Loader,
+  Pagination,
   Select,
   Table,
   Text,
@@ -13,7 +14,7 @@ import {
 } from '@mantine/core';
 import { IconPlus, IconSearch } from '@tabler/icons-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
 import { useCompanyContext } from '../../hooks/useCompanyContext';
@@ -49,11 +50,21 @@ export default function OrdersPage() {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [authorId, setAuthorId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
   const { data: company } = useCompanyContext();
   const canFilterAuthors = company != null && MANAGE_ROLES.has(company.role);
   const { data: members = [] } = useCompanyMembers(canFilterAuthors);
-  const { data: items = [], isLoading: loading, dataUpdatedAt } = useOrdersList(company?.id, authorId);
+  const { data, isLoading: loading, dataUpdatedAt } = useOrdersList(
+    company?.id,
+    authorId,
+    page,
+    pageSize,
+  );
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const hasActive = useMemo(() => items.some((o: OrderItem) => ACTIVE_STATUSES.has(o.status)), [items]);
 
@@ -73,6 +84,10 @@ export default function OrdersPage() {
       return true;
     });
   }, [items, q, status]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [status, authorId, company?.id]);
 
   const updatedAt = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
@@ -193,6 +208,14 @@ export default function OrdersPage() {
               </Table.Tbody>
             </Table>
           </ScrollTable>
+        )}
+        {totalPages > 1 && (
+          <Group justify="center" mt="md">
+            <Pagination total={totalPages} value={page} onChange={setPage} />
+            <Text size="sm" c="dimmed">
+              {total} заказов
+            </Text>
+          </Group>
         )}
       </Surface>
     </SellerShell>

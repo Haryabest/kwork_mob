@@ -34,6 +34,7 @@ class InviteRequest(BaseModel):
     max_concurrent_orders: int | None = Field(default=3, ge=1, le=50)
     monthly_spending_limit: int | None = Field(default=None, ge=0)
     ttl_days: int = Field(default=7, ge=1, le=30)
+    allowed_categories: list[str] | None = None
 
 
 class ShootLinkRequest(BaseModel):
@@ -97,6 +98,7 @@ async def list_my_companies(
                 "id": c.id,
                 "name": c.name,
                 "inn": c.inn,
+                "requisites": (c.settings or {}).get("requisites") or {},
                 "balance": c.balance if perms.get("can_view_finance") else None,
                 "role": role_by_company.get(cid, "member"),
                 "is_owner": c.owner_id == user.id,
@@ -142,6 +144,7 @@ async def invite_member(
         monthly_spending_limit=body.monthly_spending_limit,
         status="pending",
         expires_at=datetime.now(timezone.utc) + timedelta(days=body.ttl_days),
+        meta={"allowed_categories": body.allowed_categories} if body.allowed_categories else {},
     )
     db.add(inv)
     await db.flush()
@@ -311,6 +314,8 @@ async def accept_invitation(
             )
         )
         if not existing:
+            inv_meta = inv.meta or {}
+            allowed_cats = inv_meta.get("allowed_categories")
             db.add(
                 CompanyMember(
                     company_id=company_id,
@@ -318,6 +323,7 @@ async def accept_invitation(
                     role=inv.role,
                     max_concurrent_orders=inv.max_concurrent_orders,
                     monthly_spending_limit=inv.monthly_spending_limit,
+                    allowed_categories=allowed_cats if isinstance(allowed_cats, list) else None,
                 )
             )
             from app.models import AuditLog
@@ -513,6 +519,68 @@ async def remove_member(
     await cm.remove_member(db, user, user_id)
     await db.commit()
     return {"ok": True}
+
+
+@router.post("/members/{user_id}/reset-password")
+async def reset_member_password(
+    user_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """§20.5 — Owner/Manager: ссылка сброса пароля на email сотрудника."""
+    from app.services import company_members as cm
+    from app.services.auth import request_password_reset
+
+    company, _role = await cm.require_manager(db, user)
+    m = await cm.get_membership(db, company.id, user_id)
+    if not m:
+        raise HTTPException(404, "Участник не найден")
+    target = await db.get(User, user_id)
+    if not target or not target.email:
+        raise HTTPException(404, "Пользователь не найден")
+    await request_password_reset(db, target.email)
+    await cm.audit(
+        db,
+        company_id=company.id,
+        user_id=user.id,
+        action="member_password_reset",
+        details={"target_user_id": user_id},
+    )
+    await db.commit()
+    return {"ok": True, "message": "Ссылка для сброса пароля отправлена на email"}
+
+
+class CompanyRequisitesBody(BaseModel):
+    inn: str | None = Field(default=None, max_length=12)
+    legal_name: str | None = Field(default=None, max_length=255)
+    legal_address: str | None = None
+    bank_name: str | None = None
+    bank_bik: str | None = Field(default=None, max_length=9)
+    bank_account: str | None = Field(default=None, max_length=20)
+
+
+@router.patch("/requisites")
+async def update_company_requisites(
+    body: CompanyRequisitesBody,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """§20.8 — реквизиты компании (только Owner)."""
+    company = await db.scalar(select(Company).where(Company.owner_id == user.id).limit(1))
+    if not company:
+        raise HTTPException(403, "Только Owner компании")
+    payload = body.model_dump(exclude_unset=True)
+    if "inn" in payload and payload["inn"] is not None:
+        company.inn = payload.pop("inn")
+    if payload:
+        settings = dict(company.settings or {})
+        req = dict(settings.get("requisites") or {})
+        req.update(payload)
+        settings["requisites"] = req
+        company.settings = settings
+    await db.commit()
+    req_out = dict((company.settings or {}).get("requisites") or {})
+    return {"inn": company.inn, **req_out}
 
 
 class RoleBody(BaseModel):
@@ -780,6 +848,9 @@ async def audit_log(
     action_prefix: str | None = Query(None, description="Например oauth_"),
     user_id: int | None = Query(None),
     days: int = Query(30, ge=1, le=365),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    ip: str | None = Query(None, max_length=64),
     limit: int = Query(200, ge=1, le=500),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_db_user),
@@ -800,6 +871,9 @@ async def audit_log(
         action_prefix=action_prefix,
         user_id=user_id,
         days=days,
+        date_from=date_from,
+        date_to=date_to,
+        ip=ip,
         limit=limit,
         offset=offset,
     )
@@ -863,7 +937,11 @@ async def company_access_log_export(
 async def audit_export(
     action: str | None = Query(None),
     action_prefix: str | None = Query(None),
+    user_id: int | None = Query(None),
     days: int = Query(30, ge=1, le=365),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    ip: str | None = Query(None, max_length=64),
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -885,16 +963,20 @@ async def audit_export(
         member_user_ids=member_ids,
         action=action,
         action_prefix=action_prefix,
+        user_id=user_id,
         days=days,
+        date_from=date_from,
+        date_to=date_to,
+        ip=ip,
         limit=5000,
         offset=0,
     )
     rows = data["items"]
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["id", "user_id", "action", "details", "created_at"])
+    w.writerow(["id", "user_id", "action", "ip_address", "details", "created_at"])
     for r in rows:
-        w.writerow([r["id"], r["user_id"], r["action"], r["details"], r["created_at"] or ""])
+        w.writerow([r["id"], r["user_id"], r["action"], r.get("ip_address") or "", r["details"], r["created_at"] or ""])
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",

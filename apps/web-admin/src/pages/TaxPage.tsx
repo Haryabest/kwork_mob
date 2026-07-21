@@ -1,4 +1,4 @@
-import { Button, Group, NumberInput, Select, Stack, TextInput, Textarea } from '@mantine/core';
+import { Button, Card, Group, List, NumberInput, Select, Stack, Text, TextInput, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { PageHeader } from '../components/Panel';
@@ -24,12 +24,19 @@ export default function TaxPage() {
   const [s, setS] = useState<TaxSettings>({ mode: 'self_employed', vat_rate: 0 });
   const [saving, setSaving] = useState(false);
   const [orderId, setOrderId] = useState('');
+  const [taxYear, setTaxYear] = useState(new Date().getFullYear());
+  const [taxQuarter, setTaxQuarter] = useState<string | null>('1');
+  const [instructions, setInstructions] = useState<{ title: string; items: string[] } | null>(null);
 
   useEffect(() => {
     api
       .get<TaxSettings>('/admin/tax/settings')
       .then(({ data }) => setS(data))
       .catch((e) => notifications.show({ color: 'red', message: getApiError(e) }));
+    api
+      .get<{ title: string; items: string[] }>('/admin/tax/instructions')
+      .then(({ data }) => setInstructions(data))
+      .catch(() => undefined);
   }, []);
 
   async function save() {
@@ -68,6 +75,23 @@ export default function TaxPage() {
       const a = document.createElement('a');
       a.href = url;
       a.download = `${kind}-${id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function exportQuarterly() {
+    try {
+      const { data } = await api.get('/admin/tax/quarterly/export', {
+        params: { year: taxYear, quarter: Number(taxQuarter || 1) },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transactions-${taxYear}-Q${taxQuarter}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -179,6 +203,36 @@ export default function TaxPage() {
             PDF акт
           </Button>
         </Group>
+        <Group align="flex-end" mt="md">
+          <NumberInput label="Год" value={taxYear} onChange={(v) => setTaxYear(Number(v) || taxYear)} maw={120} />
+          <Select
+            label="Квартал"
+            value={taxQuarter}
+            onChange={setTaxQuarter}
+            data={[
+              { value: '1', label: 'Q1' },
+              { value: '2', label: 'Q2' },
+              { value: '3', label: 'Q3' },
+              { value: '4', label: 'Q4' },
+            ]}
+            maw={100}
+          />
+          <Button variant="light" onClick={() => void exportQuarterly()}>
+            Excel за квартал
+          </Button>
+        </Group>
+        {instructions && (
+          <Card withBorder mt="md" padding="md">
+            <Text fw={600} mb="xs">
+              {instructions.title}
+            </Text>
+            <List size="sm" spacing={4}>
+              {instructions.items.map((item) => (
+                <List.Item key={item}>{item}</List.Item>
+              ))}
+            </List>
+          </Card>
+        )}
       </Stack>
     </>
   );

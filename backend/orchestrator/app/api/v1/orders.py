@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -768,6 +768,8 @@ async def list_orders(
     db: AsyncSession = Depends(get_db),
     company_id: int | None = Query(default=None),
     user_id: int | None = Query(default=None, description="Фильтр исполнитель §3.16.2"),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
     """§3.5.3 / §3.16.2 — личные заказы или заказы компании с фильтром по сотруднику."""
     from app.services.access import assert_company_access
@@ -793,8 +795,12 @@ async def list_orders(
         stmt = select(Order).where(Order.user_id == user.id)
         if user_id is not None:
             stmt = stmt.where(Order.user_id == user_id)
-    rows = (await db.scalars(stmt.order_by(Order.id.desc()).limit(100))).all()
+    total = await db.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = (await db.scalars(stmt.order_by(Order.id.desc()).offset(offset).limit(limit))).all()
     return {
+        "total": int(total or 0),
+        "limit": limit,
+        "offset": offset,
         "items": [
             {
                 "id": o.id,

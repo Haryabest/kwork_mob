@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_db_user, require_admin
 from app.core.vpn import client_ip
-from app.models import LegalDocument, User, UserConsent
+from app.models import AuditLog, LegalDocument, User, UserConsent
 
 router = APIRouter(prefix="/legal", tags=["Юридические документы"])
 
@@ -141,6 +141,7 @@ async def accept_consents(
 async def publish_document(
     slug: str,
     body: PublishDocumentRequest,
+    admin: User = Depends(get_current_db_user),
     _: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -154,9 +155,22 @@ async def publish_document(
     version = (current.version + 1) if current else 1
     doc = LegalDocument(slug=slug, title=body.title, body=body.body, version=version, is_published=True)
     db.add(doc)
+    await db.flush()
+    db.add(
+        AuditLog(
+            user_id=admin.id,
+            action="legal_document_published",
+            details={"slug": slug, "version": version, "author_email": admin.email},
+        )
+    )
     await db.commit()
     await db.refresh(doc)
-    return {"slug": doc.slug, "version": doc.version, "title": doc.title}
+    return {
+        "slug": doc.slug,
+        "version": doc.version,
+        "title": doc.title,
+        "author_email": admin.email,
+    }
 
 
 @router.get("/admin/{slug}/versions")
@@ -174,6 +188,23 @@ async def list_document_versions(
             .limit(50)
         )
     ).all()
+    authors: dict[int, str | None] = {}
+    for d in rows:
+        log = await db.scalar(
+            select(AuditLog)
+            .where(
+                AuditLog.action == "legal_document_published",
+                AuditLog.details["slug"].astext == slug,
+                AuditLog.details["version"].astext == str(d.version),
+            )
+            .order_by(AuditLog.id.desc())
+            .limit(1)
+        )
+        if log and isinstance(log.details, dict):
+            authors[d.version] = log.details.get("author_email")
+        elif log and log.user_id:
+            u = await db.get(User, log.user_id)
+            authors[d.version] = u.email if u else None
     return {
         "items": [
             {
@@ -181,7 +212,45 @@ async def list_document_versions(
                 "title": d.title,
                 "is_published": d.is_published,
                 "created_at": d.created_at.isoformat() if d.created_at else None,
+                "author_email": authors.get(d.version),
             }
             for d in rows
         ]
+    }
+
+
+@router.get("/admin/{slug}/versions/{version}")
+async def preview_document_version(
+    slug: str,
+    version: int,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Превью версии документа §11.11."""
+    doc = await db.scalar(
+        select(LegalDocument).where(LegalDocument.slug == slug, LegalDocument.version == version)
+    )
+    if not doc:
+        raise HTTPException(404, "Версия не найдена")
+    log = await db.scalar(
+        select(AuditLog)
+        .where(
+            AuditLog.action == "legal_document_published",
+            AuditLog.details["slug"].astext == slug,
+            AuditLog.details["version"].astext == str(version),
+        )
+        .order_by(AuditLog.id.desc())
+        .limit(1)
+    )
+    author_email = None
+    if log and isinstance(log.details, dict):
+        author_email = log.details.get("author_email")
+    return {
+        "slug": doc.slug,
+        "version": doc.version,
+        "title": doc.title,
+        "body": doc.body,
+        "is_published": doc.is_published,
+        "created_at": doc.created_at.isoformat() if doc.created_at else None,
+        "author_email": author_email,
     }

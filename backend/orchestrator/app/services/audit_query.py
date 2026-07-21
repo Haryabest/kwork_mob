@@ -47,12 +47,17 @@ async def list_audit_logs(
 
 
 def _audit_row(r: AuditLog) -> dict:
+    details = r.details or {}
+    ip = None
+    if isinstance(details, dict):
+        ip = details.get("ip") or details.get("ip_address")
     return {
         "id": r.id,
         "user_id": r.user_id,
         "company_id": r.company_id,
         "action": r.action,
-        "details": r.details,
+        "details": details,
+        "ip_address": ip,
         "created_at": r.created_at.isoformat() if r.created_at else None,
     }
 
@@ -66,11 +71,16 @@ async def list_company_audit_logs(
     action_prefix: str | None = None,
     user_id: int | None = None,
     days: int = 30,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    ip: str | None = None,
     limit: int = 200,
     offset: int = 0,
 ) -> dict:
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = date_from or (datetime.now(timezone.utc) - timedelta(days=days))
     filters = [AuditLog.created_at >= since]
+    if date_to:
+        filters.append(AuditLog.created_at <= date_to)
     if action:
         filters.append(AuditLog.action == action)
     elif action_prefix:
@@ -90,6 +100,9 @@ async def list_company_audit_logs(
             filters.append(AuditLog.company_id == company_id)
     else:
         filters.append(AuditLog.company_id == company_id)
+
+    if ip and ip.strip():
+        filters.append(AuditLog.details["ip"].astext.ilike(f"%{ip.strip()}%"))
 
     total = await db.scalar(select(func.count()).select_from(AuditLog).where(*filters))
     rows = (

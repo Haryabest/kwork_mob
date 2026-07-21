@@ -18,6 +18,7 @@ class FrameQuality {
     this.laplacian = 0,
     this.centerOffset = 0,
     this.fillRatio = 0,
+    this.angleErrorDeg = 0,
   });
 
   final int index;
@@ -28,12 +29,14 @@ class FrameQuality {
   final double laplacian;
   final double centerOffset;
   final double fillRatio;
+  final double angleErrorDeg;
 
   String localizedReason(AppLocalizations l) {
     final parts = <String>[];
     if (blurry) parts.add(l.qaBlur);
     if (offCenter) parts.add(l.qaOffCenter);
     if (overexposed) parts.add(l.qaOverexposed);
+    if (angleErrorDeg > 15) parts.add('angle');
     return parts.isEmpty ? l.qaOk : parts.join(', ');
   }
 
@@ -53,12 +56,12 @@ class QualityAnalyzer {
 
   static const laplacianThreshold = 100.0;
 
-  Future<FrameQuality> analyzeFile(int index, File file) async {
+  Future<FrameQuality> analyzeFile(int index, File file, {double angleErrorDeg = 0}) async {
     final bytes = await file.readAsBytes();
-    return analyzeBytes(index, bytes);
+    return analyzeBytes(index, bytes, angleErrorDeg: angleErrorDeg);
   }
 
-  FrameQuality analyzeBytes(int index, List<int> jpegBytes) {
+  FrameQuality analyzeBytes(int index, List<int> jpegBytes, {double angleErrorDeg = 0}) {
     final decoded = img.decodeImage(Uint8List.fromList(jpegBytes));
     if (decoded == null) {
       return FrameQuality(index: index, verdict: FrameVerdict.fail, blurry: true);
@@ -78,7 +81,7 @@ class QualityAnalyzer {
     final blurry = lap < laplacianThreshold;
     final offCenter = offset > 0.10;
     final overexposed = _overexposedRatio(gray) > 0.05;
-    final fail = blurry || offCenter || overexposed;
+    final fail = blurry || offCenter || overexposed || angleErrorDeg > 15;
 
     return FrameQuality(
       index: index,
@@ -89,18 +92,21 @@ class QualityAnalyzer {
       laplacian: lap,
       centerOffset: offset,
       fillRatio: fill,
+      angleErrorDeg: angleErrorDeg,
     );
   }
 
-  /// Центрирование + доля контура для блокировки спуска (§3.1.3).
-  ({bool centered, bool fillOk, double offset, double fill, String? message})
+  /// Центрирование + доля контура + резкость для блокировки спуска (§3.1.3).
+  ({bool centered, bool fillOk, bool blurry, double offset, double fill, String? message})
       liveGate(List<int> jpegBytes, AppLocalizations l) {
     final q = analyzeBytes(0, jpegBytes);
     final centered = q.centerOffset <= kCenterMaxOffsetRatio;
     final fillOk =
         q.fillRatio >= kContourMinFill && q.fillRatio <= kContourMaxFill;
     String? msg;
-    if (!centered) {
+    if (q.blurry) {
+      msg = l.qaBlur;
+    } else if (!centered) {
       msg = l.qaCenterPhone;
     } else if (q.fillRatio < kContourMinFill) {
       msg = l.qaCloser;
@@ -110,6 +116,7 @@ class QualityAnalyzer {
     return (
       centered: centered,
       fillOk: fillOk,
+      blurry: q.blurry,
       offset: q.centerOffset,
       fill: q.fillRatio,
       message: msg,

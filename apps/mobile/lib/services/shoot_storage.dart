@@ -26,6 +26,7 @@ class ShootDraft {
     this.photosPrefix,
     this.photosUploaded = false,
     this.displayName,
+    this.angleErrors = const {},
   });
 
   final String modelUuid;
@@ -42,6 +43,7 @@ class ShootDraft {
   String? photosPrefix;
   bool photosUploaded;
   String? displayName;
+  Map<int, double> angleErrors;
 
   Map<String, dynamic> toJson() => {
         'model_uuid': modelUuid,
@@ -58,6 +60,8 @@ class ShootDraft {
         if (photosPrefix != null) 'photos_prefix': photosPrefix,
         'photos_uploaded': photosUploaded,
         if (displayName != null && displayName!.isNotEmpty) 'display_name': displayName,
+        if (angleErrors.isNotEmpty)
+          'angle_errors': angleErrors.map((k, v) => MapEntry('$k', v)),
       };
 
   static ShootDraft fromJson(Map<String, dynamic> j) {
@@ -92,6 +96,10 @@ class ShootDraft {
       photosPrefix: j['photos_prefix']?.toString(),
       photosUploaded: j['photos_uploaded'] == true,
       displayName: j['display_name']?.toString(),
+      angleErrors: {
+        for (final e in ((j['angle_errors'] as Map?) ?? {}).entries)
+          int.parse(e.key.toString()): (e.value as num).toDouble(),
+      },
     );
   }
 }
@@ -118,9 +126,21 @@ class ShootStorage {
     return File(p.join((await sourceDir(modelUuid)).path, angle.filename));
   }
 
-  Future<void> savePhoto(String modelUuid, int index, List<int> jpegBytes) async {
+  Future<void> savePhoto(
+    String modelUuid,
+    int index,
+    List<int> jpegBytes, {
+    double? angleErrorDeg,
+  }) async {
     final f = await photoFile(modelUuid, index);
     await f.writeAsBytes(jpegBytes, flush: true);
+    if (angleErrorDeg != null) {
+      final draft = await loadDraft(modelUuid);
+      if (draft != null) {
+        draft.angleErrors[index] = angleErrorDeg;
+        await writeMetadata(draft);
+      }
+    }
   }
 
   Future<List<File?>> listPhotos(String modelUuid) async {

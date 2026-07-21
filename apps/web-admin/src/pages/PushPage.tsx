@@ -1,4 +1,4 @@
-import { Badge, Button, Center, Group, Select, Stack, TextInput, Textarea } from '@mantine/core';
+import { Badge, Button, Center, Group, Select, Stack, Tabs, TextInput, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconRefresh } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -36,15 +36,18 @@ export default function PushPage() {
     total_opened?: number;
     items?: Array<{ id: number; title: string; open_rate?: number; opened?: number; delivered_inbox?: number }>;
   } | null>(null);
+  const [optOuts, setOptOuts] = useState<Array<{ id: number; email?: string; full_name?: string | null }>>([]);
 
   const loadHistory = useCallback(async () => {
     try {
-      const [hist, stats] = await Promise.all([
+      const [hist, stats, outs] = await Promise.all([
         api.get<{ items: PushRow[] }>('/admin/campaigns/push'),
         api.get<typeof openStats>('/admin/campaigns/push/stats'),
+        api.get<{ items: typeof optOuts }>('/admin/users/marketing-opt-outs'),
       ]);
       setHistory(hist.data.items ?? []);
       setOpenStats(stats.data);
+      setOptOuts(outs.data.items ?? []);
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
     }
@@ -139,7 +142,14 @@ export default function PushPage() {
         ]}
       />
 
-      <Stack maw={560} mb="xl" mt="md">
+      <Tabs defaultValue="send" mt="md">
+        <Tabs.List>
+          <Tabs.Tab value="send">Рассылка</Tabs.Tab>
+          <Tabs.Tab value="history">Журнал</Tabs.Tab>
+          <Tabs.Tab value="optouts">Отписки ({optOuts.length})</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="send" pt="md">
+      <Stack maw={560} mb="xl">
         <Select label="Сегмент" value={segment} onChange={setSegment} data={SEGMENTS} />
         <TextInput label="Заголовок" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
         <Textarea label="Текст" minRows={4} value={body} onChange={(e) => setBody(e.currentTarget.value)} />
@@ -168,7 +178,8 @@ export default function PushPage() {
         </Group>
         {result && <Center>{result}</Center>}
       </Stack>
-
+        </Tabs.Panel>
+        <Tabs.Panel value="history" pt="md">
       <ShellTable
         headers={['ID', 'Заголовок', 'Статус', 'Reach', 'Open %', 'Когда']}
         rows={history.map((h) => {
@@ -191,6 +202,18 @@ export default function PushPage() {
         ];
         })}
       />
+        </Tabs.Panel>
+        <Tabs.Panel value="optouts" pt="md">
+          <ShellTable
+            headers={['ID', 'Email', 'Имя']}
+            rows={
+              optOuts.length
+                ? optOuts.map((u) => [String(u.id), u.email || '—', u.full_name || '—'])
+                : [['—', 'Нет отписавшихся', '—']]
+            }
+          />
+        </Tabs.Panel>
+      </Tabs>
     </>
   );
 }

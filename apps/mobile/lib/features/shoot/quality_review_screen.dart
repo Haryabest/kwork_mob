@@ -62,7 +62,8 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
           'error_type': 'missing_frame',
         });
       } else {
-        results.add(await QualityAnalyzer.instance.analyzeFile(i, f));
+        final angleErr = draft?.angleErrors[i] ?? 0;
+        results.add(await QualityAnalyzer.instance.analyzeFile(i, f, angleErrorDeg: angleErr));
       }
     }
     if (!mounted) return;
@@ -95,6 +96,8 @@ class _QualityReviewScreenState extends State<QualityReviewScreen> {
         errorType = 'overexposed';
       } else if (frame.offCenter) {
         errorType = 'off_center';
+      } else if (frame.angleErrorDeg > 15) {
+        errorType = 'angle_error';
       } else if (frame.verdict == FrameVerdict.fail) {
         errorType = 'fail';
       }

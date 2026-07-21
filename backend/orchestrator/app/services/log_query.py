@@ -16,7 +16,7 @@ from app.services.log_writer import _ch
 
 logger = logging.getLogger(__name__)
 
-VALID_SOURCES = {"worker", "api", "audit", "orchestrator", "all"}
+VALID_SOURCES = {"worker", "api", "audit", "orchestrator", "segmentation", "all"}
 VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "all"}
 
 
@@ -170,7 +170,7 @@ async def _query_postgres(
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
 
-    include_service = not source or source in ("all", "worker", "api", "orchestrator")
+    include_service = not source or source in ("all", "worker", "api", "orchestrator", "segmentation")
     include_audit = not source or source in ("all", "audit")
 
     if include_service:
@@ -179,7 +179,9 @@ async def _query_postgres(
             stmt = stmt.where(ServiceLogEvent.created_at >= from_dt)
         if to_dt:
             stmt = stmt.where(ServiceLogEvent.created_at <= to_dt)
-        if source and source != "all" and source != "audit":
+        if source == "segmentation":
+            stmt = stmt.where(ServiceLogEvent.message.ilike("%segmentation%"))
+        elif source and source != "all" and source != "audit":
             stmt = stmt.where(ServiceLogEvent.source == source)
         if level and level.lower() != "all":
             stmt = stmt.where(ServiceLogEvent.level == level.upper())

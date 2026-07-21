@@ -38,6 +38,7 @@ class GhostMeshOverlay extends StatelessWidget {
     required this.category,
     required this.scale,
     required this.aligned,
+    this.fitOk = true,
     this.shapeOverride,
     this.onScaleUpdate,
     this.interactive = true,
@@ -46,6 +47,7 @@ class GhostMeshOverlay extends StatelessWidget {
   final ProductCategory category;
   final double scale;
   final bool aligned;
+  final bool fitOk;
   final GhostMeshShape? shapeOverride;
   final ValueChanged<double>? onScaleUpdate;
   final bool interactive;
@@ -57,7 +59,11 @@ class GhostMeshOverlay extends StatelessWidget {
     final baseW = size.width * 0.55;
     final baseH = size.height * 0.45;
     final (w, h) = _dims(shape, baseW, baseH, scale);
-    final color = aligned ? AppColors.success : AppColors.accent;
+    final color = !fitOk
+        ? AppColors.error
+        : aligned
+            ? AppColors.success
+            : AppColors.accent;
 
     Widget mesh = CustomPaint(
       painter: _GhostPainter(shape: shape, color: color.withValues(alpha: 0.5)),

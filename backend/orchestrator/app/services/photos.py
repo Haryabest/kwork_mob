@@ -111,6 +111,20 @@ def require_all_photos(task_uuid: str) -> None:
         raise HTTPException(400, f"Не хватает фото: {', '.join(missing)}")
 
 
+def copy_task_photos(src_uuid: str, dst_uuid: str) -> None:
+    """Копия 12 ракурсов для перегенерации §20.4."""
+    bucket = settings.MINIO_BUCKET_PHOTOS
+    require_all_photos(src_uuid)
+    for name in VIEW_NAMES:
+        src_key = f"{photos_prefix(src_uuid)}{name}"
+        dst_key = f"{photos_prefix(dst_uuid)}{name}"
+        minio_service.client.copy_object(
+            CopySource={"Bucket": bucket, "Key": src_key},
+            Bucket=bucket,
+            Key=dst_key,
+        )
+
+
 def delete_task_photos(task_uuid: str) -> dict[str, Any]:
     """Удалить photos/{task_uuid}/ из MinIO (§3.15.4 TTL)."""
     bucket = settings.MINIO_BUCKET_PHOTOS
