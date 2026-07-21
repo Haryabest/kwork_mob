@@ -10,6 +10,8 @@ import { SellerShell } from '../../components/SellerShell';
 import { ModelsGridView } from '../../components/ModelsGridView';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
 import { api, apiMessage } from '../../services/api';
+import { useCompanyContext } from '../../hooks/useCompanyContext';
+import { useCompanyMembers } from '../../hooks/useOrdersList';
 import { useModelsList } from '../../hooks/useModelsList';
 
 type Model = {
@@ -30,11 +32,6 @@ type ModelsResponse = {
   total: number;
   limit: number;
   offset: number;
-};
-
-type CompanyCtx = {
-  id: number;
-  role: string;
 };
 
 type Member = {
@@ -112,12 +109,14 @@ export default function ModelsPage() {
   const [dateTo, setDateTo] = useState('');
   const [authorId, setAuthorId] = useState<string | null>(null);
   const [sort, setSort] = useState<string | null>('newest');
-  const [isOwner, setIsOwner] = useState(false);
   const [massBusy, setMassBusy] = useState(false);
-  const [company, setCompany] = useState<CompanyCtx | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
   const isMobile = useMediaQuery('(max-width: 767px)');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+
+  const { data: company } = useCompanyContext();
+  const canFilterAuthors = company != null && MANAGE_ROLES.has(company.role);
+  const { data: members = [] } = useCompanyMembers(canFilterAuthors);
+  const isOwner = company?.role === 'owner';
 
   const { data: modelsData, isLoading: loading, refetch } = useModelsList(
     {
@@ -138,7 +137,6 @@ export default function ModelsPage() {
   const items = (modelsData?.items ?? []) as Model[];
   const total = modelsData?.total ?? 0;
 
-  const canFilterAuthors = company != null && MANAGE_ROLES.has(company.role);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const useVirtualGrid = viewMode === 'grid' && (total > 100 || items.length > 100);
 
@@ -164,28 +162,7 @@ export default function ModelsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, publishFilter, category, tier, dateFrom, dateTo, authorId, sort, company, pageSize]);
-
-  useEffect(() => {
-    api
-      .get<{ items: Array<{ id: number; role?: string }> }>('/company/mine')
-      .then(({ data }) => {
-        const first = data.items?.[0];
-        if (first?.id) {
-          setCompany({ id: first.id, role: first.role || 'member' });
-          setIsOwner(first.role === 'owner');
-        }
-      })
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    if (!canFilterAuthors) return;
-    api
-      .get<{ items: Member[] }>('/company/members')
-      .then(({ data }) => setMembers(data.items ?? []))
-      .catch(() => undefined);
-  }, [canFilterAuthors]);
+  }, [search, publishFilter, category, tier, dateFrom, dateTo, authorId, sort, company?.id, pageSize]);
 
   async function massExtendAll() {
     if (!window.confirm('Продлить хранение исходников для всех моделей компании? (лимит 3× на модель)')) {

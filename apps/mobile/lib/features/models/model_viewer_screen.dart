@@ -29,6 +29,7 @@ class ModelsScreen extends StatefulWidget {
     this.companyId,
     this.onNotifications,
     this.unread = 0,
+    this.homeHeader,
   });
 
   final ApiClient api;
@@ -36,6 +37,7 @@ class ModelsScreen extends StatefulWidget {
   final int? companyId;
   final VoidCallback? onNotifications;
   final int unread;
+  final Widget? homeHeader;
 
   @override
   State<ModelsScreen> createState() => _ModelsScreenState();
@@ -385,6 +387,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (widget.homeHeader != null) widget.homeHeader!,
             Text(l.mvTitle, style: context.theme.typography.xl.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             Center(child: Text(l.mvNoModels)),
@@ -397,6 +400,8 @@ class _ModelsScreenState extends State<ModelsScreen> {
       onRefresh: _load,
       child: CustomScrollView(
         slivers: [
+          if (widget.homeHeader != null)
+            SliverToBoxAdapter(child: widget.homeHeader!),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 48, 16, 8),

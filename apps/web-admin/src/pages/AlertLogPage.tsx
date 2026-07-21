@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Group, Select, Table, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconDownload, IconRefresh } from '@tabler/icons-react';
+import { IconDownload, IconRefresh, IconSettings } from '@tabler/icons-react';
+import { Link } from 'react-router-dom';
 import { api, getApiError } from '../services/api';
 
 type Row = {
@@ -82,6 +83,9 @@ export default function AlertLogPage() {
           </Text>
         </div>
         <Group>
+          <Button component={Link} to="/settings#alert-thresholds" variant="light" leftSection={<IconSettings size={16} />}>
+            Пороги алертов
+          </Button>
           <Button leftSection={<IconRefresh size={16} />} variant="light" onClick={() => void load()}>
             Обновить
           </Button>

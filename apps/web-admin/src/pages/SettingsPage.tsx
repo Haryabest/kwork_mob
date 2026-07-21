@@ -411,7 +411,7 @@ export default function SettingsPage() {
           </Stack>
         </Card>
 
-        <Card withBorder>
+        <Card withBorder id="alert-thresholds">
           <Text fw={600} mb="sm">
             Пороги алертов §12.4.1 / §11.16.5
           </Text>

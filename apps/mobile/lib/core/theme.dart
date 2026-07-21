@@ -34,6 +34,10 @@ abstract final class AppColors {
     end: Alignment.centerRight,
   );
 
+  /// Wildberries / FAB §19.1.2
+  static const wbPrimary = Color(0xFF6D3B6B);
+  static const wbLight = Color(0xFF8B4F89);
+
   /// Ozon / вторичный.
   static const ozonPrimary = Color(0xFF005B9F);
   static const ozonLight = Color(0xFF0073B7);
@@ -107,7 +111,7 @@ ThemeData buildMaterialTheme(FThemeData forui) {
     textTheme: material.textTheme.apply(fontFamily: AppFonts.family),
     primaryTextTheme: material.primaryTextTheme.apply(fontFamily: AppFonts.family),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: AppColors.accent,
+      backgroundColor: AppColors.wbPrimary,
       foregroundColor: Colors.white,
     ),
     colorScheme: ColorScheme.fromSeed(

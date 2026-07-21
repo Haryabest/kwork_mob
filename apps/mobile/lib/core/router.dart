@@ -129,8 +129,9 @@ GoRouter createRouter({
           final ticketId = int.tryParse(q['supportTicket'] ?? '');
           final tab = q['tab'];
           int? initialTab;
-          if (tab == 'profile') initialTab = 4;
-          if (tab == 'orders') initialTab = 2;
+          if (tab == 'profile') initialTab = 2;
+          if (tab == 'orders') initialTab = 1;
+          if (tab == 'models' || tab == 'home') initialTab = 0;
           if (tab == 'support' || ticketId != null) initialTab = 3;
           final authorId = int.tryParse(q['author'] ?? '');
           return HomeShell(

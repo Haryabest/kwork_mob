@@ -18,10 +18,12 @@
     "@mantine/notifications": "^7.17.8",
     "@tabler/icons-react": "^3.44.0",
     "@tanstack/react-query": "^5.60.0",
+    "@types/react-window": "^1.8.8",
     "axios": "^1.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.0.0",
+    "react-window": "^1.8.11",
     "recharts": "^2.13.0"
   },
   "devDependencies": {

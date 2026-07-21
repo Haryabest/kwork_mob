@@ -4,6 +4,7 @@ import { notifications } from '@mantine/notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { HealthCard, MetricGrid, PageHeader, SaveButton, ShellTable, StateBadge } from '../components/Panel';
+import { VirtualShellTable } from '../components/VirtualShellTable';
 import { api, getApiError } from '../services/api';
 
 export function WorkersPage() {
@@ -598,7 +599,7 @@ export function UsersPage() {
       <Group mb="md">
         <TextInput placeholder="Поиск по ID, email" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
       </Group>
-      <ShellTable
+      <VirtualShellTable
         headers={['ID', 'Пользователь', 'Email', 'Статус', '']}
         rows={filtered.map((user) => [
           String(user.id),
@@ -819,7 +820,7 @@ export function CompaniesPage() {
           </Group>
         }
       />
-      <ShellTable
+      <VirtualShellTable
         headers={['ID', 'Компания', 'Сотрудники', 'Баланс', 'Статус', '']}
         rows={items.map((c) => [
           String(c.id),

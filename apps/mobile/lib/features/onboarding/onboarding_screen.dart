@@ -74,7 +74,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(p.icon, size: 72, color: AppColors.accent),
+                        Icon(p.icon, size: 72, color: AppColors.wbPrimary),
                         const SizedBox(height: 16),
                         Text(
                           '${i + 1} / ${pages.length}',
@@ -110,7 +110,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   margin: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: i == _page ? AppColors.accent : AppColors.surface,
+                    color: i == _page ? AppColors.wbPrimary : AppColors.surface,
                   ),
                 ),
               ),

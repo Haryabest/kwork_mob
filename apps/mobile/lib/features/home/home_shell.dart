@@ -56,9 +56,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   bool _offline = false;
   List<Map<String, dynamic>> _campaignBanners = [];
   final _dismissedBannerIds = <int>{};
-  final _homeTabKey = GlobalKey<_HomeTabState>();
+  final _homeQuickKey = GlobalKey<_HomeQuickPanelState>();
 
-  static const _tabScreens = ['home', 'models', 'orders', 'support', 'profile'];
+  static const _tabScreens = ['home', 'orders', 'profile', 'support'];
 
   String _screenName(int i) => _tabScreens[i.clamp(0, _tabScreens.length - 1)];
 
@@ -126,7 +126,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       return;
     }
     if (uri.path == '/home' && uri.queryParameters['tab'] == 'profile') {
-      setState(() => _index = 4);
+      setState(() => _index = 2);
       return;
     }
     if (mounted) context.go(route);
@@ -249,24 +249,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final l10n = AppLocalizations.of(context)!;
     final session = widget.session;
     final pages = [
-      _HomeTab(
-        key: _homeTabKey,
-        api: widget.api,
-        session: session,
-        onSwitchMode: _switchMode,
-        onQueue: () => context.push('/home/queue'),
-        onNotifications: () async {
-          await context.push('/home/notifications');
-          await _loadUnread();
-        },
-        unread: _unread,
-        onShootLink: session.canManageTeam
-            ? () {
-                AnalyticsService.instance.track('screen_view', {'screen': 'shoot_link_fab'});
-                context.push('/home/shoot-link');
-              }
-            : null,
-      ),
       ModelsScreen(
         api: widget.api,
         session: session,
@@ -276,6 +258,19 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           await _loadUnread();
         },
         unread: _unread,
+        homeHeader: _HomeQuickPanel(
+          key: _homeQuickKey,
+          api: widget.api,
+          session: session,
+          onSwitchMode: _switchMode,
+          onQueue: () => context.push('/home/queue'),
+          onShootLink: session.canManageTeam
+              ? () {
+                  AnalyticsService.instance.track('screen_view', {'screen': 'shoot_link_fab'});
+                  context.push('/home/shoot-link');
+                }
+              : null,
+        ),
       ),
       _OrdersTab(
         api: widget.api,
@@ -330,8 +325,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             onChange: (i) {
               setState(() => _index = i);
               AnalyticsService.instance.track('screen_view', {'screen': _screenName(i)});
-              if (i == 0) _homeTabKey.currentState?.refreshPending();
-              if (i == 1) {
+              if (i == 0) {
+                _homeQuickKey.currentState?.refreshPending();
                 LocalModelLibrary.instance.syncPendingDownloads(
                   widget.api,
                   companyId: widget.session.corporate ? widget.session.companyId : null,
@@ -344,25 +339,21 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                 label: Text(l10n.home),
               ),
               FBottomNavigationBarItem(
-                icon: const Icon(FIcons.box),
-                label: Text(l10n.models),
-              ),
-              FBottomNavigationBarItem(
                 icon: const Icon(FIcons.receipt),
                 label: Text(l10n.orders),
-              ),
-              FBottomNavigationBarItem(
-                icon: const Icon(FIcons.lifeBuoy),
-                label: Text(l10n.support),
               ),
               FBottomNavigationBarItem(
                 icon: const Icon(FIcons.user),
                 label: Text(l10n.profile),
               ),
+              FBottomNavigationBarItem(
+                icon: const Icon(FIcons.lifeBuoy),
+                label: Text(l10n.support),
+              ),
             ],
           ),
         ),
-        if (_index <= 1)
+        if (_index == 0)
           Positioned(
             left: 16,
             right: 16,
@@ -405,12 +396,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               ],
             ),
           ),
-        if (_index <= 1)
+        if (_index == 0)
           Positioned(
             right: 20,
             bottom: 88,
             child: FloatingActionButton(
-              backgroundColor: AppColors.accent,
+              backgroundColor: AppColors.wbPrimary,
               foregroundColor: Colors.white,
               onPressed: () => context.push('/home/shoot'),
               tooltip: l10n.shoot,
@@ -423,15 +414,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 }
 
-class _HomeTab extends StatefulWidget {
-  const _HomeTab({
+class _HomeQuickPanel extends StatefulWidget {
+  const _HomeQuickPanel({
     super.key,
     required this.api,
     required this.session,
     required this.onSwitchMode,
     required this.onQueue,
-    required this.onNotifications,
-    required this.unread,
     this.onShootLink,
   });
 
@@ -439,15 +428,13 @@ class _HomeTab extends StatefulWidget {
   final AppSession session;
   final VoidCallback onSwitchMode;
   final VoidCallback onQueue;
-  final VoidCallback onNotifications;
-  final int unread;
   final VoidCallback? onShootLink;
 
   @override
-  State<_HomeTab> createState() => _HomeTabState();
+  State<_HomeQuickPanel> createState() => _HomeQuickPanelState();
 }
 
-class _HomeTabState extends State<_HomeTab> {
+class _HomeQuickPanelState extends State<_HomeQuickPanel> {
   ({String modelUuid, int uploaded, int total})? _pendingUpload;
 
   @override
@@ -474,34 +461,11 @@ class _HomeTabState extends State<_HomeTab> {
         ? (session.companyName ?? l10n.corporateMode)
         : l10n.personalMode;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 48, 20, 100),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                l10n.appName,
-                style: context.theme.typography.xl.copyWith(fontWeight: FontWeight.bold),
-              ),
-            ),
-            IconButton(
-              onPressed: widget.onNotifications,
-              icon: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(FIcons.bell),
-                  if (widget.unread > 0)
-                    Positioned(
-                      right: -6,
-                      top: -4,
-                      child: FBadge(child: Text('${widget.unread}')),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         if (_pendingUpload != null) ...[
           const SizedBox(height: 12),
           Material(
@@ -583,7 +547,8 @@ class _HomeTabState extends State<_HomeTab> {
             child: Text(l10n.homeShootLinkQr),
           ),
         ],
-      ],
+        ],
+      ),
     );
   }
 }

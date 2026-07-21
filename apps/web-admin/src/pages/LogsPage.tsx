@@ -11,7 +11,8 @@ import {
 import { IconDownload, IconRefresh } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useCallback, useEffect, useState } from 'react';
-import { PageHeader, ShellTable, StateBadge } from '../components/Panel';
+import { PageHeader, StateBadge } from '../components/Panel';
+import { VirtualShellTable } from '../components/VirtualShellTable';
 import { api, getApiError } from '../services/api';
 
 type LogRow = {
@@ -186,7 +187,7 @@ export default function LogsPage() {
           <Loader color="brand" />
         </Center>
       ) : (
-        <ShellTable
+        <VirtualShellTable
           headers={['Время', 'Уровень', 'Источник', 'Сообщение', 'Воркер', 'Задача']}
           rows={
             items.length
