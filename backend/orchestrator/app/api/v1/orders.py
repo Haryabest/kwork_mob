@@ -42,6 +42,7 @@ class PhotoEncryptionKeyBody(BaseModel):
 class OrderPayRequest(BaseModel):
     payment_method: str = "redirect"
     customer_name: str | None = None
+    captcha_token: str | None = None
 
 
 class ZipUploadInitBody(BaseModel):
@@ -125,6 +126,9 @@ async def _task_payload(
     os_version: str | None = None,
 ) -> dict:
     prefix = photos_prefix or f"photos/{order.task_uuid}/"
+    from app.services import company_buckets as cb_svc
+
+    models_bucket = await cb_svc.models_bucket_for_company(db, order.company_id)
     payload = {
         "category": order.category,
         "tier": order.tier,
@@ -133,7 +137,7 @@ async def _task_payload(
         "company_id": order.company_id,
         "photos_bucket": settings.MINIO_BUCKET_PHOTOS,
         "photos_prefix": prefix,
-        "models_bucket": settings.MINIO_BUCKET_MODELS,
+        "models_bucket": models_bucket,
         "upsell_options": order.upsell_options or [],
         "scale_calibration": order.scale_calibration,
         "device_model": device_model or order.device_model or "unknown",
@@ -287,6 +291,11 @@ async def create_order(
             400,
             "Вы выбрали запрещённую категорию. Заказ будет отклонён без возврата средств.",
         )
+
+    from app.services import order_rate_limit as orl_svc
+
+    await orl_svc.assert_order_creation_allowed(db, user_id=user.id, company_id=body.company_id)
+
     if await nsfw_service.check_blacklist_db(db, body.category.value):
         raise HTTPException(400, "Категория в чёрном списке")
 
@@ -510,6 +519,7 @@ async def create_order(
 @router.post("/{order_id}/pay")
 async def pay_order(
     order_id: int,
+    request: Request,
     body: OrderPayRequest | None = None,
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
@@ -520,6 +530,13 @@ async def pay_order(
         raise HTTPException(404, "Заказ не найден")
     if order.status not in ("awaiting_payment", "pending"):
         raise HTTPException(400, f"Заказ в статусе {order.status}, оплата не нужна")
+
+    from app.services import captcha_guard as cap_svc
+    from app.api.v1.auth import client_ip
+
+    await cap_svc.require_payment_captcha(
+        db, user, client_ip(request), body.captcha_token
+    )
 
     if body.customer_name and body.customer_name.strip():
         order.customer_name = body.customer_name.strip()

@@ -25,7 +25,8 @@ _stop = asyncio.Event()
 
 
 async def _assign_once() -> bool:
-    item = await queue_service.dequeue()
+    async with async_session() as db:
+        item = await queue_service.dequeue_with_fallback(db)
     if not item:
         return False
 

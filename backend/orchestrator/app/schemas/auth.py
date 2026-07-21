@@ -11,6 +11,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     password_confirm: str
+    captcha_token: str | None = None
     # §2.8 — обязательные согласия при регистрации
     consents: list[str] = Field(default_factory=list)
 

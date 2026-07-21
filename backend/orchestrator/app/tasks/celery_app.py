@@ -98,10 +98,10 @@ def run_escalations():
 
 @celery_app.task(name="app.tasks.celery_app.backup_postgres")
 def backup_postgres():
-    """Резервное копирование БД в MinIO (§9)."""
-    from app.services.backup import run_pg_dump_to_minio
+    """Резервное копирование БД в MinIO (§9.4: pg_dump + опционально WAL-G)."""
+    from app.services.backup import run_backup_suite
 
-    return run_pg_dump_to_minio()
+    return run_backup_suite()
 
 
 @celery_app.task(name="app.tasks.celery_app.collect_queue_metrics")
@@ -633,4 +633,49 @@ def sync_user_events_to_clickhouse():
 celery_app.conf.beat_schedule["user-events-ch-sync-every-15-min"] = {
     "task": "app.tasks.celery_app.sync_user_events_to_clickhouse",
     "schedule": crontab(minute="*/15"),
+}
+
+
+@celery_app.task(name="app.tasks.celery_app.process_company_data_export")
+def process_company_data_export(export_id: int):
+    """§9.5.2 — сбор ZIP всех данных компании."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services.company_data_export import process_export
+
+    async def _run():
+        async with async_session() as db:
+            result = await process_export(db, export_id)
+            await db.commit()
+            return result
+
+    return asyncio.run(_run())
+
+
+@celery_app.task(name="app.tasks.celery_app.run_partman_maintenance")
+def run_partman_maintenance_task():
+    """§9.3.2 — ежедневное обслуживание pg_partman."""
+    from app.services.partman import run_partman_maintenance
+
+    return run_partman_maintenance()
+
+
+celery_app.conf.beat_schedule["partman-maintenance-daily"] = {
+    "task": "app.tasks.celery_app.run_partman_maintenance",
+    "schedule": crontab(hour=3, minute=0),
+}
+
+
+@celery_app.task(name="app.tasks.celery_app.backup_walg")
+def backup_walg():
+    """§9.4 — WAL-G incremental/full (каждые 6ч)."""
+    from app.services.backup import run_walg_backup_push
+
+    return run_walg_backup_push()
+
+
+celery_app.conf.beat_schedule["backup-walg-every-6h"] = {
+    "task": "app.tasks.celery_app.backup_walg",
+    "schedule": crontab(minute=15, hour="*/6"),
 }

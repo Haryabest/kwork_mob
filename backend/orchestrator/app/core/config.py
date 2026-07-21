@@ -83,6 +83,26 @@ class Settings(BaseSettings):
     # reCAPTCHA v3 (§20.10.2 / §10)
     RECAPTCHA_SECRET_KEY: str = ""
     RECAPTCHA_MIN_SCORE: float = 0.5
+    RECAPTCHA_ENFORCE_REGISTER: bool = False
+    RECAPTCHA_ENFORCE_PAYMENT: bool = False
+    CAPTCHA_DISPOSABLE_DOMAINS: str = ""
+
+    # §10.10 — не более N заказов в час с аккаунта
+    ORDERS_PER_HOUR_LIMIT: int = 10
+
+    # §9.5.2 — срок presigned URL экспорта компании
+    COMPANY_DATA_EXPORT_URL_TTL_DAYS: int = 7
+
+    # §9.3.2 pg_partman
+    PARTMAN_ENABLED: bool = False
+
+    # §9.4 WAL-G + GPG backups
+    WALG_ENABLED: bool = False
+    WALG_BIN: str = "wal-g"
+    WALG_PGDATA: str = ""
+    WALG_S3_PREFIX: str = "s3://backups/wal-g"
+    BACKUP_GPG_ENABLED: bool = False
+    BACKUP_GPG_RECIPIENT: str = ""
 
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

@@ -1172,6 +1172,44 @@ async def export_company_transactions(
     )
 
 
+@router.post("/data-export")
+async def request_company_data_export(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """§9.5.2 — асинхронный экспорт всех данных компании (ZIP на email за 24ч)."""
+    from app.services import company_data_export as cde_svc
+
+    company = await api_keys_svc.require_company_owner(db, user)
+    row = await cde_svc.request_export(db, company=company, user=user)
+    await db.commit()
+
+    from app.tasks.celery_app import process_company_data_export
+
+    process_company_data_export.delay(row.id)
+    return {
+        "export_id": row.id,
+        "status": row.status,
+        "message": "Экспорт запущен. Ссылка придёт на email после формирования архива.",
+    }
+
+
+@router.get("/data-export/{export_id}")
+async def get_company_data_export_status(
+    export_id: int,
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Статус экспорта данных компании §9.5.2."""
+    from app.services import company_data_export as cde_svc
+
+    company = await api_keys_svc.require_company_owner(db, user)
+    row = await cde_svc.get_export(db, company_id=company.id, export_id=export_id)
+    if not row:
+        raise HTTPException(404, "Экспорт не найден")
+    return cde_svc.export_to_dict(row)
+
+
 @router.get("/balance-filters")
 async def get_company_balance_filters(
     user: User = Depends(get_current_db_user),

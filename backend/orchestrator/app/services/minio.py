@@ -115,6 +115,15 @@ class MinioService:
         self._ensure_cors()
         return created
 
+    def ensure_bucket(self, name: str) -> bool:
+        """Создать один bucket + SSE (§9.5.1 dedicated B2B)."""
+        existing = {b["Name"] for b in self.client.list_buckets().get("Buckets", [])}
+        created = name not in existing
+        if created:
+            self.client.create_bucket(Bucket=name)
+        self._apply_bucket_encryption(name)
+        return created
+
     def _apply_bucket_encryption(self, bucket: str) -> None:
         mode = self.sse_mode()
         if mode == "none":

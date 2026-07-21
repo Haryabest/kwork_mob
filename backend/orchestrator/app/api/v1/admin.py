@@ -547,6 +547,61 @@ async def patch_company_settings(
     }
 
 
+@router.post("/companies/{company_id}/dedicated-bucket")
+async def enable_company_dedicated_bucket(
+    company_id: int,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """§9.5.1 — выделенный MinIO bucket company_{id}_models."""
+    from app.services import company_buckets as cb_svc
+
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(404, "Компания не найдена")
+    info = await cb_svc.enable_dedicated_bucket(db, company)
+    await db.commit()
+    return {"company_id": company_id, **info}
+
+
+@router.delete("/companies/{company_id}/dedicated-bucket")
+async def disable_company_dedicated_bucket(
+    company_id: int,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отключить dedicated bucket (новые модели → общий models)."""
+    from app.services import company_buckets as cb_svc
+
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(404, "Компания не найдена")
+    info = await cb_svc.disable_dedicated_bucket(db, company)
+    await db.commit()
+    return {"company_id": company_id, **info}
+
+
+@router.get("/companies/{company_id}/dedicated-bucket")
+async def get_company_dedicated_bucket(
+    company_id: int,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_buckets as cb_svc
+
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(404, "Компания не найдена")
+    bucket = cb_svc.resolve_models_bucket(company)
+    dedicated = (company.settings or {}).get("dedicated_bucket")
+    return {
+        "company_id": company_id,
+        "models_bucket": bucket,
+        "dedicated_bucket": dedicated,
+        "is_dedicated": bool(dedicated),
+    }
+
+
 @router.get("/users")
 async def list_users(_: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     rows = (await db.scalars(select(User).order_by(User.id.desc()).limit(200))).all()

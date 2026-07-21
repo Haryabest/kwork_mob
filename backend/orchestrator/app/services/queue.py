@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -10,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis
 from app.models import TaskQueue
+
+logger = logging.getLogger(__name__)
 
 
 class QueueService:
@@ -89,8 +93,47 @@ class QueueService:
                 continue
             if not data.get("task_id"):
                 continue
+            data["source"] = "redis"
             return data
         return None
+
+    async def dequeue_from_postgres(self, db: AsyncSession) -> dict[str, Any] | None:
+        """§4.2.2: SELECT FOR UPDATE SKIP LOCKED при недоступности Redis."""
+        for priority in ("high", "normal"):
+            row = (
+                await db.execute(
+                    select(TaskQueue)
+                    .where(TaskQueue.status == "queued", TaskQueue.priority == priority)
+                    .order_by(TaskQueue.id)
+                    .with_for_update(skip_locked=True)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if not row:
+                continue
+            row.status = "processing"
+            row.worker_id = "_dispatch"
+            row.processing_started_at = datetime.now(timezone.utc)
+            await db.flush()
+            logger.warning("Dequeued task %s from PostgreSQL (Redis fallback)", row.task_id)
+            return {
+                "task_id": row.task_id,
+                "order_id": row.order_id,
+                "payload": row.payload_json or {},
+                "source": "postgres",
+            }
+        return None
+
+    async def dequeue_with_fallback(self, db: AsyncSession) -> dict[str, Any] | None:
+        """Redis LPOP; при ошибке Redis — PG SKIP LOCKED."""
+        try:
+            return await self.dequeue()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Redis dequeue failed (%s), fallback to PostgreSQL", exc)
+            item = await self.dequeue_from_postgres(db)
+            if item:
+                await db.commit()
+            return item
 
     async def remove_from_redis(self, task_id: str) -> int:
         """Удалить все вхождения task_id из queue:high/normal."""

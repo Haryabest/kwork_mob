@@ -45,6 +45,18 @@ def replication_status() -> dict[str, Any]:
     }
 
 
+def replication_status_for_bucket(bucket: str) -> dict[str, Any]:
+    """Статус репликации для одного bucket (в т.ч. dedicated)."""
+    base = replication_status()
+    repl = [r for r in base.get("replication", []) if r.get("bucket") == bucket]
+    return {
+        "bucket": bucket,
+        "replication": repl,
+        "read_failover": base.get("read_failover"),
+        "replica_endpoint": base.get("replica_endpoint"),
+    }
+
+
 async def apply_prod_replication(db, *, user_id: int | None = None) -> dict[str, Any]:
     """Prod apply: делегирует force_resync / hook агенту узла."""
     from app.services import storage_ops as so

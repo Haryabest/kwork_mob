@@ -219,7 +219,12 @@ class TwoFACodeBody(BaseModel):
 @router.post("/register", status_code=status.HTTP_201_CREATED, response_model=RegisterResponse)
 async def register(body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Регистрация по email + пароль + согласия (§2.8)."""
+    from app.services import captcha_guard as cap_svc
     from app.services import marketing_profile as mp_svc
+
+    await cap_svc.require_register_captcha(
+        client_ip(request), body.email, body.captcha_token
+    )
 
     user, dev_code = await auth_service.register_user(db, body.email, body.password)
     mp_svc.apply_region_from_request(user, request)
