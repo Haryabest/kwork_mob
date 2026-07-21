@@ -10,6 +10,11 @@ if [ -z "${WORKER_PIPELINE_MODE:-}" ]; then
   fi
 fi
 
+if [ "${ENVIRONMENT:-}" = "production" ]; then
+  export WORKER_PIPELINE_MODE=trellis
+  export TRELLIS_ALLOW_STUB_FALLBACK=0
+fi
+
 if [ -n "${TAILSCALE_AUTH_KEY:-}" ] && command -v tailscaled >/dev/null 2>&1; then
   tailscaled --state=/var/lib/tailscale/tailscaled.state --socket=/var/run/tailscale/tailscaled.sock &
   sleep 1

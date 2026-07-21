@@ -1632,6 +1632,37 @@ async def dod_metrics(
     return await dm.compute_dod_metrics(db, days=days)
 
 
+@router.get("/dod-metrics/export")
+async def dod_metrics_export(
+    days: int = Query(7, ge=1, le=90),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """CSV export §1.4 DoD metrics."""
+    from fastapi.responses import Response
+
+    from app.services import dod_export as de
+    from app.services import dod_metrics as dm
+
+    data = await dm.compute_dod_metrics(db, days=days)
+    return Response(
+        content=de.dod_to_csv(data),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="dod-metrics-{days}d.csv"'},
+    )
+
+
+@router.get("/worker/trellis-status")
+async def worker_trellis_status(
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """§5 TRELLIS prod readiness (P14)."""
+    from app.services.trellis_prod_status import trellis_prod_status
+
+    return await trellis_prod_status(db)
+
+
 @router.post("/load-test/queue")
 async def load_test_queue(
     count: int = Query(100, ge=1, le=500),
@@ -1740,6 +1771,14 @@ async def ha_cutover_preflight(_: dict = Depends(require_admin)):
     from app.services.ha_cutover import cutover_preflight
 
     return cutover_preflight()
+
+
+@router.get("/ha/minio-vip")
+async def ha_minio_vip_status(_: dict = Depends(require_admin)):
+    """MinIO VIP / Keepalived §9.6."""
+    from app.services.minio_vip_status import minio_vip_status
+
+    return minio_vip_status()
 
 
 @router.get("/ha/witness")

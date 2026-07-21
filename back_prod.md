@@ -101,8 +101,8 @@
 | P10 | §9.5.1 Dedicated B2B buckets (опция) | **DONE** — `company_buckets.py`, admin API |
 | P11 | §10 CSE premium KMS | **DONE** — `cse_kms.py`, worker `/cse-key`, company policies |
 | P12 | §23.1 VictoriaMetrics + полный exporter stack | **DONE** — compose + `prometheus.ha.yml`, admin `/monitoring/victoria` |
-| P13 | §1.4 Все KPI prod | UNVERIFIED |
-| P14 | §5 TRELLIS prod (`WORKER_PIPELINE_MODE=stub` default) | UNVERIFIED |
+| P13 | §1.4 Все KPI prod | **TOOLING** — `dod_metrics.py`, export CSV, load test (prod verify pending) |
+| P14 | §5 TRELLIS prod | **TOOLING** — `trellis_prod_status.py`, entrypoint production guard |
 | P15 | §7.6 Marketplace API upload | **DONE** — auto-upload Celery, `verified_{mp}`, admin `/marketplace/upload` |
 
 ---
@@ -111,7 +111,7 @@
 
 - §4.2.2 — ~~PG fallback при пустой очереди~~ heal Redis из PG (Celery 5m), PG только при ошибке Redis
 - §6.1.1 — ~~rembg первым~~ DeepLab primary (исправлено)
-- §9.6 — MinIO VIP: `MINIO_VIP` + `infra/ha/keepalived/` (prod deploy на узлах)
+- §9.6 — **TOOLING** — `minio_vip_status.py`, `GET /admin/ha/minio-vip` (+ keepalived deploy на узлах)
 - §4.3 — **DONE** — `mesh_hosts.py`, `MESH_*_HOSTS`, worker WS/TS fallback
 - §12 — dual: Debezium + Celery fallback (`USER_EVENTS_SYNC_MODE`)
 - §22 — cutover preflight API + `scripts/ha_cutover_preflight.sh`
@@ -173,6 +173,12 @@
 - [x] §10 CSE premium KMS (`cse_kms.py`, `GET /worker/cse-key/{task_id}`)
 - [x] §4.2.2 Queue heal Celery (`heal_queue_redis_from_pg` каждые 5m)
 - [x] Worker prod Tailscale/WS fallback в `.env.prod.example`
+
+### Спринт 7 — prod verify tooling
+- [x] §1.4 DoD CSV export (`dod_export.py`, `GET /admin/dod-metrics/export`)
+- [x] §5 TRELLIS status (`trellis_prod_status.py`, `GET /admin/worker/trellis-status`)
+- [x] §9.6 MinIO VIP health (`minio_vip_status.py`, `GET /admin/ha/minio-vip`)
+- [x] Worker entrypoint: `ENVIRONMENT=production` → trellis, no stub fallback
 
 ---
 
