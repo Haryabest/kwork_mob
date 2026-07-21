@@ -34,6 +34,7 @@ import WebhooksDashboardPage from './pages/WebhooksDashboardPage';
 import MarketplacePage from './pages/MarketplacePage';
 import AccessLogPage from './pages/AccessLogPage';
 import TaskConflictsPage from './pages/TaskConflictsPage';
+import WatermarkVerifyPage from './pages/WatermarkVerifyPage';
 import TicketsPage from './pages/support/TicketsPage';
 import TicketDetailPage from './pages/support/TicketDetailPage';
 import FaqEditorPage from './pages/support/FaqEditorPage';
@@ -73,6 +74,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 <Route path="/marketplace" element={<MarketplacePage />} />
                 <Route path="/access-log" element={<AccessLogPage />} />
                 <Route path="/task-conflicts" element={<TaskConflictsPage />} />
+                <Route path="/watermark-verify" element={<WatermarkVerifyPage />} />
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="/users/:id" element={<UserDetailPage />} />
                 <Route path="/companies" element={<CompaniesPage />} />

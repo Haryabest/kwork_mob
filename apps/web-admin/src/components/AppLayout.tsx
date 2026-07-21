@@ -38,6 +38,7 @@ import {
   IconWebhook,
   IconUpload,
   IconHistory,
+  IconShieldCheck,
 } from '@tabler/icons-react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -60,6 +61,7 @@ const NAV: {
   { path: '/marketplace', label: 'Marketplace API', roles: ['admin'], icon: IconUpload },
   { path: '/access-log', label: 'Access log', roles: ['admin'], icon: IconHistory },
   { path: '/task-conflicts', label: 'Task conflicts', roles: ['admin'], icon: IconShield },
+  { path: '/watermark-verify', label: 'Watermark verify', roles: ['admin'], icon: IconShieldCheck },
   { path: '/promocodes', label: 'Промокоды', roles: ['admin'], icon: IconDiscount2 },
   { path: '/campaigns', label: 'Кампании', roles: ['admin'], icon: IconStack2 },
   { path: '/analytics', label: 'Аналитика', roles: ['admin'], icon: IconChartBar },

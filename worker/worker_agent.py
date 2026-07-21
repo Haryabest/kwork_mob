@@ -445,6 +445,8 @@ class WorkerAgent:
                 "order_id": payload.get("order_id"),
                 "company_id": payload.get("company_id"),
                 "category": payload.get("category"),
+                "tier": payload.get("tier"),
+                "target_marketplace": payload.get("target_marketplace") or "ozon",
                 "upsell_options": payload.get("upsell_options") or [],
                 "scale_calibration": payload.get("scale_calibration"),
                 "trellis_version": os.getenv("TRELLIS_VERSION", "2"),
@@ -555,6 +557,16 @@ class WorkerAgent:
                 except Exception:  # noqa: BLE001
                     seg_payload = {}
 
+            compress_warning = False
+            cpath = task_dir / "compress_result.json"
+            if cpath.exists():
+                try:
+                    compress_warning = bool(
+                        json.loads(cpath.read_text(encoding="utf-8")).get("warning_size_exceeded")
+                    )
+                except Exception:  # noqa: BLE001
+                    compress_warning = False
+
             await self._notify_event(
                 {
                     "type": "task_completed",
@@ -565,6 +577,7 @@ class WorkerAgent:
                     "video_360_url": extras_urls.get("video_360_url"),
                     "watermark_hmac": watermark_hmac,
                     "quality_score": quality_score,
+                    "warning_size_exceeded": compress_warning,
                     "upsell_options": payload.get("upsell_options") or [],
                     "elapsed_sec": round(time.monotonic() - t0, 2),
                     "e2e_budget_sec": E2E_BUDGET_SEC,

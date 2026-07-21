@@ -117,6 +117,7 @@ class Order(Base):
     device_model: Mapped[str | None] = mapped_column(String(64))
     os_version: Mapped[str | None] = mapped_column(String(64))
     model_display_name: Mapped[str | None] = mapped_column(String(120))
+    target_marketplace: Mapped[str] = mapped_column(String(20), default="ozon")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

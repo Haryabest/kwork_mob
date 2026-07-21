@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -14,6 +16,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.url.path.startswith("/health") or request.method == "OPTIONS":
+            return await call_next(request)
+        if os.getenv("RATE_LIMIT_DISABLED", "").lower() in ("1", "true", "yes"):
             return await call_next(request)
 
         try:

@@ -13,9 +13,26 @@ import tempfile
 from pathlib import Path
 
 
-def _target_faces() -> int:
-    # ТЗ §6.3: 100k–300k; премиум 200k–250k
-    return int(os.getenv("RETOPO_TARGET_FACES", "150000"))
+def _target_faces(task_dir: Path | None = None) -> int:
+    from category_targets import target_faces
+
+    category = None
+    tier = None
+    if task_dir is not None:
+        meta_path = task_dir / "task_meta.json"
+        if meta_path.exists():
+            try:
+                import json
+
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                category = meta.get("category")
+                tier = meta.get("tier")
+            except Exception:  # noqa: BLE001
+                pass
+    if category or tier:
+        return target_faces(category, tier=tier)
+    # fallback env (legacy)
+    return int(os.getenv("RETOPO_TARGET_FACES", str(target_faces("other"))))
 
 
 def _engine() -> str:
@@ -177,7 +194,7 @@ def main(task_dir: str) -> None:
         print(f"[retopology] {tag} copy {src.name} → {dst.name} ({dst.stat().st_size} bytes)")
         return
 
-    target = _target_faces()
+    target = _target_faces(root)
     engine = _engine()
 
     order: list = []

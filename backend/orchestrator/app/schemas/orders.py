@@ -5,6 +5,12 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 
+class TargetMarketplace(str, Enum):
+    OZON = "ozon"
+    WB = "wb"
+    WILDBERRIES = "wildberries"
+
+
 class ProductCategory(str, Enum):
     CLOTHING = "clothing"
     SHOES = "shoes"
@@ -55,3 +61,4 @@ class OrderCreateRequest(BaseModel):
     device_model: str | None = Field(default=None, max_length=64)
     os_version: str | None = Field(default=None, max_length=64)
     model_display_name: str | None = Field(default=None, max_length=120)
+    target_marketplace: TargetMarketplace = TargetMarketplace.OZON

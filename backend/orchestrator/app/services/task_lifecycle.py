@@ -427,6 +427,7 @@ async def try_queue_awaiting_orders(db: AsyncSession, user_id: int) -> list[int]
         payload = {
             "category": order.category,
             "tier": order.tier,
+            "target_marketplace": getattr(order, "target_marketplace", None) or "ozon",
             "user_id": user.id,
             "photos_bucket": settings.MINIO_BUCKET_PHOTOS,
             "photos_prefix": f"photos/{order.task_uuid}/",

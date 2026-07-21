@@ -93,6 +93,7 @@ def test_client_ip_x_forwarded_for():
 
 @pytest.mark.asyncio
 async def test_rate_limit_blocks_after_threshold(monkeypatch):
+    monkeypatch.delenv("RATE_LIMIT_DISABLED", raising=False)
     class FakeRedis:
         def __init__(self):
             self.data: dict[str, int] = {}

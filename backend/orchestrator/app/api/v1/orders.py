@@ -86,6 +86,7 @@ async def _task_payload(
         "scale_calibration": order.scale_calibration,
         "device_model": device_model or order.device_model or "unknown",
         "os_version": os_version or order.os_version or "unknown",
+        "target_marketplace": getattr(order, "target_marketplace", None) or "ozon",
     }
     from app.services import photo_encryption as photo_enc
 
@@ -310,6 +311,9 @@ async def create_order(
         device_model=device_model,
         os_version=os_version,
         model_display_name=(body.model_display_name or "").strip() or None,
+        target_marketplace=body.target_marketplace.value
+        if body.target_marketplace.value != "wildberries"
+        else "wb",
     )
     db.add(order)
     await db.flush()

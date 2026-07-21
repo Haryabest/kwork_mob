@@ -17,6 +17,12 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 
+@pytest.fixture(autouse=True)
+def _disable_gateway_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CI: не копить rl:* в Redis на всём прогоне pytest."""
+    monkeypatch.setenv("RATE_LIMIT_DISABLED", "1")
+
+
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",

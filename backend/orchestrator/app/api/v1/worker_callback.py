@@ -33,6 +33,7 @@ class WorkerEvent(BaseModel):
     device_model: str | None = None
     os_version: str | None = None
     segmentation: dict | None = None
+    warning_size_exceeded: bool | None = None
 
 
 def _verify_worker_token(authorization: str | None = Header(default=None)) -> None:
@@ -113,6 +114,23 @@ async def worker_event(body: WorkerEvent, _: None = Depends(_verify_worker_token
                     data=body.model_dump(),
                     failed=False,
                 )
+                if body.warning_size_exceeded and existing and existing.order_id:
+                    from app.models import Order
+                    from app.services.task_lifecycle import _notify_order_user_push
+
+                    order = await db.get(Order, existing.order_id)
+                    if order:
+                        await _notify_order_user_push(
+                            db,
+                            order,
+                            pref_key="generation_done",
+                            event_type="size_warning",
+                            title="Файл оптимизирован до предела",
+                            body=(
+                                "Возможны трудности с загрузкой на маркетплейс. "
+                                "Рекомендуем переснять с более однородным фоном."
+                            ),
+                        )
         await release_task_lock(task_id)
         await worker_hub.set_idle(worker_id)
         from app.services.log_writer import emit_log

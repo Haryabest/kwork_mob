@@ -1287,6 +1287,9 @@ components:
             type: object
           - type: 'null'
           title: Scale Calibration
+        target_marketplace:
+          $ref: '#/components/schemas/TargetMarketplace'
+          default: ozon
         task_uuid:
           description: UUID для идемпотентности
           title: Task Uuid
@@ -1890,6 +1893,13 @@ components:
       - message
       title: SupportReply
       type: object
+    TargetMarketplace:
+      enum:
+      - ozon
+      - wb
+      - wildberries
+      title: TargetMarketplace
+      type: string
     TariffUpdate:
       properties:
         amount_rub:
@@ -2284,6 +2294,11 @@ components:
           - type: string
           - type: 'null'
           title: Video 360 Url
+        warning_size_exceeded:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Warning Size Exceeded
         watermark_hmac:
           anyOf:
           - type: string

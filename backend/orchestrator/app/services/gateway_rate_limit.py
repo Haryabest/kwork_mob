@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
 from starlette.requests import Request
 
 from app.core.config import settings
+
+
+def _skip_rate_limit() -> bool:
+    return os.getenv("RATE_LIMIT_DISABLED", "").lower() in ("1", "true", "yes")
 
 
 def client_ip(request: Request) -> str:
@@ -54,6 +59,8 @@ def bearer_user_id(auth: str) -> str | None:
 
 async def check_request(request: Request, redis: Any) -> tuple[bool, int, str]:
     """Returns (allowed, retry_after_sec, detail)."""
+    if _skip_rate_limit():
+        return True, 0, ""
     limits = await load_limits()
     window = 60
     block_sec = limits["gateway_rate_block_sec"]
