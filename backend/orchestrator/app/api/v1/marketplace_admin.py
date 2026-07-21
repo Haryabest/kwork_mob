@@ -124,3 +124,29 @@ async def upload_logs(
 ):
     items = await mp_svc.list_upload_logs(db, model_uuid=model_uuid, company_id=company_id)
     return {"items": items}
+
+
+class AdminMarketplaceUploadBody(BaseModel):
+    model_uuid: str = Field(min_length=8, max_length=36)
+    marketplace: str = Field(pattern=r"^(wb|ozon|wildberries)$")
+    sku: str = Field(min_length=1, max_length=64)
+
+
+@router.post("/upload")
+async def admin_marketplace_upload(body: AdminMarketplaceUploadBody, db: AsyncSession = Depends(get_db)):
+    """Ручной триггер API-публикации §7.6."""
+    from sqlalchemy import select
+
+    from app.models import Model3D
+
+    model = await db.scalar(select(Model3D).where(Model3D.uuid == body.model_uuid))
+    if not model:
+        raise HTTPException(404, "Модель не найдена")
+    result = await mp_svc.upload_model_to_marketplace(
+        db,
+        model=model,
+        marketplace=body.marketplace,
+        sku=body.sku,
+    )
+    await db.commit()
+    return result

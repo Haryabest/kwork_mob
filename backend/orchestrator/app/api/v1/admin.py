@@ -1754,6 +1754,14 @@ async def monitoring_waf_status(_: dict = Depends(require_admin)):
     }
 
 
+@router.get("/monitoring/debezium")
+async def monitoring_debezium_status(_: dict = Depends(require_admin)):
+    """Debezium Connect CDC status §12.1."""
+    from app.services.debezium_status import debezium_status
+
+    return debezium_status()
+
+
 @router.post("/storage/force-resync-minio")
 async def force_resync_minio(
     staff: dict = Depends(require_admin),

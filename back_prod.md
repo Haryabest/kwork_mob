@@ -95,7 +95,7 @@
 | P4 | §4.2.2 PG dequeue `SKIP LOCKED` при падении Redis | **DONE** — `queue.py` |
 | P5 | §10.10 reCAPTCHA register/pay (подозрительные) | **DONE** — `captcha_guard.py` |
 | P6 | §10.10 Лимит 10 заказов/час | **DONE** — `order_rate_limit.py` |
-| P7 | §12.1 Debezium PG→CH | MISSING — только Celery app-sync |
+| P7 | §12.1 Debezium PG→CH | **DONE** — compose, connector, CH kafka engine, admin `/monitoring/debezium` |
 | P8 | §22.5 Witness/quorum split-brain | **DONE** — `infra/ha/witness/`, admin `/ha/witness` |
 | P9 | §10.7.6 / §21 WAF Cloudflare | **DONE** — `cloudflare_waf.py`, `infra/cloudflare/waf-rules.example.json` |
 | P10 | §9.5.1 Dedicated B2B buckets (опция) | **DONE** — `company_buckets.py`, admin API |
@@ -103,14 +103,14 @@
 | P12 | §23.1 VictoriaMetrics + полный exporter stack | **DONE** — compose + `prometheus.ha.yml`, admin `/monitoring/victoria` |
 | P13 | §1.4 Все KPI prod | UNVERIFIED |
 | P14 | §5 TRELLIS prod (`WORKER_PIPELINE_MODE=stub` default) | UNVERIFIED |
-| P15 | §7.6 Marketplace API upload | PARTIAL — scaffold |
+| P15 | §7.6 Marketplace API upload | **DONE** — auto-upload Celery, `verified_{mp}`, admin `/marketplace/upload` |
 
 ---
 
 ## PARTIAL (доработать)
 
 - §4.2.2 — PG fallback только при ошибке Redis (не при пустой очереди)
-- §6.1.1 — rembg первым, ТЗ: DeepLab primary
+- §6.1.1 — ~~rembg первым~~ DeepLab primary (исправлено)
 - §9.6 — MinIO VIP: `MINIO_VIP` + `infra/ha/keepalived/` (prod deploy на узлах)
 - §4.3 — Tailscale mesh + WS fallback в prod agent
 - §12 — CH sync через Celery (лаг при сбоях)
@@ -159,6 +159,13 @@
 - [x] KPI §1.4 DoD dashboard (`dod_metrics.py`, `GET /admin/dod-metrics`)
 - [x] §6.1.1 DeepLab primary в `remove_background.py`
 - [x] Debezium connector template (`infra/debezium/user-events-connector.json`)
+
+### Спринт 5 — CDC + marketplace
+- [x] §12.1 Debezium stack (`docker-compose.debezium.yml`, `debezium_init.sql`, CH kafka engine)
+- [x] `debezium_status.py`, `GET /admin/monitoring/debezium`, `USER_EVENTS_SYNC_MODE`
+- [x] §7.6 Auto-upload после генерации (`marketplace_auto_upload.py`, Celery)
+- [x] API upload → `verified_{mp}` + `publication_verified` event
+- [x] Admin `POST /admin/marketplace/upload`
 
 ---
 

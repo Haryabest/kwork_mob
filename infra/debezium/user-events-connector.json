@@ -6,7 +6,7 @@
     "database.port": "5432",
     "database.user": "debezium",
     "database.password": "${DEBEZIUM_DB_PASSWORD}",
-    "database.dbname": "kwork",
+    "database.dbname": "kwork_mob",
     "database.server.name": "kwork_pg",
     "plugin.name": "pgoutput",
     "publication.name": "dbz_user_events",

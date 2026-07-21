@@ -285,6 +285,16 @@ async def mark_completed(
         )
     except Exception:  # noqa: BLE001
         pass
+    try:
+        from app.services.marketplace_auto_upload import schedule_after_generation
+
+        schedule_after_generation(
+            order=order,
+            model_uuid=model_uuid or task_id,
+            payload=row.payload_json or {},
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("marketplace auto upload schedule: %s", exc)
     await db.commit()
     await publish_order_status(
         user_id=order.user_id,

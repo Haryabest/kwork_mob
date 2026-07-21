@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     # §23.1 VictoriaMetrics
     VICTORIA_METRICS_URL: str = "http://victoriametrics:8428"
 
+    # §12.1 Debezium PG→CH (celery fallback when disabled)
+    DEBEZIUM_CONNECT_URL: str = ""
+    USER_EVENTS_SYNC_MODE: str = "celery"  # celery | debezium | dual
+
     # §10.7.6 / §21 Cloudflare WAF (трафик только через CDN)
     CLOUDFLARE_WAF_ENABLED: bool = False
 
@@ -261,6 +265,7 @@ class Settings(BaseSettings):
 
     # §7.6 / §14.6 WB/Ozon API upload (scaffold)
     MARKETPLACE_UPLOAD_ENABLED: bool = False
+    MARKETPLACE_AUTO_UPLOAD_ENABLED: bool = False
     WB_API_BASE_URL: str = "https://content-api.wildberries.ru"
     WB_3D_UPLOAD_PATH: str = "/content/v3/media/file"
     OZON_API_BASE_URL: str = "https://api-seller.ozon.ru"

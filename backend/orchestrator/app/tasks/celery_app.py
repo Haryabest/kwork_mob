@@ -679,3 +679,25 @@ celery_app.conf.beat_schedule["backup-walg-every-6h"] = {
     "task": "app.tasks.celery_app.backup_walg",
     "schedule": crontab(minute=15, hour="*/6"),
 }
+
+
+@celery_app.task(name="app.tasks.celery_app.auto_marketplace_upload_task")
+def auto_marketplace_upload_task(model_uuid: str, marketplace: str, sku: str, order_id: int):
+    """§7.6 — автозагрузка на WB/Ozon после генерации."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services.marketplace_auto_upload import run_auto_upload
+
+    async def _run():
+        async with async_session() as db:
+            return await run_auto_upload(
+                db,
+                model_uuid=model_uuid,
+                marketplace=marketplace,
+                sku=sku,
+                order_id=order_id,
+            )
+
+    return asyncio.run(_run())
+

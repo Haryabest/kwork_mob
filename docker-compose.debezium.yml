@@ -1,0 +1,46 @@
+# §12.1 Debezium PG→Kafka→ClickHouse (staging/prod overlay)
+#   docker compose -f docker-compose.ha.yml -f docker-compose.debezium.yml up -d
+#
+# После старта:
+#   bash infra/debezium/register-connectors.sh
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:v24.2.4
+    hostname: redpanda
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+    ports:
+      - "9092:9092"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+
+  debezium-connect:
+    image: debezium/connect:2.6
+    hostname: debezium-connect
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: kwork-debezium
+      CONFIG_STORAGE_TOPIC: debezium_connect_configs
+      OFFSET_STORAGE_TOPIC: debezium_connect_offsets
+      STATUS_STORAGE_TOPIC: debezium_connect_status
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    ports:
+      - "8083:8083"
+    depends_on:
+      - redpanda
+
+volumes:
+  redpanda_data:

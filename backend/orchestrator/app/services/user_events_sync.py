@@ -61,6 +61,12 @@ async def count_pending(db: AsyncSession) -> int:
 
 
 async def sync_unsynced(db: AsyncSession, *, limit: int = 500) -> dict:
+    from app.core.config import settings
+
+    mode = (settings.USER_EVENTS_SYNC_MODE or "celery").lower()
+    if mode == "debezium":
+        pending = await count_pending(db)
+        return {"synced": 0, "pending": pending, "ok": True, "skipped": "debezium"}
     rows = (
         await db.scalars(
             select(UserEvent)

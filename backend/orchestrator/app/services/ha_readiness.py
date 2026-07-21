@@ -29,6 +29,7 @@ def ha_readiness() -> dict[str, Any]:
         "disk_not_critical": not bool(smart.get("alert_disk_critical")),
         "witness_configured": bool((settings.WITNESS_URL or "").strip()),
         "victoria_metrics_configured": bool((settings.VICTORIA_METRICS_URL or "").strip()),
+        "debezium_configured": bool((settings.DEBEZIUM_CONNECT_URL or "").strip()),
         "cloudflare_waf": bool(settings.CLOUDFLARE_WAF_ENABLED),
     }
     prod_score = sum(1 for v in checks.values() if v)

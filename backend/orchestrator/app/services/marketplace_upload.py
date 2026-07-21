@@ -336,8 +336,25 @@ async def upload_model_to_marketplace(
             initiated_by_user_id,
         )
         if last_result.success:
-            model.publish_status = f"api_uploaded_{mp}"
+            model.publish_status = f"verified_{mp}"
             await db.flush()
+            try:
+                from app.services.user_events import record_event
+
+                await record_event(
+                    db,
+                    event_type="publication_verified",
+                    user_id=initiated_by_user_id or model.user_id,
+                    company_id=model.company_id,
+                    payload={
+                        "model_uuid": model.uuid,
+                        "marketplace": mp,
+                        "method": "api_upload",
+                        "external_ref": last_result.external_ref,
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                pass
             return {
                 "ok": True,
                 "model_uuid": model.uuid,
