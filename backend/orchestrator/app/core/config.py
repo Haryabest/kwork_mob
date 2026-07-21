@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "noreply@kworkmob.local"
+    SMTP_USE_TLS: bool = True
 
     EMAIL_VERIFY_CODE_TTL_SECONDS: int = 900
     PASSWORD_RESET_TTL_SECONDS: int = 3600

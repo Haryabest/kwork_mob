@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -86,6 +87,45 @@ async def record_event(
     db.add(row)
     await db.flush()
     return row
+
+
+async def export_csv(
+    db: AsyncSession,
+    *,
+    company_id: int,
+    days: int = 30,
+    event_type: str | None = None,
+    limit: int = 5000,
+) -> str:
+    """CSV export company user_events §12.7."""
+    import csv
+    import io
+    from datetime import timedelta
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    data = await list_events(
+        db,
+        company_id=company_id,
+        event_type=event_type,
+        date_from=since,
+        limit=limit,
+        offset=0,
+    )
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["event_id", "user_id", "member_role", "event_type", "payload", "created_at"])
+    for r in data["items"]:
+        w.writerow(
+            [
+                r["event_id"],
+                r["user_id"],
+                r.get("member_role") or "",
+                r["event_type"],
+                json.dumps(r.get("payload") or {}, ensure_ascii=False),
+                r.get("created_at") or "",
+            ]
+        )
+    return buf.getvalue()
 
 
 async def list_events(

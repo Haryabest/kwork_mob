@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS worker_metrics_minute (
     cpu_percent Float32,
     ram_percent Float32
 ) ENGINE = MergeTree()
-ORDER BY (worker_id, timestamp);
+ORDER BY (worker_id, timestamp)
+TTL timestamp + INTERVAL 7 DAY;
 
 CREATE TABLE IF NOT EXISTS queue_metrics_minute (
     timestamp DateTime,
@@ -17,7 +18,8 @@ CREATE TABLE IF NOT EXISTS queue_metrics_minute (
     length UInt32,
     avg_wait_seconds Float32
 ) ENGINE = MergeTree()
-ORDER BY (queue_name, timestamp);
+ORDER BY (queue_name, timestamp)
+TTL timestamp + INTERVAL 7 DAY;
 
 CREATE TABLE IF NOT EXISTS order_events (
     timestamp DateTime,
@@ -43,6 +45,7 @@ ORDER BY (timestamp, event_type);
 CREATE MATERIALIZED VIEW IF NOT EXISTS worker_metrics_hourly
 ENGINE = AggregatingMergeTree()
 ORDER BY (worker_id, hour)
+TTL hour + INTERVAL 30 DAY
 AS SELECT
     toStartOfHour(timestamp) AS hour,
     worker_id,
@@ -56,6 +59,7 @@ GROUP BY hour, worker_id;
 CREATE MATERIALIZED VIEW IF NOT EXISTS queue_metrics_hourly
 ENGINE = AggregatingMergeTree()
 ORDER BY (queue_name, hour)
+TTL hour + INTERVAL 30 DAY
 AS SELECT
     toStartOfHour(timestamp) AS hour,
     queue_name,
@@ -64,9 +68,36 @@ AS SELECT
 FROM queue_metrics_minute
 GROUP BY hour, queue_name;
 
+CREATE MATERIALIZED VIEW IF NOT EXISTS worker_metrics_daily
+ENGINE = SummingMergeTree()
+ORDER BY (worker_id, day)
+TTL day + INTERVAL 365 DAY
+AS SELECT
+    toDate(timestamp) AS day,
+    worker_id,
+    avg(gpu_util) AS gpu_util,
+    avg(gpu_temp) AS gpu_temp,
+    avg(cpu_percent) AS cpu_percent,
+    avg(ram_percent) AS ram_percent
+FROM worker_metrics_minute
+GROUP BY day, worker_id;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS queue_metrics_daily
+ENGINE = SummingMergeTree()
+ORDER BY (queue_name, day)
+TTL day + INTERVAL 365 DAY
+AS SELECT
+    toDate(timestamp) AS day,
+    queue_name,
+    avg(length) AS length,
+    avg(avg_wait_seconds) AS avg_wait_seconds
+FROM queue_metrics_minute
+GROUP BY day, queue_name;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS order_events_daily
 ENGINE = SummingMergeTree()
 ORDER BY (day, event_type)
+TTL day + INTERVAL 365 DAY
 AS SELECT
     toDate(timestamp) AS day,
     event_type,
@@ -106,12 +137,24 @@ TTL event_ts + INTERVAL 1 YEAR;
 CREATE MATERIALIZED VIEW IF NOT EXISTS user_events_daily
 ENGINE = SummingMergeTree()
 ORDER BY (day, event_type)
+TTL day + INTERVAL 365 DAY
 AS SELECT
     toDate(event_ts) AS day,
     event_type,
     count() AS events
 FROM user_events
 GROUP BY day, event_type;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS user_events_hourly
+ENGINE = SummingMergeTree()
+ORDER BY (hour, event_type)
+TTL hour + INTERVAL 30 DAY
+AS SELECT
+    toStartOfHour(event_ts) AS hour,
+    event_type,
+    count() AS events
+FROM user_events
+GROUP BY hour, event_type;
 
 -- Mobile analytics ingest mirror §19.20 (PG source of truth)
 CREATE TABLE IF NOT EXISTS mobile_analytics_events (

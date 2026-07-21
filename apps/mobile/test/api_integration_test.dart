@@ -81,7 +81,11 @@ void main() {
       '/api/v1/user/analytics/events',
       data: {
         'events': [
-          {'event': 'ci_smoke', 'ts': '2026-01-01T00:00:00Z'},
+          {
+            'event': 'screen_view',
+            'ts': DateTime.now().toUtc().toIso8601String(),
+            'props': {'screen': 'home'},
+          },
         ],
       },
       options: Options(headers: headers),

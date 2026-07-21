@@ -11,6 +11,7 @@ from app.core.security import require_admin
 from app.core.vpn import require_vpn
 from app.models import MarketplaceCredential
 from app.services import marketplace_upload as mp_svc
+from app.services.email import smtp_health
 
 
 def _vpn(request: Request) -> None:
@@ -37,13 +38,42 @@ class CredentialToggleBody(BaseModel):
 
 
 @router.get("/status")
-async def marketplace_status():
+async def marketplace_status(db: AsyncSession = Depends(get_db)):
+    creds = (await db.scalars(select(MarketplaceCredential).where(MarketplaceCredential.enabled.is_(True)))).all()
+    mps = set()
+    for c in creds:
+        mp = (c.marketplace or "").lower()
+        mps.add("wb" if mp in ("wb", "wildberries") else mp)
     return {
         "upload_enabled": settings.MARKETPLACE_UPLOAD_ENABLED,
         "max_retries": settings.MARKETPLACE_UPLOAD_MAX_RETRIES,
         "wb_base": settings.WB_API_BASE_URL,
         "ozon_base": settings.OZON_API_BASE_URL,
+        "credentials_active": len(creds),
+        "marketplaces": sorted(mps),
+        "smtp": smtp_health(),
     }
+
+
+@router.post("/e2e-ping")
+async def marketplace_e2e_ping(db: AsyncSession = Depends(get_db)):
+    """Проверка готовности ключей WB/Ozon §14.1."""
+    creds = (await db.scalars(select(MarketplaceCredential).where(MarketplaceCredential.enabled.is_(True)))).all()
+    items = []
+    for c in creds:
+        mp = (c.marketplace or "").lower()
+        if mp == "wildberries":
+            mp = "wb"
+        ok = bool(c.api_key_encrypted)
+        items.append(
+            {
+                "marketplace": mp,
+                "company_id": c.company_id,
+                "ok": ok,
+                "has_client_id": bool(c.client_id) if mp == "ozon" else True,
+            }
+        )
+    return {"ok": bool(items) and all(i["ok"] for i in items), "items": items}
 
 
 @router.get("/credentials")

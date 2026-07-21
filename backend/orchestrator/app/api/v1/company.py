@@ -902,6 +902,33 @@ async def audit_export(
     )
 
 
+@router.get("/user-events/export")
+async def company_user_events_export(
+    days: int = Query(30, ge=1, le=365),
+    event_type: str | None = Query(None, max_length=64),
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Экспорт user_events компании §12.7."""
+    from fastapi.responses import Response
+
+    from app.services import user_events as ue
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    body = await ue.export_csv(
+        db,
+        company_id=company.id,
+        days=days,
+        event_type=event_type,
+    )
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="company-user-events.csv"'},
+    )
+
+
 @router.get("/balance")
 async def company_balance(
     user: User = Depends(get_current_db_user),

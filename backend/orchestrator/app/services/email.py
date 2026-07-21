@@ -90,11 +90,29 @@ async def _send_email(to: str, subject: str, body: str, *, html_body: str | None
     if html_body:
         message.add_alternative(html_body, subtype="html")
 
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-        server.starttls()
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+        if settings.SMTP_USE_TLS:
+            server.starttls()
         if settings.SMTP_USER:
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         server.send_message(message)
+
+
+def smtp_health() -> dict:
+    """§14.3 — статус SMTP для prod readiness."""
+    if settings.is_development and not settings.SMTP_HOST:
+        return {"ok": True, "mode": "dev_skip"}
+    if not settings.SMTP_HOST:
+        return {"ok": False, "mode": "missing_host"}
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=5) as server:
+            if settings.SMTP_USE_TLS:
+                server.starttls()
+            if settings.SMTP_USER:
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        return {"ok": True, "mode": "smtp", "host": settings.SMTP_HOST}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "mode": "smtp", "error": str(exc)[:200]}
 
 
 def _topup_failed_html(

@@ -7,7 +7,16 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 ALLOWED_EVENTS = frozenset(
-    {"screen_view", "shoot_complete", "checkout_pay", "shoot_step", "shoot_step_retry"}
+    {
+        "screen_view",
+        "shoot_complete",
+        "checkout_pay",
+        "shoot_step",
+        "shoot_step_retry",
+        "checkout_start",
+        "thermal_warning",
+        "app_open",
+    }
 )
 
 _OAUTH_PROVIDERS = frozenset({"vk", "yandex", "sber"})
@@ -133,6 +142,15 @@ class AnalyticsEventItem(BaseModel):
                 raise ValueError("shoot_step_retry requires props.step 1..12")
             if not isinstance(err, str) or not err.strip():
                 raise ValueError("shoot_step_retry requires props.error_type")
+        elif self.event == "checkout_start":
+            if props.get("order_id") is None and props.get("tier") is None:
+                raise ValueError("checkout_start requires props.order_id or props.tier")
+        elif self.event == "thermal_warning":
+            temp = props.get("celsius")
+            if temp is not None and not isinstance(temp, (int, float)):
+                raise ValueError("thermal_warning props.celsius must be number")
+        elif self.event == "app_open":
+            pass
         return self
 
 

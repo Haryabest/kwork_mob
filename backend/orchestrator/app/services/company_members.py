@@ -232,7 +232,14 @@ async def enforce_member_limits(
         allowed = policies.get("default_allowed_categories") or None
 
     if allowed and category not in allowed:
-        raise HTTPException(403, f"Категория {category} запрещена политикой")
+        raise HTTPException(
+            403,
+            detail={
+                "code": "category_forbidden",
+                "message": f"Категория {category} запрещена политикой",
+                "category": category,
+            },
+        )
     if max_concurrent:
         active = await db.scalar(
             select(func.count())
@@ -244,7 +251,28 @@ async def enforce_member_limits(
             )
         )
         if int(active or 0) >= max_concurrent:
-            raise HTTPException(403, "Лимит одновременных заказов")
+            try:
+                from app.services.user_events import record_event
+
+                await record_event(
+                    db,
+                    event_type="photographer_limit_reached",
+                    user_id=user.id,
+                    company_id=company_id,
+                    member_role=m.role,
+                    payload={"limit": "max_concurrent_orders", "max": max_concurrent, "active": int(active or 0)},
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            raise HTTPException(
+                403,
+                detail={
+                    "code": "max_concurrent_orders",
+                    "message": "Лимит одновременных заказов",
+                    "max": max_concurrent,
+                    "active": int(active or 0),
+                },
+            )
     if monthly_limit is not None:
         start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         spent = await db.scalar(
@@ -256,4 +284,30 @@ async def enforce_member_limits(
             )
         )
         if int(spent or 0) + amount > monthly_limit:
-            raise HTTPException(403, "Месячный лимит расходов исчерпан")
+            try:
+                from app.services.user_events import record_event
+
+                await record_event(
+                    db,
+                    event_type="photographer_limit_reached",
+                    user_id=user.id,
+                    company_id=company_id,
+                    member_role=m.role,
+                    payload={
+                        "limit": "monthly_spending",
+                        "monthly_limit": monthly_limit,
+                        "spent": int(spent or 0),
+                        "requested": amount,
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            raise HTTPException(
+                403,
+                detail={
+                    "code": "monthly_spending_limit",
+                    "message": "Месячный лимит расходов исчерпан",
+                    "monthly_limit": monthly_limit,
+                    "spent": int(spent or 0),
+                },
+            )

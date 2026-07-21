@@ -8030,6 +8030,31 @@
         ]
       }
     },
+    "/api/v1/admin/marketplace/e2e-ping": {
+      "post": {
+        "description": "Проверка готовности ключей WB/Ozon §14.1.",
+        "operationId": "marketplace_e2e_ping_api_v1_admin_marketplace_e2e_ping_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Marketplace E2E Ping",
+        "tags": [
+          "Marketplace API"
+        ]
+      }
+    },
     "/api/v1/admin/marketplace/status": {
       "get": {
         "operationId": "marketplace_status_api_v1_admin_marketplace_status_get",
@@ -15689,6 +15714,72 @@
         "summary": "Export Transactions",
         "tags": [
           "Налоги"
+        ]
+      }
+    },
+    "/api/v1/company/user-events/export": {
+      "get": {
+        "description": "Экспорт user_events компании §12.7.",
+        "operationId": "company_user_events_export_api_v1_company_user_events_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 365,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Company User Events Export",
+        "tags": [
+          "Компания"
         ]
       }
     },

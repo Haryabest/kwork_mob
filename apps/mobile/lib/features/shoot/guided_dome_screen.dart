@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
@@ -20,7 +21,6 @@ import 'package:kwork_mobile/services/gyro_guide.dart';
 import 'package:kwork_mobile/services/quality_analyzer.dart';
 import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
-import 'package:kwork_mobile/services/cloud_draft_backup_service.dart';
 import 'package:kwork_mobile/services/thermal_monitor.dart';
 import 'package:kwork_mobile/widgets/native_ar_preview.dart';
 import 'package:kwork_mobile/widgets/ar_markers_overlay.dart';
@@ -273,6 +273,17 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
     if (!mounted) return;
     _applyThermalCamera();
     setState(() {});
+    if (_thermal.level == ThermalLevel.powerSave || _thermal.level == ThermalLevel.critical) {
+      final c = _thermal.celsius;
+      if (c != null) {
+        unawaited(
+          AnalyticsService.instance.track('thermal_warning', {
+            'celsius': c.round(),
+            'level': _thermal.level.name,
+          }),
+        );
+      }
+    }
     if (_thermal.needsCriticalPrompt && !_criticalDialogOpen) {
       _showCriticalThermalDialog();
     }

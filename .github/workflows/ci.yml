@@ -156,8 +156,14 @@ jobs:
           pip install -e ".[dev]"
           python scripts/init_ci_schema.py
           uvicorn app.main:app --host 127.0.0.1 --port 8000 &
-          sleep 3
-          curl -sf http://127.0.0.1:8000/health
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API failed to start"
+          exit 1
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
