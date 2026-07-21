@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def test_partman_skipped_when_disabled(monkeypatch):
     from app.core.config import settings
