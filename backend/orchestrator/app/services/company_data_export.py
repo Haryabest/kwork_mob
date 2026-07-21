@@ -59,6 +59,18 @@ async def get_export(db: AsyncSession, *, company_id: int, export_id: int) -> Co
     )
 
 
+async def list_exports(db: AsyncSession, *, company_id: int, limit: int = 20) -> list[dict[str, Any]]:
+    rows = (
+        await db.scalars(
+            select(CompanyDataExport)
+            .where(CompanyDataExport.company_id == company_id)
+            .order_by(CompanyDataExport.id.desc())
+            .limit(min(limit, 50))
+        )
+    ).all()
+    return [export_to_dict(r) for r in rows]
+
+
 def export_to_dict(row: CompanyDataExport) -> dict[str, Any]:
     return {
         "id": row.id,

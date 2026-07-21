@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -92,6 +92,15 @@ async def create_campaign(
     await db.commit()
     await db.refresh(row)
     return {"id": row.id, "status": row.status, "name": row.name}
+
+
+@router.get("/push/stats")
+async def push_broadcast_stats(
+    days: int = Query(default=30, ge=1, le=90),
+    db: AsyncSession = Depends(get_db),
+):
+    """Open-rate push-рассылок §11.8."""
+    return await camp_svc.push_open_stats(db, days=days)
 
 
 @router.get("/push")

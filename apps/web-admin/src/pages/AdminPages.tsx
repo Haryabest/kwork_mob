@@ -2,9 +2,9 @@ import { ActionIcon, Badge, Button, Card, Center, Code, Group, Loader, Modal, Nu
 import { IconDownload, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { HealthCard, MetricGrid, PageHeader, SaveButton, ShellTable, StateBadge } from '../components/Panel';
+import { HealthCard, MetricGrid, PageHeader, ShellTable, StateBadge } from '../components/Panel';
 import { VirtualShellTable } from '../components/VirtualShellTable';
 import { api, getApiError } from '../services/api';
 
@@ -388,6 +388,15 @@ export function WorkersPage() {
                     }}
                   >
                     Rollback
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    component={Link}
+                    to="/storage"
+                    state={{ openDockerLogs: true, containerHint: w.id }}
+                  >
+                    Docker
                   </Button>
                   <Button
                     size="xs"
@@ -1000,9 +1009,19 @@ export function CompanyDetailPage() {
   const [priceDraft, setPriceDraft] = useState<Record<string, PriceOverride>>({});
   const [editMember, setEditMember] = useState<CompanyMemberRow | null>(null);
   const [limitDraft, setLimitDraft] = useState<{ mco: number | ''; msl: number | '' }>({ mco: '', msl: '' });
+  const [dataExports, setDataExports] = useState<
+    Array<{
+      id: number;
+      status: string;
+      download_url?: string | null;
+      expires_at?: string | null;
+      created_at?: string | null;
+    }>
+  >([]);
+  const [exportBusy, setExportBusy] = useState(false);
 
   async function load() {
-    const [c, s, sl, keys, inv, lg, pr] = await Promise.all([
+    const [c, s, sl, keys, inv, lg, pr, ex] = await Promise.all([
       api.get(`/admin/companies/${id}`),
       api.get(`/admin/companies/${id}/stats`),
       api.get(`/admin/companies/${id}/shoot-links`),
@@ -1010,6 +1029,7 @@ export function CompanyDetailPage() {
       api.get(`/admin/companies/${id}/invitations`),
       api.get(`/admin/companies/${id}/logs`),
       api.get(`/admin/companies/${id}/price-overrides`),
+      api.get<{ items: typeof dataExports }>(`/admin/companies/${id}/data-exports`),
     ]);
     setCompany(c.data);
     setForceTrellis(c.data.settings?.force_trellis_version ?? '');
@@ -1030,6 +1050,7 @@ export function CompanyDetailPage() {
     setLogs(lg.data.items ?? []);
     setPrices(pr.data);
     setPriceDraft(pr.data.overrides ?? {});
+    setDataExports(ex.data.items ?? []);
   }
 
   useEffect(() => {
@@ -1132,7 +1153,55 @@ export function CompanyDetailPage() {
             >
               {company.status === 'blocked' ? 'Разблокировать' : 'Заблокировать'}
             </Button>
+            <Button
+              variant="light"
+              loading={exportBusy}
+              onClick={async () => {
+                setExportBusy(true);
+                try {
+                  await api.post(`/admin/companies/${company.id}/data-export`);
+                  notifications.show({ color: 'teal', message: 'Экспорт запущен (§9.5.2)' });
+                  await load();
+                } catch (e) {
+                  notifications.show({ color: 'red', message: getApiError(e) });
+                } finally {
+                  setExportBusy(false);
+                }
+              }}
+            >
+              Экспорт данных ZIP
+            </Button>
           </Stack>
+        </Card>
+        <Card withBorder>
+          <Text fw={600} mb="sm">Экспорты §11.14</Text>
+          <ShellTable
+            headers={['ID', 'Статус', 'Создан', 'Ссылка']}
+            rows={
+              dataExports.length
+                ? dataExports.map((e) => [
+                    String(e.id),
+                    e.status,
+                    e.created_at ? new Date(e.created_at).toLocaleString('ru-RU') : '—',
+                    e.download_url ? (
+                      <Button
+                        key={`dl${e.id}`}
+                        size="xs"
+                        variant="light"
+                        component="a"
+                        href={e.download_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Скачать
+                      </Button>
+                    ) : (
+                      '—'
+                    ),
+                  ])
+                : [['—', 'Нет экспортов', '—', '—']]
+            }
+          />
         </Card>
         <Card withBorder>
           <Text fw={600} mb="sm">Сотрудники и лимиты (§11.6)</Text>
@@ -1426,103 +1495,6 @@ export function InvitationsPage() {
   );
 }
 
-export function PromocodesPage() {
-  const [opened, setOpened] = useState(false);
-  return (
-    <>
-      <PageHeader
-        title="Промокоды"
-        description="Скидки, лимиты активаций и статистика использования"
-        action={
-          <Button leftSection={<IconPlus size={16} />} onClick={() => setOpened(true)}>
-            Создать
-          </Button>
-        }
-      />
-      <ShellTable
-        headers={['Код', 'Скидка', 'Использовано', 'Действует до', 'Статус']}
-        rows={[[<Text key="c" fw={600}>SUMMER26</Text>, '15%', '42 / 100', '31.08.2026', <StateBadge key="s" value="Активен" color="teal" />]]}
-      />
-      <Modal opened={opened} onClose={() => setOpened(false)} title="Новый промокод">
-        <Stack>
-          <TextInput label="Код" placeholder="SUMMER26" />
-          <NumberInput label="Скидка, %" min={1} max={100} />
-          <NumberInput label="Лимит активаций" />
-          <Button onClick={() => setOpened(false)}>Создать</Button>
-        </Stack>
-      </Modal>
-    </>
-  );
-}
-
-export function CampaignsPage() {
-  return (
-    <>
-      <PageHeader title="Кампании" description="Маркетинговые кампании, сегменты и ROI" />
-      <SimpleGrid cols={{ base: 1, lg: 2 }}>
-        <Card withBorder>
-          <Stack>
-            <TextInput label="Название кампании" />
-            <Select label="Сегмент" data={['Новые пользователи', 'Неактивные 30 дней', 'B2B']} />
-            <Textarea label="Сообщение" minRows={4} />
-            <Group>
-              <Button>Запустить кампанию</Button>
-              <Button variant="light">Сохранить черновик</Button>
-            </Group>
-          </Stack>
-        </Card>
-        <Card withBorder>
-          <Text fw={600}>Результаты кампаний</Text>
-          <MetricGrid items={[{ label: 'Охват', value: '—' }, { label: 'Конверсия', value: '—' }, { label: 'ROI', value: '—' }]} />
-        </Card>
-      </SimpleGrid>
-    </>
-  );
-}
-
-export function PushPage() {
-  return (
-    <>
-      <PageHeader title="Push-рассылки" description="Массовые уведомления" />
-      <Card withBorder>
-        <Stack>
-          <Select label="Получатели" data={['Все активные']} defaultValue="Все активные" />
-          <TextInput label="Заголовок" />
-          <Textarea label="Текст уведомления" minRows={3} />
-          <Button w="fit-content">Отправить на модерацию</Button>
-        </Stack>
-      </Card>
-    </>
-  );
-}
-
-export function ModerationPage() {
-  return (
-    <>
-      <PageHeader title="Модерация" description="NSFW-проверка" />
-      <ShellTable
-        headers={['Материал', 'Пользователь', 'Оценка', 'Действие']}
-        rows={[['—', 'Нет в очереди', '—', '—']]}
-      />
-    </>
-  );
-}
-
-export function TaxPage() {
-  return (
-    <>
-      <PageHeader title="Налоговый модуль" description="Реквизиты и выгрузка" />
-      <Card withBorder>
-        <Stack>
-          <TextInput label="Наименование / ФИО" />
-          <TextInput label="ИНН" />
-          <SaveButton>Сохранить реквизиты</SaveButton>
-        </Stack>
-      </Card>
-    </>
-  );
-}
-
 export function LegalPage() {
   const [docs, setDocs] = useState<Array<{ slug: string; title: string; version: number }>>([]);
   const [consents, setConsents] = useState<
@@ -1628,23 +1600,8 @@ export function LegalPage() {
   );
 }
 
-export function SettingsPage() {
-  return (
-    <>
-      <PageHeader title="Настройки" description="Тарифы и оповещения" />
-      <Card withBorder>
-        <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <NumberInput label="Малый тариф, ₽" defaultValue={2990} />
-          <NumberInput label="Крупный тариф, ₽" defaultValue={5990} />
-          <NumberInput label="Grace period, сек." defaultValue={30} />
-        </SimpleGrid>
-        <Button mt="md">Сохранить</Button>
-      </Card>
-    </>
-  );
-}
-
 export function StoragePage() {
+  const location = useLocation();
   const [health, setHealth] = useState<{
     ok?: boolean;
     buckets?: string[];
@@ -1807,6 +1764,25 @@ export function StoragePage() {
   useEffect(() => {
     check();
   }, []);
+
+  useEffect(() => {
+    const st = location.state as { openDockerLogs?: boolean; containerHint?: string } | null;
+    if (!st?.openDockerLogs) return;
+    setLogsOpen(true);
+    void (async () => {
+      try {
+        const { data } = await api.get<{ containers: string[] }>('/admin/storage/docker-logs/containers');
+        const list = data.containers || [];
+        setLogContainers(list);
+        const hint = st.containerHint?.toLowerCase();
+        const match = hint ? list.find((c) => c.toLowerCase().includes(hint)) : null;
+        setLogContainer(match || list[0] || 'postgres');
+      } catch {
+        setLogContainers(['postgres', 'minio', 'patroni', 'redis']);
+        if (st.containerHint) setLogContainer(st.containerHint);
+      }
+    })();
+  }, [location.state]);
 
   const repl = health.cluster_ha?.minio_replication || [];
   const pg = health.cluster_ha?.postgres || {};

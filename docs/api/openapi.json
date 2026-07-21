@@ -180,6 +180,34 @@
         "title": "AccountTypeRequest",
         "type": "object"
       },
+      "AdminMarketplaceUploadBody": {
+        "properties": {
+          "marketplace": {
+            "pattern": "^(wb|ozon|wildberries)$",
+            "title": "Marketplace",
+            "type": "string"
+          },
+          "model_uuid": {
+            "maxLength": 36,
+            "minLength": 8,
+            "title": "Model Uuid",
+            "type": "string"
+          },
+          "sku": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Sku",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_uuid",
+          "marketplace",
+          "sku"
+        ],
+        "title": "AdminMarketplaceUploadBody",
+        "type": "object"
+      },
       "AlertSettingsBody": {
         "properties": {
           "email_enabled": {
@@ -2081,6 +2109,17 @@
       },
       "OrderPayRequest": {
         "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
           "customer_name": {
             "anyOf": [
               {
@@ -2670,6 +2709,18 @@
             "title": "Segment",
             "type": "object"
           },
+          "send_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Send At"
+          },
           "title": {
             "maxLength": 255,
             "minLength": 1,
@@ -2732,6 +2783,17 @@
       },
       "RegisterRequest": {
         "properties": {
+          "captcha_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captcha Token"
+          },
           "consents": {
             "items": {
               "type": "string"
@@ -5564,6 +5626,29 @@
       }
     },
     "/api/v1/admin/campaigns/push": {
+      "get": {
+        "description": "Журнал push-рассылок §11.8.",
+        "operationId": "list_push_broadcasts_api_v1_admin_campaigns_push_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Push Broadcasts",
+        "tags": [
+          "Кампании"
+        ]
+      },
       "post": {
         "operationId": "create_push_api_v1_admin_campaigns_push_post",
         "requestBody": {
@@ -5602,6 +5687,55 @@
           }
         ],
         "summary": "Create Push",
+        "tags": [
+          "Кампании"
+        ]
+      }
+    },
+    "/api/v1/admin/campaigns/push/stats": {
+      "get": {
+        "description": "Open-rate push-рассылок §11.8.",
+        "operationId": "push_broadcast_stats_api_v1_admin_campaigns_push_stats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Push Broadcast Stats",
         "tags": [
           "Кампании"
         ]
@@ -6740,6 +6874,284 @@
         ]
       }
     },
+    "/api/v1/admin/companies/{company_id}/data-export": {
+      "post": {
+        "description": "§9.5.2 / §11.14 — запуск экспорта данных компании (staff).",
+        "operationId": "admin_request_company_data_export_api_v1_admin_companies__company_id__data_export_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "company_id",
+            "required": true,
+            "schema": {
+              "title": "Company Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Request Company Data Export",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/companies/{company_id}/data-export/{export_id}": {
+      "get": {
+        "operationId": "admin_get_company_data_export_api_v1_admin_companies__company_id__data_export__export_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "company_id",
+            "required": true,
+            "schema": {
+              "title": "Company Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "title": "Export Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Get Company Data Export",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/companies/{company_id}/data-exports": {
+      "get": {
+        "operationId": "admin_list_company_data_exports_api_v1_admin_companies__company_id__data_exports_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "company_id",
+            "required": true,
+            "schema": {
+              "title": "Company Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin List Company Data Exports",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/companies/{company_id}/dedicated-bucket": {
+      "delete": {
+        "description": "Отключить dedicated bucket (новые модели → общий models).",
+        "operationId": "disable_company_dedicated_bucket_api_v1_admin_companies__company_id__dedicated_bucket_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "company_id",
+            "required": true,
+            "schema": {
+              "title": "Company Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Disable Company Dedicated Bucket",
+        "tags": [
+          "Администрирование"
+        ]
+      },
+      "get": {
+        "operationId": "get_company_dedicated_bucket_api_v1_admin_companies__company_id__dedicated_bucket_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "company_id",
+            "required": true,
+            "schema": {
+              "title": "Company Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Company Dedicated Bucket",
+        "tags": [
+          "Администрирование"
+        ]
+      },
+      "post": {
+        "description": "§9.5.1 — выделенный MinIO bucket company_{id}_models.",
+        "operationId": "enable_company_dedicated_bucket_api_v1_admin_companies__company_id__dedicated_bucket_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "company_id",
+            "required": true,
+            "schema": {
+              "title": "Company Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Enable Company Dedicated Bucket",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/companies/{company_id}/invitations": {
       "get": {
         "description": "Активные/все приглашения сотрудников компании (§11.6).",
@@ -7295,6 +7707,104 @@
         ]
       }
     },
+    "/api/v1/admin/dod-metrics": {
+      "get": {
+        "description": "§1.4 DoD metrics dashboard (staging/prod).",
+        "operationId": "dod_metrics_api_v1_admin_dod_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Dod Metrics",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/dod-metrics/export": {
+      "get": {
+        "description": "CSV export §1.4 DoD metrics.",
+        "operationId": "dod_metrics_export_api_v1_admin_dod_metrics_export_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Dod Metrics Export",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/escalations": {
       "get": {
         "operationId": "list_escalations_api_v1_admin_escalations_get",
@@ -7339,6 +7849,81 @@
           }
         ],
         "summary": "Grafana Embed Config",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/ha/cutover/preflight": {
+      "get": {
+        "description": "Preflight checklist перед HA cutover §22.3.",
+        "operationId": "ha_cutover_preflight_api_v1_admin_ha_cutover_preflight_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ha Cutover Preflight",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/ha/mesh": {
+      "get": {
+        "description": "Tailscale multi-host storage mesh §4.3.",
+        "operationId": "ha_mesh_status_api_v1_admin_ha_mesh_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ha Mesh Status",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/ha/minio-vip": {
+      "get": {
+        "description": "MinIO VIP / Keepalived §9.6.",
+        "operationId": "ha_minio_vip_status_api_v1_admin_ha_minio_vip_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ha Minio Vip Status",
         "tags": [
           "Администрирование"
         ]
@@ -7439,6 +8024,31 @@
           }
         ],
         "summary": "Ha Tailscale Status",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/ha/witness": {
+      "get": {
+        "description": "Witness quorum §22.5.",
+        "operationId": "ha_witness_status_api_v1_admin_ha_witness_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ha Witness Status",
         "tags": [
           "Администрирование"
         ]
@@ -7563,6 +8173,55 @@
           }
         ],
         "summary": "List Consents",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/load-test/queue": {
+      "post": {
+        "description": "Enqueue N synthetic tasks for queue load test (no GPU).",
+        "operationId": "load_test_queue_api_v1_admin_load_test_queue_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "count",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Count",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Load Test Queue",
         "tags": [
           "Администрирование"
         ]
@@ -8179,6 +8838,51 @@
         ]
       }
     },
+    "/api/v1/admin/marketplace/upload": {
+      "post": {
+        "description": "Ручной триггер API-публикации §7.6.",
+        "operationId": "admin_marketplace_upload_api_v1_admin_marketplace_upload_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminMarketplaceUploadBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Marketplace Upload",
+        "tags": [
+          "Marketplace API"
+        ]
+      }
+    },
     "/api/v1/admin/marketplace/upload-logs": {
       "get": {
         "operationId": "upload_logs_api_v1_admin_marketplace_upload_logs_get",
@@ -8472,6 +9176,81 @@
           }
         ],
         "summary": "Publication Funnel Export",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/monitoring/debezium": {
+      "get": {
+        "description": "Debezium Connect CDC status §12.1.",
+        "operationId": "monitoring_debezium_status_api_v1_admin_monitoring_debezium_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Monitoring Debezium Status",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/monitoring/victoria": {
+      "get": {
+        "description": "VictoriaMetrics health §23.1.",
+        "operationId": "monitoring_victoria_status_api_v1_admin_monitoring_victoria_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Monitoring Victoria Status",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/monitoring/waf": {
+      "get": {
+        "description": "Cloudflare WAF config status §10.7.6.",
+        "operationId": "monitoring_waf_status_api_v1_admin_monitoring_waf_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Monitoring Waf Status",
         "tags": [
           "Администрирование"
         ]
@@ -10340,6 +11119,98 @@
         ]
       }
     },
+    "/api/v1/admin/tax/act/{order_id}": {
+      "post": {
+        "description": "PDF акт по order_id (staff §11.13).",
+        "operationId": "admin_generate_act_api_v1_admin_tax_act__order_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Generate Act",
+        "tags": [
+          "Налоги"
+        ]
+      }
+    },
+    "/api/v1/admin/tax/invoice/{order_id}": {
+      "post": {
+        "description": "PDF счёт по order_id (staff §11.13).",
+        "operationId": "admin_generate_invoice_api_v1_admin_tax_invoice__order_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "order_id",
+            "required": true,
+            "schema": {
+              "title": "Order Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Admin Generate Invoice",
+        "tags": [
+          "Налоги"
+        ]
+      }
+    },
     "/api/v1/admin/tax/settings": {
       "get": {
         "operationId": "get_tax_settings_api_v1_admin_tax_settings_get",
@@ -11585,6 +12456,31 @@
           }
         ],
         "summary": "Android Assetlinks",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/worker/trellis-status": {
+      "get": {
+        "description": "§5 TRELLIS prod readiness (P14).",
+        "operationId": "worker_trellis_status_api_v1_admin_worker_trellis_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Worker Trellis Status",
         "tags": [
           "Администрирование"
         ]
@@ -14283,6 +15179,77 @@
         ]
       }
     },
+    "/api/v1/company/data-export": {
+      "post": {
+        "description": "§9.5.2 — асинхронный экспорт всех данных компании (ZIP на email за 24ч).",
+        "operationId": "request_company_data_export_api_v1_company_data_export_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Request Company Data Export",
+        "tags": [
+          "Компания"
+        ]
+      }
+    },
+    "/api/v1/company/data-export/{export_id}": {
+      "get": {
+        "description": "Статус экспорта данных компании §9.5.2.",
+        "operationId": "get_company_data_export_status_api_v1_company_data_export__export_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "export_id",
+            "required": true,
+            "schema": {
+              "title": "Export Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Company Data Export Status",
+        "tags": [
+          "Компания"
+        ]
+      }
+    },
     "/api/v1/company/delete-cancel": {
       "post": {
         "description": "Отмена запланированного удаления компании §9.8.",
@@ -16535,6 +17502,52 @@
           }
         ],
         "summary": "Publish Document",
+        "tags": [
+          "Юридические документы"
+        ]
+      }
+    },
+    "/api/v1/legal/admin/{slug}/versions": {
+      "get": {
+        "description": "История версий документа §11.11.",
+        "operationId": "list_document_versions_api_v1_legal_admin__slug__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Document Versions",
         "tags": [
           "Юридические документы"
         ]
@@ -21423,6 +22436,63 @@
         "summary": "Yookassa Webhook",
         "tags": [
           "Webhooks"
+        ]
+      }
+    },
+    "/api/v1/worker/cse-key/{task_id}": {
+      "get": {
+        "description": "§10 CSE premium: ключ расшифровки из KMS компании (оркестратор — прокси).",
+        "operationId": "worker_cse_key_api_v1_worker_cse_key__task_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Worker Cse Key",
+        "tags": [
+          "Worker callback"
         ]
       }
     },

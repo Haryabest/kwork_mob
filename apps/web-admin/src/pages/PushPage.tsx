@@ -2,7 +2,7 @@ import { Badge, Button, Center, Group, Select, Stack, TextInput, Textarea } from
 import { notifications } from '@mantine/notifications';
 import { IconRefresh } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
-import { PageHeader, ShellTable } from '../components/Panel';
+import { PageHeader, MetricGrid, ShellTable } from '../components/Panel';
 import { api, getApiError } from '../services/api';
 
 const SEGMENTS = [
@@ -30,11 +30,21 @@ export default function PushPage() {
   const [result, setResult] = useState<string | null>(null);
   const [testUserId, setTestUserId] = useState('');
   const [history, setHistory] = useState<PushRow[]>([]);
+  const [openStats, setOpenStats] = useState<{
+    open_rate?: number;
+    total_delivered?: number;
+    total_opened?: number;
+    items?: Array<{ id: number; title: string; open_rate?: number; opened?: number; delivered_inbox?: number }>;
+  } | null>(null);
 
   const loadHistory = useCallback(async () => {
     try {
-      const { data } = await api.get<{ items: PushRow[] }>('/admin/campaigns/push');
-      setHistory(data.items ?? []);
+      const [hist, stats] = await Promise.all([
+        api.get<{ items: PushRow[] }>('/admin/campaigns/push'),
+        api.get<typeof openStats>('/admin/campaigns/push/stats'),
+      ]);
+      setHistory(hist.data.items ?? []);
+      setOpenStats(stats.data);
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
     }
@@ -118,7 +128,18 @@ export default function PushPage() {
           </Button>
         }
       />
-      <Stack maw={560} mb="xl">
+
+      <MetricGrid
+        items={[
+          {
+            label: 'Open rate 30д',
+            value: `${Math.round((openStats?.open_rate ?? 0) * 100)}%`,
+            hint: `opened ${openStats?.total_opened ?? 0} / ${openStats?.total_delivered ?? 0}`,
+          },
+        ]}
+      />
+
+      <Stack maw={560} mb="xl" mt="md">
         <Select label="Сегмент" value={segment} onChange={setSegment} data={SEGMENTS} />
         <TextInput label="Заголовок" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
         <Textarea label="Текст" minRows={4} value={body} onChange={(e) => setBody(e.currentTarget.value)} />
@@ -149,14 +170,17 @@ export default function PushPage() {
       </Stack>
 
       <ShellTable
-        headers={['ID', 'Заголовок', 'Статус', 'Reach', 'Когда']}
-        rows={history.map((h) => [
+        headers={['ID', 'Заголовок', 'Статус', 'Reach', 'Open %', 'Когда']}
+        rows={history.map((h) => {
+          const stat = openStats?.items?.find((i) => i.id === h.id);
+          return [
           String(h.id),
           h.title,
           <Badge key={h.id} color={h.status === 'sent' ? 'teal' : h.status === 'scheduled' ? 'blue' : 'gray'} variant="light">
             {h.status}
           </Badge>,
           String(h.stats?.reach ?? '—'),
+          stat ? `${Math.round((stat.open_rate ?? 0) * 100)}%` : '—',
           h.sent_at
             ? new Date(h.sent_at).toLocaleString('ru-RU')
             : h.scheduled_at
@@ -164,7 +188,8 @@ export default function PushPage() {
               : h.created_at
                 ? new Date(h.created_at).toLocaleString('ru-RU')
                 : '—',
-        ])}
+        ];
+        })}
       />
     </>
   );

@@ -547,6 +547,61 @@ async def patch_company_settings(
     }
 
 
+@router.post("/companies/{company_id}/data-export")
+async def admin_request_company_data_export(
+    company_id: int,
+    staff: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """§9.5.2 / §11.14 — запуск экспорта данных компании (staff)."""
+    from app.services import company_data_export as cde_svc
+    from app.tasks.celery_app import process_company_data_export
+
+    if not staff.staff_role:
+        raise HTTPException(403, "Только staff")
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(404, "Компания не найдена")
+    row = await cde_svc.request_export(db, company=company, user=staff)
+    await db.commit()
+    process_company_data_export.delay(row.id)
+    return {
+        "export_id": row.id,
+        "status": row.status,
+        **cde_svc.export_to_dict(row),
+    }
+
+
+@router.get("/companies/{company_id}/data-exports")
+async def admin_list_company_data_exports(
+    company_id: int,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_data_export as cde_svc
+
+    company = await db.get(Company, company_id)
+    if not company:
+        raise HTTPException(404, "Компания не найдена")
+    items = await cde_svc.list_exports(db, company_id=company_id)
+    return {"items": items}
+
+
+@router.get("/companies/{company_id}/data-export/{export_id}")
+async def admin_get_company_data_export(
+    company_id: int,
+    export_id: int,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import company_data_export as cde_svc
+
+    row = await cde_svc.get_export(db, company_id=company_id, export_id=export_id)
+    if not row:
+        raise HTTPException(404, "Экспорт не найден")
+    return cde_svc.export_to_dict(row)
+
+
 @router.post("/companies/{company_id}/dedicated-bucket")
 async def enable_company_dedicated_bucket(
     company_id: int,

@@ -685,21 +685,108 @@ async def _deliver_push_broadcast(db: AsyncSession, row: PushBroadcast) -> PushB
     from app.services import push as push_svc
 
     users = await resolve_segment(db, row.segment or {})
-    result = await push_svc.send_to_users(db, [u.id for u in users], row.title, row.body)
+    pushed = 0
+    emailed = 0
+    for u in users:
+        result = await push_svc.send_to_user(
+            db,
+            u.id,
+            row.title,
+            row.body,
+            data={"type": "marketing_push", "dedup_key": f"push:broadcast:{row.id}:{u.id}"},
+            email_fallback=True,
+        )
+        if result["delivered_push"]:
+            pushed += 1
+        elif result["email_fallback"]:
+            emailed += 1
     row.status = "sent"
     row.sent_at = datetime.now(timezone.utc)
     prev = dict(row.stats or {})
     row.stats = {
         **prev,
-        "reach": result["reach"],
-        "sent": result["pushed"] + result["emailed"],
-        "pushed": result["pushed"],
-        "emailed": result["emailed"],
+        "reach": len(users),
+        "sent": pushed + emailed,
+        "pushed": pushed,
+        "emailed": emailed,
         "channel": "fcm+email_fallback",
-        "fcm_configured": result["fcm_configured"],
+        "fcm_configured": push_svc._fcm_configured(),
     }
     await db.flush()
     return row
+
+
+async def push_open_stats(db: AsyncSession, *, days: int = 30) -> dict:
+    """Open-rate push-рассылок по read_at в inbox §11.8."""
+    from app.models import UserNotification
+
+    days = max(1, min(days, 90))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    prefix = "push:broadcast:"
+
+    rows = (
+        await db.execute(
+            select(
+                UserNotification.dedup_key,
+                func.count(),
+                func.count().filter(UserNotification.read_at.isnot(None)),
+            )
+            .where(
+                UserNotification.dedup_key.like(f"{prefix}%"),
+                UserNotification.created_at >= since,
+            )
+            .group_by(UserNotification.dedup_key)
+        )
+    ).all()
+
+    by_broadcast: dict[int, dict] = {}
+    total = 0
+    opened = 0
+    for dk, cnt, read_cnt in rows:
+        total += int(cnt)
+        opened += int(read_cnt)
+        parts = (dk or "").split(":")
+        if len(parts) >= 3 and parts[2].isdigit():
+            bid = int(parts[2])
+            slot = by_broadcast.setdefault(bid, {"broadcast_id": bid, "delivered": 0, "opened": 0})
+            slot["delivered"] += int(cnt)
+            slot["opened"] += int(read_cnt)
+
+    broadcasts = (
+        await db.scalars(
+            select(PushBroadcast)
+            .where(PushBroadcast.created_at >= since)
+            .order_by(PushBroadcast.id.desc())
+            .limit(50)
+        )
+    ).all()
+
+    items = []
+    for b in broadcasts:
+        slot = by_broadcast.get(b.id, {"delivered": 0, "opened": 0})
+        delivered = int(slot.get("delivered") or 0)
+        opens = int(slot.get("opened") or 0)
+        items.append(
+            {
+                "id": b.id,
+                "title": b.title,
+                "status": b.status,
+                "sent_at": b.sent_at.isoformat() if b.sent_at else None,
+                "reach": (b.stats or {}).get("reach"),
+                "pushed": (b.stats or {}).get("pushed"),
+                "delivered_inbox": delivered,
+                "opened": opens,
+                "open_rate": round(opens / max(delivered, 1), 4),
+            }
+        )
+
+    return {
+        "days": days,
+        "total_delivered": total,
+        "total_opened": opened,
+        "open_rate": round(opened / max(total, 1), 4),
+        "items": items,
+    }
 
 
 async def dispatch_scheduled_push_broadcasts(db: AsyncSession) -> dict:
