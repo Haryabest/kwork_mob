@@ -26,6 +26,8 @@ POLICY_KEYS = (
     "auto_block_exempt_user_ids",
     "low_balance_threshold",
     "e2e_photo_encryption",
+    "cse_premium_kms_enabled",
+    "cse_kms_url",
 )
 
 DEFAULT_POLICIES: dict[str, Any] = {
@@ -39,6 +41,8 @@ DEFAULT_POLICIES: dict[str, Any] = {
     "auto_block_exempt_user_ids": [],
     "low_balance_threshold": 5000,
     "e2e_photo_encryption": False,
+    "cse_premium_kms_enabled": False,
+    "cse_kms_url": "",
 }
 
 
@@ -53,6 +57,8 @@ class CompanyPolicies(BaseModel):
     auto_block_exempt_user_ids: list[int] = Field(default_factory=list)
     low_balance_threshold: int = Field(default=5000, ge=0)
     e2e_photo_encryption: bool = False
+    cse_premium_kms_enabled: bool = False
+    cse_kms_url: str = Field(default="", max_length=512)
 
     @field_validator("default_allowed_categories")
     @classmethod
@@ -125,6 +131,10 @@ async def update_policies(db: AsyncSession, user: User, body: dict) -> dict:
         raise HTTPException(400, f"Некорректные политики: {exc}") from exc
 
     rest = {k: v for k, v in (company.settings or {}).items() if k not in POLICY_KEYS}
+    if body.get("cse_kms_token"):
+        from app.core.crypto import encrypt_field
+
+        rest["cse_kms_token_encrypted"] = encrypt_field(str(body["cse_kms_token"]))
     routing_patch = body.get("notification_routing")
     if routing_patch is None and isinstance(body.get("settings"), dict):
         routing_patch = body["settings"].get(cn.SETTINGS_KEY)

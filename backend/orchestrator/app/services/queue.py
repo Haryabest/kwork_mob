@@ -125,15 +125,22 @@ class QueueService:
         return None
 
     async def dequeue_with_fallback(self, db: AsyncSession) -> dict[str, Any] | None:
-        """Redis LPOP; при ошибке Redis — PG SKIP LOCKED."""
+        """Redis LPOP; PG SKIP LOCKED только при ошибке Redis (не при пустой очереди)."""
         try:
-            return await self.dequeue()
+            item = await self.dequeue()
+            if item is not None:
+                return item
+            return None
         except Exception as exc:  # noqa: BLE001
             logger.warning("Redis dequeue failed (%s), fallback to PostgreSQL", exc)
             item = await self.dequeue_from_postgres(db)
             if item:
                 await db.commit()
             return item
+
+    async def heal_redis_from_postgres(self, db: AsyncSession) -> int:
+        """Восстановить Redis из PG (отдельно от dequeue, §4.2.2)."""
+        return await self.sync_from_postgres(db)
 
     async def remove_from_redis(self, task_id: str) -> int:
         """Удалить все вхождения task_id из queue:high/normal."""

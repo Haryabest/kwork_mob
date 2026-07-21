@@ -60,7 +60,16 @@ class Settings(BaseSettings):
     LOKI_URL: str = ""  # http://loki:3100
     DOCKER_LOGS_PROXY_URL: str = ""  # agent POST /logs
     DOCKER_LOG_CONTAINERS: str = "postgres,minio,patroni,redis,clickhouse,orchestrator,haproxy"
-    TAILSCALE_STATUS_JSON: str = ""  # §23.3 tailscale status --json sidecar
+    # §23.3 Tailscale sidecar
+    TAILSCALE_STATUS_JSON: str = ""  # tailscale status --json
+
+    # §4.3 Mesh failover (Tailscale IPs, comma-separated)
+    MESH_POSTGRES_HOSTS: str = ""
+    MESH_REDIS_HOSTS: str = ""
+    MESH_MINIO_HOSTS: str = ""
+    ORCHESTRATOR_WS_FALLBACK_URL: str = ""
+    PATRONI_REST_URL: str = "http://postgres-primary:8008"
+    HAPROXY_PG_HOST: str = ""
 
     CLICKHOUSE_HOST: str = "localhost"
     CLICKHOUSE_PORT: int = 8123

@@ -30,6 +30,9 @@ def ha_readiness() -> dict[str, Any]:
         "witness_configured": bool((settings.WITNESS_URL or "").strip()),
         "victoria_metrics_configured": bool((settings.VICTORIA_METRICS_URL or "").strip()),
         "debezium_configured": bool((settings.DEBEZIUM_CONNECT_URL or "").strip()),
+        "tailscale_mesh_configured": bool(
+            (settings.MESH_POSTGRES_HOSTS or settings.MESH_REDIS_HOSTS or settings.MESH_MINIO_HOSTS or "").strip()
+        ),
         "cloudflare_waf": bool(settings.CLOUDFLARE_WAF_ENABLED),
     }
     prod_score = sum(1 for v in checks.values() if v)

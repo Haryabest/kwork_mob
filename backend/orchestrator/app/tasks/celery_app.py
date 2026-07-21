@@ -701,3 +701,26 @@ def auto_marketplace_upload_task(model_uuid: str, marketplace: str, sku: str, or
 
     return asyncio.run(_run())
 
+
+@celery_app.task(name="app.tasks.celery_app.heal_queue_redis_from_pg")
+def heal_queue_redis_from_pg():
+    """§4.2.2 — восстановить Redis из PG (не dequeue)."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services.queue import queue_service
+
+    async def _run():
+        async with async_session() as db:
+            restored = await queue_service.heal_redis_from_postgres(db)
+            await db.commit()
+            return {"restored": restored}
+
+    return asyncio.run(_run())
+
+
+celery_app.conf.beat_schedule["queue-redis-heal-every-5-min"] = {
+    "task": "app.tasks.celery_app.heal_queue_redis_from_pg",
+    "schedule": crontab(minute="*/5"),
+}
+

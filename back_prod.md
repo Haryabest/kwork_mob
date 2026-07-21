@@ -99,7 +99,7 @@
 | P8 | §22.5 Witness/quorum split-brain | **DONE** — `infra/ha/witness/`, admin `/ha/witness` |
 | P9 | §10.7.6 / §21 WAF Cloudflare | **DONE** — `cloudflare_waf.py`, `infra/cloudflare/waf-rules.example.json` |
 | P10 | §9.5.1 Dedicated B2B buckets (опция) | **DONE** — `company_buckets.py`, admin API |
-| P11 | §10 CSE premium KMS | MISSING (опция) |
+| P11 | §10 CSE premium KMS | **DONE** — `cse_kms.py`, worker `/cse-key`, company policies |
 | P12 | §23.1 VictoriaMetrics + полный exporter stack | **DONE** — compose + `prometheus.ha.yml`, admin `/monitoring/victoria` |
 | P13 | §1.4 Все KPI prod | UNVERIFIED |
 | P14 | §5 TRELLIS prod (`WORKER_PIPELINE_MODE=stub` default) | UNVERIFIED |
@@ -109,12 +109,12 @@
 
 ## PARTIAL (доработать)
 
-- §4.2.2 — PG fallback только при ошибке Redis (не при пустой очереди)
+- §4.2.2 — ~~PG fallback при пустой очереди~~ heal Redis из PG (Celery 5m), PG только при ошибке Redis
 - §6.1.1 — ~~rembg первым~~ DeepLab primary (исправлено)
 - §9.6 — MinIO VIP: `MINIO_VIP` + `infra/ha/keepalived/` (prod deploy на узлах)
-- §4.3 — Tailscale mesh + WS fallback в prod agent
-- §12 — CH sync через Celery (лаг при сбоях)
-- §22 — HA compose есть, cutover нет
+- §4.3 — **DONE** — `mesh_hosts.py`, `MESH_*_HOSTS`, worker WS/TS fallback
+- §12 — dual: Debezium + Celery fallback (`USER_EVENTS_SYNC_MODE`)
+- §22 — cutover preflight API + `scripts/ha_cutover_preflight.sh`
 
 ---
 
@@ -166,6 +166,13 @@
 - [x] §7.6 Auto-upload после генерации (`marketplace_auto_upload.py`, Celery)
 - [x] API upload → `verified_{mp}` + `publication_verified` event
 - [x] Admin `POST /admin/marketplace/upload`
+
+### Спринт 6 — mesh / cutover / CSE
+- [x] §4.3 Tailscale mesh (`mesh_hosts.py`, `GET /admin/ha/mesh`, `MESH_*_HOSTS`)
+- [x] §22 HA cutover preflight (`ha_cutover.py`, `GET /admin/ha/cutover/preflight`)
+- [x] §10 CSE premium KMS (`cse_kms.py`, `GET /worker/cse-key/{task_id}`)
+- [x] §4.2.2 Queue heal Celery (`heal_queue_redis_from_pg` каждые 5m)
+- [x] Worker prod Tailscale/WS fallback в `.env.prod.example`
 
 ---
 

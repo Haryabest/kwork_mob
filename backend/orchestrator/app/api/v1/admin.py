@@ -1726,6 +1726,22 @@ async def ha_tailscale_status(_: dict = Depends(require_admin)):
     return tailscale_status()
 
 
+@router.get("/ha/mesh")
+async def ha_mesh_status(_: dict = Depends(require_admin)):
+    """Tailscale multi-host storage mesh §4.3."""
+    from app.services.mesh_hosts import mesh_status
+
+    return mesh_status()
+
+
+@router.get("/ha/cutover/preflight")
+async def ha_cutover_preflight(_: dict = Depends(require_admin)):
+    """Preflight checklist перед HA cutover §22.3."""
+    from app.services.ha_cutover import cutover_preflight
+
+    return cutover_preflight()
+
+
 @router.get("/ha/witness")
 async def ha_witness_status(_: dict = Depends(require_admin)):
     """Witness quorum §22.5."""

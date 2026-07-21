@@ -207,3 +207,16 @@ async def worker_event(body: WorkerEvent, _: None = Depends(_verify_worker_token
         return {"ok": True, "status": "failed", "task_id": task_id}
 
     raise HTTPException(400, f"Unsupported event type: {body.type}")
+
+
+@router.get("/cse-key/{task_id}")
+async def worker_cse_key(
+    task_id: str,
+    _: None = Depends(_verify_worker_token),
+):
+    """§10 CSE premium: ключ расшифровки из KMS компании (оркестратор — прокси)."""
+    from app.services.cse_kms import fetch_worker_key_from_kms
+
+    async with async_session() as db:
+        result = await fetch_worker_key_from_kms(db, task_id=task_id)
+    return result
