@@ -16,6 +16,7 @@ import {
   Indicator,
   Menu,
   UnstyledButton,
+  useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import {
@@ -29,6 +30,8 @@ import {
   IconShoppingCart,
   IconStack2,
   IconUsersGroup,
+  IconMoon,
+  IconSun,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -71,6 +74,7 @@ function SellerShellInner({ children }: { children: ReactNode }) {
   const [userLabel, setUserLabel] = useState('3D');
   const isMobile = useMediaQuery('(max-width: 767px)');
   const { live: queueLive, pendingCount: queuePending, clearPending } = useQueueWs();
+  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
 
   useEffect(() => {
     api
@@ -111,6 +115,14 @@ function SellerShellInner({ children }: { children: ReactNode }) {
               </Box>
             </Group>
             <Group gap={6} wrap="nowrap">
+              <ActionIcon
+                variant="subtle"
+                aria-label={colorScheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+                onClick={() => toggleColorScheme()}
+                visibleFrom="sm"
+              >
+                {colorScheme === 'dark' ? <IconSun size={19} /> : <IconMoon size={19} />}
+              </ActionIcon>
               <Badge
                 component={Link}
                 href="/balance"

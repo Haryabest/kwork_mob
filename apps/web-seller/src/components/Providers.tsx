@@ -12,7 +12,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <MantineProvider theme={brandTheme} defaultColorScheme="light">
+      <MantineProvider theme={brandTheme} defaultColorScheme="auto">
         <I18nProvider>
           <Notifications position="top-right" />
           {children}

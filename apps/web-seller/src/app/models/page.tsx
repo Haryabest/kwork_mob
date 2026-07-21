@@ -94,10 +94,15 @@ function publishLabel(status?: string | null, orderStatus?: string | null): stri
 }
 
 const MANAGE_ROLES = new Set(['owner', 'manager']);
-const PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [
+  { value: '20', label: '20' },
+  { value: '50', label: '50' },
+  { value: '100', label: '100' },
+];
 
 export default function ModelsPage() {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
   const [publishFilter, setPublishFilter] = useState<string | null>(null);
@@ -118,7 +123,7 @@ export default function ModelsPage() {
     {
       companyId: company?.id,
       page,
-      pageSize: PAGE_SIZE,
+      pageSize,
       search,
       publishFilter,
       category,
@@ -134,7 +139,7 @@ export default function ModelsPage() {
   const total = modelsData?.total ?? 0;
 
   const canFilterAuthors = company != null && MANAGE_ROLES.has(company.role);
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const useVirtualGrid = viewMode === 'grid' && (total > 100 || items.length > 100);
 
   useEffect(() => {
@@ -159,7 +164,7 @@ export default function ModelsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, publishFilter, category, tier, dateFrom, dateTo, authorId, sort, company]);
+  }, [search, publishFilter, category, tier, dateFrom, dateTo, authorId, sort, company, pageSize]);
 
   useEffect(() => {
     api
@@ -317,6 +322,16 @@ export default function ModelsPage() {
         </FilterRow>
 
         <Group justify="flex-end" mb="md">
+          <Select
+            label="На странице §20.4"
+            data={PAGE_SIZE_OPTIONS}
+            value={String(pageSize)}
+            onChange={(v) => {
+              setPageSize(Number(v) || 20);
+              setPage(1);
+            }}
+            w={100}
+          />
           <SegmentedControl
             value={viewMode}
             onChange={onViewModeChange}

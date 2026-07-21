@@ -44,6 +44,7 @@ export function useModelsList(params: ModelsListParams, enabled = true) {
       'models',
       companyId,
       page,
+      pageSize,
       search,
       publishFilter,
       category,

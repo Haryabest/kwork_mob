@@ -3,34 +3,15 @@
 import { Button, Group, Stack, Text, Title, Skeleton } from '@mantine/core';
 import { IconBox, IconCash, IconCamera, IconUsers, IconShoppingCart } from '@tabler/icons-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, PageHeader, Surface } from '../../components/ui';
-import { api } from '../../services/api';
-
-type Me = { balance: number; full_name?: string | null; account_type?: string | null };
-type Order = { id: number; status: string; amount: number };
-type Model = { uuid: string; order_id: number; glb_url?: string | null; publish_status?: string; created_at?: string };
+import { useDashboard } from '../../hooks/useDashboard';
 
 export default function DashboardPage() {
-  const [me, setMe] = useState<Me | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [models, setModels] = useState<Model[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    Promise.all([
-      api.get<Me>('/user/me'),
-      api.get<{ items: Order[] }>('/orders'),
-      api.get<{ items: Model[] }>('/user/models').catch(() => ({ data: { items: [] } })),
-    ])
-      .then(([meRes, ordersRes, modelsRes]) => {
-        setMe(meRes.data);
-        setOrders(ordersRes.data.items ?? []);
-        setModels(modelsRes.data.items ?? []);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, isLoading: loading } = useDashboard();
+  const me = data?.me ?? null;
+  const orders = data?.orders ?? [];
+  const models = data?.models ?? [];
 
   const activeOrders = orders.filter((o) => ['queued', 'processing', 'awaiting_payment', 'pending'].includes(o.status)).length;
   const monthSpend = orders

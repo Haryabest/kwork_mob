@@ -13,34 +13,11 @@ import {
 } from '@mantine/core';
 import { IconPlus, IconSearch } from '@tabler/icons-react';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { notifications } from '@mantine/notifications';
+import { useMemo, useState } from 'react';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
-import { api, apiMessage } from '../../services/api';
-
-type OrderItem = {
-  id: number;
-  task_uuid: string;
-  category: string;
-  tier: string;
-  status: string;
-  amount: number;
-  user_id?: number;
-  created_at?: string;
-};
-
-type CompanyCtx = {
-  id: number;
-  role: string;
-};
-
-type Member = {
-  user_id: number;
-  email?: string | null;
-  full_name?: string | null;
-  role?: string;
-};
+import { useCompanyContext } from '../../hooks/useCompanyContext';
+import { useCompanyMembers, useOrdersList, type OrderItem } from '../../hooks/useOrdersList';
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Новый',
@@ -65,89 +42,20 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 const MANAGE_ROLES = new Set(['owner', 'manager']);
-
-// Незавершённые статусы — пока есть такие заказы, список опрашивается вживую.
-const ACTIVE_STATUSES = new Set([
-  'pending',
-  'awaiting_payment',
-  'paid',
-  'queued',
-  'processing',
-]);
-const LIVE_POLL_MS = 15000;
+const ACTIVE_STATUSES = new Set(['pending', 'awaiting_payment', 'paid', 'queued', 'processing']);
 
 /** §20.6 Заказы · §3.16.2 фильтр исполнитель */
 export default function OrdersPage() {
-  const [items, setItems] = useState<OrderItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [authorId, setAuthorId] = useState<string | null>(null);
-  const [company, setCompany] = useState<CompanyCtx | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
+  const { data: company } = useCompanyContext();
   const canFilterAuthors = company != null && MANAGE_ROLES.has(company.role);
+  const { data: members = [] } = useCompanyMembers(canFilterAuthors);
+  const { data: items = [], isLoading: loading, dataUpdatedAt } = useOrdersList(company?.id, authorId);
 
-  const loadOrders = useCallback(
-    async (silent = false) => {
-      if (!silent) setLoading(true);
-      try {
-        const params: Record<string, string | number> = {};
-        if (company) params.company_id = company.id;
-        if (authorId) params.user_id = Number(authorId);
-        const { data } = await api.get<{ items: OrderItem[] }>('/orders', { params });
-        setItems(data.items ?? []);
-        setUpdatedAt(new Date());
-      } catch (e) {
-        if (!silent) notifications.show({ color: 'red', message: apiMessage(e) });
-      } finally {
-        if (!silent) setLoading(false);
-      }
-    },
-    [company, authorId],
-  );
-
-  useEffect(() => {
-    api
-      .get<{ items: Array<{ id: number; role?: string }> }>('/company/mine')
-      .then(({ data }) => {
-        const first = data.items?.[0];
-        if (first?.id) {
-          setCompany({ id: first.id, role: first.role || 'member' });
-        }
-      })
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    if (!canFilterAuthors || !company) return;
-    api
-      .get<{ items: Member[] }>('/company/members')
-      .then(({ data }) => setMembers(data.items ?? []))
-      .catch(() => undefined);
-  }, [canFilterAuthors, company]);
-
-  useEffect(() => {
-    void loadOrders();
-  }, [loadOrders]);
-
-  const hasActive = useMemo(
-    () => items.some((o) => ACTIVE_STATUSES.has(o.status)),
-    [items],
-  );
-
-  // §20.6 живые статусы: пока есть незавершённые заказы — тихий поллинг.
-  useEffect(() => {
-    if (!hasActive) return;
-    const tick = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        void loadOrders(true);
-      }
-    };
-    const timer = window.setInterval(tick, LIVE_POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [hasActive, loadOrders]);
+  const hasActive = useMemo(() => items.some((o: OrderItem) => ACTIVE_STATUSES.has(o.status)), [items]);
 
   const memberLabel = useMemo(() => {
     const map = new Map<number, string>();
@@ -166,14 +74,14 @@ export default function OrdersPage() {
     });
   }, [items, q, status]);
 
+  const updatedAt = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
+
   return (
     <SellerShell>
       <PageHeader
         title="Заказы"
         description={
-          company
-            ? `Заказы компании · роль ${company.role}`
-            : 'Статусы генераций, оплата и очередь'
+          company ? `Заказы компании · роль ${company.role}` : 'Статусы генераций, оплата и очередь'
         }
         action={
           <Button component={Link} href="/orders/new" leftSection={<IconPlus size={16} />}>

@@ -11,7 +11,7 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconCreditCard, IconX, IconWifi } from '@tabler/icons-react';
+import { IconCreditCard, IconFileTypePdf, IconWifi, IconX } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -57,6 +57,7 @@ export default function OrderDetailPage() {
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState(false);
   const [lastEvent, setLastEvent] = useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = useState<'invoice' | 'act' | null>(null);
   const userIdRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -177,6 +178,26 @@ export default function OrderDetailPage() {
     }
   }
 
+  async function downloadPdf(kind: 'invoice' | 'act') {
+    setPdfBusy(kind);
+    try {
+      const path = kind === 'invoice' ? `/company/invoice/${id}` : `/company/act/${id}`;
+      const { data } = await api.post(path, {}, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${kind}-${id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setPdfBusy(null);
+    }
+  }
+
+  const canDownloadDocs = order != null && ['completed', 'paid'].includes(order.status);
+
   if (loading || !order) {
     return (
       <SellerShell>
@@ -277,6 +298,26 @@ export default function OrderDetailPage() {
           <Button color="red" variant="light" leftSection={<IconX size={16} />} loading={busy} onClick={() => void cancel()}>
             Отменить
           </Button>
+        )}
+        {canDownloadDocs && (
+          <>
+            <Button
+              variant="light"
+              leftSection={<IconFileTypePdf size={16} />}
+              loading={pdfBusy === 'invoice'}
+              onClick={() => void downloadPdf('invoice')}
+            >
+              Счёт PDF
+            </Button>
+            <Button
+              variant="light"
+              leftSection={<IconFileTypePdf size={16} />}
+              loading={pdfBusy === 'act'}
+              onClick={() => void downloadPdf('act')}
+            >
+              Акт PDF
+            </Button>
+          </>
         )}
         <Button variant="default" onClick={() => router.push('/orders')}>
           К списку
