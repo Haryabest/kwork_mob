@@ -38,3 +38,5 @@ Ops, user events, QS dashboard, push schedule, legal/tax/forbidden, ACL
 cd backend/orchestrator && py scripts/export_openapi.py --check
 cd apps/web-admin && npm run build
 ```
+
+См. также: [`front_prod.md`](front_prod.md) — mobile/seller ops и prod QA.
