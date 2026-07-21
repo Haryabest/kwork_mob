@@ -1,0 +1,39 @@
+global:
+  scrape_interval: 15s
+  external_labels:
+    cluster: kwork-ha
+
+remote_write:
+  - url: http://victoriametrics:8428/api/v1/write
+
+scrape_configs:
+  - job_name: orchestrator
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['orchestrator:8000']
+
+  - job_name: node-exporter
+    static_configs:
+      - targets: ['node-exporter-a:9100', 'node-exporter-b:9100']
+
+  - job_name: postgres-exporter
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  - job_name: redis-exporter
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  - job_name: clickhouse-exporter
+    static_configs:
+      - targets: ['clickhouse-exporter:9116']
+
+  - job_name: minio
+    metrics_path: /minio/v2/metrics/cluster
+    scheme: http
+    static_configs:
+      - targets: ['minio-1:9000', 'minio-2:9000']
+
+  - job_name: ha-witness
+    static_configs:
+      - targets: ['ha-witness:8089']

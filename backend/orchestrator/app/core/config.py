@@ -104,6 +104,18 @@ class Settings(BaseSettings):
     BACKUP_GPG_ENABLED: bool = False
     BACKUP_GPG_RECIPIENT: str = ""
 
+    # §22.3 Keepalived VIP для MinIO
+    MINIO_VIP: str = ""
+
+    # §22.5 Witness arbiter
+    WITNESS_URL: str = "http://ha-witness:8089"
+
+    # §23.1 VictoriaMetrics
+    VICTORIA_METRICS_URL: str = "http://victoriametrics:8428"
+
+    # §10.7.6 / §21 Cloudflare WAF (трафик только через CDN)
+    CLOUDFLARE_WAF_ENABLED: bool = False
+
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""

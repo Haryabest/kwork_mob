@@ -1,0 +1,30 @@
+{
+  "description": "§10.7.6 / §21 — пример правил WAF Cloudflare (импорт в Dashboard → Security → WAF)",
+  "rules": [
+    {
+      "name": "Block SQLi common patterns",
+      "action": "block",
+      "expression": "(http.request.uri.query contains \"union select\") or (http.request.uri.query contains \"';--\")"
+    },
+    {
+      "name": "Block XSS script tags",
+      "action": "block",
+      "expression": "(http.request.uri.query contains \"<script\") or (http.request.body contains \"<script\")"
+    },
+    {
+      "name": "Rate limit auth endpoints",
+      "action": "challenge",
+      "expression": "(http.request.uri.path contains \"/api/v1/auth/login\") or (http.request.uri.path contains \"/api/v1/auth/register\")"
+    },
+    {
+      "name": "Challenge suspicious bots",
+      "action": "managed_challenge",
+      "expression": "(cf.bot_management.score lt 30)"
+    }
+  ],
+  "settings": {
+    "security_level": "high",
+    "browser_check": "on",
+    "challenge_ttl": 1800
+  }
+}

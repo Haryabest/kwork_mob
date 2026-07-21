@@ -10,6 +10,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import async_session
 from app.core.middleware import ApiRequestLogMiddleware, RateLimitMiddleware, RobotsTagMiddleware
+from app.core.cloudflare_waf import CloudflareWafMiddleware
 from app.services.dispatcher import start_dispatcher, stop_dispatcher
 from app.services.queue import queue_service
 from app.websocket.routes import ws_router
@@ -75,6 +76,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RateLimitMiddleware)
+if settings.CLOUDFLARE_WAF_ENABLED:
+    app.add_middleware(CloudflareWafMiddleware)
 app.add_middleware(ApiRequestLogMiddleware)
 app.add_middleware(RobotsTagMiddleware)
 

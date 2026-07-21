@@ -1702,6 +1702,34 @@ async def ha_tailscale_status(_: dict = Depends(require_admin)):
     return tailscale_status()
 
 
+@router.get("/ha/witness")
+async def ha_witness_status(_: dict = Depends(require_admin)):
+    """Witness quorum §22.5."""
+    from app.services.witness_status import witness_status
+
+    return witness_status()
+
+
+@router.get("/monitoring/victoria")
+async def monitoring_victoria_status(_: dict = Depends(require_admin)):
+    """VictoriaMetrics health §23.1."""
+    from app.services.victoria_metrics import victoria_status
+
+    return victoria_status()
+
+
+@router.get("/monitoring/waf")
+async def monitoring_waf_status(_: dict = Depends(require_admin)):
+    """Cloudflare WAF config status §10.7.6."""
+    from app.core.config import settings
+
+    return {
+        "cloudflare_waf_enabled": settings.CLOUDFLARE_WAF_ENABLED,
+        "rules_template": "infra/cloudflare/waf-rules.example.json",
+        "keepalived_template": "infra/ha/keepalived/keepalived.conf.example",
+    }
+
+
 @router.post("/storage/force-resync-minio")
 async def force_resync_minio(
     staff: dict = Depends(require_admin),

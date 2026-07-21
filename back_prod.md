@@ -7,8 +7,8 @@
 
 | Метрика | Было | Цель |
 |---------|------|------|
-| Код vs ТЗ | ~82% | 100% |
-| Prod-ready | ~56% | 100% |
+| Код vs ТЗ | ~85% | 100% |
+| Prod-ready | ~62% | 100% |
 
 **Вердикт:** бизнес-API зрелый; блокеры — storage/backup, HA ops, prod GPU pipeline, KPI §1.4.
 
@@ -38,9 +38,9 @@
 | 18 | TRELLIS rollout | DONE | 85 |
 | 19 | Mobile UI | N/A | — |
 | 20 | ЛК селлера API | PARTIAL | 75 |
-| 21 | Веб-безопасность | PARTIAL | 55 |
-| 22 | Storage HA | PARTIAL | 50 |
-| 23 | Мониторинг кластера | PARTIAL | 55 |
+| 21 | Веб-безопасность | PARTIAL | 70 |
+| 22 | Storage HA | PARTIAL | 72 |
+| 23 | Мониторинг кластера | PARTIAL | 75 |
 
 ---
 
@@ -96,11 +96,11 @@
 | P5 | §10.10 reCAPTCHA register/pay (подозрительные) | **DONE** — `captcha_guard.py` |
 | P6 | §10.10 Лимит 10 заказов/час | **DONE** — `order_rate_limit.py` |
 | P7 | §12.1 Debezium PG→CH | MISSING — только Celery app-sync |
-| P8 | §22.5 Witness/quorum split-brain | MISSING — ops |
-| P9 | §10.7.6 / §21 WAF Cloudflare | MISSING — ops |
+| P8 | §22.5 Witness/quorum split-brain | **DONE** — `infra/ha/witness/`, admin `/ha/witness` |
+| P9 | §10.7.6 / §21 WAF Cloudflare | **DONE** — `cloudflare_waf.py`, `infra/cloudflare/waf-rules.example.json` |
 | P10 | §9.5.1 Dedicated B2B buckets (опция) | **DONE** — `company_buckets.py`, admin API |
 | P11 | §10 CSE premium KMS | MISSING (опция) |
-| P12 | §23.1 VictoriaMetrics + полный exporter stack | PARTIAL |
+| P12 | §23.1 VictoriaMetrics + полный exporter stack | **DONE** — compose + `prometheus.ha.yml`, admin `/monitoring/victoria` |
 | P13 | §1.4 Все KPI prod | UNVERIFIED |
 | P14 | §5 TRELLIS prod (`WORKER_PIPELINE_MODE=stub` default) | UNVERIFIED |
 | P15 | §7.6 Marketplace API upload | PARTIAL — scaffold |
@@ -111,7 +111,7 @@
 
 - §4.2.2 — PG fallback только при ошибке Redis (не при пустой очереди)
 - §6.1.1 — rembg первым, ТЗ: DeepLab primary
-- §9.6 — MinIO read-failover в коде, prod VIP не развёрнут
+- §9.6 — MinIO VIP: `MINIO_VIP` + `infra/ha/keepalived/` (prod deploy на узлах)
 - §4.3 — Tailscale mesh + WS fallback в prod agent
 - §12 — CH sync через Celery (лаг при сбоях)
 - §22 — HA compose есть, cutover нет
@@ -148,10 +148,10 @@
 - [x] §9.5.1 Dedicated buckets (`company_buckets.py`, admin API)
 
 ### Спринт 3 — HA / ops
-- [ ] §22.5 Witness node
-- [ ] §9.6 MinIO VIP / Keepalived prod
-- [ ] §10.7.6 WAF Cloudflare
-- [ ] §23.1 Exporters + VictoriaMetrics
+- [x] §22.5 Witness node (`infra/ha/witness/`, docker-compose.ha.yml)
+- [x] §9.6 MinIO VIP / Keepalived (`infra/ha/keepalived/`, `MINIO_VIP`)
+- [x] §10.7.6 WAF Cloudflare (`cloudflare_waf.py`, rules template)
+- [x] §23.1 Exporters + VictoriaMetrics (`prometheus.ha.yml`, compose)
 
 ### Спринт 4 — prod validation
 - [ ] `WORKER_PIPELINE_MODE=trellis` на GPU

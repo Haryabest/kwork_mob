@@ -304,10 +304,39 @@ services:
     depends_on:
       - clickhouse-1
 
+  # §22.5 Witness / quorum arbiter
+  ha-witness:
+    build:
+      context: ./infra/ha/witness
+    hostname: ha-witness
+    environment:
+      WITNESS_NODES: minio-1:9000,minio-2:9000,postgres-primary:5432,redis-master:6379
+      WITNESS_PORT: "8089"
+    ports:
+      - "8089:8089"
+    depends_on:
+      minio-1:
+        condition: service_healthy
+      minio-2:
+        condition: service_healthy
+
+  # §23.1 VictoriaMetrics (long-term metrics, Prometheus remote_write)
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.103.0
+    hostname: victoriametrics
+    command:
+      - "-storageDataPath=/storage"
+      - "-retentionPeriod=365d"
+      - "-httpListenAddr=:8428"
+    ports:
+      - "8428:8428"
+    volumes:
+      - vm_data:/storage
+
   prometheus:
     image: prom/prometheus:v2.54.0
     volumes:
-      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/prometheus.ha.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
     depends_on:
@@ -315,6 +344,8 @@ services:
       - postgres-exporter
       - redis-exporter
       - clickhouse-exporter
+      - victoriametrics
+      - ha-witness
 
 volumes:
   etcd_data:
@@ -328,3 +359,4 @@ volumes:
   ch_keeper_data:
   ch1_data:
   ch2_data:
+  vm_data:

@@ -40,7 +40,8 @@ def resolve_kms_key_id() -> str | None:
 
 class MinioService:
     def __init__(self) -> None:
-        self._primary_endpoint = settings.MINIO_ENDPOINT
+        vip = (getattr(settings, "MINIO_VIP", "") or "").strip()
+        self._primary_endpoint = vip or settings.MINIO_ENDPOINT
         self._replica_endpoint = (getattr(settings, "MINIO_REPLICA_ENDPOINT", "") or "").strip()
         self.client = self._make_client(self._primary_endpoint)
         self._replica_client = (
