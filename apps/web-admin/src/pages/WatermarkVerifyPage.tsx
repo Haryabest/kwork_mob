@@ -33,6 +33,7 @@ export default function WatermarkVerifyPage() {
   const [file, setFile] = useState<File | null>(null);
   const [bucket, setBucket] = useState('models');
   const [key, setKey] = useState('');
+  const [modelUuid, setModelUuid] = useState('');
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -75,6 +76,24 @@ export default function WatermarkVerifyPage() {
     }
   }
 
+  async function verifyModel() {
+    if (!modelUuid.trim()) {
+      notifications.show({ color: 'yellow', message: 'Укажите model_uuid' });
+      return;
+    }
+    setBusy(true);
+    try {
+      const { data } = await api.post<VerifyResult>(
+        `/admin/watermark/verify-model/${encodeURIComponent(modelUuid.trim())}`,
+      );
+      setResult(data);
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const valid = result?.ok === true || result?.hmac_valid === true;
 
   return (
@@ -96,6 +115,7 @@ export default function WatermarkVerifyPage() {
           <Tabs.Tab value="minio" leftSection={<IconShieldCheck size={16} />}>
             MinIO объект
           </Tabs.Tab>
+          <Tabs.Tab value="model">По model_uuid</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="upload" pt="md">
@@ -126,6 +146,22 @@ export default function WatermarkVerifyPage() {
                 onChange={(e) => setKey(e.currentTarget.value)}
               />
               <Button loading={busy} onClick={() => void verifyMinio()}>
+                Проверить
+              </Button>
+            </Stack>
+          </Card>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="model" pt="md">
+          <Card withBorder p="md">
+            <Stack gap="md">
+              <TextInput
+                label="model_uuid"
+                placeholder="uuid модели"
+                value={modelUuid}
+                onChange={(e) => setModelUuid(e.currentTarget.value)}
+              />
+              <Button loading={busy} onClick={() => void verifyModel()}>
                 Проверить
               </Button>
             </Stack>

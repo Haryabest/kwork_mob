@@ -235,7 +235,7 @@ async def _publication_funnel_dashboard() -> dict[str, Any]:
 async def _pg_dashboard() -> dict:
     """Агрегаты из PostgreSQL (§11.2) — fallback и дополнение к ClickHouse."""
     from app.core.database import async_session
-    from app.models import Company, CompanyMember, ModelFeedback, Order, TaskQueue, Transaction
+    from app.models import Company, CompanyMember, ModelFeedback, NsfwBlock, Order, TaskQueue, Transaction
 
     since = datetime.now(timezone.utc) - timedelta(days=7)
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -268,6 +268,26 @@ async def _pg_dashboard() -> dict:
                 select(func.coalesce(func.sum(Transaction.amount), 0)).where(
                     Transaction.created_at >= since,
                     Transaction.tx_type == "refund",
+                )
+            )
+            or 0
+        )
+        upsell_revenue_7d = int(
+            await db.scalar(
+                select(func.coalesce(func.sum(Order.upsell_amount), 0)).where(
+                    Order.created_at >= since, Order.status.in_(paid_like)
+                )
+            )
+            or 0
+        )
+        nsfw_withheld_7d = int(
+            await db.scalar(
+                select(func.coalesce(func.sum(Order.amount), 0))
+                .select_from(NsfwBlock)
+                .join(Order, Order.id == NsfwBlock.order_id)
+                .where(
+                    NsfwBlock.created_at >= since,
+                    NsfwBlock.refunded.is_(False),
                 )
             )
             or 0
@@ -355,6 +375,8 @@ async def _pg_dashboard() -> dict:
         "revenue_today_rub": revenue_today,
         "revenue_7d_rub": revenue_7d,
         "refunds_7d_rub": refunds,
+        "upsell_revenue_7d_rub": upsell_revenue_7d,
+        "nsfw_withheld_7d_rub": nsfw_withheld_7d,
         "ewt_normal_sec": float(ewt_normal or 0),
         "ewt_high_sec": float(ewt_high or 0),
         "rating_distribution": rating_dist,
@@ -438,6 +460,8 @@ async def dashboard_aggregates() -> dict:
             "revenue_today_rub": pg.get("revenue_today_rub", 0),
             "revenue_7d_rub": pg.get("revenue_7d_rub", 0),
             "refunds_7d_rub": pg.get("refunds_7d_rub", 0),
+            "upsell_revenue_7d_rub": pg.get("upsell_revenue_7d_rub", 0),
+            "nsfw_withheld_7d_rub": pg.get("nsfw_withheld_7d_rub", 0),
         },
         "b2b": {
             "companies_active": pg.get("companies_active", 0),

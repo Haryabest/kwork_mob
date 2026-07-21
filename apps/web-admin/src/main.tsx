@@ -35,6 +35,9 @@ import MarketplacePage from './pages/MarketplacePage';
 import AccessLogPage from './pages/AccessLogPage';
 import TaskConflictsPage from './pages/TaskConflictsPage';
 import WatermarkVerifyPage from './pages/WatermarkVerifyPage';
+import GrafanaPage from './pages/GrafanaPage';
+import AuditExportPage from './pages/AuditExportPage';
+import B2bApiUsagePage from './pages/B2bApiUsagePage';
 import TicketsPage from './pages/support/TicketsPage';
 import TicketDetailPage from './pages/support/TicketDetailPage';
 import FaqEditorPage from './pages/support/FaqEditorPage';
@@ -75,6 +78,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 <Route path="/access-log" element={<AccessLogPage />} />
                 <Route path="/task-conflicts" element={<TaskConflictsPage />} />
                 <Route path="/watermark-verify" element={<WatermarkVerifyPage />} />
+                <Route path="/grafana" element={<GrafanaPage />} />
+                <Route path="/audit-export" element={<AuditExportPage />} />
+                <Route path="/b2b-api-usage" element={<B2bApiUsagePage />} />
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="/users/:id" element={<UserDetailPage />} />
                 <Route path="/companies" element={<CompaniesPage />} />

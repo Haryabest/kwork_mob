@@ -5221,6 +5221,87 @@
         ]
       }
     },
+    "/api/v1/admin/audit-export/periods": {
+      "get": {
+        "description": "Список экспортов audit-logs в MinIO §10.5.",
+        "operationId": "list_audit_export_periods_api_v1_admin_audit_export_periods_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Audit Export Periods",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/audit-export/periods/{prefix}/presign": {
+      "get": {
+        "description": "Presigned URL скачивания экспорта §10.5.",
+        "operationId": "presign_audit_export_file_api_v1_admin_audit_export_periods__prefix__presign_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "prefix",
+            "required": true,
+            "schema": {
+              "title": "Prefix",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "pattern": "^(audit_log\\.csv\\.gz|access_log\\.csv\\.gz|manifest\\.json)$",
+              "title": "Filename",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Presign Audit Export File",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
     "/api/v1/admin/audit-export/run": {
       "post": {
         "description": "Ручной запуск экспорта в MinIO audit-logs §10.7.7.",
@@ -5334,6 +5415,55 @@
           }
         ],
         "summary": "Admin Audit Oauth Summary",
+        "tags": [
+          "Администрирование"
+        ]
+      }
+    },
+    "/api/v1/admin/b2b/api-usage": {
+      "get": {
+        "description": "B2B API keys usage metrics §11.5.",
+        "operationId": "b2b_api_usage_api_v1_admin_b2b_api_usage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "B2B Api Usage",
         "tags": [
           "Администрирование"
         ]
@@ -7113,6 +7243,31 @@
         "summary": "List Escalations",
         "tags": [
           "Тарифы и алерты"
+        ]
+      }
+    },
+    "/api/v1/admin/grafana/embed": {
+      "get": {
+        "description": "URL для iframe Grafana §11.1.",
+        "operationId": "grafana_embed_config_api_v1_admin_grafana_embed_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Grafana Embed Config",
+        "tags": [
+          "Администрирование"
         ]
       }
     },
@@ -10560,6 +10715,52 @@
           }
         ],
         "summary": "Verify Minio",
+        "tags": [
+          "Водяной знак"
+        ]
+      }
+    },
+    "/api/v1/admin/watermark/verify-model/{model_uuid}": {
+      "post": {
+        "description": "Проверка HMAC водяного знака по model_uuid из MinIO §10.4.",
+        "operationId": "verify_model_watermark_api_v1_admin_watermark_verify_model__model_uuid__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_uuid",
+            "required": true,
+            "schema": {
+              "title": "Model Uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Verify Model Watermark",
         "tags": [
           "Водяной знак"
         ]

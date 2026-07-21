@@ -142,3 +142,30 @@ async def export_month(
         "keys": [audit_key, access_key, f"{prefix}/manifest.json"],
         **meta,
     }
+
+
+def list_exported_periods() -> dict:
+    """Список экспортированных периодов в MinIO audit-logs §10.5."""
+    try:
+        minio_service.ensure_buckets()
+        keys = minio_service.list_objects(BUCKET, prefix="")
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)[:200], "items": []}
+    periods: dict[str, dict] = {}
+    for key in keys:
+        part = key.split("/", 1)[0]
+        if len(part) == 7 and part[4] == "-":
+            periods.setdefault(part, {"prefix": part, "keys": []})["keys"].append(key)
+    items = sorted(periods.values(), key=lambda x: x["prefix"], reverse=True)
+    for item in items:
+        manifest_key = f"{item['prefix']}/manifest.json"
+        item["has_manifest"] = manifest_key in keys
+    return {"ok": True, "bucket": BUCKET, "items": items}
+
+
+def presign_export_file(prefix: str, filename: str, *, expires: int = 3600) -> dict:
+    key = f"{prefix.strip('/')}/{filename}"
+    if not minio_service.object_exists(BUCKET, key):
+        return {"ok": False, "error": "not_found", "key": key}
+    url = minio_service.generate_presigned_url(BUCKET, key, expires=expires, method="get_object")
+    return {"ok": True, "bucket": BUCKET, "key": key, "download_url": url, "expires_in": expires}

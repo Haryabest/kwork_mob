@@ -39,6 +39,8 @@ type Dashboard = {
     revenue_today_rub: number;
     revenue_7d_rub: number;
     refunds_7d_rub: number;
+    upsell_revenue_7d_rub?: number;
+    nsfw_withheld_7d_rub?: number;
   };
   b2b: {
     companies_active: number;
@@ -389,9 +391,21 @@ export default function DashboardPage() {
             </Text>
           </div>
           <div className="vz-surface">
+            <Text fw={600}>Апсейлы 7 дней</Text>
+            <Text size="xl" fw={700} mt="md" className="vz-metric-value">
+              {fmtRub(fin?.upsell_revenue_7d_rub ?? 0)}
+            </Text>
+          </div>
+          <div className="vz-surface">
             <Text fw={600}>Возвраты 7 дней</Text>
             <Text size="xl" fw={700} mt="md" className="vz-metric-value">
               {fmtRub(fin?.refunds_7d_rub ?? 0)}
+            </Text>
+          </div>
+          <div className="vz-surface">
+            <Text fw={600}>NSFW withheld 7д</Text>
+            <Text size="xl" fw={700} mt="md" className="vz-metric-value">
+              {fmtRub(fin?.nsfw_withheld_7d_rub ?? 0)}
             </Text>
           </div>
         </div>

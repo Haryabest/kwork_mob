@@ -4,7 +4,7 @@ import base64
 
 import pytest
 
-from tests.integration.conftest import login_owner_with_company
+from .conftest import login_owner_with_company
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 

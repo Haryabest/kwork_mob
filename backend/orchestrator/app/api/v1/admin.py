@@ -1342,6 +1342,47 @@ async def run_audit_export(
     return await ae.export_month(db, year=year, month=month)
 
 
+@router.get("/audit-export/periods")
+async def list_audit_export_periods(_: dict = Depends(require_admin)):
+    """Список экспортов audit-logs в MinIO §10.5."""
+    from app.services import audit_export as ae
+
+    return ae.list_exported_periods()
+
+
+@router.get("/audit-export/periods/{prefix}/presign")
+async def presign_audit_export_file(
+    prefix: str,
+    filename: str = Query(..., pattern=r"^(audit_log\.csv\.gz|access_log\.csv\.gz|manifest\.json)$"),
+    _: dict = Depends(require_admin),
+):
+    """Presigned URL скачивания экспорта §10.5."""
+    from app.services import audit_export as ae
+
+    return ae.presign_export_file(prefix, filename)
+
+
+@router.get("/grafana/embed")
+async def grafana_embed_config(_: dict = Depends(require_admin)):
+    """URL для iframe Grafana §11.1."""
+    from app.core.config import settings
+
+    url = (settings.GRAFANA_EMBED_URL or "").strip()
+    return {"embed_url": url or None, "configured": bool(url)}
+
+
+@router.get("/b2b/api-usage")
+async def b2b_api_usage(
+    days: int = Query(7, ge=1, le=90),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """B2B API keys usage metrics §11.5."""
+    from app.services import b2b_api_usage as usage_svc
+
+    return await usage_svc.summary(db, days=days)
+
+
 @router.post("/storage-alerts/check")
 async def run_storage_alerts_check(
     _: dict = Depends(require_admin),
