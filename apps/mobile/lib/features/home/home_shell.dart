@@ -25,6 +25,7 @@ import 'package:kwork_mobile/services/oauth_pending.dart';
 import 'package:kwork_mobile/services/notification_inbox.dart';
 import 'package:kwork_mobile/services/offline_sync_service.dart';
 import 'package:kwork_mobile/services/upload_progress_service.dart';
+import 'package:kwork_mobile/services/device_benchmark.dart';
 import 'package:kwork_mobile/widgets/campaign_banner.dart';
 
 class HomeShell extends StatefulWidget {
@@ -400,12 +401,21 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           Positioned(
             right: 20,
             bottom: 88,
-            child: FloatingActionButton(
-              backgroundColor: AppColors.wbPrimary,
-              foregroundColor: Colors.white,
-              onPressed: () => context.push('/home/shoot'),
-              tooltip: l10n.shoot,
-              child: const Icon(FIcons.camera),
+            child: AnimatedSlide(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              offset: _index == 0 ? Offset.zero : const Offset(0, 1.5),
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 220),
+                opacity: _index == 0 ? 1 : 0,
+                child: FloatingActionButton(
+                  backgroundColor: AppColors.wbPrimary,
+                  foregroundColor: Colors.white,
+                  onPressed: () => context.push('/home/shoot'),
+                  tooltip: l10n.shoot,
+                  child: const Icon(FIcons.camera),
+                ),
+              ),
             ),
           ),
         ],
@@ -745,6 +755,10 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
   String? _deletingDraftUuid;
   bool _exportingAudit = false;
   bool _exportingAccessLog = false;
+  double? _benchScore;
+  bool _benchArOk = true;
+  String _benchPreset = 'high';
+  bool _benchRunning = false;
 
   static String _prefLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -838,7 +852,26 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
     } catch (_) {
       _draftBackups = [];
     }
+    await DeviceBenchmark.instance.loadPersisted();
+    _benchScore = DeviceBenchmark.instance.score;
+    _benchArOk = DeviceBenchmark.instance.arRecommended;
+    _benchPreset = DeviceBenchmark.instance.presetLabel();
     if (mounted) setState(() => _prefs = prefs);
+  }
+
+  Future<void> _rerunBenchmark() async {
+    setState(() => _benchRunning = true);
+    try {
+      final score = await DeviceBenchmark.instance.run();
+      if (!mounted) return;
+      setState(() {
+        _benchScore = score;
+        _benchArOk = DeviceBenchmark.instance.arRecommended;
+        _benchPreset = DeviceBenchmark.instance.presetLabel();
+      });
+    } finally {
+      if (mounted) setState(() => _benchRunning = false);
+    }
   }
 
   Future<void> _revokePushDevice(int id) async {
@@ -1435,6 +1468,50 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
               onPress: () => context.push('/home/calibration'),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Производительность устройства §3.8',
+                  style: context.theme.typography.sm.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _benchScore == null
+                      ? 'Бенчмарк ещё не выполнен'
+                      : 'Оценка: ${_benchScore!.toStringAsFixed(1)} · камера: $_benchPreset',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                ),
+                Text(
+                  _benchArOk
+                      ? 'AR-навигация рекомендована'
+                      : 'Рекомендуется съёмка без AR (слабое устройство)',
+                  style: TextStyle(
+                    color: _benchArOk ? AppColors.success : AppColors.warning,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                FButton(
+                  onPress: _benchRunning ? null : () => _rerunBenchmark(),
+                  child: _benchRunning
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Перезапустить тест'),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 12),
         FTextField(

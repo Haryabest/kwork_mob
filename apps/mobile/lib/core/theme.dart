@@ -114,6 +114,9 @@ ThemeData buildMaterialTheme(FThemeData forui) {
       backgroundColor: AppColors.wbPrimary,
       foregroundColor: Colors.white,
     ),
+    progressIndicatorTheme: const ProgressIndicatorThemeData(
+      color: AppColors.wbPrimary,
+    ),
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.accent,
       primary: AppColors.accent,

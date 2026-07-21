@@ -40,7 +40,6 @@ class DeviceBenchmark {
     return !(prefs.getBool(_keyDone) ?? false);
   }
 
-  /// Лёгкий CPU-тест (не блокирует UI дольше ~300мс батчами через compute).
   Future<double> run() async {
     final t0 = DateTime.now();
     final score = await compute(_cpuProbe, 180000);
@@ -72,6 +71,15 @@ class DeviceBenchmark {
     );
     await prefs.setBool(_keyArOk, _arRecommended);
     return normalized;
+  }
+
+  String presetLabel() {
+    return switch (_preset) {
+      ResolutionPreset.medium => 'medium',
+      ResolutionPreset.low => 'low',
+      ResolutionPreset.veryHigh => 'veryHigh',
+      _ => 'high',
+    };
   }
 }
 

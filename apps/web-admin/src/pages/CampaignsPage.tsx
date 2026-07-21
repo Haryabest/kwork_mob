@@ -52,7 +52,28 @@ const SEGMENTS = [
   { value: '{"account_type":"legal"}', label: 'Юрлица' },
   { value: '{"has_orders":true}', label: 'С заказами' },
   { value: '{"min_balance":1000}', label: 'Баланс ≥ 1000' },
+  { value: '{"gender":"male"}', label: 'Пол: мужской' },
+  { value: '{"gender":"female"}', label: 'Пол: женский' },
+  { value: '{"region":"Москва"}', label: 'Регион: Москва' },
+  { value: '{"card_bank":"Сбер"}', label: 'Банк: Сбер' },
+  { value: '{"marketing_opt_in_only":false}', label: 'Без фильтра opt-in' },
 ];
+
+const CHANNELS = [
+  { value: 'email', label: 'Email' },
+  { value: 'push', label: 'Push' },
+  { value: 'dual', label: 'Email + Push' },
+];
+
+const TEMPLATE_HINTS: Record<string, string> = {
+  promo_discount: 'Скидка по промокоду — создаётся код при старте',
+  referral: 'Реферальная акция — invite-ссылки',
+  nth_free: 'Каждая N-я генерация бесплатно',
+  timed_discount: 'Таймерная скидка с TTL',
+  free_generation: 'Бесплатная генерация (промокод)',
+  upsell_discount: 'Скидка на апсейл',
+  custom_push: 'Произвольный push/email',
+};
 
 /** §11.7 — кампании + A/B stats */
 export default function CampaignsPage() {
@@ -63,6 +84,9 @@ export default function CampaignsPage() {
   const [name, setName] = useState('');
   const [template, setTemplate] = useState<string | null>('promo_discount');
   const [segment, setSegment] = useState<string | null>(SEGMENTS[0].value);
+  const [customSegment, setCustomSegment] = useState('');
+  const [useCustomSegment, setUseCustomSegment] = useState(false);
+  const [channel, setChannel] = useState<string | null>('email');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [budget, setBudget] = useState<number | string>(0);
@@ -87,14 +111,17 @@ export default function CampaignsPage() {
 
   async function createDraft() {
     try {
+      const segmentJson = useCustomSegment
+        ? (JSON.parse(customSegment || '{}') as Record<string, unknown>)
+        : JSON.parse(segment || '{}');
       await api.post('/admin/campaigns', {
         name,
         template,
-        segment: JSON.parse(segment || '{}'),
+        segment: segmentJson,
         config: {
           title: title || name,
           body,
-          channel: 'email',
+          channel: channel || 'email',
           ab_enabled: abEnabled,
           variants: ['A', 'B'],
           cta_url: ctaUrl.trim() || undefined,
@@ -239,8 +266,26 @@ export default function CampaignsPage() {
             value={template}
             onChange={setTemplate}
             data={templates.map((t) => ({ value: t.code, label: t.title }))}
+            description={template ? TEMPLATE_HINTS[template] : undefined}
           />
-          <Select label="Сегмент" value={segment} onChange={setSegment} data={SEGMENTS} />
+          <Select label="Канал §11.7" value={channel} onChange={setChannel} data={CHANNELS} />
+          <Checkbox
+            label="Сегмент JSON вручную"
+            checked={useCustomSegment}
+            onChange={(e) => setUseCustomSegment(e.currentTarget.checked)}
+          />
+          {useCustomSegment ? (
+            <Textarea
+              label="Сегмент (JSON)"
+              description='gender, region, card_bank, min_balance, has_orders, marketing_opt_in_only'
+              minRows={3}
+              value={customSegment}
+              onChange={(e) => setCustomSegment(e.currentTarget.value)}
+              placeholder='{"region":"Москва","min_balance":500}'
+            />
+          ) : (
+            <Select label="Сегмент" value={segment} onChange={setSegment} data={SEGMENTS} />
+          )}
           <TextInput label="Заголовок письма" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
           <Textarea label="Текст" minRows={4} value={body} onChange={(e) => setBody(e.currentTarget.value)} />
           <TextInput

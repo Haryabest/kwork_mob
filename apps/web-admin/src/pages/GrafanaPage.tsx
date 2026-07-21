@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Center, Group, Loader, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { Link } from 'react-router-dom';
 import { api, getApiError } from '../services/api';
 
 export default function GrafanaPage() {
@@ -39,7 +40,11 @@ export default function GrafanaPage() {
         <div>
           <Title order={2}>Grafana</Title>
           <Text c="#6d6c77" size="sm">
-            Мониторинг §11.1 — задайте GRAFANA_EMBED_URL
+            Мониторинг §11.1 — задайте GRAFANA_EMBED_URL. Интерактивные графики KPI — в{' '}
+            <Text component={Link} to="/" size="sm" c="brand">
+              Дашборде §11.2.6
+            </Text>
+            .
           </Text>
         </div>
         <Button variant="light" onClick={() => void load()}>

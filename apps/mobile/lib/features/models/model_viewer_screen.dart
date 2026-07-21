@@ -383,6 +383,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
     }
     if (_items.isEmpty && _total == 0) {
       return RefreshIndicator(
+        color: AppColors.wbPrimary,
         onRefresh: _load,
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -397,6 +398,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
     }
     final visible = _filtered;
     return RefreshIndicator(
+      color: AppColors.wbPrimary,
       onRefresh: _load,
       child: CustomScrollView(
         slivers: [

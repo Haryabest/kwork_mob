@@ -427,8 +427,9 @@ class _GuidedDomeScreenState extends State<GuidedDomeScreen> {
       }
 
       if (await Vibration.hasVibrator()) {
-        await Vibration.vibrate(duration: 40);
+        await Vibration.vibrate(duration: 50);
       }
+      HapticFeedback.lightImpact();
       await SystemSound.play(SystemSoundType.click);
 
       if (widget.reshootIndex != null) {
