@@ -2,36 +2,13 @@
 
 import pytest
 
+from tests.integration.conftest import login_owner_with_company
+
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
-async def _login_owner(client, unique_email):
-    email = unique_email()
-    password = "secret123"
-    reg = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": email,
-            "password": password,
-            "password_confirm": password,
-            "consents": ["terms", "privacy", "offer", "rights", "nsfw_rules"],
-        },
-    )
-    assert reg.status_code == 201
-    await client.post(
-        "/api/v1/auth/verify-email",
-        json={"email": email, "code": reg.json()["dev_code"]},
-    )
-    login = await client.post(
-        "/api/v1/auth/login",
-        json={"email": email, "password": password},
-    )
-    assert login.status_code == 200
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
-
-
 async def test_webhook_replay_dlq(client, unique_email, db, monkeypatch):
-    headers = await _login_owner(client, unique_email)
+    headers = await login_owner_with_company(client, unique_email)
 
     wh = await client.post(
         "/api/v1/company/webhooks",

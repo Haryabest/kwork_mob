@@ -24,6 +24,8 @@ from app.models import (
 WB_HOSTS = ("wildberries.ru", "www.wildberries.ru", "wb.ru", "www.wb.ru")
 OZON_HOSTS = ("ozon.ru", "www.ozon.ru")
 
+MAX_VERIFY_ATTEMPTS = 5
+
 
 def detect_marketplace(url: str) -> str:
     host = (urlparse(url).hostname or "").lower()
@@ -88,6 +90,11 @@ def _html_has_3d(marketplace: str, html: str) -> bool:
 
 
 async def verify_link(db: AsyncSession, link: ModelPublicationLink) -> ModelPublicationLink:
+    if int(link.check_attempts or 0) >= MAX_VERIFY_ATTEMPTS:
+        link.status = "failed"
+        link.error_message = f"Превышен лимит проверок ({MAX_VERIFY_ATTEMPTS})"
+        await db.flush()
+        return link
     link.check_attempts = int(link.check_attempts or 0) + 1
     link.last_check_at = datetime.now(timezone.utc)
     model = await db.scalar(select(Model3D).where(Model3D.uuid == link.model_uuid))
@@ -264,6 +271,9 @@ async def list_links(db: AsyncSession, model_uuid: str) -> list[dict]:
             "last_check_at": r.last_check_at.isoformat() if r.last_check_at else None,
             "verified_at": r.verified_at.isoformat() if r.verified_at else None,
             "check_attempts": r.check_attempts,
+            "max_check_attempts": MAX_VERIFY_ATTEMPTS,
+            "can_verify": int(r.check_attempts or 0) < MAX_VERIFY_ATTEMPTS
+            and r.status in ("pending", "failed"),
             "error_message": r.error_message,
             "verification_method": getattr(r, "verification_method", None),
         }

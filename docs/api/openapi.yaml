@@ -2004,6 +2004,34 @@ components:
       - large
       title: Tier
       type: string
+    TierSuggestBody:
+      properties:
+        company_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Company Id
+        depth_m:
+          exclusiveMinimum: 0.0
+          maximum: 50.0
+          title: Depth M
+          type: number
+        height_m:
+          exclusiveMinimum: 0.0
+          maximum: 50.0
+          title: Height M
+          type: number
+        width_m:
+          exclusiveMinimum: 0.0
+          maximum: 50.0
+          title: Width M
+          type: number
+      required:
+      - width_m
+      - height_m
+      - depth_m
+      title: TierSuggestBody
+      type: object
     TokenResponse:
       properties:
         access_token:
@@ -8826,6 +8854,21 @@ paths:
       summary: Shoot Links Stats
       tags:
       - Компания
+  /api/v1/company/tariffs:
+    get:
+      description: Эффективные тарифы компании с персональными ценами §8.2.
+      operationId: company_tariffs_api_v1_company_tariffs_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+      summary: Company Tariffs
+      tags:
+      - Компания
   /api/v1/company/transactions:
     get:
       operationId: company_transactions_api_v1_company_transactions_get
@@ -10449,15 +10492,59 @@ paths:
       - Заказы
   /api/v1/orders/tariffs:
     get:
-      description: Публичные тарифы для checkout §19.8.
+      description: Публичные тарифы для checkout §19.8; с company_id — B2B цены §8.2.
       operationId: list_tariffs_api_v1_orders_tariffs_get
+      parameters:
+      - in: query
+        name: company_id
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Company Id
       responses:
         '200':
           content:
             application/json:
               schema: {}
           description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
       summary: List Tariffs
+      tags:
+      - Заказы
+  /api/v1/orders/tier-suggest:
+    post:
+      description: AR-автотариф по объёму §8.3.
+      operationId: suggest_order_tier_api_v1_orders_tier_suggest_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TierSuggestBody'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Suggest Order Tier
       tags:
       - Заказы
   /api/v1/orders/upsells:

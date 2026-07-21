@@ -17,6 +17,7 @@ from app.models import WorkerNode
 from app.services.events import user_channel
 from app.services.queue import queue_service
 from app.services.task_lifecycle import (
+    handle_quality_gate_failure,
     mark_completed,
     mark_failed,
     mark_processing,
@@ -315,7 +316,7 @@ async def worker_ws(websocket: WebSocket):
                         qs = None
                     if qs is not None and qs < threshold:
                         async with async_session() as db:
-                            await mark_failed(
+                            await handle_quality_gate_failure(
                                 db,
                                 task_id,
                                 f"quality_gate_failed score={qs} < {threshold}",
@@ -386,7 +387,7 @@ async def worker_ws(websocket: WebSocket):
                 # failed_segmentation / transient — requeue с чекпоинтом; quality gate — fail
                 if "quality_gate_failed" in error:
                     async with async_session() as db:
-                        await mark_failed(db, task_id, error)
+                        await handle_quality_gate_failure(db, task_id, error)
                 elif "failed_segmentation" in error or data.get("checkpoint_path"):
                     async with async_session() as db:
                         from app.services import quality_alerts as qa

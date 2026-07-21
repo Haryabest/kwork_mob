@@ -159,7 +159,7 @@ async def test_cancel_processing_order_sets_cancelled(db, monkeypatch):
     category="other",
     tier="small",
   )
-  row = TaskQueue(task_id="cancel-task", status="processing", worker_id="w1")
+  row = TaskQueue(task_id="cancel-task", order_id=9001, status="processing", worker_id="w1")
   db.add(order)
   db.add(row)
   await db.flush()

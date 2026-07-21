@@ -3,13 +3,13 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_db_user
+from app.core.security import get_current_db_user, get_current_db_user_optional
 from app.models import Company, Model3D, Order, Transaction, User
 from app.schemas.orders import OrderCreateRequest
 from app.services import photos as photos_service
@@ -55,12 +55,64 @@ class CancelOrderBody(BaseModel):
     ack_no_refund: bool = False
 
 
+class TierSuggestBody(BaseModel):
+    width_m: float = Field(gt=0, le=50)
+    height_m: float = Field(gt=0, le=50)
+    depth_m: float = Field(gt=0, le=50)
+    company_id: int | None = None
+
+
 @router.get("/tariffs")
 async def list_tariffs(
+    company_id: int | None = None,
+    user: User | None = Depends(get_current_db_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
-    """Публичные тарифы для checkout §19.8."""
-    return {"items": await tariff_svc.list_tariffs(db)}
+    """Публичные тарифы для checkout §19.8; с company_id — B2B цены §8.2."""
+    items = await tariff_svc.list_tariffs(db)
+    company = None
+    if company_id is not None and user is not None:
+        company = await db.get(Company, company_id)
+        if not company:
+            raise HTTPException(404, "Компания не найдена")
+        from app.services.company_members import get_membership
+
+        if not await get_membership(db, company_id, user.id):
+            raise HTTPException(403, "Нет доступа к компании")
+    if company:
+        for item in items:
+            if item["code"] in ("small", "large", "import_glb"):
+                base = item["amount_rub"]
+                item["base_amount_rub"] = base
+                item["amount_rub"] = await tariff_svc.get_amount_for_company(db, item["code"], company)
+                item["has_override"] = item["amount_rub"] != base
+    return {"items": items}
+
+
+@router.post("/tier-suggest")
+async def suggest_order_tier(
+    body: TierSuggestBody,
+    user: User | None = Depends(get_current_db_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """AR-автотариф по объёму §8.3."""
+    from app.services import ar_tier as ar_tier_svc
+
+    suggestion = ar_tier_svc.suggest_tier(
+        width_m=body.width_m,
+        height_m=body.height_m,
+        depth_m=body.depth_m,
+    )
+    company = await db.get(Company, body.company_id) if body.company_id else None
+    tier = suggestion["suggested_tier"]
+    base = await tariff_svc.get_amount(db, tier)
+    effective = await tariff_svc.get_amount_for_company(db, tier, company)
+    return {
+        **suggestion,
+        "amount_rub": effective,
+        "base_amount_rub": base,
+        "has_price_override": company is not None and effective != base,
+    }
 
 
 async def _task_payload(

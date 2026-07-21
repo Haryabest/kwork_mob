@@ -393,11 +393,14 @@ async def download_model(
     db: AsyncSession = Depends(get_db),
 ):
     """Presigned URL для скачивания .glb / .usdz + Referer/SHA-256 (§10.3 / §9)."""
+    from app.services import marketplace_download as mp_dl
     from app.services import publication_funnel as funnel_svc
 
     assert_download_allowed(request)
     model = await _get_owned_model(db, model_uuid, user)
     await require_company_permission(db, user, model.company_id, "can_download_models")
+    mp = marketplace or "ozon"
+    dl_meta = mp_dl.download_meta(mp, format)
     await funnel_svc.log_download(
         db,
         model=model,
@@ -420,6 +423,7 @@ async def download_model(
             "message": "USDZ ещё не сгенерирован — отдан GLB",
             "expires_in": ttl,
             "file_sha256": model.file_sha256,
+            **dl_meta,
         }
     parsed = _parse_s3(raw)
     if not parsed:
@@ -437,6 +441,7 @@ async def download_model(
             "key": key,
             "expires_in": ttl,
             "file_sha256": model.file_sha256,
+            **dl_meta,
         }
     from app.services.integrity import verify_object_sha256
 
@@ -444,7 +449,7 @@ async def download_model(
         verify_object_sha256(bucket, key, model.file_sha256)
     url = minio_service.generate_presigned_url(bucket, key, expires=ttl, method="get_object")
     await db.commit()
-    return {"download_url": url, "format": format, "bucket": bucket, "key": key, "expires_in": ttl}
+    return {"download_url": url, "format": format, "bucket": bucket, "key": key, "expires_in": ttl, **dl_meta}
 
 
 
@@ -612,6 +617,16 @@ async def verify_publication_link(
     link = await db.get(ModelPublicationLink, link_id)
     if not link or link.model_uuid != model_uuid:
         raise HTTPException(404, "Ссылка не найдена")
+    if int(link.check_attempts or 0) >= pub_svc.MAX_VERIFY_ATTEMPTS:
+        raise HTTPException(
+            429,
+            detail={
+                "code": "verify_attempts_exceeded",
+                "message": f"Превышен лимит проверок ({pub_svc.MAX_VERIFY_ATTEMPTS})",
+                "check_attempts": link.check_attempts,
+                "max_check_attempts": pub_svc.MAX_VERIFY_ATTEMPTS,
+            },
+        )
     await pub_svc.verify_link(db, link)
     await db.commit()
     return {
@@ -620,6 +635,10 @@ async def verify_publication_link(
         "error_message": link.error_message,
         "verified_at": link.verified_at.isoformat() if link.verified_at else None,
         "verification_method": getattr(link, "verification_method", None),
+        "check_attempts": link.check_attempts,
+        "max_check_attempts": pub_svc.MAX_VERIFY_ATTEMPTS,
+        "can_verify": int(link.check_attempts or 0) < pub_svc.MAX_VERIFY_ATTEMPTS
+        and link.status in ("pending", "failed"),
     }
 
 

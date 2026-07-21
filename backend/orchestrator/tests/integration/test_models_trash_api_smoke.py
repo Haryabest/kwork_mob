@@ -64,7 +64,7 @@ async def test_user_models_filters_and_trash_pagination(client, unique_email):
                 {
                     "event": "screen_view",
                     "ts": "2026-07-17T10:00:00Z",
-                    "props": {"screen": "integration_smoke"},
+                    "props": {"screen": "home"},
                 }
             ]
         },

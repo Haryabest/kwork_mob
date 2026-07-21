@@ -313,6 +313,33 @@ async def accept_invitation(
     return {"ok": True, "role": inv.role, "company_id": inv.company_id}
 
 
+@router.get("/tariffs")
+async def company_tariffs(
+    user: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Эффективные тарифы компании с персональными ценами §8.2."""
+    from app.services.company_members import get_owned_company
+
+    company = await get_owned_company(db, user)
+    items = await tariff_svc.list_tariffs(db)
+    out = []
+    for item in items:
+        if item["code"] not in ("small", "large", "import_glb"):
+            continue
+        base = item["amount_rub"]
+        effective = await tariff_svc.get_amount_for_company(db, item["code"], company)
+        out.append(
+            {
+                **item,
+                "base_amount_rub": base,
+                "amount_rub": effective,
+                "has_override": effective != base,
+            }
+        )
+    return {"company_id": company.id, "items": out}
+
+
 @router.get("/members")
 async def list_members(
     user: User = Depends(get_current_db_user),

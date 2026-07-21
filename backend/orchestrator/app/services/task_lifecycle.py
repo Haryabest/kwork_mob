@@ -17,6 +17,8 @@ from app.services.queue import queue_service
 
 logger = logging.getLogger(__name__)
 
+MAX_QUALITY_GENERATION_ATTEMPTS = 3
+
 
 async def _notify_order_user_push(
     db: AsyncSession,
@@ -254,6 +256,57 @@ async def mark_completed(
         extra={"glb_url": glb_url},
     )
     return order
+
+
+async def handle_quality_gate_failure(db: AsyncSession, task_id: str, error: str) -> dict:
+    """Quality gate fail: requeue до 3 попыток, refund только на финальной (§8.9.2)."""
+    import json
+
+    row = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))
+    if not row:
+        return {"action": "missing", "task_id": task_id}
+    payload = dict(row.payload_json or {})
+    attempts = int(payload.get("quality_attempts") or 0) + 1
+    payload["quality_attempts"] = attempts
+    row.payload_json = payload
+    order = await db.get(Order, row.order_id)
+    if attempts < MAX_QUALITY_GENERATION_ATTEMPTS:
+        row.status = "queued"
+        row.processing_started_at = None
+        row.worker_id = None
+        if order and order.status == "processing":
+            order.status = "queued"
+        await db.commit()
+        redis = await get_redis()
+        key = queue_service._key(row.priority)
+        await redis.lpush(
+            key,
+            json.dumps(
+                {"task_id": row.task_id, "order_id": row.order_id, "payload": payload},
+                ensure_ascii=False,
+            ),
+        )
+        if order:
+            await publish_order_status(
+                user_id=order.user_id,
+                order_id=order.id,
+                task_id=task_id,
+                status="queued",
+                extra={"quality_retry": attempts, "max_attempts": MAX_QUALITY_GENERATION_ATTEMPTS},
+            )
+        return {
+            "action": "requeued",
+            "attempt": attempts,
+            "max_attempts": MAX_QUALITY_GENERATION_ATTEMPTS,
+        }
+    final_error = f"{error} (after {attempts} attempts)"
+    failed_order = await mark_failed(db, task_id, final_error)
+    return {
+        "action": "failed",
+        "attempt": attempts,
+        "max_attempts": MAX_QUALITY_GENERATION_ATTEMPTS,
+        "refunded": bool(failed_order and failed_order.amount > 0),
+    }
 
 
 async def mark_failed(db: AsyncSession, task_id: str, error: str) -> Order | None:

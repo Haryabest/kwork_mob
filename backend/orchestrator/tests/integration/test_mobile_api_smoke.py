@@ -52,7 +52,7 @@ async def test_mobile_auth_and_user_paths(client, unique_email):
                 {
                     "event": "screen_view",
                     "ts": "2026-01-01T00:00:00Z",
-                    "props": {"screen": "ci_smoke"},
+                    "props": {"screen": "home"},
                 }
             ]
         },

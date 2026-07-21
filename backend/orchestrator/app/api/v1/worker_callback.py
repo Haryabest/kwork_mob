@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from app.core.config import settings
 from app.core.database import async_session
 from app.core.redis import release_task_lock
-from app.services.task_lifecycle import mark_completed, mark_failed, requeue_task
+from app.services.task_lifecycle import handle_quality_gate_failure, mark_completed, mark_failed, requeue_task
 from app.services.worker_hub import worker_hub
 
 router = APIRouter(prefix="/worker", tags=["Worker callback"])
@@ -78,10 +78,14 @@ async def worker_event(body: WorkerEvent, _: None = Depends(_verify_worker_token
         threshold = float(os.getenv("QUALITY_THRESHOLD", "0.7"))
         if body.quality_score is not None and body.quality_score < threshold:
             async with async_session() as db:
-                await mark_failed(db, task_id, f"quality_gate_failed score={body.quality_score} < {threshold}")
+                result = await handle_quality_gate_failure(
+                    db,
+                    task_id,
+                    f"quality_gate_failed score={body.quality_score} < {threshold}",
+                )
             await release_task_lock(task_id)
             await worker_hub.set_idle(worker_id)
-            return {"ok": True, "status": "rejected", "reason": "quality"}
+            return {"ok": True, "status": "rejected", "reason": "quality", **result}
 
         async with async_session() as db:
             from sqlalchemy import select
@@ -161,7 +165,7 @@ async def worker_event(body: WorkerEvent, _: None = Depends(_verify_worker_token
         await release_task_lock(task_id)
         if "quality_gate_failed" in error:
             async with async_session() as db:
-                await mark_failed(db, task_id, error)
+                await handle_quality_gate_failure(db, task_id, error)
         elif "failed_segmentation" in error or body.checkpoint_path:
             async with async_session() as db:
                 from app.services import quality_alerts as qa

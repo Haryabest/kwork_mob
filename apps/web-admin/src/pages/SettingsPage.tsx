@@ -5,6 +5,7 @@ import {
   Group,
   Loader,
   NumberInput,
+  Select,
   SimpleGrid,
   Stack,
   Switch,
@@ -74,9 +75,14 @@ export default function SettingsPage() {
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [emailRecipients, setEmailRecipients] = useState<string[]>([]);
   const [thresholds, setThresholds] = useState<Thresholds>({});
+  const [bonusType, setBonusType] = useState('discount_percent');
+  const [bonusValue, setBonusValue] = useState<number | string>(10);
+  const [bonusTtl, setBonusTtl] = useState<number | string>(30);
+  const [bonusMaxUses, setBonusMaxUses] = useState<number | string>(1);
+  const [bonusActive, setBonusActive] = useState(false);
 
   async function load() {
-    const [t, h, a, e] = await Promise.all([
+    const [t, h, a, e, b] = await Promise.all([
       api.get<{ items: Tariff[] }>('/admin/tariffs'),
       api.get<{ items: Hist[] }>('/admin/tariffs/history'),
       api.get<{
@@ -89,6 +95,13 @@ export default function SettingsPage() {
         thresholds?: Thresholds;
       }>('/admin/alerts/settings'),
       api.get<{ items: Esc[] }>('/admin/escalations'),
+      api.get<{
+        bonus_type: string;
+        bonus_value: number;
+        promocode_ttl_days: number;
+        max_uses: number;
+        is_active: boolean;
+      }>('/admin/cloud/publication/bonus-settings'),
     ]);
     setTariffs(t.data.items ?? []);
     const sm = t.data.items?.find((x) => x.code === 'small');
@@ -111,6 +124,11 @@ export default function SettingsPage() {
     setEmailRecipients(rec.slice(0, 5));
     setThresholds(a.data.thresholds ?? {});
     setEsc(e.data.items ?? []);
+    setBonusType(b.data.bonus_type ?? 'discount_percent');
+    setBonusValue(b.data.bonus_value ?? 10);
+    setBonusTtl(b.data.promocode_ttl_days ?? 30);
+    setBonusMaxUses(b.data.max_uses ?? 1);
+    setBonusActive(Boolean(b.data.is_active));
   }
 
   useEffect(() => {
@@ -144,6 +162,22 @@ export default function SettingsPage() {
         thresholds,
       });
       notifications.show({ color: 'teal', message: 'Алерты и пороги сохранены' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function saveBonuses() {
+    try {
+      await api.put('/admin/cloud/publication/bonus-settings', {
+        bonus_type: bonusType,
+        bonus_value: Number(bonusValue),
+        promocode_ttl_days: Number(bonusTtl),
+        max_uses: Number(bonusMaxUses),
+        is_active: bonusActive,
+      });
+      notifications.show({ color: 'teal', message: 'Бонусы публикации сохранены' });
       await load();
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
@@ -221,6 +255,36 @@ export default function SettingsPage() {
                 : [['—', 'Нет изменений', '—', '—']]
             }
           />
+        </Card>
+
+        <Card withBorder>
+          <Text fw={600} mb="sm">
+            Бонусы за публикацию §7.8
+          </Text>
+          <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
+            <Select
+              label="Тип бонуса"
+              data={[
+                { value: 'discount_percent', label: 'Скидка %' },
+                { value: 'fixed_amount', label: 'Фикс. сумма' },
+                { value: 'free_generation', label: 'Бесплатная генерация' },
+              ]}
+              value={bonusType}
+              onChange={(v) => setBonusType(v || 'discount_percent')}
+            />
+            <NumberInput label="Значение" value={bonusValue} onChange={setBonusValue} min={0} />
+            <NumberInput label="TTL промокода, дней" value={bonusTtl} onChange={setBonusTtl} min={1} />
+            <NumberInput label="Max uses" value={bonusMaxUses} onChange={setBonusMaxUses} min={1} />
+          </SimpleGrid>
+          <Switch
+            mt="md"
+            label="Бонусы активны"
+            checked={bonusActive}
+            onChange={(e) => setBonusActive(e.currentTarget.checked)}
+          />
+          <Button mt="md" onClick={() => void saveBonuses()}>
+            Сохранить бонусы
+          </Button>
         </Card>
 
         <Card withBorder>
