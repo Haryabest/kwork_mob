@@ -122,6 +122,31 @@ export default function ModerationPage() {
   } | null>(null);
   const [ageFilter, setAgeFilter] = useState<string | null>('all');
 
+  const [forbiddenLoading, setForbiddenLoading] = useState(false);
+  const [forbiddenEvents, setForbiddenEvents] = useState<
+    Array<{
+      event_id: string;
+      user_id?: number | null;
+      company_id?: number | null;
+      payload?: Record<string, unknown> | null;
+      created_at?: string | null;
+    }>
+  >([]);
+
+  const loadForbidden = useCallback(async () => {
+    setForbiddenLoading(true);
+    try {
+      const { data } = await api.get<{ items: typeof forbiddenEvents }>('/admin/user-events', {
+        params: { event_type: 'forbidden_category_attempt', limit: 200 },
+      });
+      setForbiddenEvents(data.items ?? []);
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setForbiddenLoading(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     const verifiedParam =
       queueFilter === 'verified' ? true : queueFilter === 'all' ? undefined : false;
@@ -177,7 +202,8 @@ export default function ModerationPage() {
 
   useEffect(() => {
     if (tab === 'age') void loadAge();
-  }, [tab, loadAge]);
+    if (tab === 'forbidden') void loadForbidden();
+  }, [tab, loadAge, loadForbidden]);
 
   async function verify(id: number, legal: boolean) {
     setBusyId(id);
@@ -311,12 +337,12 @@ export default function ModerationPage() {
             )}
             <Button
               variant="light"
-              loading={tab === 'age' ? ageLoading : false}
-              onClick={() =>
-                tab === 'age'
-                  ? void loadAge()
-                  : load().catch((e) => notifications.show({ color: 'red', message: getApiError(e) }))
-              }
+              loading={tab === 'age' ? ageLoading : tab === 'forbidden' ? forbiddenLoading : false}
+              onClick={() => {
+                if (tab === 'age') void loadAge();
+                else if (tab === 'forbidden') void loadForbidden();
+                else load().catch((e) => notifications.show({ color: 'red', message: getApiError(e) }));
+              }}
             >
               Обновить
             </Button>
@@ -335,6 +361,7 @@ export default function ModerationPage() {
             ) : null}
           </Tabs.Tab>
           <Tabs.Tab value="age">Проверки возраста</Tabs.Tab>
+          <Tabs.Tab value="forbidden">Forbidden category</Tabs.Tab>
         </Tabs.List>
       </Tabs>
 
@@ -524,6 +551,31 @@ export default function ModerationPage() {
                 }
               />
             </>
+          )}
+        </>
+      )}
+
+      {tab === 'forbidden' && (
+        <>
+          {forbiddenLoading ? (
+            <Center py="xl">
+              <Loader color="brand" />
+            </Center>
+          ) : (
+            <ShellTable
+              headers={['Время', 'User', 'Company', 'Категории', 'Payload']}
+              rows={
+                forbiddenEvents.length
+                  ? forbiddenEvents.map((e) => [
+                      e.created_at ? new Date(e.created_at).toLocaleString('ru-RU') : '—',
+                      String(e.user_id ?? '—'),
+                      String(e.company_id ?? '—'),
+                      String((e.payload?.categories as string[] | undefined)?.join(', ') ?? '—'),
+                      JSON.stringify(e.payload ?? {}),
+                    ])
+                  : [['—', '—', 'Нет попыток', '—', '—']]
+              }
+            />
           )}
         </>
       )}

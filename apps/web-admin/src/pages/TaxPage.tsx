@@ -23,6 +23,7 @@ type TaxSettings = {
 export default function TaxPage() {
   const [s, setS] = useState<TaxSettings>({ mode: 'self_employed', vat_rate: 0 });
   const [saving, setSaving] = useState(false);
+  const [orderId, setOrderId] = useState('');
 
   useEffect(() => {
     api
@@ -51,6 +52,22 @@ export default function TaxPage() {
       const a = document.createElement('a');
       a.href = url;
       a.download = 'transactions.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function downloadPdf(kind: 'invoice' | 'act') {
+    const id = Number(orderId);
+    if (!id) return notifications.show({ color: 'red', message: 'Укажите order_id' });
+    try {
+      const { data } = await api.post<Blob>(`/admin/tax/${kind}/${id}`, null, { responseType: 'blob' });
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${kind}-${id}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -147,6 +164,21 @@ export default function TaxPage() {
         <Button loading={saving} onClick={save} w="fit-content">
           Сохранить реквизиты
         </Button>
+        <Group align="flex-end">
+          <TextInput
+            label="Order ID"
+            placeholder="123"
+            value={orderId}
+            onChange={(e) => setOrderId(e.currentTarget.value)}
+            maw={160}
+          />
+          <Button variant="light" onClick={() => void downloadPdf('invoice')}>
+            PDF счёт
+          </Button>
+          <Button variant="light" onClick={() => void downloadPdf('act')}>
+            PDF акт
+          </Button>
+        </Group>
       </Stack>
     </>
   );

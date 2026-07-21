@@ -28,6 +28,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.celery_app.run_push_email_fallback",
         "schedule": crontab(minute="*"),
     },
+    "scheduled-push-every-minute": {
+        "task": "app.tasks.celery_app.run_scheduled_push_broadcasts",
+        "schedule": crontab(minute="*"),
+    },
 }
 
 
@@ -80,6 +84,23 @@ def run_push_email_fallback():
         redis = await get_redis()
         async with async_session() as db:
             result = await push_fallback.process_due(db, redis)
+            await db.commit()
+            return result
+
+    return asyncio.run(_run())
+
+
+@celery_app.task(name="app.tasks.celery_app.run_scheduled_push_broadcasts")
+def run_scheduled_push_broadcasts():
+    """Отложенные push-рассылки §11.8."""
+    import asyncio
+
+    from app.core.database import async_session
+    from app.services import campaigns as camp_svc
+
+    async def _run():
+        async with async_session() as db:
+            result = await camp_svc.dispatch_scheduled_push_broadcasts(db)
             await db.commit()
             return result
 

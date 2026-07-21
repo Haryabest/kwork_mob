@@ -1,5 +1,7 @@
 """Маркетинговые кампании + push (§11.7–11.8)."""
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -8,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_db_user, require_admin
 from app.core.vpn import require_vpn
-from app.models import Campaign, User
+from app.models import Campaign, PushBroadcast, User
 from app.services import campaigns as camp_svc
 
 
@@ -31,6 +33,7 @@ class PushCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     body: str = Field(min_length=1)
     segment: dict = Field(default_factory=dict)
+    send_at: datetime | None = None
 
 
 class PushTestBody(BaseModel):
@@ -91,6 +94,27 @@ async def create_campaign(
     return {"id": row.id, "status": row.status, "name": row.name}
 
 
+@router.get("/push")
+async def list_push_broadcasts(db: AsyncSession = Depends(get_db)):
+    """Журнал push-рассылок §11.8."""
+    rows = (await db.scalars(select(PushBroadcast).order_by(PushBroadcast.id.desc()).limit(100))).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "title": r.title,
+                "status": r.status,
+                "stats": r.stats,
+                "segment": r.segment,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "sent_at": r.sent_at.isoformat() if r.sent_at else None,
+                "scheduled_at": (r.stats or {}).get("scheduled_at"),
+            }
+            for r in rows
+        ]
+    }
+
+
 @router.post("/push")
 async def create_push(
     body: PushCreate,
@@ -103,6 +127,7 @@ async def create_push(
         body=body.body,
         segment=body.segment,
         created_by=admin.id,
+        send_at=body.send_at,
     )
     await db.commit()
     return {"id": row.id, "status": row.status, "stats": row.stats}

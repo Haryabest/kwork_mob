@@ -287,6 +287,17 @@ async def create_order(
     db: AsyncSession = Depends(get_db),
 ):
     if body.forbidden_categories:
+        from app.services.user_events import record_event
+
+        cats = [c.value if hasattr(c, "value") else str(c) for c in body.forbidden_categories]
+        await record_event(
+            db,
+            event_type="forbidden_category_attempt",
+            user_id=user.id,
+            company_id=body.company_id,
+            payload={"categories": cats, "category": body.category.value if body.category else None},
+        )
+        await db.commit()
         raise HTTPException(
             400,
             "Вы выбрали запрещённую категорию. Заказ будет отклонён без возврата средств.",

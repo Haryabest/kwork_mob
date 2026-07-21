@@ -87,6 +87,28 @@ export function WorkersPage() {
   const [gpu, setGpu] = useState('rtx4090');
   const [count, setCount] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [logWorkerId, setLogWorkerId] = useState('');
+  const [logItems, setLogItems] = useState<Array<{ timestamp: string; level: string; message: string }>>([]);
+  const [logLoading, setLogLoading] = useState(false);
+
+  async function openWorkerLogs(workerId: string) {
+    setLogWorkerId(workerId);
+    setLogOpen(true);
+    setLogLoading(true);
+    try {
+      const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await api.get<{ items: Array<{ timestamp: string; level: string; message: string }> }>(
+        '/admin/logs',
+        { params: { source: 'worker', q: workerId, from, limit: 200 } },
+      );
+      setLogItems(data.items ?? []);
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setLogLoading(false);
+    }
+  }
 
   async function load() {
     const [w, c, r, cost, tr, st] = await Promise.all([
@@ -369,6 +391,13 @@ export function WorkersPage() {
                   </Button>
                   <Button
                     size="xs"
+                    variant="light"
+                    onClick={() => void openWorkerLogs(w.id)}
+                  >
+                    Логи 24ч
+                  </Button>
+                  <Button
+                    size="xs"
                     variant="subtle"
                     onClick={async () => {
                       try {
@@ -386,6 +415,26 @@ export function WorkersPage() {
             : [['—', 'Нет воркеров', '—', 'Heartbeat ещё не приходил', '—', '—', '—']]
         }
       />
+
+      <Modal opened={logOpen} onClose={() => setLogOpen(false)} title={`Логи воркера ${logWorkerId}`} size="lg">
+        {logLoading ? (
+          <Center py="md">
+            <Loader color="brand" />
+          </Center>
+        ) : (
+          <ScrollArea h={400}>
+            {logItems.length === 0 ? (
+              <Text c="dimmed">Нет записей за 24ч</Text>
+            ) : (
+              logItems.map((l, i) => (
+                <Text key={`${l.timestamp}-${i}`} size="xs" mb={6} ff="monospace">
+                  [{new Date(l.timestamp).toLocaleString('ru-RU')}] {l.level}: {l.message}
+                </Text>
+              ))
+            )}
+          </ScrollArea>
+        )}
+      </Modal>
 
       <PageHeader title="Облачные инстансы" description={`Месяц: ${costs.month_rub} ₽ · прогноз 24ч: ${costs.forecast_24h_rub ?? 0} ₽ · running: ${costs.running_instances}`} />
       {scaleStatus?.pending_approval ? (
@@ -1483,6 +1532,9 @@ export function LegalPage() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [saving, setSaving] = useState(false);
+  const [versions, setVersions] = useState<
+    Array<{ version: number; title: string; is_published: boolean; created_at?: string }>
+  >([]);
 
   async function load() {
     const [d, c] = await Promise.all([api.get('/legal'), api.get('/admin/legal/consents')]);
@@ -1503,6 +1555,10 @@ export function LegalPage() {
         setBody(data.body);
       })
       .catch(() => undefined);
+    api
+      .get<{ items: typeof versions }>(`/legal/admin/${slug}/versions`)
+      .then(({ data }) => setVersions(data.items ?? []))
+      .catch(() => setVersions([]));
   }, [slug]);
 
   return (
@@ -1511,6 +1567,7 @@ export function LegalPage() {
       <Tabs defaultValue="documents">
         <Tabs.List>
           <Tabs.Tab value="documents">Документы</Tabs.Tab>
+          <Tabs.Tab value="versions">История версий</Tabs.Tab>
           <Tabs.Tab value="consents">Согласия</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="documents" pt="md">
@@ -1543,6 +1600,17 @@ export function LegalPage() {
               </Button>
             </Stack>
           </Card>
+        </Tabs.Panel>
+        <Tabs.Panel value="versions" pt="md">
+          <ShellTable
+            headers={['Версия', 'Название', 'Опубликован', 'Дата']}
+            rows={versions.map((v) => [
+              String(v.version),
+              v.title,
+              v.is_published ? 'да' : 'нет',
+              v.created_at ? new Date(v.created_at).toLocaleString('ru-RU') : '—',
+            ])}
+          />
         </Tabs.Panel>
         <Tabs.Panel value="consents" pt="md">
           <ShellTable

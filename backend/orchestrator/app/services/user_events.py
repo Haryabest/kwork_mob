@@ -58,6 +58,7 @@ USER_EVENT_TYPES = frozenset(
         "api_key_rate_limit_exceeded",
         "shoot_link_expired",
         "auto_cleanup_executed",
+        "forbidden_category_attempt",
     }
 )
 

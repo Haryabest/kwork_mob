@@ -652,8 +652,21 @@ async def send_push_broadcast(
     body: str,
     segment: dict,
     created_by: int,
+    send_at: datetime | None = None,
 ) -> PushBroadcast:
-    from app.services import push as push_svc
+    now = datetime.now(timezone.utc)
+    if send_at and send_at > now:
+        row = PushBroadcast(
+            title=title,
+            body=body,
+            segment=segment or {},
+            status="scheduled",
+            created_by_user_id=created_by,
+            stats={"scheduled_at": send_at.isoformat()},
+        )
+        db.add(row)
+        await db.flush()
+        return row
 
     row = PushBroadcast(
         title=title,
@@ -665,11 +678,19 @@ async def send_push_broadcast(
     )
     db.add(row)
     await db.flush()
-    users = await resolve_segment(db, segment or {})
-    result = await push_svc.send_to_users(db, [u.id for u in users], title, body)
+    return await _deliver_push_broadcast(db, row)
+
+
+async def _deliver_push_broadcast(db: AsyncSession, row: PushBroadcast) -> PushBroadcast:
+    from app.services import push as push_svc
+
+    users = await resolve_segment(db, row.segment or {})
+    result = await push_svc.send_to_users(db, [u.id for u in users], row.title, row.body)
     row.status = "sent"
     row.sent_at = datetime.now(timezone.utc)
+    prev = dict(row.stats or {})
     row.stats = {
+        **prev,
         "reach": result["reach"],
         "sent": result["pushed"] + result["emailed"],
         "pushed": result["pushed"],
@@ -679,3 +700,27 @@ async def send_push_broadcast(
     }
     await db.flush()
     return row
+
+
+async def dispatch_scheduled_push_broadcasts(db: AsyncSession) -> dict:
+    """Отправка push с status=scheduled и scheduled_at <= now."""
+    now = datetime.now(timezone.utc)
+    rows = (
+        await db.scalars(select(PushBroadcast).where(PushBroadcast.status == "scheduled").limit(50))
+    ).all()
+    sent = 0
+    for row in rows:
+        raw = (row.stats or {}).get("scheduled_at")
+        if not raw:
+            continue
+        try:
+            due = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if due.tzinfo is None:
+                due = due.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if due <= now:
+            row.status = "sending"
+            await _deliver_push_broadcast(db, row)
+            sent += 1
+    return {"processed": sent}

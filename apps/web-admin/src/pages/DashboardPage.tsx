@@ -53,6 +53,8 @@ type Dashboard = {
     rating_share_4_5: number;
     rating_total: number;
     low_rating_reasons: Array<[string, number]>;
+    qs_pass_rate_7d?: number;
+    qs_sample_total?: number;
   };
   moderation: { nsfw_blocked: number };
   publication_funnel?: PublicationFunnel & {
@@ -216,6 +218,7 @@ export default function DashboardPage() {
   const ops = data?.ops;
   const fin = data?.finance;
   const share45 = Math.round((data?.quality.rating_share_4_5 ?? 0) * 100);
+  const qsPass = Math.round((data?.quality.qs_pass_rate_7d ?? 0) * 100);
   const redisTotal = (queueHealth?.redis.normal ?? 0) + (queueHealth?.redis.high ?? 0);
   const pgSynced = queueHealth ? queueHealth.pg_queued === redisTotal : false;
 
@@ -536,6 +539,16 @@ export default function DashboardPage() {
 
       {tab === 'quality' && (
         <div className="vz-grid vz-grid-2-lg">
+          <div className="vz-surface">
+            <Group>
+              <IconStar size={18} />
+              <Text fw={600}>QS ≥0.7 (7д) — {qsPass}%</Text>
+            </Group>
+            <Progress value={qsPass} mt="md" color={qsPass >= 95 ? 'teal' : 'orange'} />
+            <Text size="sm" c="dimmed" mt="sm">
+              выборка: {data?.quality.qs_sample_total ?? 0} · цель ≥95% §11.2.1
+            </Text>
+          </div>
           <div className="vz-surface">
             <Group>
               <IconStar size={18} />

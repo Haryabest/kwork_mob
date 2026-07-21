@@ -129,3 +129,37 @@ async def admin_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="transactions.xlsx"'},
     )
+
+
+@admin_router.post("/invoice/{order_id}")
+async def admin_generate_invoice(
+    order_id: int,
+    staff: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """PDF счёт по order_id (staff §11.13)."""
+    if not staff.staff_role:
+        raise HTTPException(403, "Только staff")
+    data = await tax_svc.invoice_for_order(db, order_id, staff, "invoice")
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="invoice-{order_id}.pdf"'},
+    )
+
+
+@admin_router.post("/act/{order_id}")
+async def admin_generate_act(
+    order_id: int,
+    staff: User = Depends(get_current_db_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """PDF акт по order_id (staff §11.13)."""
+    if not staff.staff_role:
+        raise HTTPException(403, "Только staff")
+    data = await tax_svc.invoice_for_order(db, order_id, staff, "act")
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="act-{order_id}.pdf"'},
+    )

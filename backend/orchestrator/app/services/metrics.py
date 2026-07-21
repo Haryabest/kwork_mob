@@ -235,7 +235,7 @@ async def _publication_funnel_dashboard() -> dict[str, Any]:
 async def _pg_dashboard() -> dict:
     """Агрегаты из PostgreSQL (§11.2) — fallback и дополнение к ClickHouse."""
     from app.core.database import async_session
-    from app.models import Company, CompanyMember, ModelFeedback, NsfwBlock, Order, TaskQueue, Transaction
+    from app.models import Company, CompanyMember, ModelFeedback, NsfwBlock, Order, ServiceLogEvent, TaskQueue, Transaction
 
     since = datetime.now(timezone.utc) - timedelta(days=7)
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -368,6 +368,30 @@ async def _pg_dashboard() -> dict:
             )
         ).all()
 
+        qs_logs = (
+            await db.execute(
+                select(ServiceLogEvent.details).where(
+                    ServiceLogEvent.source == "worker",
+                    ServiceLogEvent.message == "task_completed",
+                    ServiceLogEvent.created_at >= since,
+                    ServiceLogEvent.details.isnot(None),
+                )
+            )
+        ).scalars().all()
+        qs_scores: list[float] = []
+        for details in qs_logs:
+            if not details:
+                continue
+            raw = details.get("quality_score")
+            if raw is None:
+                continue
+            try:
+                qs_scores.append(float(raw))
+            except (TypeError, ValueError):
+                continue
+        qs_pass = sum(1 for s in qs_scores if s >= 0.7)
+        qs_pass_rate = round(qs_pass / max(len(qs_scores), 1), 4)
+
     return {
         "orders_by_status": by_status,
         "queued": queued,
@@ -392,6 +416,8 @@ async def _pg_dashboard() -> dict:
         "orders_hourly": [
             {"hour": (r[0].isoformat() if r[0] else None), "count": int(r[1])} for r in hourly
         ],
+        "qs_pass_rate_7d": qs_pass_rate,
+        "qs_sample_total": len(qs_scores),
     }
 
 
@@ -473,6 +499,8 @@ async def dashboard_aggregates() -> dict:
             "rating_share_4_5": pg.get("rating_share_4_5", 0),
             "rating_total": pg.get("rating_total", 0),
             "low_rating_reasons": pg.get("low_rating_reasons", []),
+            "qs_pass_rate_7d": pg.get("qs_pass_rate_7d", 0),
+            "qs_sample_total": pg.get("qs_sample_total", 0),
         },
         "moderation": {
             "nsfw_blocked": pg.get("nsfw_blocked", 0),

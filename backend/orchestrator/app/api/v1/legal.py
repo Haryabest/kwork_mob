@@ -157,3 +157,31 @@ async def publish_document(
     await db.commit()
     await db.refresh(doc)
     return {"slug": doc.slug, "version": doc.version, "title": doc.title}
+
+
+@router.get("/admin/{slug}/versions")
+async def list_document_versions(
+    slug: str,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """История версий документа §11.11."""
+    rows = (
+        await db.scalars(
+            select(LegalDocument)
+            .where(LegalDocument.slug == slug)
+            .order_by(LegalDocument.version.desc())
+            .limit(50)
+        )
+    ).all()
+    return {
+        "items": [
+            {
+                "version": d.version,
+                "title": d.title,
+                "is_published": d.is_published,
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+            }
+            for d in rows
+        ]
+    }
