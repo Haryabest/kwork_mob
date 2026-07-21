@@ -470,6 +470,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shootCategoryLabel => '类别';
 
   @override
+  String get shootCategoryRestricted => '您的公司角色不可使用此类别';
+
+  @override
+  String get corpPolicyDenied => '公司政策不允许此操作';
+
+  @override
   String get shootForbiddenCategories => '禁止类别';
 
   @override

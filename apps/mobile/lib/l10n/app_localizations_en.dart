@@ -476,6 +476,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shootCategoryLabel => 'Category';
 
   @override
+  String get shootCategoryRestricted =>
+      'This category is not allowed for your company role';
+
+  @override
+  String get corpPolicyDenied => 'Action blocked by company policy';
+
+  @override
   String get shootForbiddenCategories => 'Forbidden categories';
 
   @override

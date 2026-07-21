@@ -6,6 +6,7 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/services/analytics_service.dart';
+import 'package:kwork_mobile/services/company_access_policy.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
 import 'package:kwork_mobile/services/storage_space.dart';
 import 'package:kwork_mobile/services/scale_calibration_service.dart';
@@ -39,6 +40,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   final _birth = TextEditingController();
   final _modelName = TextEditingController();
   double _ghostScale = 1.0;
+  CompanyAccessPolicy? _accessPolicy;
 
   @override
   void initState() {
@@ -47,6 +49,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
     if (widget.session.dateOfBirth != null) {
       _birth.text = widget.session.dateOfBirth!;
     }
+    _loadAccessPolicy();
+  }
+
+  Future<void> _loadAccessPolicy() async {
+    if (!widget.session.corporate) return;
+    final policy = await CompanyAccessPolicy.load(widget.api, widget.session);
+    if (!mounted) return;
+    setState(() => _accessPolicy = policy);
   }
 
   @override
@@ -174,6 +184,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
   Future<void> _next() async {
     if (_category == null) return;
 
+    if (_accessPolicy != null && !_accessPolicy!.isCategoryAllowed(_category!.api)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.shootCategoryRestricted)),
+      );
+      return;
+    }
+
     if (!await _checkOrderLimit()) return;
 
     final okSpace = await StorageSpaceGuard.instance.hasEnoughForShoot();
@@ -278,7 +296,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
     context.push('/home/shoot/dome', extra: uuid);
   }
 
-  Map<String, ProductCategory> _categoryItems(AppLocalizations l) => productCategorySelectItems(l);
+  Map<String, ProductCategory> _categoryItems(AppLocalizations l) {
+    final all = productCategorySelectItems(l);
+    final policy = _accessPolicy;
+    if (policy == null || !policy.restrictsCategories) return all;
+    return Map.fromEntries(
+      all.entries.where((e) => policy.isCategoryAllowed(e.key.api)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

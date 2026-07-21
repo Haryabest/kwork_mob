@@ -12,6 +12,7 @@ import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/l10n/catalog_l10n.dart';
 import 'package:kwork_mobile/domain/catalog.dart';
 import 'package:kwork_mobile/services/local_model_library.dart';
+import 'package:kwork_mobile/services/company_access_policy.dart';
 import 'package:kwork_mobile/services/export_prefs_service.dart';
 import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
@@ -65,6 +66,7 @@ class _ModelsScreenState extends State<ModelsScreen> {
   final Map<String, String?> _thumbnails = {};
   final Map<String, File?> _localThumbs = {};
   String? _menuBusyUuid;
+  CompanyAccessPolicy? _accessPolicy;
 
   String _modelTitle(Map<String, dynamic> m) {
     final name = m['display_name']?.toString();
@@ -205,14 +207,38 @@ class _ModelsScreenState extends State<ModelsScreen> {
     try {
       switch (action) {
         case 'glb_ozon':
+          if (_accessPolicy != null && !_accessPolicy!.allowDownload) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(AppLocalizations.of(context)!.corpPolicyDenied)),
+              );
+            }
+            return;
+          }
           final r = await widget.api.downloadModel(modelUuid: uuid, format: 'glb', marketplace: 'ozon');
           final url = r['download_url']?.toString();
           if (url != null) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
         case 'usdz_wb':
+          if (_accessPolicy != null && !_accessPolicy!.allowDownload) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(AppLocalizations.of(context)!.corpPolicyDenied)),
+              );
+            }
+            return;
+          }
           final r = await widget.api.downloadModel(modelUuid: uuid, format: 'usdz', marketplace: 'wb');
           final url = r['download_url']?.toString();
           if (url != null) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
         case 'share':
+          if (_accessPolicy != null && !_accessPolicy!.allowShareLinks) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(AppLocalizations.of(context)!.corpPolicyDenied)),
+              );
+            }
+            return;
+          }
           final r = await widget.api.createShareLink(modelUuid: uuid);
           final link = r['public_url']?.toString() ?? r['url']?.toString();
           if (link != null && mounted) {
@@ -362,6 +388,9 @@ class _ModelsScreenState extends State<ModelsScreen> {
     _search.addListener(() {
       _searchDebounce?.cancel();
       _searchDebounce = Timer(const Duration(milliseconds: 400), _resetAndLoad);
+    });
+    CompanyAccessPolicy.load(widget.api, widget.session).then((p) {
+      if (mounted) setState(() => _accessPolicy = p);
     });
     _load();
   }
@@ -676,21 +705,24 @@ class _ModelsScreenState extends State<ModelsScreen> {
                               enabled: !busy,
                               onSelected: (v) => _onMenu(v, m),
                               itemBuilder: (_) => [
-                                PopupMenuItem(
-                                  value: 'glb_ozon',
-                                  child: Text(
-                                    l.mvDownloadGlbOzon,
-                                    style: const TextStyle(color: AppColors.ozonPrimary),
+                                if (_accessPolicy == null || _accessPolicy!.allowDownload) ...[
+                                  PopupMenuItem(
+                                    value: 'glb_ozon',
+                                    child: Text(
+                                      l.mvDownloadGlbOzon,
+                                      style: const TextStyle(color: AppColors.ozonPrimary),
+                                    ),
                                   ),
-                                ),
-                                PopupMenuItem(
-                                  value: 'usdz_wb',
-                                  child: Text(
-                                    l.mvDownloadUsdzWb,
-                                    style: const TextStyle(color: AppColors.accentPurple),
+                                  PopupMenuItem(
+                                    value: 'usdz_wb',
+                                    child: Text(
+                                      l.mvDownloadUsdzWb,
+                                      style: const TextStyle(color: AppColors.accentPurple),
+                                    ),
                                   ),
-                                ),
-                                PopupMenuItem(value: 'share', child: Text(l.mvShare)),
+                                ],
+                                if (_accessPolicy == null || _accessPolicy!.allowShareLinks)
+                                  PopupMenuItem(value: 'share', child: Text(l.mvShare)),
                                 PopupMenuItem(value: 'rate', child: Text(l.mvRate)),
                                 PopupMenuItem(
                                   value: 'pub_link',
@@ -764,6 +796,7 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
   bool _busy = false;
   bool _favorite = false;
   bool _hasLocalGlb = false;
+  CompanyAccessPolicy? _accessPolicy;
 
   static const _reasons = ['blurry', 'holes', 'scale', 'color', 'other'];
 
@@ -802,6 +835,8 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
     _rated = prefs.getBool('rated_${widget.modelUuid}') ?? false;
     _favorite = await LocalModelLibrary.instance.isFavorite(widget.modelUuid);
     _hasLocalGlb = await LocalModelLibrary.instance.hasLocalGlb(widget.modelUuid);
+    _accessPolicy = await CompanyAccessPolicy.load(widget.api, widget.session);
+    if (mounted) setState(() {});
     await LocalModelLibrary.instance.touchAccess(widget.modelUuid);
     try {
       final detail = await widget.api.getModel(widget.modelUuid);
@@ -902,6 +937,14 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
   }
 
   Future<void> _sharePublic() async {
+    if (_accessPolicy != null && !_accessPolicy!.allowShareLinks) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.corpPolicyDenied)),
+        );
+      }
+      return;
+    }
     setState(() => _busy = true);
     try {
       final res = await widget.api.createShareLink(modelUuid: widget.modelUuid);
@@ -1324,24 +1367,27 @@ class _ModelViewerScreenState extends State<ModelViewerScreen> {
                       onPress: _busy ? null : _regenerate,
                       child: Text(l.mvRegenerate),
                     ),
-                    FButton(
-                      variant: .outline,
-                      onPress: _busy ? null : _sharePublic,
-                      child: Text(l.mvShare),
-                    ),
-                    FButton(
-                      variant: .outline,
-                      onPress: _busy ? null : _downloadLocalGlb,
-                      child: Text(_hasLocalGlb ? l.mvUpdateGlb : l.mvGlbLocal),
-                    ),
-                    FButton(
-                      onPress: _busy ? null : () => _download('wb'),
-                      child: Text(l.mvDownloadWb),
-                    ),
-                    FButton(
-                      onPress: _busy ? null : () => _download('ozon'),
-                      child: Text(l.mvDownloadOzon),
-                    ),
+                    if (_accessPolicy == null || _accessPolicy!.allowShareLinks)
+                      FButton(
+                        variant: .outline,
+                        onPress: _busy ? null : _sharePublic,
+                        child: Text(l.mvShare),
+                      ),
+                    if (_accessPolicy == null || _accessPolicy!.allowDownload) ...[
+                      FButton(
+                        variant: .outline,
+                        onPress: _busy ? null : _downloadLocalGlb,
+                        child: Text(_hasLocalGlb ? l.mvUpdateGlb : l.mvGlbLocal),
+                      ),
+                      FButton(
+                        onPress: _busy ? null : () => _download('wb'),
+                        child: Text(l.mvDownloadWb),
+                      ),
+                      FButton(
+                        onPress: _busy ? null : () => _download('ozon'),
+                        child: Text(l.mvDownloadOzon),
+                      ),
+                    ],
                     FButton(
                       variant: .outline,
                       onPress: _busy ? null : _restoreSources,

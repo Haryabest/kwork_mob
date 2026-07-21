@@ -150,6 +150,8 @@
   "authDevToken": "Dev token: {token}",
   "shootCategoryTitle": "Product category",
   "shootCategoryLabel": "Category",
+  "shootCategoryRestricted": "This category is not allowed for your company role",
+  "corpPolicyDenied": "Action blocked by company policy",
   "shootForbiddenCategories": "Forbidden categories",
   "shootForbiddenHint": "If selected — order is not created and funds are not charged",
   "shootAgeConfirmed": "Age verified",

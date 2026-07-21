@@ -150,6 +150,8 @@
   "authDevToken": "Dev-токен: {token}",
   "shootCategoryTitle": "Тауар категориясы",
   "shootCategoryLabel": "Категория",
+  "shootCategoryRestricted": "Бұл санат компаниядағы рөліңізге қолжетімсіз",
+  "corpPolicyDenied": "Компания саясаты бойынша әрекетке тыйым салынған",
   "shootForbiddenCategories": "Тыйым салынған категориялар",
   "shootForbiddenHint": "Белgilenseniz — тапсырыс жасалмайды, қаражат алынбайды",
   "shootAgeConfirmed": "Жас расталды",

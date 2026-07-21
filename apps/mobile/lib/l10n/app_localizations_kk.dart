@@ -480,6 +480,14 @@ class AppLocalizationsKk extends AppLocalizations {
   String get shootCategoryLabel => 'Категория';
 
   @override
+  String get shootCategoryRestricted =>
+      'Бұл санат компаниядағы рөліңізге қолжетімсіз';
+
+  @override
+  String get corpPolicyDenied =>
+      'Компания саясаты бойынша әрекетке тыйым салынған';
+
+  @override
   String get shootForbiddenCategories => 'Тыйым салынған категориялар';
 
   @override

@@ -150,6 +150,8 @@
   "authDevToken": "Dev 令牌：{token}",
   "shootCategoryTitle": "商品类别",
   "shootCategoryLabel": "类别",
+  "shootCategoryRestricted": "您的公司角色不可使用此类别",
+  "corpPolicyDenied": "公司政策不允许此操作",
   "shootForbiddenCategories": "禁止类别",
   "shootForbiddenHint": "若勾选 — 不会创建订单，不会扣款",
   "shootAgeConfirmed": "年龄已验证",

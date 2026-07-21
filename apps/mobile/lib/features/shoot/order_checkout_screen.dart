@@ -8,6 +8,7 @@ import 'package:kwork_mobile/core/session.dart';
 import 'package:kwork_mobile/core/theme.dart';
 import 'package:kwork_mobile/l10n/app_localizations.dart';
 import 'package:kwork_mobile/l10n/catalog_l10n.dart';
+import 'package:kwork_mobile/services/offline_sync_service.dart';
 import 'package:kwork_mobile/services/scale_calibration_service.dart';
 import 'package:kwork_mobile/services/analytics_service.dart';
 import 'package:kwork_mobile/services/shoot_storage.dart';
@@ -146,6 +147,14 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
   Future<void> _submit({required String payMethod}) async {
     final draft = _draft;
     if (draft == null || _busy) return;
+
+    if (!OfflineSyncService.instance.isOnline) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.errorNetwork)),
+      );
+      return;
+    }
 
     if (_selectedUpsells.contains('real_scale')) {
       final cal = draft.scaleCalibration ??

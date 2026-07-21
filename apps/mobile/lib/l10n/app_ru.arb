@@ -168,6 +168,8 @@
   "@authDevToken": {"placeholders": {"token": {"type": "String"}}},
   "shootCategoryTitle": "Категория товара",
   "shootCategoryLabel": "Категория",
+  "shootCategoryRestricted": "Эта категория недоступна для вашей роли в компании",
+  "corpPolicyDenied": "Действие недоступно по политике компании",
   "shootForbiddenCategories": "Запрещённые категории",
   "shootForbiddenHint": "Если отметите — заказ не создаётся, средства не списываются",
   "shootAgeConfirmed": "Возраст подтверждён",

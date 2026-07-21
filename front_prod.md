@@ -2,7 +2,7 @@
 
 **Источник:** `.claude/ТЗ.txt` §3, §11, §19, §20  
 **Сверка с кодом:** 2026-07-21  
-**Связанные файлы:** `webadminprod.md` (§11 детально), `back_prod.md` (backend), `67.md` → этот файл
+**Связанные файлы:** [`tz_frontend_audit.md`](tz_frontend_audit.md) (сверка с ТЗ), `webadminprod.md`, `back_prod.md`
 
 ---
 
@@ -10,12 +10,12 @@
 
 | Приложение | Код vs ТЗ | Prod-ready | Комментарий |
 |------------|-----------|------------|-------------|
-| `apps/web-admin` | **100%** §11 | **~90%** | UI/API-клиент закрыт; gate — VPN, Grafana prod, DoD KPI |
-| `apps/mobile` | **~98%** §3+§19 | **~75%** | Фичи в коде; gate — store assets, real-device QA, Firebase prod |
-| `apps/web-seller` | **100%** §20 | **~95%** | Код закрыт; gate — prod keys, WAF |
+| `apps/web-admin` | **~88%** §11 | **~90%** | См. `tz_frontend_audit.md` §11 |
+| `apps/mobile` | **~92%** §3+§19 | **~75%** | См. `tz_frontend_audit.md` §3/§19 |
+| `apps/web-seller` | **~85%** §20 | **~95%** | См. `tz_frontend_audit.md` §20 |
 | `apps/web-support` | — | **100%** | Deprecated → web-admin |
 
-**Вердикт:** новые экраны и API-клиенты писать почти нечего. Блокеры — **release/QA/ops** и **backend prod-verify** (§1.4).
+**Вердикт:** по ТЗ не 100% — см. [`tz_frontend_audit.md`](tz_frontend_audit.md). Блокеры release — OPS + polish P1–P3.
 
 ---
 

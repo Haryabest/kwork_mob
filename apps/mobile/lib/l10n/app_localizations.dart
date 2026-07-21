@@ -1002,6 +1002,18 @@ abstract class AppLocalizations {
   /// **'Категория'**
   String get shootCategoryLabel;
 
+  /// No description provided for @shootCategoryRestricted.
+  ///
+  /// In ru, this message translates to:
+  /// **'Эта категория недоступна для вашей роли в компании'**
+  String get shootCategoryRestricted;
+
+  /// No description provided for @corpPolicyDenied.
+  ///
+  /// In ru, this message translates to:
+  /// **'Действие недоступно по политике компании'**
+  String get corpPolicyDenied;
+
   /// No description provided for @shootForbiddenCategories.
   ///
   /// In ru, this message translates to:

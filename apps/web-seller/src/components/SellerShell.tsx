@@ -41,7 +41,7 @@ import { AuthGuard } from './AuthGuard';
 import { api } from '../services/api';
 import { GRADIENT_PRIMARY } from '../theme/brand';
 import { useT } from '../i18n/I18nProvider';
-import { QueueWsProvider, useQueueWs } from '../context/QueueWsContext';
+import { useCompanyContext } from '../hooks/useCompanyContext';
 
 const NAV_KEYS = [
   { href: '/dashboard', key: 'dashboard' as const, icon: IconHome2 },
@@ -75,6 +75,10 @@ function SellerShellInner({ children }: { children: ReactNode }) {
   const isMobile = useMediaQuery('(max-width: 767px)');
   const { live: queueLive, pendingCount: queuePending, clearPending } = useQueueWs();
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+  const { data: companyCtx } = useCompanyContext();
+  const isOwner = companyCtx?.role === 'owner';
+
+  const navItems = NAV_KEYS.filter((item) => item.key !== 'team' || isOwner);
 
   useEffect(() => {
     api
@@ -188,7 +192,7 @@ function SellerShellInner({ children }: { children: ReactNode }) {
         <AppShell.Navbar p="md">
           <AppShell.Section grow component={ScrollArea}>
             <Stack gap={8}>
-              {NAV_KEYS.map((item) => {
+              {navItems.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 const showQueueDot = item.key === 'orders' && queuePending > 0;

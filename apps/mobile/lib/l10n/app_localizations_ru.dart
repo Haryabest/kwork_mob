@@ -478,6 +478,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get shootCategoryLabel => 'Категория';
 
   @override
+  String get shootCategoryRestricted =>
+      'Эта категория недоступна для вашей роли в компании';
+
+  @override
+  String get corpPolicyDenied => 'Действие недоступно по политике компании';
+
+  @override
   String get shootForbiddenCategories => 'Запрещённые категории';
 
   @override
