@@ -8,6 +8,8 @@ def test_topup_failed_html_contains_link():
         title="Ошибка пополнения",
         body="Платёж не прошёл",
         balance_url="https://3d.app/balance",
+        cta="Открыть баланс",
+        lang="ru",
     )
     assert "https://3d.app/balance" in html
     assert "Открыть баланс" in html

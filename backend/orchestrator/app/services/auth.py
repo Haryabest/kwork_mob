@@ -80,7 +80,7 @@ async def register_user(db: AsyncSession, email: str, password: str) -> tuple[Us
 
     code = f"{secrets.randbelow(1_000_000):06d}"
     await _store_email_code(email, code)
-    dev_code = await send_verification_email(email, code)
+    dev_code = await send_verification_email(email, code, locale=getattr(user, "preferred_locale", None))
 
     await db.commit()
     await db.refresh(user)
@@ -252,7 +252,7 @@ async def request_password_reset(db: AsyncSession, email: str) -> str | None:
     token = secrets.token_urlsafe(32)
     redis = await get_redis()
     await redis.set(f"{PASSWORD_RESET_PREFIX}{token}", str(user.id), ex=settings.PASSWORD_RESET_TTL_SECONDS)
-    return await send_password_reset_email(email, token)
+    return await send_password_reset_email(email, token, locale=getattr(user, "preferred_locale", None))
 
 
 async def confirm_password_reset(db: AsyncSession, token: str, new_password: str) -> None:

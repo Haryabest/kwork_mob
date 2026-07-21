@@ -21,6 +21,8 @@ import { notifications } from '@mantine/notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { SellerShell } from '../../components/SellerShell';
 import { PageHeader, Surface } from '../../components/ui';
+import { LanguageSelect } from '../../i18n/LanguageSelect';
+import { useT } from '../../i18n/I18nProvider';
 import {
   fetchOAuthProviders,
   oauthErrorMessage,
@@ -129,6 +131,7 @@ const PREF_LABELS: Record<string, string> = {
 
 /** §20.8 Профиль и настройки — 2FA + push prefs */
 export default function SettingsPage() {
+  const t = useT();
   const [me, setMe] = useState<Me | null>(null);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -358,7 +361,7 @@ export default function SettingsPage() {
     setBusy(true);
     try {
       await api.patch('/user/me', { full_name: fullName, phone });
-      notifications.show({ color: 'teal', message: 'Профиль сохранён' });
+      notifications.show({ color: 'teal', message: t.settings.profileSaved });
       await load();
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
@@ -492,15 +495,15 @@ export default function SettingsPage() {
 
   return (
     <SellerShell>
-      <PageHeader title="Профиль и настройки" description="Личные данные, 2FA и уведомления (§20.8 / §3.4.3)" />
+      <PageHeader title={t.settings.title} description={t.settings.description} />
 
       <Tabs defaultValue="profile">
         <Tabs.List mb="lg">
-          <Tabs.Tab value="profile">Профиль</Tabs.Tab>
-          <Tabs.Tab value="security">Безопасность</Tabs.Tab>
-          <Tabs.Tab value="notifications">Уведомления</Tabs.Tab>
+          <Tabs.Tab value="profile">{t.settings.profile}</Tabs.Tab>
+          <Tabs.Tab value="security">{t.settings.security}</Tabs.Tab>
+          <Tabs.Tab value="notifications">{t.settings.notifications}</Tabs.Tab>
           <Tabs.Tab value="danger" color="red">
-            Опасная зона
+            {t.settings.danger}
           </Tabs.Tab>
         </Tabs.List>
 
@@ -537,11 +540,12 @@ export default function SettingsPage() {
                   ) : null}
                 </Stack>
               </Group>
-              <TextInput label="Email" value={me?.email || ''} disabled size="md" />
-              <TextInput label="ФИО" value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} size="md" />
-              <TextInput label="Телефон" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} size="md" />
+              <LanguageSelect label={t.settings.language} description={t.settings.languageHint} />
+              <TextInput label={t.settings.email} value={me?.email || ''} disabled size="md" />
+              <TextInput label={t.settings.fullName} value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} size="md" />
+              <TextInput label={t.settings.phone} value={phone} onChange={(e) => setPhone(e.currentTarget.value)} size="md" />
               <Button loading={busy} w={{ base: '100%', sm: 'fit-content' }} onClick={() => void saveProfile()}>
-                Сохранить профиль
+                {t.settings.saveProfile}
               </Button>
             </Stack>
           </Surface>

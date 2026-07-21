@@ -222,9 +222,13 @@ async def _send_fallback_email(
         event_type = str(data.get("type") or "")
         if event_type == "topup_failed":
             balance_url = f"{settings.SELLER_PUBLIC_URL.rstrip('/')}/balance"
-            await email_svc.send_topup_failed_email(user.email, title, body, balance_url)
+            await email_svc.send_topup_failed_email(
+                user.email, title, body, balance_url, locale=getattr(user, "preferred_locale", None)
+            )
         else:
-            await email_svc.send_notification_email(user.email, title, body)
+            await email_svc.send_notification_email(
+                user.email, title, body, locale=getattr(user, "preferred_locale", None)
+            )
         return True
     except Exception as exc:  # noqa: BLE001
         logger.warning("email fallback user=%s: %s", user.id, exc)

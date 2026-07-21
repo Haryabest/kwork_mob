@@ -28,6 +28,7 @@ class User(Base):
     marketing_opt_in: Mapped[bool] = mapped_column(Boolean, default=True)
     notification_prefs: Mapped[dict] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     avatar_key: Mapped[str | None] = mapped_column(String(512))
+    preferred_locale: Mapped[str] = mapped_column(String(10), default="ru")
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     age_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

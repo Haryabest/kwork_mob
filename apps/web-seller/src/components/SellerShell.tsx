@@ -37,18 +37,20 @@ import { useEffect, useState } from 'react';
 import { AuthGuard } from './AuthGuard';
 import { api } from '../services/api';
 import { GRADIENT_PRIMARY } from '../theme/brand';
+import { useT } from '../i18n/I18nProvider';
 
-const NAV = [
-  { href: '/dashboard', label: 'Главная', icon: IconHome2 },
-  { href: '/models', label: 'Мои модели', icon: IconBox },
-  { href: '/orders', label: 'Заказы', icon: IconShoppingCart },
-  { href: '/balance', label: 'Баланс', icon: IconCash },
-  { href: '/team', label: 'Команда', icon: IconUsersGroup },
-  { href: '/support', label: 'Поддержка', icon: IconHeadset },
-  { href: '/settings', label: 'Настройки', icon: IconSettings },
+const NAV_KEYS = [
+  { href: '/dashboard', key: 'dashboard' as const, icon: IconHome2 },
+  { href: '/models', key: 'models' as const, icon: IconBox },
+  { href: '/orders', key: 'orders' as const, icon: IconShoppingCart },
+  { href: '/balance', key: 'balance' as const, icon: IconCash },
+  { href: '/team', key: 'team' as const, icon: IconUsersGroup },
+  { href: '/support', key: 'support' as const, icon: IconHeadset },
+  { href: '/settings', key: 'settings' as const, icon: IconSettings },
 ] as const;
 
 export function SellerShell({ children }: { children: ReactNode }) {
+  const t = useT();
   const pathname = usePathname();
   const router = useRouter();
   const [opened, { toggle, close }] = useDisclosure();
@@ -93,7 +95,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
                   3dvektor
                 </Text>
                 <Text size="xs" c="#6d6c77" visibleFrom="xs">
-                  Кабинет селлера
+                  {t.shell.sellerCabinet}
                 </Text>
               </Box>
             </Group>
@@ -119,7 +121,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
                   component={Link}
                   href="/notifications"
                   variant="subtle"
-                  aria-label="Уведомления"
+                  aria-label={t.shell.notifications}
                   size="lg"
                   visibleFrom="sm"
                 >
@@ -135,9 +137,9 @@ export function SellerShell({ children }: { children: ReactNode }) {
                   </UnstyledButton>
                 </Menu.Target>
                 <Menu.Dropdown>
-                  <Menu.Label>Личный кабинет</Menu.Label>
+                  <Menu.Label>{t.shell.personalAccount}</Menu.Label>
                   <Menu.Item component={Link} href="/settings">
-                    Настройки
+                    {t.shell.settings}
                   </Menu.Item>
                   <Menu.Divider />
                   <Menu.Item
@@ -152,7 +154,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
                       router.replace('/');
                     }}
                   >
-                    Выйти
+                    {t.shell.logout}
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>
@@ -163,7 +165,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
         <AppShell.Navbar p="md">
           <AppShell.Section grow component={ScrollArea}>
             <Stack gap={8}>
-              {NAV.map((item) => {
+              {NAV_KEYS.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                 return (
@@ -171,7 +173,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
                     key={item.href}
                     component={Link}
                     href={item.href}
-                    label={item.label}
+                    label={t.nav[item.key]}
                     leftSection={<Icon size={18} stroke={1.5} />}
                     active={active}
                     onClick={() => close()}
@@ -181,7 +183,7 @@ export function SellerShell({ children }: { children: ReactNode }) {
               <NavLink
                 component={Link}
                 href="/notifications"
-                label="Уведомления"
+                label={t.shell.notifications}
                 leftSection={<IconBell size={18} stroke={1.5} />}
                 rightSection={
                   unread > 0 ? (

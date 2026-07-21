@@ -1485,6 +1485,11 @@ class _ProfileTabState extends State<_ProfileTab> with WidgetsBindingObserver {
             onChange: (v) async {
               if (v == null) return;
               await AppLocaleController.instance.setLocale(Locale(v));
+              try {
+                await widget.api.updateProfile({
+                  'preferred_locale': v == 'zh' ? 'zh-CN' : v,
+                });
+              } catch (_) {}
               if (mounted) setState(() {});
             },
           ),

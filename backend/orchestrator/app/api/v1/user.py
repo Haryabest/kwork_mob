@@ -36,6 +36,7 @@ class DeviceTokenRequest(BaseModel):
 
 def _user_payload(user: User) -> dict:
     from app.services import user_avatar as av_svc
+    from app.services.locale import normalize_locale
 
     pii = pii_svc.user_public(user)
     return {
@@ -58,6 +59,7 @@ def _user_payload(user: User) -> dict:
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "export_format": (user.notification_prefs or {}).get("export_format", "glb"),
         "avatar_url": av_svc.presigned_avatar_url(getattr(user, "avatar_key", None)),
+        "preferred_locale": normalize_locale(getattr(user, "preferred_locale", None)),
     }
 
 
@@ -208,6 +210,10 @@ async def update_me(
         cur = dict(user.notification_prefs or {})
         cur["export_format"] = payload["export_format"]
         user.notification_prefs = cur
+    if "preferred_locale" in payload:
+        from app.services.locale import normalize_locale
+
+        user.preferred_locale = normalize_locale(str(payload["preferred_locale"]))
     if changed:
         ip = request.client.host if request.client else None
         await pii_svc.audit_pii_change(
