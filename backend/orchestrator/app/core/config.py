@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ORCHESTRATOR_ROOT = Path(__file__).resolve().parents[2]
@@ -171,6 +171,14 @@ class Settings(BaseSettings):
     INTELION_FLAVOR_ID: int = 0
     INTELION_OS_ID: int = 0
     INTELION_SSD_GB: int = 100
+
+    @field_validator("INTELION_FLAVOR_ID", "INTELION_OS_ID", mode="before")
+    @classmethod
+    def _empty_int_cloud(cls, value: object) -> object:
+        if value is None or value == "":
+            return 0
+        return value
+
     # §11.3.3 / soft-launch: лимит расходов на облачные GPU (0 = без лимита)
     CLOUD_MONTHLY_BUDGET_RUB: int = 0
     CLOUD_DAILY_BUDGET_RUB: int = 0
