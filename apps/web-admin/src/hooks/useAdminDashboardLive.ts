@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 
 function wsBaseUrl(): string {
   const api = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1';
+  if (api.startsWith('/')) {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${window.location.host}`;
+  }
   const origin = api.replace(/\/api\/v1\/?$/, '');
   return origin.replace(/^http/, 'ws');
 }

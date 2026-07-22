@@ -213,14 +213,6 @@ export default function DashboardPage() {
     return () => window.clearInterval(t);
   }, [load]);
 
-  if (loading && !data) {
-    return (
-      <Center py="xl">
-        <Loader color="brand" />
-      </Center>
-    );
-  }
-
   const ops = data?.ops;
   const fin = data?.finance;
   const share45 = Math.round((data?.quality.rating_share_4_5 ?? 0) * 100);
@@ -251,6 +243,14 @@ export default function DashboardPage() {
       })),
     [ops?.orders_hourly],
   );
+
+  if (loading && !data) {
+    return (
+      <Center py="xl">
+        <Loader color="brand" />
+      </Center>
+    );
+  }
 
   return (
     <div className="vz-page">
