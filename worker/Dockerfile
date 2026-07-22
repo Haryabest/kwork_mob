@@ -75,7 +75,8 @@ RUN mkdir -p /var/log/worker /tmp/worker
 
 # TRELLIS.2: clone отдельно — кэш слоя при повторной сборке
 RUN if [ "$INSTALL_TRELLIS" = "1" ]; then \
-      git clone --depth 1 --recursive "${TRELLIS_REPO}" /app/trellis; \
+      git clone --depth 1 --recursive "${TRELLIS_REPO}" /app/trellis && \
+      test -f /app/trellis/trellis2/__init__.py; \
     fi
 
 # setup.sh + xformers (без flash-attn по умолчанию) + веса (§5.1)

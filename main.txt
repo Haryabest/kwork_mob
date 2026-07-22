@@ -1,0 +1,1 @@
+curl -H "ngrok-skip-browser-warning: 1" https://d2a9-2001-41d0-403-2909-00.ngrok-free.app/health

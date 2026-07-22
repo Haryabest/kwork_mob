@@ -59,12 +59,25 @@ else
 fi
 pip3 install --no-cache-dir o-voxel || echo "[warn] o-voxel pip — возможно уже из setup.sh"
 
-echo "[install_trellis2] pip install -e (критично)"
+echo "[install_trellis2] пакет trellis2 (TRELLIS.2 без setup.py — только PYTHONPATH)"
 if [[ -f setup.py ]] || [[ -f pyproject.toml ]]; then
   pip3 install --no-cache-dir --timeout "${PIP_DEFAULT_TIMEOUT}" --retries "${PIP_RETRIES}" \
     -e "${TRELLIS_ROOT}"
+elif [[ -f trellis2/__init__.py ]]; then
+  PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
+import sys
+from pathlib import Path
+
+root = Path(".").resolve()
+if str(root) not in sys.path:
+    sys.path.insert(0, str(root))
+import trellis2  # noqa: F401
+
+print(f"[install_trellis2] trellis2 OK ({root / 'trellis2'})")
+PY
 else
-  echo "[install_trellis2] ERROR: нет setup.py/pyproject.toml в ${TRELLIS_ROOT}" >&2
+  echo "[install_trellis2] ERROR: нет trellis2/ в ${TRELLIS_ROOT} — git clone не удался?" >&2
+  ls -la "${TRELLIS_ROOT}" >&2 || true
   exit 1
 fi
 
