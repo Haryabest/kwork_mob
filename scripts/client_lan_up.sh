@@ -64,12 +64,12 @@ Grafana:    http://${HOST}:3003
 
 Staff:      admin@example.com / admin1234  (ADMIN_2FA_REQUIRED=false в .env)
 
-Фронты (2 терминала, нужен Node 20+):
-  cd apps/web-seller && npm i && NEXT_PUBLIC_API_URL=http://${HOST}:8000/api/v1 npm run dev -- -H 0.0.0.0
-  cd apps/web-admin  && npm i && VITE_API_URL=http://${HOST}:8000/api/v1 npm run dev -- --host
+Фронты (одна команда, нужен Node 20+):
+  ./scripts/client_lan_frontends.sh
 
 Seller:     http://${HOST}:3000
 Admin:      http://${HOST}:3001
 
+Остановить фронты: ./scripts/client_lan_frontends.sh stop
 Воркер:     docker logs -f kwork-worker
 EOF
