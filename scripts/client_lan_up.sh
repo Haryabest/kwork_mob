@@ -34,9 +34,12 @@ docker compose exec -T orchestrator python scripts/seed_staff.py || true
 
 if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
   echo "[client_lan] GPU worker…"
+  chmod +x "$ROOT/worker/entrypoint.sh" "$ROOT/worker/scripts/"*.sh 2>/dev/null || true
   docker rm -f kwork-worker 2>/dev/null || true
   docker run -d --gpus all --name kwork-worker --restart unless-stopped \
     --add-host=host.docker.internal:host-gateway \
+    -v "$ROOT/worker/entrypoint.sh:/usr/local/bin/worker_entrypoint.sh:ro" \
+    -v "$ROOT/worker/scripts:/app/scripts:ro" \
     -e WORKER_ID="${WORKER_ID:-client-gpu-01}" \
     -e WORKER_TOKEN="${WORKER_TOKEN:-worker-dev-token}" \
     -e WORKER_PIPELINE_MODE="${WORKER_PIPELINE_MODE:-trellis}" \
