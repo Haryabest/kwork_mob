@@ -51,16 +51,12 @@ fi
 export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"
 
 SETUP_FLAGS=(--basic --nvdiffrast --nvdiffrec --cumesh --o-voxel)
-DEFER_FLEXGEMM=0
-if [[ "${DOCKER_BUILD:-}" == "1" ]] || ! python3 -c "import torch; import sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
-  DEFER_FLEXGEMM=1
-  echo "[install_trellis2] GPU driver недоступен — flexgemm отложен до старта контейнера"
-fi
-if [[ "${DEFER_FLEXGEMM}" == "0" ]]; then
-  SETUP_FLAGS+=(--flexgemm)
-else
+if [[ "${DOCKER_BUILD:-}" == "1" ]]; then
+  echo "[install_trellis2] docker build — flexgemm отложен до старта контейнера"
   mkdir -p /var/lib/worker
   touch /var/lib/worker/defer_flexgemm
+else
+  SETUP_FLAGS+=(--flexgemm)
 fi
 
 echo "[install_trellis2] setup.sh (без --flash-attn, без --new-env)"
@@ -88,7 +84,10 @@ if [[ -f setup.py ]] || [[ -f pyproject.toml ]]; then
   pip3 install --no-cache-dir --timeout "${PIP_DEFAULT_TIMEOUT}" --retries "${PIP_RETRIES}" \
     -e "${TRELLIS_ROOT}"
 elif [[ -f trellis2/__init__.py ]]; then
-  PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
+  if [[ "${DOCKER_BUILD:-}" == "1" ]]; then
+    echo "[install_trellis2] trellis2 package OK (${TRELLIS_ROOT}/trellis2)"
+  else
+    PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
 import sys
 from pathlib import Path
 
@@ -99,6 +98,7 @@ import trellis2  # noqa: F401
 
 print(f"[install_trellis2] trellis2 OK ({root / 'trellis2'})")
 PY
+  fi
 else
   echo "[install_trellis2] ERROR: нет trellis2/ в ${TRELLIS_ROOT} — git clone не удался?" >&2
   ls -la "${TRELLIS_ROOT}" >&2 || true
@@ -106,19 +106,22 @@ else
 fi
 
 echo "[install_trellis2] verify cumesh + o_voxel"
-PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
+PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" DOCKER_BUILD="${DOCKER_BUILD:-}" python3 - <<'PY'
+import os
+
 import cumesh  # noqa: F401
 import o_voxel  # noqa: F401
 
 print("[install_trellis2] cumesh + o_voxel OK")
-import torch
-
-if torch.cuda.is_available():
-    from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: F401
-
-    print("[install_trellis2] Trellis2ImageTo3DPipeline OK")
+if os.environ.get("DOCKER_BUILD") == "1":
+    print("[install_trellis2] pipeline import пропущен (docker build)")
 else:
-    print("[install_trellis2] pipeline import пропущен (нет GPU driver на build)")
+    import torch
+
+    if torch.cuda.is_available():
+        from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: F401
+
+        print("[install_trellis2] Trellis2ImageTo3DPipeline OK")
 PY
 
 mkdir -p "${WEIGHTS_DIR}"

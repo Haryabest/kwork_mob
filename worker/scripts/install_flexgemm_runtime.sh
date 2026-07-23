@@ -10,9 +10,13 @@ command -v nvidia-smi >/dev/null 2>&1 || exit 0
 
 python3 - <<'PY' || exit 0
 import sys
-import torch
 
-sys.exit(0 if torch.cuda.is_available() else 1)
+try:
+    import torch
+
+    sys.exit(0 if torch.cuda.is_available() else 1)
+except Exception:
+    sys.exit(1)
 PY
 
 echo "[flexgemm] GPU доступен — setup.sh --flexgemm"
