@@ -672,6 +672,7 @@ class WorkerAgent:
 
         if msg_type == "task":
             task_id = data["task_id"]
+            logger.info("Received task %s", task_id)
             if (
                 self.current_task == task_id
                 and self._task_coro is not None

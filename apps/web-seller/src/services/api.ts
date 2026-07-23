@@ -3,13 +3,24 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { auth } from '../lib/auth';
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+/** LAN/dev: через Next proxy (/api/v1), иначе прямой URL из env. */
+export function getApiUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl?.startsWith('/')) return envUrl;
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname;
+    if (h !== 'localhost' && h !== '127.0.0.1') return '/api/v1';
+  }
+  return envUrl || 'http://localhost:8000/api/v1';
+}
+
+export const API_URL = getApiUrl();
 
 /** WS на :8000 при прокси API через Next (/api/v1). */
 export function wsBase(): string {
   const explicit = process.env.NEXT_PUBLIC_WS_URL;
   if (explicit) return explicit.replace(/\/$/, '');
-  const http = API_URL.replace(/\/api\/v1\/?$/, '');
+  const http = getApiUrl().replace(/\/api\/v1\/?$/, '');
   if (!http || http.startsWith('/')) {
     if (typeof window !== 'undefined') {
       const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -21,11 +32,11 @@ export function wsBase(): string {
 }
 
 export const api = axios.create({
-  baseURL: API_URL,
   withCredentials: true,
 });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  config.baseURL = config.baseURL || getApiUrl();
   const token = auth.getAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
@@ -42,7 +53,7 @@ api.interceptors.response.use(
     }
     request._retry = true;
     refreshing ??= axios
-      .post(`${API_URL}/auth/refresh`, {}, { withCredentials: true })
+      .post(`${getApiUrl()}/auth/refresh`, {}, { withCredentials: true })
       .then(() => true)
       .catch(() => {
         auth.clear();

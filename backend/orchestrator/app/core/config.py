@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ORCHESTRATOR_ROOT = Path(__file__).resolve().parents[2]
@@ -179,6 +179,36 @@ class Settings(BaseSettings):
             return 0
         return value
 
+    @model_validator(mode="after")
+    def _enrich_cors_origins(self) -> "Settings":
+        from urllib.parse import urlparse
+
+        origins = list(self.CORS_ORIGINS)
+        seen = set(origins)
+
+        def add(url: str) -> None:
+            u = (url or "").strip().rstrip("/")
+            if u and u not in seen:
+                origins.append(u)
+                seen.add(u)
+
+        add(self.SELLER_PUBLIC_URL)
+        parsed = urlparse(self.SELLER_PUBLIC_URL)
+        if parsed.hostname:
+            scheme = parsed.scheme or "http"
+            host = parsed.hostname
+            add(f"{scheme}://{host}:3000")
+            add(f"{scheme}://{host}:3001")
+        api = urlparse(self.API_BASE_URL)
+        if api.hostname:
+            scheme = api.scheme or "http"
+            host = api.hostname
+            add(f"{scheme}://{host}:3000")
+            add(f"{scheme}://{host}:3001")
+
+        object.__setattr__(self, "CORS_ORIGINS", origins)
+        return self
+
     # §11.3.3 / soft-launch: лимит расходов на облачные GPU (0 = без лимита)
     CLOUD_MONTHLY_BUDGET_RUB: int = 0
     CLOUD_DAILY_BUDGET_RUB: int = 0
@@ -290,7 +320,7 @@ class Settings(BaseSettings):
     MARKETPLACE_UPLOAD_MAX_RETRIES: int = 3
 
     # §10.6.3 MinIO SSE: none | sse-s3 | sse-kms
-    MINIO_SSE_MODE: str = "sse-s3"
+    MINIO_SSE_MODE: str = "none"
     MINIO_KMS_KEY_ID: str = ""  # Key ID для SSE-KMS (MinIO / Vault Transit)
     VAULT_MINIO_KMS_KEY_PATH: str = "secret/data/kwork/minio_kms_key_id"
 

@@ -7,6 +7,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+chmod +x scripts/client_lan_frontends.sh scripts/client_lan_up.sh 2>/dev/null || true
 
 if [[ ! -f .env ]]; then
   echo "[client_lan] скопируйте .env.example → .env и задайте CLIENT_HOST" >&2
@@ -21,6 +22,7 @@ set +a
 HOST="${CLIENT_HOST:-192.168.0.177}"
 export API_BASE_URL="${API_BASE_URL:-http://${HOST}:8000}"
 export SELLER_PUBLIC_URL="${SELLER_PUBLIC_URL:-http://${HOST}:3000}"
+export MINIO_SSE_MODE="${MINIO_SSE_MODE:-none}"
 
 echo "[client_lan] HOST=$HOST"
 echo "[client_lan] docker compose up…"
@@ -45,6 +47,7 @@ if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
     -e ATTN_BACKEND="${ATTN_BACKEND:-xformers}" \
     -e ORCHESTRATOR_WS_URL="ws://host.docker.internal:8000/ws/worker" \
     -e ORCHESTRATOR_HTTP_URL="http://host.docker.internal:8000" \
+    -e REDIS_URL="${REDIS_URL:-redis://host.docker.internal:6382/0}" \
     -e MINIO_ENDPOINT="http://host.docker.internal:9010" \
     -e MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" \
     -e MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}" \

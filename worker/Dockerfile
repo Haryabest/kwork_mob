@@ -9,7 +9,8 @@
 #
 # Runtime E2E бюджет: ≤3 мин ПК / ≤5 мин облако (логируется worker_agent)
 
-FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
+# PyTorch cu128 + RTX Blackwell (sm_120): nvcc должен совпадать с torch.cuda
+FROM nvidia/cuda:12.8.2-devel-ubuntu22.04
 
 ARG INSTALL_TRELLIS=0
 ARG DOWNLOAD_WEIGHTS=1

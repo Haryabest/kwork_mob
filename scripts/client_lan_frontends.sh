@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+chmod +x scripts/client_lan_frontends.sh scripts/client_lan_up.sh 2>/dev/null || true
 
 if [[ ! -f .env ]]; then
   echo "[frontends] нет .env — скопируйте .env.example" >&2
@@ -48,19 +49,25 @@ echo "[frontends] npm install (seller + admin)…"
 
 echo "[frontends] API proxy → $API_PROXY (browser: /api/v1, WS: ws://${HOST}:8000)"
 
+cat >apps/web-seller/.env.local <<EOF
+NEXT_PUBLIC_API_URL=/api/v1
+NEXT_PUBLIC_WS_URL=ws://${HOST}:8000
+API_PROXY_TARGET=${API_PROXY}
+EOF
+
+cat >apps/web-admin/.env.local <<EOF
+VITE_API_URL=/api/v1
+API_PROXY_TARGET=${API_PROXY}
+EOF
+
 (
   cd apps/web-seller
-  export NEXT_PUBLIC_API_URL="/api/v1"
-  export NEXT_PUBLIC_WS_URL="ws://${HOST}:8000"
-  export API_PROXY_TARGET="$API_PROXY"
   exec npm run dev -- -H 0.0.0.0 -p 3000
 ) >"${LOG_DIR}/web-seller.log" 2>&1 &
 echo $! >"$PID_FILE"
 
 (
   cd apps/web-admin
-  export VITE_API_URL="/api/v1"
-  export API_PROXY_TARGET="$API_PROXY"
   exec npm run dev -- --host --port 3001
 ) >"${LOG_DIR}/web-admin.log" 2>&1 &
 echo $! >>"$PID_FILE"

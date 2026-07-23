@@ -42,12 +42,13 @@ export NINJAFLAGS="-j${MAX_JOBS}"
 
 echo "[install_trellis2] setup.sh (без --flash-attn, без --new-env)"
 if [[ -f setup.sh ]]; then
-  # Как в README TRELLIS.2, но flash-attn опционален — см. ATTN_BACKEND=xformers в Dockerfile.
-  bash setup.sh --basic --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm \
-    || echo "[warn] setup.sh завершился с ошибкой — проверьте deps на GPU-хосте"
+  bash setup.sh --basic --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm
 fi
 
 echo "[install_trellis2] доп. зависимости TRELLIS.2"
+pip3 install --no-cache-dir \
+  easydict opencv-python-headless trimesh transformers kornia timm zstandard \
+  imageio imageio-ffmpeg tqdm ninja
 pip3 install --no-cache-dir huggingface_hub
 pip3 install --no-cache-dir xformers || echo "[warn] xformers не установлен — нужен ATTN_BACKEND=xformers"
 if [[ "${INSTALL_FLASH_ATTN}" == "1" ]]; then
@@ -80,6 +81,15 @@ else
   ls -la "${TRELLIS_ROOT}" >&2 || true
   exit 1
 fi
+
+echo "[install_trellis2] verify cumesh + trellis2 pipeline"
+PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
+import cumesh  # noqa: F401
+import o_voxel  # noqa: F401
+from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: F401
+
+print("[install_trellis2] cumesh + Trellis2ImageTo3DPipeline OK")
+PY
 
 mkdir -p "${WEIGHTS_DIR}"
 
