@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { api, API_URL } from '../services/api';
+import { api, wsBase } from '../services/api';
 
 export type QueueWsEvent = {
   order_id: number;
@@ -22,11 +22,6 @@ const QueueWsContext = createContext<QueueWsContextValue>({
   lastEvent: null,
   clearPending: () => undefined,
 });
-
-function wsBase(): string {
-  const http = API_URL.replace(/\/api\/v1\/?$/, '');
-  return http.replace(/^http/, 'ws');
-}
 
 export function QueueWsProvider({ children }: { children: ReactNode }) {
   const [live, setLive] = useState(false);

@@ -17,7 +17,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SellerShell } from '../../../components/SellerShell';
 import { PageHeader, Surface } from '../../../components/ui';
-import { api, apiMessage, API_URL } from '../../../services/api';
+import { api, apiMessage, wsBase } from '../../../services/api';
 
 type OrderDetail = {
   id: number;
@@ -42,11 +42,6 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: 'Отменён',
   blocked_nsfw: 'NSFW блок',
 };
-
-function wsBase(): string {
-  const http = API_URL.replace(/\/api\/v1\/?$/, '');
-  return http.replace(/^http/, 'ws');
-}
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();

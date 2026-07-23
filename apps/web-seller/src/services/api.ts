@@ -5,6 +5,21 @@ import { auth } from '../lib/auth';
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
+/** WS на :8000 при прокси API через Next (/api/v1). */
+export function wsBase(): string {
+  const explicit = process.env.NEXT_PUBLIC_WS_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const http = API_URL.replace(/\/api\/v1\/?$/, '');
+  if (!http || http.startsWith('/')) {
+    if (typeof window !== 'undefined') {
+      const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${wsProto}//${window.location.hostname}:8000`;
+    }
+    return 'ws://localhost:8000';
+  }
+  return http.replace(/^http/, 'ws');
+}
+
 export const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
