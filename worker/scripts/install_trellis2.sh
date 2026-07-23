@@ -32,15 +32,20 @@ _install_basic_pip() {
     || echo "[warn] utils3d не установлен"
 }
 
+_install_cumesh_only() {
+  echo "[install_trellis2] cumesh (nvcc, без o-voxel/flexgemm на build)"
+  if python3 -c "import cumesh" 2>/dev/null; then
+    return 0
+  fi
+  pip3 install --no-cache-dir "git+https://github.com/JeffreyXiang/CuMesh.git" --no-build-isolation
+}
+
 _install_cumesh_o_voxel() {
-  echo "[install_trellis2] cumesh + o-voxel (nvcc, без GPU driver)"
+  _install_cumesh_only
   if [[ -d o-voxel ]]; then
     pip3 install --no-cache-dir ./o-voxel --no-build-isolation
   else
     pip3 install --no-cache-dir o-voxel || true
-  fi
-  if ! python3 -c "import cumesh" 2>/dev/null; then
-    pip3 install --no-cache-dir "git+https://github.com/JeffreyXiang/CuMesh.git" --no-build-isolation
   fi
 }
 
@@ -73,13 +78,19 @@ PY
 }
 
 _verify_build() {
-  echo "[install_trellis2] verify cumesh + o_voxel"
-  PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
+  local with_o_voxel="${1:-0}"
+  if [[ "${with_o_voxel}" == "1" ]]; then
+    echo "[install_trellis2] verify cumesh + o_voxel"
+    PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
 import cumesh  # noqa: F401
 import o_voxel  # noqa: F401
 
 print("[install_trellis2] cumesh + o_voxel OK")
 PY
+  else
+    echo "[install_trellis2] verify cumesh (o-voxel → runtime)"
+    python3 -c "import cumesh; print('[install_trellis2] cumesh OK')"
+  fi
   [[ -f trellis2/__init__.py ]] && echo "[install_trellis2] trellis2 package OK"
 }
 
@@ -95,8 +106,8 @@ PY
   mkdir -p /var/lib/worker
   touch /var/lib/worker/defer_trellis_runtime
   _install_basic_pip
-  _install_cumesh_o_voxel
-  _verify_build
+  _install_cumesh_only
+  _verify_build 0
   _download_weights
   echo "[install_trellis2] готово (runtime: setup.sh при старте контейнера)"
   exit 0
@@ -135,6 +146,6 @@ elif [[ -f trellis2/__init__.py ]]; then
   PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 -c "import trellis2; print('trellis2 OK')"
 fi
 
-_verify_build
+_verify_build 1
 _download_weights
 echo "[install_trellis2] готово"

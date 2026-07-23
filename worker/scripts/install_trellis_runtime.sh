@@ -26,8 +26,12 @@ export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
 export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"
 
 if [[ -f setup.sh ]]; then
-  bash setup.sh --basic --nvdiffrast --nvdiffrec --flexgemm
+  bash setup.sh --o-voxel --flexgemm --nvdiffrast --nvdiffrec
+elif [[ -d o-voxel ]]; then
+  pip3 install --no-cache-dir ./o-voxel --no-build-isolation
 fi
+
+python3 -c "import o_voxel; print('[trellis-runtime] o_voxel OK')"
 
 PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
 from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: F401
