@@ -26,7 +26,7 @@ if [ -n "${TAILSCALE_AUTH_KEY:-}" ] && command -v tailscaled >/dev/null 2>&1; th
 fi
 
 if [ -f /app/scripts/install_trellis_runtime.sh ]; then
-  sh /app/scripts/install_trellis_runtime.sh || true
+  bash /app/scripts/install_trellis_runtime.sh || true
 fi
 
 exec "$@"
