@@ -40,9 +40,32 @@ export MAX_JOBS="${MAX_JOBS:-2}"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
 export NINJAFLAGS="-j${MAX_JOBS}"
 
+# docker build не пробрасывает GPU — setup.sh иначе: "No supported GPU found"
+if ! command -v nvidia-smi >/dev/null 2>&1; then
+  echo "[install_trellis2] build без GPU: stub nvidia-smi для setup.sh"
+  mkdir -p /tmp/fake-bin
+  printf '#!/bin/sh\nexit 0\n' >/tmp/fake-bin/nvidia-smi
+  chmod +x /tmp/fake-bin/nvidia-smi
+  export PATH="/tmp/fake-bin:${PATH}"
+fi
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"
+
+SETUP_FLAGS=(--basic --nvdiffrast --nvdiffrec --cumesh --o-voxel)
+DEFER_FLEXGEMM=0
+if [[ "${DOCKER_BUILD:-}" == "1" ]] || ! python3 -c "import torch; import sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
+  DEFER_FLEXGEMM=1
+  echo "[install_trellis2] GPU driver недоступен — flexgemm отложен до старта контейнера"
+fi
+if [[ "${DEFER_FLEXGEMM}" == "0" ]]; then
+  SETUP_FLAGS+=(--flexgemm)
+else
+  mkdir -p /var/lib/worker
+  touch /var/lib/worker/defer_flexgemm
+fi
+
 echo "[install_trellis2] setup.sh (без --flash-attn, без --new-env)"
 if [[ -f setup.sh ]]; then
-  bash setup.sh --basic --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm
+  bash setup.sh "${SETUP_FLAGS[@]}"
 fi
 
 echo "[install_trellis2] доп. зависимости TRELLIS.2"
@@ -82,13 +105,20 @@ else
   exit 1
 fi
 
-echo "[install_trellis2] verify cumesh + trellis2 pipeline"
+echo "[install_trellis2] verify cumesh + o_voxel"
 PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
 import cumesh  # noqa: F401
 import o_voxel  # noqa: F401
-from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: F401
 
-print("[install_trellis2] cumesh + Trellis2ImageTo3DPipeline OK")
+print("[install_trellis2] cumesh + o_voxel OK")
+import torch
+
+if torch.cuda.is_available():
+    from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: F401
+
+    print("[install_trellis2] Trellis2ImageTo3DPipeline OK")
+else:
+    print("[install_trellis2] pipeline import пропущен (нет GPU driver на build)")
 PY
 
 mkdir -p "${WEIGHTS_DIR}"

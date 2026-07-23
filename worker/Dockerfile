@@ -2,7 +2,8 @@
 # FID (compute_fid.py) НЕ включается в production-образ
 #
 # Сборка production (рекомендуется):
-#   docker build --build-arg INSTALL_TRELLIS=1 --build-arg DOWNLOAD_WEIGHTS=1 -t kwork-worker .
+#   docker build --build-arg INSTALL_TRELLIS=1 --build-arg DOWNLOAD_WEIGHTS=1 -t kwork-worker:trellis2 .
+# flexgemm ставится при старте контейнера (--gpus all), не при docker build.
 # Dev без TRELLIS (только для локальной отладки оркестрации):
 #   docker build --build-arg INSTALL_TRELLIS=0 -t kwork-worker:dev .
 #   WORKER_PIPELINE_MODE=stub
@@ -80,11 +81,14 @@ RUN if [ "$INSTALL_TRELLIS" = "1" ]; then \
       test -f /app/trellis/trellis2/__init__.py; \
     fi
 
+RUN mkdir -p /var/lib/worker
+
 # setup.sh + xformers (без flash-attn по умолчанию) + веса (§5.1)
 COPY scripts/install_trellis2.sh /tmp/install_trellis2.sh
 RUN if [ "$INSTALL_TRELLIS" = "1" ]; then \
       chmod +x /tmp/install_trellis2.sh && \
       if [ "$TRELLIS_VERSION" = "2" ]; then \
+        DOCKER_BUILD=1 \
         DOWNLOAD_WEIGHTS="${DOWNLOAD_WEIGHTS}" \
         INSTALL_FLASH_ATTN="${INSTALL_FLASH_ATTN}" \
         TRELLIS_WEIGHTS=microsoft/TRELLIS.2-4B \
