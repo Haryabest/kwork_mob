@@ -196,6 +196,25 @@ body {
   gap: var(--vz-gap) !important;
 }
 
+.mantine-NavLink-root {
+  border-radius: 10px;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.mantine-NavLink-root[data-active] {
+  background-image: linear-gradient(135deg, #0057b8 0%, #0381e9 45%, #9403fd 100%);
+  color: #fff;
+}
+
+.mantine-NavLink-root[data-active] .mantine-NavLink-label {
+  color: #fff;
+  font-weight: 600;
+}
+
+.mantine-NavLink-root[data-active] .mantine-NavLink-section {
+  color: #fff;
+}
+
 .mantine-Tabs-list {
   gap: 0.45rem;
   flex-wrap: wrap;

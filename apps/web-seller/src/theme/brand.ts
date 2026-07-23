@@ -58,46 +58,8 @@ export const brandTheme: MantineThemeOverride = createTheme({
         return {};
       },
     },
-    NavLink: {
-      styles: {
-        root: {
-          borderRadius: 10,
-          transition: 'background 160ms ease, color 160ms ease',
-          '&[data-active]': {
-            backgroundImage: GRADIENT_PRIMARY,
-            color: '#fff',
-            '& .mantine-NavLink-label': { color: '#fff', fontWeight: 600 },
-            '& .mantine-NavLink-section': { color: '#fff' },
-          },
-        },
-      },
-    },
     Tabs: {
       defaultProps: { variant: 'pills', radius: 'xl' },
-      styles: {
-        list: {
-          gap: 8,
-          flexWrap: 'wrap',
-          borderBottom: 'none',
-        },
-        tab: {
-          border: '1px solid rgba(0,87,184,0.14)',
-          background: '#fff',
-          color: '#374151',
-          fontWeight: 600,
-          transition: 'background 160ms ease, color 160ms ease, box-shadow 160ms ease, border-color 160ms ease',
-          '&[data-active]': {
-            backgroundImage: GRADIENT_PRIMARY,
-            color: '#fff !important',
-            borderColor: 'transparent',
-            boxShadow: '0 8px 18px rgba(0, 87, 184, 0.28)',
-          },
-          '&[data-active]:hover': {
-            backgroundImage: GRADIENT_PRIMARY,
-            color: '#fff',
-          },
-        },
-      },
     },
     AppShell: {
       styles: {
