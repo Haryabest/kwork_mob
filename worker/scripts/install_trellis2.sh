@@ -16,117 +16,39 @@ fi
 cd "${TRELLIS_ROOT}"
 export PIP_DEFAULT_TIMEOUT="${PIP_DEFAULT_TIMEOUT:-1200}"
 export PIP_RETRIES="${PIP_RETRIES:-15}"
-
-echo "[install_trellis2] torch cu128 уже в образе — проверка"
-python3 - <<'PY'
-import sys
-import torch
-cuda = getattr(torch.version, "cuda", None) or ""
-if "12.8" not in cuda:
-    print(f"[warn] ожидался PyTorch cu128, получен cuda={cuda}", file=sys.stderr)
-else:
-    print(f"[install_trellis2] torch {torch.__version__} cuda={cuda}")
-PY
-
-echo "[install_trellis2] requirements.txt"
-if [[ -f requirements.txt ]]; then
-  pip3 install --no-cache-dir --timeout "${PIP_DEFAULT_TIMEOUT}" --retries "${PIP_RETRIES}" \
-    -r requirements.txt
-fi
-
-INSTALL_FLASH_ATTN="${INSTALL_FLASH_ATTN:-0}"
-# Ограничиваем параллельную компиляцию — иначе Docker/WSL падает с EOF (OOM).
 export MAX_JOBS="${MAX_JOBS:-2}"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
 export NINJAFLAGS="-j${MAX_JOBS}"
-
-# docker build не пробрасывает GPU — setup.sh иначе: "No supported GPU found"
-if ! command -v nvidia-smi >/dev/null 2>&1; then
-  echo "[install_trellis2] build без GPU: stub nvidia-smi для setup.sh"
-  mkdir -p /tmp/fake-bin
-  printf '#!/bin/sh\nexit 0\n' >/tmp/fake-bin/nvidia-smi
-  chmod +x /tmp/fake-bin/nvidia-smi
-  export PATH="/tmp/fake-bin:${PATH}"
-fi
 export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"
 
-SETUP_FLAGS=(--basic --nvdiffrast --nvdiffrec --cumesh --o-voxel)
-if [[ "${DOCKER_BUILD:-}" == "1" ]]; then
-  echo "[install_trellis2] docker build — flexgemm отложен до старта контейнера"
-  mkdir -p /var/lib/worker
-  touch /var/lib/worker/defer_flexgemm
-else
-  SETUP_FLAGS+=(--flexgemm)
-fi
+_install_basic_pip() {
+  echo "[install_trellis2] базовые pip-зависимости"
+  pip3 install --no-cache-dir \
+    easydict opencv-python-headless trimesh transformers kornia timm zstandard \
+    imageio imageio-ffmpeg tqdm ninja huggingface_hub
+  pip3 install --no-cache-dir xformers || echo "[warn] xformers не установлен"
+  pip3 install --no-cache-dir \
+    "git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8" \
+    || echo "[warn] utils3d не установлен"
+}
 
-echo "[install_trellis2] setup.sh (без --flash-attn, без --new-env)"
-if [[ -f setup.sh ]]; then
-  bash setup.sh "${SETUP_FLAGS[@]}"
-fi
-
-echo "[install_trellis2] доп. зависимости TRELLIS.2"
-pip3 install --no-cache-dir \
-  easydict opencv-python-headless trimesh transformers kornia timm zstandard \
-  imageio imageio-ffmpeg tqdm ninja
-pip3 install --no-cache-dir huggingface_hub
-pip3 install --no-cache-dir xformers || echo "[warn] xformers не установлен — нужен ATTN_BACKEND=xformers"
-if [[ "${INSTALL_FLASH_ATTN}" == "1" ]]; then
-  echo "[install_trellis2] flash-attn (долго, нужно ≥16 GB RAM Docker)"
-  pip3 install --no-cache-dir flash-attn --no-build-isolation \
-    || echo "[warn] flash-attn не собрался"
-else
-  echo "[install_trellis2] flash-attn пропущен (INSTALL_FLASH_ATTN=0, ATTN_BACKEND=xformers)"
-fi
-pip3 install --no-cache-dir o-voxel || echo "[warn] o-voxel pip — возможно уже из setup.sh"
-
-echo "[install_trellis2] пакет trellis2 (TRELLIS.2 без setup.py — только PYTHONPATH)"
-if [[ -f setup.py ]] || [[ -f pyproject.toml ]]; then
-  pip3 install --no-cache-dir --timeout "${PIP_DEFAULT_TIMEOUT}" --retries "${PIP_RETRIES}" \
-    -e "${TRELLIS_ROOT}"
-elif [[ -f trellis2/__init__.py ]]; then
-  if [[ "${DOCKER_BUILD:-}" == "1" ]]; then
-    echo "[install_trellis2] trellis2 package OK (${TRELLIS_ROOT}/trellis2)"
+_install_cumesh_o_voxel() {
+  echo "[install_trellis2] cumesh + o-voxel (nvcc, без GPU driver)"
+  if [[ -d o-voxel ]]; then
+    pip3 install --no-cache-dir ./o-voxel --no-build-isolation
   else
-    PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
-import sys
-from pathlib import Path
-
-root = Path(".").resolve()
-if str(root) not in sys.path:
-    sys.path.insert(0, str(root))
-import trellis2  # noqa: F401
-
-print(f"[install_trellis2] trellis2 OK ({root / 'trellis2'})")
-PY
+    pip3 install --no-cache-dir o-voxel || true
   fi
-else
-  echo "[install_trellis2] ERROR: нет trellis2/ в ${TRELLIS_ROOT} — git clone не удался?" >&2
-  ls -la "${TRELLIS_ROOT}" >&2 || true
-  exit 1
-fi
+  if ! python3 -c "import cumesh" 2>/dev/null; then
+    pip3 install --no-cache-dir "git+https://github.com/JeffreyXiang/CuMesh.git" --no-build-isolation
+  fi
+}
 
-echo "[install_trellis2] verify cumesh + o_voxel"
-PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" DOCKER_BUILD="${DOCKER_BUILD:-}" python3 - <<'PY'
-import os
-
-import cumesh  # noqa: F401
-import o_voxel  # noqa: F401
-
-print("[install_trellis2] cumesh + o_voxel OK")
-if os.environ.get("DOCKER_BUILD") == "1":
-    print("[install_trellis2] pipeline import пропущен (docker build)")
-else:
-    import torch
-
-    if torch.cuda.is_available():
-        from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: F401
-
-        print("[install_trellis2] Trellis2ImageTo3DPipeline OK")
-PY
-
-mkdir -p "${WEIGHTS_DIR}"
-
-if [[ "${DOWNLOAD_WEIGHTS}" == "1" ]]; then
+_download_weights() {
+  mkdir -p "${WEIGHTS_DIR}"
+  if [[ "${DOWNLOAD_WEIGHTS}" != "1" ]]; then
+    return 0
+  fi
   echo "[install_trellis2] веса ${TRELLIS_WEIGHTS} → ${WEIGHTS_DIR}"
   if [[ -f scripts/download_weights.sh ]]; then
     bash scripts/download_weights.sh "${WEIGHTS_DIR}" || true
@@ -148,6 +70,71 @@ except Exception as exc:
     print(f"[warn] HF download: {exc}")
 PY
   fi
+}
+
+_verify_build() {
+  echo "[install_trellis2] verify cumesh + o_voxel"
+  PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
+import cumesh  # noqa: F401
+import o_voxel  # noqa: F401
+
+print("[install_trellis2] cumesh + o_voxel OK")
+PY
+  [[ -f trellis2/__init__.py ]] && echo "[install_trellis2] trellis2 package OK"
+}
+
+# docker build: без GPU driver — не трогаем requirements.txt/setup.sh (там flexgemm → torch.cuda)
+if [[ "${DOCKER_BUILD:-}" == "1" ]]; then
+  echo "[install_trellis2] режим docker build (без setup.sh / requirements.txt)"
+  python3 - <<'PY'
+import torch
+
+cuda = getattr(torch.version, "cuda", None) or ""
+print(f"[install_trellis2] torch {torch.__version__} cuda={cuda}")
+PY
+  mkdir -p /var/lib/worker
+  touch /var/lib/worker/defer_trellis_runtime
+  _install_basic_pip
+  _install_cumesh_o_voxel
+  _verify_build
+  _download_weights
+  echo "[install_trellis2] готово (runtime: setup.sh при старте контейнера)"
+  exit 0
 fi
 
+echo "[install_trellis2] torch cu128 уже в образе — проверка"
+python3 - <<'PY'
+import sys
+import torch
+
+cuda = getattr(torch.version, "cuda", None) or ""
+if "12.8" not in cuda:
+    print(f"[warn] ожидался PyTorch cu128, получен cuda={cuda}", file=sys.stderr)
+else:
+    print(f"[install_trellis2] torch {torch.__version__} cuda={cuda}")
+PY
+
+echo "[install_trellis2] requirements.txt"
+if [[ -f requirements.txt ]]; then
+  pip3 install --no-cache-dir --timeout "${PIP_DEFAULT_TIMEOUT}" --retries "${PIP_RETRIES}" \
+    -r requirements.txt
+fi
+
+if [[ -f setup.sh ]]; then
+  echo "[install_trellis2] setup.sh (полный)"
+  bash setup.sh --basic --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm
+fi
+
+_install_basic_pip
+pip3 install --no-cache-dir o-voxel || true
+
+if [[ -f setup.py ]] || [[ -f pyproject.toml ]]; then
+  pip3 install --no-cache-dir --timeout "${PIP_DEFAULT_TIMEOUT}" --retries "${PIP_RETRIES}" \
+    -e "${TRELLIS_ROOT}"
+elif [[ -f trellis2/__init__.py ]]; then
+  PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 -c "import trellis2; print('trellis2 OK')"
+fi
+
+_verify_build
+_download_weights
 echo "[install_trellis2] готово"

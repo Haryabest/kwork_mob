@@ -25,8 +25,8 @@ if [ -n "${TAILSCALE_AUTH_KEY:-}" ] && command -v tailscaled >/dev/null 2>&1; th
   fi
 fi
 
-if [ -f /app/scripts/install_flexgemm_runtime.sh ]; then
-  sh /app/scripts/install_flexgemm_runtime.sh || true
+if [ -f /app/scripts/install_trellis_runtime.sh ]; then
+  sh /app/scripts/install_trellis_runtime.sh || true
 fi
 
 exec "$@"
