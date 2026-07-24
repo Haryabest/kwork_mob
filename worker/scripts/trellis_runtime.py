@@ -173,6 +173,7 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
 
     decimation = int(os.getenv("TRELLIS2_DECIMATION", "300000"))
     texture_size = _texture_size_for_task(task_dir) if task_dir else int(os.getenv("TRELLIS2_TEXTURE_SIZE", "1024"))
+    use_webp = os.getenv("TRELLIS2_EXTENSION_WEBP", "0").lower() in ("1", "true", "yes")
 
     glb = o_voxel.postprocess.to_glb(
         vertices=mesh.vertices,
@@ -190,7 +191,8 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         verbose=False,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
-    glb.export(str(output), extension_webp=True)
+    glb.export(str(output), extension_webp=use_webp)
+    logger.info("TRELLIS.2 export extension_webp=%s texture_size=%s", use_webp, texture_size)
 
 
 def _export_result(result, output: Path) -> None:

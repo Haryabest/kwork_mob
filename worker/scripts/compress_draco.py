@@ -137,6 +137,13 @@ def main(task_dir: str) -> None:
         _write_result(root, dst, marketplace)
         return
 
+    src_size = src.stat().st_size
+    if src_size <= max_limit and os.getenv("COMPRESS_DRACO_FORCE", "0") not in ("1", "true", "yes"):
+        shutil.copy2(src, dst)
+        print(f"[compress_draco] under limit, copy as-is → {dst} ({src_size} bytes)")
+        _write_result(root, dst, marketplace)
+        return
+
     current = src
     if _try_gltf_webp(current, dst):
         size = dst.stat().st_size
