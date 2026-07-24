@@ -26,7 +26,15 @@ if [ -n "${TAILSCALE_AUTH_KEY:-}" ] && command -v tailscaled >/dev/null 2>&1; th
 fi
 
 if [ -f /app/scripts/install_trellis_runtime.sh ]; then
-  bash /app/scripts/install_trellis_runtime.sh || true
+  if [ "${WORKER_PIPELINE_MODE:-}" = "trellis" ] && [ "${TRELLIS_ALLOW_STUB_FALLBACK:-0}" != "1" ]; then
+    bash /app/scripts/install_trellis_runtime.sh
+  else
+    bash /app/scripts/install_trellis_runtime.sh || true
+  fi
+fi
+
+if [ -f /app/scripts/install_gltf_transform.sh ]; then
+  bash /app/scripts/install_gltf_transform.sh || true
 fi
 
 exec "$@"

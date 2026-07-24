@@ -26,9 +26,11 @@ ARG BLENDER_VERSION=4.2.3
 RUN apt-get update && apt-get install -y \
     python3.10 python3-pip libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 \
     libxrender-dev libgomp1 git wget unzip ffmpeg curl ca-certificates xz-utils \
-    nodejs npm postgresql-client cmake g++ libx11-dev libxi-dev libgl1-mesa-dev && \
-    rm -rf /var/lib/apt/lists/* && \
-    npm install -g @gltf-transform/cli || true
+    gnupg postgresql-client cmake g++ libx11-dev libxi-dev libgl1-mesa-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY scripts/install_gltf_transform.sh /tmp/install_gltf_transform.sh
+RUN chmod +x /tmp/install_gltf_transform.sh && bash /tmp/install_gltf_transform.sh && rm -f /tmp/install_gltf_transform.sh
 
 # Blender LTS headless (§6.4 PBR bake, §6 video_360 / USDZ)
 RUN if [ "$INSTALL_BLENDER" = "1" ]; then \

@@ -28,7 +28,12 @@ if python3 -c "${RUNTIME_OK_PY}" 2>/dev/null; then
   exit 0
 fi
 
-[ -f "${MARKER}" ] || exit 0
+# После docker rm пакеты пропадают, а маркер defer мог не сохраниться в volume — не выходим молча.
+if [ ! -f "${MARKER}" ]; then
+  echo "[trellis-runtime] o_voxel/flex_gemm нет — запуск setup (маркер defer не обязателен)"
+  mkdir -p /var/lib/worker
+  touch "${MARKER}"
+fi
 command -v nvidia-smi >/dev/null 2>&1 || { echo "[trellis-runtime] нет nvidia-smi"; exit 0; }
 
 python3 - <<'PY' || { echo "[trellis-runtime] CUDA недоступна"; exit 0; }

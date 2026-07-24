@@ -40,6 +40,7 @@ if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
   echo "[client_lan] GPU worker…"
   chmod +x "$ROOT/worker/entrypoint.sh" "$ROOT/worker/scripts/"*.sh 2>/dev/null || true
   docker volume create kwork_worker_state >/dev/null 2>&1 || true
+  mkdir -p "${HF_CACHE_DIR:-$HOME/hf_cache}"
   if docker ps -a --format '{{.Names}}' | grep -qx kwork-worker; then
     if [[ "${WORKER_FORCE_RECREATE:-0}" == "1" ]]; then
       docker rm -f kwork-worker 2>/dev/null || true
@@ -52,6 +53,7 @@ if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
   docker run -d --gpus all --name kwork-worker --restart unless-stopped \
     --add-host=host.docker.internal:host-gateway \
     -v kwork_worker_state:/var/lib/worker \
+    -v "${HF_CACHE_DIR:-$HOME/hf_cache}:/root/.cache/huggingface" \
     -v "$ROOT/worker/entrypoint.sh:/usr/local/bin/worker_entrypoint.sh:ro" \
     -v "$ROOT/worker/scripts:/app/scripts:ro" \
     -v "$ROOT/worker/worker_agent.py:/app/worker_agent.py:ro" \
@@ -70,6 +72,8 @@ if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
     -e MINIO_ENDPOINT="http://host.docker.internal:9010" \
     -e MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" \
     -e MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}" \
+    -e HF_TOKEN="${HF_TOKEN:-}" \
+    -e QUALITY_THRESHOLD="${QUALITY_THRESHOLD:-0.4}" \
     -e WATERMARK_HMAC_SECRET="${WATERMARK_HMAC_SECRET:-change-me-watermark-secret}" \
     kwork-worker:trellis2
   fi
