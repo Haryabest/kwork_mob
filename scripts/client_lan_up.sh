@@ -36,9 +36,19 @@ docker compose exec -T orchestrator python scripts/seed_staff.py || true
 if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
   echo "[client_lan] GPU worker…"
   chmod +x "$ROOT/worker/entrypoint.sh" "$ROOT/worker/scripts/"*.sh 2>/dev/null || true
-  docker rm -f kwork-worker 2>/dev/null || true
+  docker volume create kwork_worker_state >/dev/null 2>&1 || true
+  if docker ps -a --format '{{.Names}}' | grep -qx kwork-worker; then
+    if [[ "${WORKER_FORCE_RECREATE:-0}" == "1" ]]; then
+      docker rm -f kwork-worker 2>/dev/null || true
+    else
+      echo "[client_lan] воркер уже есть — restart (runtime не пересобирается)"
+      docker start kwork-worker 2>/dev/null || docker restart kwork-worker
+    fi
+  fi
+  if ! docker ps -a --format '{{.Names}}' | grep -qx kwork-worker; then
   docker run -d --gpus all --name kwork-worker --restart unless-stopped \
     --add-host=host.docker.internal:host-gateway \
+    -v kwork_worker_state:/var/lib/worker \
     -v "$ROOT/worker/entrypoint.sh:/usr/local/bin/worker_entrypoint.sh:ro" \
     -v "$ROOT/worker/scripts:/app/scripts:ro" \
     -v "$ROOT/worker/worker_agent.py:/app/worker_agent.py:ro" \
@@ -58,6 +68,7 @@ if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
     -e MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}" \
     -e WATERMARK_HMAC_SECRET="${WATERMARK_HMAC_SECRET:-change-me-watermark-secret}" \
     kwork-worker:trellis2
+  fi
 else
   echo "[client_lan] образ kwork-worker:trellis2 не найден — воркер пропущен"
 fi

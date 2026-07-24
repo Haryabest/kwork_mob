@@ -2,8 +2,22 @@
 # setup.sh (flexgemm, nvdiffrast…) — только при docker run --gpus all.
 set -eu
 
+DONE="/var/lib/worker/trellis_runtime_done"
 MARKER="/var/lib/worker/defer_trellis_runtime"
 TRELLIS_ROOT="${TRELLIS_ROOT:-/app/trellis}"
+
+if [ -f "${DONE}" ]; then
+  echo "[trellis-runtime] уже готово (volume), skip"
+  exit 0
+fi
+
+if python3 -c "import o_voxel" 2>/dev/null; then
+  echo "[trellis-runtime] o_voxel OK, skip setup"
+  mkdir -p /var/lib/worker
+  touch "${DONE}"
+  rm -f "${MARKER}"
+  exit 0
+fi
 
 [ -f "${MARKER}" ] || exit 0
 command -v nvidia-smi >/dev/null 2>&1 || { echo "[trellis-runtime] нет nvidia-smi"; exit 0; }
@@ -40,4 +54,6 @@ print("[trellis-runtime] Trellis2ImageTo3DPipeline OK")
 PY
 
 rm -f "${MARKER}"
+mkdir -p /var/lib/worker
+touch "${DONE}"
 echo "[trellis-runtime] готово"

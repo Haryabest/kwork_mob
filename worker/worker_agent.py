@@ -160,9 +160,22 @@ class WorkerAgent:
             "dwt_watermark_strength": 0.01,
         }
 
+    def _preflight_redis(self) -> None:
+        try:
+            pong = self.redis_client.ping()
+            logger.info("Redis preflight: %s url=%s", pong, REDIS_URL.split("@")[-1])
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Redis preflight failed (%s): %s", REDIS_URL, exc)
+            raise
+
     def acquire_lock(self, task_id: str) -> bool:
         key = f"task:{task_id}"
-        owner = self.redis_client.get(key)
+        try:
+            owner = self.redis_client.get(key)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Redis GET %s failed: %s", key, exc)
+            return False
+        logger.info("Lock %s owner=%r me=%r", task_id, owner, self.worker_id)
         if owner == self.worker_id:
             self.redis_client.expire(key, 120)
             return True
@@ -411,6 +424,13 @@ class WorkerAgent:
                 r.raise_for_status()
         logger.info("HTTP notify ok: %s task=%s", payload.get("type"), payload.get("task_id"))
 
+    async def _acquire_lock_async(self, task_id: str) -> bool:
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(self.acquire_lock, task_id), timeout=15)
+        except TimeoutError:
+            logger.error("acquire_lock timeout for %s", task_id)
+            return False
+
     async def start_task(self, task_id: str, payload: dict, ws) -> None:
         logger.info("start_task %s", task_id)
         if self._overheated:
@@ -423,7 +443,8 @@ class WorkerAgent:
             )
             return
 
-        if not self.acquire_lock(task_id):
+        if not await self._acquire_lock_async(task_id):
+            logger.warning("task_conflict %s (lock)", task_id)
             await self._notify_event({"type": "task_conflict", "task_id": task_id})
             return
 
@@ -825,6 +846,10 @@ class WorkerAgent:
                 return websockets.connect(url, **connect_kwargs)
 
     async def connect(self) -> None:
+        try:
+            await asyncio.to_thread(self._preflight_redis)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Redis unreachable — tasks will fail locks: %s", exc)
         try:
             await asyncio.to_thread(self._preflight_at_start)
         except Exception as exc:  # noqa: BLE001
