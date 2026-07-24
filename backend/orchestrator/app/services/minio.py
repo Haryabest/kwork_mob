@@ -43,7 +43,9 @@ class MinioService:
         vip = (getattr(settings, "MINIO_VIP", "") or "").strip()
         self._primary_endpoint = vip or settings.MINIO_ENDPOINT
         self._replica_endpoint = (getattr(settings, "MINIO_REPLICA_ENDPOINT", "") or "").strip()
+        public = (getattr(settings, "MINIO_PUBLIC_ENDPOINT", "") or "").strip()
         self.client = self._make_client(self._primary_endpoint)
+        self._presign_client = self._make_client(public) if public else self.client
         self._replica_client = (
             self._make_client(self._replica_endpoint) if self._replica_endpoint else None
         )
@@ -376,7 +378,7 @@ class MinioService:
         self, bucket: str, key: str, expires: int = 1800, method: str = "get_object"
     ) -> str:
         """Presigned URL: get_object (скачивание) или put_object (загрузка)."""
-        return self.client.generate_presigned_url(
+        return self._presign_client.generate_presigned_url(
             method,
             Params={"Bucket": bucket, "Key": key},
             ExpiresIn=expires,

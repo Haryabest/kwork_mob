@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str = ""
 
     MINIO_ENDPOINT: str = "http://localhost:9000"
+    MINIO_PUBLIC_ENDPOINT: str = ""  # presigned URL для браузера (LAN: http://CLIENT_HOST:9010)
     MINIO_REPLICA_ENDPOINT: str = ""  # §22.2.4 read-failover при недоступности primary
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"

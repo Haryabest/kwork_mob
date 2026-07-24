@@ -23,6 +23,7 @@ HOST="${CLIENT_HOST:-192.168.0.177}"
 export API_BASE_URL="${API_BASE_URL:-http://${HOST}:8000}"
 export SELLER_PUBLIC_URL="${SELLER_PUBLIC_URL:-http://${HOST}:3000}"
 export MINIO_SSE_MODE="${MINIO_SSE_MODE:-none}"
+export MINIO_PUBLIC_ENDPOINT="${MINIO_PUBLIC_ENDPOINT:-http://${HOST}:9010}"
 
 echo "[client_lan] HOST=$HOST"
 echo "[client_lan] docker compose up…"
