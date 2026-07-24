@@ -126,13 +126,23 @@ def _texture_size_for_meta(meta: dict) -> int:
 class WorkerAgent:
     def __init__(self) -> None:
         self.worker_id = WORKER_ID
-        self.redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+        self.redis_client = redis.from_url(
+            REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_timeout=10,
+        )
         self.minio = boto3.client(
             "s3",
             endpoint_url=MINIO_ENDPOINT,
             aws_access_key_id=MINIO_ACCESS_KEY,
             aws_secret_access_key=MINIO_SECRET_KEY,
-            config=Config(signature_version="s3v4"),
+            config=Config(
+                signature_version="s3v4",
+                connect_timeout=10,
+                read_timeout=60,
+                retries={"max_attempts": 3, "mode": "standard"},
+            ),
             region_name="us-east-1",
         )
         self.temp_dir = TEMP_DIR
@@ -157,7 +167,11 @@ class WorkerAgent:
             self.redis_client.expire(key, 120)
             return True
         if owner is None:
-            return bool(self.redis_client.set(key, self.worker_id, nx=True, ex=120))
+            ok = bool(self.redis_client.set(key, self.worker_id, nx=True, ex=120))
+            if not ok:
+                logger.warning("Lock not acquired for %s (race)", task_id)
+            return ok
+        logger.warning("Lock held by %s for %s", owner, task_id)
         return False
 
     def renew_lock(self, task_id: str) -> None:
@@ -398,6 +412,7 @@ class WorkerAgent:
         logger.info("HTTP notify ok: %s task=%s", payload.get("type"), payload.get("task_id"))
 
     async def start_task(self, task_id: str, payload: dict, ws) -> None:
+        logger.info("start_task %s", task_id)
         if self._overheated:
             await self._notify_event(
                 {
@@ -412,12 +427,14 @@ class WorkerAgent:
             await self._notify_event({"type": "task_conflict", "task_id": task_id})
             return
 
+        logger.info("Lock OK for %s", task_id)
         self.current_task = task_id
         self.status = "processing"
         self._stop_task = False
         models_bucket = payload.get("models_bucket") or "models"
         cached_url = payload.get("cached_result_url")
         if not cached_url:
+            logger.info("Checking cached model in s3://%s/models/%s/model.glb", models_bucket, task_id)
             existing_key = await asyncio.to_thread(self._existing_model_key, task_id, models_bucket)
             if existing_key:
                 cached_url = f"s3://{models_bucket}/{existing_key}"
@@ -437,7 +454,7 @@ class WorkerAgent:
 
         task_dir = self.temp_dir / task_id
         checkpoint_path = payload.get("checkpoint_path")
-        resume = bool(checkpoint_path) or self._remote_checkpoint_exists(task_id)
+        resume = bool(checkpoint_path) or await asyncio.to_thread(self._remote_checkpoint_exists, task_id)
 
         if task_dir.exists() and not resume:
             shutil.rmtree(task_dir, ignore_errors=True)
@@ -467,6 +484,7 @@ class WorkerAgent:
             elif not (photos_dir.exists() and any(photos_dir.iterdir())):
                 bucket = payload.get("photos_bucket") or "photos"
                 prefix = payload.get("photos_prefix") or f"photos/{task_id}/"
+                logger.info("Downloading photos from s3://%s/%s", bucket, prefix)
                 n = await asyncio.to_thread(self.download_photos, bucket, prefix, photos_dir)
                 if n == 0:
                     raise RuntimeError(

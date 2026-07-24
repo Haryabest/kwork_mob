@@ -41,6 +41,7 @@ if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
     --add-host=host.docker.internal:host-gateway \
     -v "$ROOT/worker/entrypoint.sh:/usr/local/bin/worker_entrypoint.sh:ro" \
     -v "$ROOT/worker/scripts:/app/scripts:ro" \
+    -v "$ROOT/worker/worker_agent.py:/app/worker_agent.py:ro" \
     -e WORKER_ID="${WORKER_ID:-client-gpu-01}" \
     -e WORKER_TOKEN="${WORKER_TOKEN:-worker-dev-token}" \
     -e WORKER_PIPELINE_MODE="${WORKER_PIPELINE_MODE:-trellis}" \
