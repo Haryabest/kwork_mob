@@ -6,13 +6,22 @@ DONE="/var/lib/worker/trellis_runtime_done"
 MARKER="/var/lib/worker/defer_trellis_runtime"
 TRELLIS_ROOT="${TRELLIS_ROOT:-/app/trellis}"
 
-if [ -f "${DONE}" ]; then
-  echo "[trellis-runtime] уже готово (volume), skip"
+RUNTIME_OK_PY='
+import importlib.util
+mods = ("o_voxel", "flex_gemm")
+missing = [m for m in mods if importlib.util.find_spec(m) is None]
+if missing:
+    raise SystemExit(",".join(missing))
+'
+
+if [ -f "${DONE}" ] && python3 -c "${RUNTIME_OK_PY}" 2>/dev/null; then
+  echo "[trellis-runtime] уже готово, skip"
   exit 0
 fi
+rm -f "${DONE}"
 
-if python3 -c "import o_voxel" 2>/dev/null; then
-  echo "[trellis-runtime] o_voxel OK, skip setup"
+if python3 -c "${RUNTIME_OK_PY}" 2>/dev/null; then
+  echo "[trellis-runtime] o_voxel+flex_gemm OK, skip setup"
   mkdir -p /var/lib/worker
   touch "${DONE}"
   rm -f "${MARKER}"
@@ -45,7 +54,7 @@ elif [ -d o-voxel ]; then
   pip3 install --no-cache-dir ./o-voxel --no-build-isolation
 fi
 
-python3 -c "import o_voxel; print('[trellis-runtime] o_voxel OK')"
+python3 -c "import o_voxel; import flex_gemm; print('[trellis-runtime] o_voxel+flex_gemm OK')"
 
 PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
 from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: F401

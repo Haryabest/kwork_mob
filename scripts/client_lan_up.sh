@@ -24,6 +24,9 @@ export API_BASE_URL="${API_BASE_URL:-http://${HOST}:8000}"
 export SELLER_PUBLIC_URL="${SELLER_PUBLIC_URL:-http://${HOST}:3000}"
 export MINIO_SSE_MODE="${MINIO_SSE_MODE:-none}"
 export MINIO_PUBLIC_ENDPOINT="${MINIO_PUBLIC_ENDPOINT:-http://${HOST}:9010}"
+# Воркер в отдельном контейнере: localhost из .env не достаёт до Redis на хосте
+WORKER_REDIS_URL="${WORKER_REDIS_URL:-redis://host.docker.internal:6382/0}"
+NOBG_CONFIDENCE="${NOBG_CONFIDENCE:-0.65}"
 
 echo "[client_lan] HOST=$HOST"
 echo "[client_lan] docker compose up…"
@@ -62,7 +65,8 @@ if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
     -e ATTN_BACKEND="${ATTN_BACKEND:-xformers}" \
     -e ORCHESTRATOR_WS_URL="ws://host.docker.internal:8000/ws/worker" \
     -e ORCHESTRATOR_HTTP_URL="http://host.docker.internal:8000" \
-    -e REDIS_URL="${REDIS_URL:-redis://host.docker.internal:6382/0}" \
+    -e REDIS_URL="${WORKER_REDIS_URL}" \
+    -e NOBG_CONFIDENCE="${NOBG_CONFIDENCE}" \
     -e MINIO_ENDPOINT="http://host.docker.internal:9010" \
     -e MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" \
     -e MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}" \
