@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -718,7 +718,13 @@ async def list_user_models(
 
     if company_id is not None:
         await assert_company_access(db, user, company_id)
-        where = [Model3D.company_id == company_id, Model3D.trashed_at.is_(None)]
+        where = [
+            or_(
+                Model3D.company_id == company_id,
+                and_(Model3D.user_id == user.id, Model3D.company_id.is_(None)),
+            ),
+            Model3D.trashed_at.is_(None),
+        ]
     else:
         where = [Model3D.user_id == user.id, Model3D.trashed_at.is_(None)]
 

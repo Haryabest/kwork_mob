@@ -57,14 +57,14 @@ export function useModelsList(params: ModelsListParams, enabled = true) {
       sort,
       orderStatus,
     ],
-    enabled: enabled && companyId != null,
+    enabled,
     queryFn: async () => {
       const q: Record<string, string | number> = {
         limit: pageSize,
         offset: (page - 1) * pageSize,
         sort: sort || 'newest',
-        company_id: companyId as number,
       };
+      if (companyId != null) q.company_id = companyId;
       if (search) q.search = search;
       if (dateFrom) q.date_from = dateFrom;
       if (dateTo) q.date_to = dateTo;

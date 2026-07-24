@@ -134,7 +134,7 @@ export default function ModelsPage() {
       sort,
       orderStatus,
     },
-    company != null,
+    true,
   );
   const items = (modelsData?.items ?? []) as Model[];
   const total = modelsData?.total ?? 0;
