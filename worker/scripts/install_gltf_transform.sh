@@ -25,6 +25,8 @@ fi
 echo "[gltf-transform] установка Node.js 20 + @gltf-transform/cli"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
+apt-get remove -y -qq nodejs libnode-dev libnode72 2>/dev/null || true
+apt-get autoremove -y -qq 2>/dev/null || true
 apt-get install -y -qq ca-certificates curl gnupg
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y -qq nodejs
