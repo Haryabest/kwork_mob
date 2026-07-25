@@ -191,6 +191,12 @@ def main(task_dir: str) -> None:
     print(f"[compress_draco] final → {dst} ({size} bytes, limit={max_limit}, mp={marketplace})")
     _write_result(root, dst, marketplace)
     if status["hard_limit_exceeded"]:
+        if os.getenv("COMPRESS_ALLOW_OVER_LIMIT", "0").lower() in ("1", "true", "yes"):
+            print(
+                f"[compress_draco] over limit ({size} > {max_limit}), "
+                "COMPRESS_ALLOW_OVER_LIMIT=1 — продолжаем с флагом"
+            )
+            return
         raise SystemExit(f"GLB > hard limit after cascade: {size}")
     if status["warning_size_exceeded"]:
         print("[compress_draco] warning_size_exceeded — сохраняем с флагом §6.6.3")

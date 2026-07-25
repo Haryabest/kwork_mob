@@ -33,5 +33,6 @@ apt-get install -y -qq nodejs
 npm uninstall -g @gltf-transform/cli 2>/dev/null || true
 npm install -g @gltf-transform/cli
 npm install -g --include=optional sharp
+pip3 install --no-cache-dir fast-simplification 2>/dev/null || true
 gltf-transform --help >/dev/null
 echo "[gltf-transform] OK node=$(node -v)"
