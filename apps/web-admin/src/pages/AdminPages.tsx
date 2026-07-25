@@ -3,13 +3,13 @@ import { IconDownload, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-re
 import { notifications } from '@mantine/notifications';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { HealthCard, MetricGrid, PageHeader, ShellTable, StateBadge } from '../components/Panel';
 import { VirtualShellTable } from '../components/VirtualShellTable';
 import { api, getApiError } from '../services/api';
 
 export function WorkersPage() {
-  const [items, setItems] = useState<Array<{
+  type WorkerItem = {
     id: string;
     status: string;
     gpu_name?: string | null;
@@ -23,7 +23,14 @@ export function WorkersPage() {
     current_task_id?: string | null;
     gpu_temp?: number | null;
     vram_used_gb?: number | null;
-  }>>([]);
+    vram_total_gb?: number | null;
+    vram_percent?: number | null;
+    cpu_percent?: number | null;
+    ram_percent?: number | null;
+    ram_total_gb?: number | null;
+    ram_used_gb?: number | null;
+  };
+  const [items, setItems] = useState<WorkerItem[]>([]);
   const [rollout, setRollout] = useState({
     target_version: '2',
     default_docker_image: '',
@@ -95,6 +102,10 @@ export function WorkersPage() {
   const [logWorkerId, setLogWorkerId] = useState('');
   const [logItems, setLogItems] = useState<Array<{ timestamp: string; level: string; message: string }>>([]);
   const [logLoading, setLogLoading] = useState(false);
+  const [detailWorker, setDetailWorker] = useState<WorkerItem | null>(null);
+  const [gpuSeries, setGpuSeries] = useState<Array<Record<string, string | number>>>([]);
+  const [gpuSeriesWorkers, setGpuSeriesWorkers] = useState<string[]>([]);
+  const [liveGpu, setLiveGpu] = useState<Array<{ id: string; load: number }>>([]);
 
   async function openWorkerLogs(workerId: string) {
     setLogWorkerId(workerId);
@@ -115,16 +126,31 @@ export function WorkersPage() {
   }
 
   async function load() {
-    const [w, c, r, cost, tr, st] = await Promise.all([
+    const [w, c, r, cost, tr, st, series] = await Promise.all([
       api.get<{ summary: typeof summary; items: typeof items }>('/admin/workers'),
       api.get<{ items: typeof cloud }>('/admin/cloud/instances'),
       api.get<{ items: typeof rules }>('/admin/cloud/autoscaling/rules'),
       api.get<typeof costs>('/admin/cloud/costs'),
       api.get<typeof rollout>('/admin/trellis/rollout'),
       api.get<typeof scaleStatus>('/admin/cloud/autoscaling/status'),
+      api.get<{ series: Array<Record<string, string | number>>; workers: string[] }>(
+        '/admin/workers/metrics/series',
+        { params: { minutes: 15 } },
+      ),
     ]);
     setSummary(w.data.summary);
-    setItems(w.data.items ?? []);
+    const workerItems = w.data.items ?? [];
+    setItems(workerItems);
+    setLiveGpu(
+      workerItems.map((x) => ({
+        id: x.id.length > 12 ? `${x.id.slice(0, 10)}…` : x.id,
+        load: Math.round(x.gpu_load ?? 0),
+      })),
+    );
+    if (series.data.series?.length) {
+      setGpuSeries(series.data.series);
+      setGpuSeriesWorkers(series.data.workers ?? []);
+    }
     setCloud(c.data.items ?? []);
     setRules(r.data.items ?? []);
     setCosts(cost.data);
@@ -136,18 +162,25 @@ export function WorkersPage() {
 
   useEffect(() => {
     load().catch((e) => notifications.show({ color: 'red', message: getApiError(e) })).finally(() => setLoading(false));
+    const timer = window.setInterval(() => {
+      load().catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const gpuChart = useMemo(
-    () =>
-      items
-        .filter((w) => w.gpu_load != null)
-        .map((w) => ({
-          id: w.id.length > 12 ? `${w.id.slice(0, 10)}…` : w.id,
-          load: Math.round(w.gpu_load ?? 0),
-        })),
-    [items],
-  );
+  const gpuChart = useMemo(() => liveGpu, [liveGpu]);
+
+  const gpuLineKeys = useMemo(() => {
+    if (gpuSeriesWorkers.length) {
+      return gpuSeriesWorkers.map((w) => (w.length > 14 ? `${w.slice(0, 12)}…` : w));
+    }
+    return gpuChart.map((g) => g.id);
+  }, [gpuSeriesWorkers, gpuChart]);
+
+  const gpuLineData = useMemo(() => {
+    if (gpuSeries.length) return gpuSeries;
+    return gpuChart.map((g) => ({ time: 'сейчас', [g.id]: g.load }));
+  }, [gpuSeries, gpuChart]);
 
   const costChart = useMemo(
     () =>
@@ -210,16 +243,36 @@ export function WorkersPage() {
             : []),
         ]}
       />
-      {(gpuChart.length > 0 || costChart.length > 0) && (
+      {(items.length > 0 || costChart.length > 0) && (
         <SimpleGrid cols={{ base: 1, lg: 2 }} mb="md">
-          {gpuChart.length > 0 && (
+          {items.length > 0 && (
             <Card withBorder p="md">
               <Text fw={600} mb="sm">
                 Загрузка GPU по воркерам §11.2.6
               </Text>
+              <Text size="xs" c="dimmed" mb="xs">
+                обновление каждые 5 с · столбец — сейчас, линия — 15 мин (ClickHouse)
+              </Text>
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={gpuChart} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                <LineChart data={gpuLineData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,87,184,0.12)" />
+                  <XAxis dataKey="time" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
+                  <Tooltip />
+                  {gpuLineKeys.map((key, i) => (
+                    <Line
+                      key={key}
+                      type="monotone"
+                      dataKey={key}
+                      stroke={['#0057b8', '#0381E9', '#0b7a73'][i % 3]}
+                      dot={false}
+                      strokeWidth={2}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+              <ResponsiveContainer width="100%" height={120}>
+                <BarChart data={gpuChart} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                   <XAxis dataKey="id" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
                   <Tooltip />
@@ -298,7 +351,14 @@ export function WorkersPage() {
         rows={
           items.length
             ? items.map((w) => [
-                w.id,
+                <Button
+                  key={`id-${w.id}`}
+                  variant="subtle"
+                  size="compact-sm"
+                  onClick={() => setDetailWorker(w)}
+                >
+                  {w.id}
+                </Button>,
                 <Group key={`s-${w.id}`} gap={6}>
                   <StateBadge
                     value={w.status}
@@ -310,7 +370,9 @@ export function WorkersPage() {
                 w.current_task_id ? String(w.current_task_id).slice(0, 8) : '—',
                 `${w.trellis_version ?? '—'}${w.docker_image ? ` · ${w.docker_image}` : ''}`,
                 `${w.gpu_name ?? '—'} · ${w.gpu_load != null ? `${Math.round(w.gpu_load)}%` : '—'}`,
-                w.vram_used_gb != null ? `${w.vram_used_gb} GB` : '—',
+                w.vram_used_gb != null
+                  ? `${w.vram_used_gb}${w.vram_total_gb ? ` / ${w.vram_total_gb}` : ''} GB`
+                  : '—',
                 w.gpu_temp != null ? `${Math.round(w.gpu_temp)}°` : '—',
                 <Slider
                   key={`w-${w.id}`}
@@ -451,6 +513,66 @@ export function WorkersPage() {
             : [['—', 'Нет воркеров', '—', 'Сигнал heartbeat ещё не приходил', '—', '—', '—']]
         }
       />
+
+      <Modal
+        opened={detailWorker != null}
+        onClose={() => setDetailWorker(null)}
+        title={detailWorker ? `Воркер ${detailWorker.id}` : 'Воркер'}
+        centered
+      >
+        {detailWorker && (
+          <Stack gap="sm">
+            <Group justify="space-between">
+              <Text size="sm" c="dimmed">
+                Статус
+              </Text>
+              <StateBadge
+                value={detailWorker.status}
+                color={['online', 'idle', 'busy', 'overheated'].includes(detailWorker.status) ? 'teal' : 'orange'}
+              />
+            </Group>
+            <Text size="sm">
+              <b>ЦП:</b>{' '}
+              {detailWorker.cpu_percent != null
+                ? `${Math.round(detailWorker.cpu_percent)}%`
+                : '—'}
+            </Text>
+            <Text size="sm">
+              <b>ОЗУ:</b>{' '}
+              {detailWorker.ram_percent != null
+                ? `${Math.round(detailWorker.ram_percent)}%${
+                    detailWorker.ram_used_gb != null && detailWorker.ram_total_gb != null
+                      ? ` (${detailWorker.ram_used_gb} из ${detailWorker.ram_total_gb} ГБ)`
+                      : ''
+                  }`
+                : '—'}
+            </Text>
+            <Text size="sm">
+              <b>GPU:</b>{' '}
+              {detailWorker.gpu_load != null
+                ? `${Math.round(detailWorker.gpu_load)}%${
+                    detailWorker.vram_used_gb != null && detailWorker.vram_total_gb != null
+                      ? ` (${detailWorker.vram_used_gb} из ${detailWorker.vram_total_gb} ГБ VRAM)`
+                      : detailWorker.vram_percent != null
+                        ? ` (${detailWorker.vram_percent}% VRAM)`
+                        : ''
+                  }`
+                : '—'}
+              {detailWorker.gpu_name ? ` · ${detailWorker.gpu_name}` : ''}
+            </Text>
+            <Text size="sm">
+              <b>Температура GPU:</b>{' '}
+              {detailWorker.gpu_temp != null ? `${Math.round(detailWorker.gpu_temp)}°C` : '—'}
+            </Text>
+            <Text size="sm">
+              <b>Задача:</b> {detailWorker.current_task_id ?? '—'}
+            </Text>
+            <Button variant="light" onClick={() => setDetailWorker(null)}>
+              Закрыть
+            </Button>
+          </Stack>
+        )}
+      </Modal>
 
       <Modal opened={logOpen} onClose={() => setLogOpen(false)} title={`Логи воркера ${logWorkerId}`} size="lg">
         {logLoading ? (

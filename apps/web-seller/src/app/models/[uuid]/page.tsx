@@ -36,6 +36,8 @@ type PubLink = {
 type Model = {
   uuid: string;
   order_id: number;
+  tier?: string | null;
+  category?: string | null;
   glb_url?: string | null;
   usdz_url?: string | null;
   publish_status?: string;
@@ -90,6 +92,13 @@ export default function ModelDetailPage() {
   const [sku, setSku] = useState('');
   const [productUrl, setProductUrl] = useState('');
   const [rateOpen, { open: openRate, close: closeRate }] = useDisclosure(false);
+  const [regenOpen, { open: openRegen, close: closeRegen }] = useDisclosure(false);
+  const [promocode, setPromocode] = useState('');
+  const [promoPreview, setPromoPreview] = useState<{
+    discount_amount: number;
+    final_amount: number;
+    base_amount: number;
+  } | null>(null);
   const [rating, setRating] = useState<string | null>('5');
   const [mpStatus, setMpStatus] = useState<{
     upload_enabled: boolean;
@@ -197,8 +206,30 @@ export default function ModelDetailPage() {
     }
   }
 
+  async function validatePromo(tier: string) {
+    const code = promocode.trim();
+    if (!code) {
+      setPromoPreview(null);
+      return;
+    }
+    try {
+      const { data } = await api.post<{
+        discount_amount: number;
+        final_amount: number;
+        base_amount: number;
+      }>('/promocodes/validate', { code, tier });
+      setPromoPreview(data);
+      notifications.show({
+        color: 'teal',
+        message: `Скидка ${data.discount_amount} ₽ → к оплате ${data.final_amount} ₽`,
+      });
+    } catch (e) {
+      setPromoPreview(null);
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    }
+  }
+
   async function regenerate() {
-    if (!window.confirm('Создать новый заказ на перегенерацию с теми же исходниками?')) return;
     setBusy(true);
     try {
       const { data } = await api.post<{
@@ -212,7 +243,11 @@ export default function ModelDetailPage() {
         category: data.category,
         tier: data.tier,
         company_id: data.company_id,
+        promocode: promocode.trim() || undefined,
       });
+      closeRegen();
+      setPromocode('');
+      setPromoPreview(null);
       notifications.show({ color: 'teal', message: `Заказ #${order.id} в очереди` });
       window.location.href = `/orders/${order.id}`;
     } catch (e) {
@@ -425,7 +460,7 @@ export default function ModelDetailPage() {
             <Button variant="light" leftSection={<IconDownload size={16} />} loading={busy} onClick={() => void restoreSources()}>
               Восстановить исходники из облака
             </Button>
-            <Button variant="light" loading={busy} onClick={() => void regenerate()}>
+            <Button variant="light" loading={busy} onClick={openRegen}>
               Перегенерировать модель
             </Button>
             <Text size="xs" c="#6d6c77">
@@ -506,6 +541,48 @@ export default function ModelDetailPage() {
           </Stack>
         </Surface>
       </div>
+
+      <Modal
+        opened={regenOpen}
+        onClose={() => {
+          closeRegen();
+          setPromocode('');
+          setPromoPreview(null);
+        }}
+        title="Перегенерация модели"
+        centered
+        radius="lg"
+      >
+        <Stack>
+          <Text size="sm" c="dimmed">
+            Будет создан новый заказ с теми же исходниками. Промокод необязателен.
+          </Text>
+          <TextInput
+            label="Промокод"
+            placeholder="Введите код"
+            value={promocode}
+            onChange={(e) => setPromocode(e.currentTarget.value.toUpperCase())}
+          />
+          <Group>
+            <Button
+              variant="light"
+              disabled={!promocode.trim()}
+              onClick={() => void validatePromo(model.tier || 'small')}
+            >
+              Проверить промокод
+            </Button>
+          </Group>
+          {promoPreview && (
+            <Text size="sm" c="teal">
+              Скидка {promoPreview.discount_amount} ₽ · итого {promoPreview.final_amount} ₽ (было{' '}
+              {promoPreview.base_amount} ₽)
+            </Text>
+          )}
+          <Button loading={busy} onClick={() => void regenerate()}>
+            Создать заказ на перегенерацию
+          </Button>
+        </Stack>
+      </Modal>
 
       <Modal opened={linkOpen} onClose={closeLink} title="Ссылка на карточку товара" centered radius="lg">
         <Stack>

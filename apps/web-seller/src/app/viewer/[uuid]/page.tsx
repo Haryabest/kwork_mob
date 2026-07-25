@@ -1,7 +1,8 @@
 'use client';
 
-import { Badge, Center, Loader, Stack, Text, Title } from '@mantine/core';
-import { useParams } from 'next/navigation';
+import { Badge, Button, Center, Group, Loader, Stack, Text, Title } from '@mantine/core';
+import { IconArrowLeft } from '@tabler/icons-react';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ModelViewer3D } from '../../../components/ModelViewer3D';
 import { apiMessage } from '../../../services/api';
@@ -9,6 +10,7 @@ import { loadModelPreviewBlobUrl, revokeModelPreviewUrl } from '../../../lib/mod
 
 export default function ViewerPage() {
   const params = useParams<{ uuid: string }>();
+  const router = useRouter();
   const uuid = params.uuid;
   const [url, setUrl] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -35,6 +37,16 @@ export default function ViewerPage() {
       <Stack maw={1100} w="100%" gap="md">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
+            <Group gap="sm" mb={4}>
+              <Button
+                variant="subtle"
+                size="compact-sm"
+                leftSection={<IconArrowLeft size={16} />}
+                onClick={() => router.back()}
+              >
+                Назад
+              </Button>
+            </Group>
             <Title order={2}>3DVektor Viewer</Title>
             <Text c="dimmed" size="sm">
               Модель {uuid}

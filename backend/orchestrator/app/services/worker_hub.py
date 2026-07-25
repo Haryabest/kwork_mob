@@ -143,6 +143,7 @@ class WorkerHub:
                     "current_task_id": w.current_task_id,
                     "last_heartbeat": w.last_heartbeat.isoformat(),
                     "version": w.version,
+                    "meta": dict(w.meta or {}),
                 }
                 for w in self._workers.values()
             ]

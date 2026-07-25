@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_db_user, get_current_db_user_optional
-from app.models import Model3D, ModelPublicationLink, User
+from app.models import Model3D, ModelPublicationLink, Order, User
 from app.schemas.models import ModelRateRequest
 from app.services import publication as pub_svc
 from app.services.access import get_accessible_model, require_company_permission
@@ -369,6 +369,7 @@ async def get_model(
 
     model = await _get_owned_model(db, model_uuid, user)
     links = await pub_svc.list_links(db, model.uuid)
+    order = await db.get(Order, model.order_id) if model.order_id else None
     return {
         "uuid": model.uuid,
         "order_id": model.order_id,
@@ -379,6 +380,8 @@ async def get_model(
         "watermark_hmac": model.watermark_hmac,
         "publication_links": links,
         "created_at": model.created_at.isoformat() if model.created_at else None,
+        "tier": order.tier if order else None,
+        "category": order.category if order else None,
         "storage": ms.storage_meta(model),
     }
 

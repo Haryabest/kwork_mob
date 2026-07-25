@@ -309,9 +309,21 @@ async def worker_ws(websocket: WebSocket):
 
             elif msg_type == "metrics":
                 gpu = data.get("gpu") or {}
+                cpu_pct = float(data.get("cpu_percent") or 0)
+                ram_pct = float(data.get("ram_percent") or 0)
+                meta_patch = {
+                    "cpu_percent": cpu_pct,
+                    "ram_percent": ram_pct,
+                    "ram_total_gb": data.get("ram_total_gb"),
+                    "ram_used_gb": data.get("ram_used_gb"),
+                    "gpu": gpu,
+                    "gpu_temp": gpu.get("gpu_temp"),
+                    "vram_used_gb": gpu.get("vram_used_gb"),
+                    "vram_total_gb": gpu.get("vram_total_gb"),
+                }
                 await worker_hub.touch(
                     worker_id,
-                    meta={"cpu": data.get("cpu_percent"), "ram": data.get("ram_percent"), "gpu": gpu},
+                    meta=meta_patch,
                 )
                 async with async_session() as db:
                     await upsert_worker_heartbeat(
@@ -320,7 +332,7 @@ async def worker_ws(websocket: WebSocket):
                         status=conn.status,
                         gpu_name=str(gpu.get("name") or gpu.get("gpu_name") or "") or None,
                         gpu_load=float(gpu.get("gpu_util") or 0),
-                        meta={"gpu": gpu},
+                        meta=meta_patch,
                     )
                 try:
                     from app.services.metrics import record_worker_metrics

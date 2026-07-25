@@ -34,6 +34,66 @@ def _vpn_guard(request: Request) -> None:
 router = APIRouter(dependencies=[Depends(_vpn_guard)])
 
 
+def _worker_metrics_payload(node: WorkerNode, hub: dict | None) -> dict:
+    """Слить PG + live hub meta (§11.2.6)."""
+    meta = dict(node.meta or {})
+    if hub:
+        meta = {**meta, **(hub.get("meta") or {})}
+    gpu = meta.get("gpu") if isinstance(meta.get("gpu"), dict) else {}
+    gpu_load = node.gpu_load
+    if hub and hub.get("worker_id"):
+        pass
+    if gpu_load is None and gpu:
+        gpu_load = float(gpu.get("gpu_util") or 0)
+    vram_used = meta.get("vram_used_gb") or gpu.get("vram_used_gb")
+    vram_total = meta.get("vram_total_gb") or gpu.get("vram_total_gb")
+    if vram_used is not None:
+        try:
+            vram_used = float(vram_used)
+        except (TypeError, ValueError):
+            vram_used = None
+    if vram_total is not None:
+        try:
+            vram_total = float(vram_total)
+        except (TypeError, ValueError):
+            vram_total = None
+    gpu_temp = meta.get("gpu_temp") or gpu.get("gpu_temp")
+    cpu_pct = meta.get("cpu_percent")
+    if cpu_pct is None:
+        cpu_pct = meta.get("cpu")
+    ram_pct = meta.get("ram_percent")
+    if ram_pct is None:
+        ram_pct = meta.get("ram")
+    ram_total = meta.get("ram_total_gb")
+    ram_used = meta.get("ram_used_gb")
+    vram_pct = None
+    if vram_used is not None and vram_total and vram_total > 0:
+        vram_pct = round(100.0 * vram_used / vram_total, 1)
+    status = (hub or {}).get("status") or node.status
+    return {
+        "id": node.id,
+        "status": status,
+        "gpu_name": node.gpu_name or gpu.get("name"),
+        "gpu_load": float(gpu_load or 0),
+        "weight": node.weight,
+        "grace_period": node.grace_period,
+        "last_heartbeat": node.last_heartbeat.isoformat() if node.last_heartbeat else None,
+        "trellis_version": meta.get("trellis_version") or meta.get("version"),
+        "docker_image": meta.get("docker_image"),
+        "maintenance": bool(meta.get("maintenance")),
+        "tailscale_ip": meta.get("tailscale_ip"),
+        "current_task_id": (hub or {}).get("current_task_id"),
+        "gpu_temp": gpu_temp,
+        "vram_used_gb": vram_used,
+        "vram_total_gb": vram_total,
+        "vram_percent": vram_pct,
+        "cpu_percent": float(cpu_pct) if cpu_pct is not None else None,
+        "ram_percent": float(ram_pct) if ram_pct is not None else None,
+        "ram_total_gb": ram_total,
+        "ram_used_gb": ram_used,
+    }
+
+
 class WorkerUpsert(BaseModel):
     status: str = "online"
     gpu_name: str | None = None
@@ -916,6 +976,7 @@ async def list_workers(_: dict = Depends(require_admin), db: AsyncSession = Depe
         if (now - hb).total_seconds() < 20:
             online += 1
     hub = {h["worker_id"]: h for h in await worker_hub.list_snapshot()}
+    items = [_worker_metrics_payload(w, hub.get(w.id)) for w in rows]
     return {
         "summary": {
             "online": online,
@@ -923,26 +984,34 @@ async def list_workers(_: dict = Depends(require_admin), db: AsyncSession = Depe
             "queue_normal": lengths["normal"],
             "queue_high": lengths["high"],
         },
-        "items": [
-            {
-                "id": w.id,
-                "status": w.status,
-                "gpu_name": w.gpu_name,
-                "gpu_load": w.gpu_load,
-                "weight": w.weight,
-                "grace_period": w.grace_period,
-                "last_heartbeat": w.last_heartbeat.isoformat() if w.last_heartbeat else None,
-                "trellis_version": (w.meta or {}).get("trellis_version") or (w.meta or {}).get("version"),
-                "docker_image": (w.meta or {}).get("docker_image"),
-                "maintenance": bool((w.meta or {}).get("maintenance")),
-                "tailscale_ip": (w.meta or {}).get("tailscale_ip"),
-                "current_task_id": hub.get(w.id, {}).get("current_task_id"),
-                "gpu_temp": (w.meta or {}).get("gpu_temp") or (w.meta or {}).get("temperature"),
-                "vram_used_gb": (w.meta or {}).get("vram_used_gb"),
-            }
-            for w in rows
-        ],
+        "items": items,
     }
+
+
+@router.get("/workers/metrics/series")
+async def workers_metrics_series(
+    _: dict = Depends(require_admin),
+    minutes: int = Query(15, ge=1, le=120),
+):
+    """GPU load time series из ClickHouse (fallback — пустой список)."""
+    from app.services.metrics import worker_gpu_series
+
+    return await worker_gpu_series(minutes=minutes)
+
+
+@router.get("/workers/{worker_id}")
+async def get_worker_detail(
+    worker_id: str,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.worker_hub import worker_hub
+
+    node = await db.get(WorkerNode, worker_id)
+    if not node:
+        raise HTTPException(404, "Воркер не найден")
+    hub_snap = {h["worker_id"]: h for h in await worker_hub.list_snapshot()}
+    return _worker_metrics_payload(node, hub_snap.get(worker_id))
 
 
 @router.post("/workers/{worker_id}/heartbeat")

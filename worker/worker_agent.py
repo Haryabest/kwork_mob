@@ -847,6 +847,8 @@ class WorkerAgent:
                         "gpu": gpu,
                         "cpu_percent": psutil.cpu_percent(),
                         "ram_percent": psutil.virtual_memory().percent,
+                        "ram_total_gb": round(psutil.virtual_memory().total / 1e9, 1),
+                        "ram_used_gb": round(psutil.virtual_memory().used / 1e9, 1),
                         "status": self.status,
                     }
                 )

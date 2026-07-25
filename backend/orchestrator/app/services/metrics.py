@@ -72,6 +72,46 @@ def _ch():
         return None
 
 
+async def worker_gpu_series(minutes: int = 15) -> dict[str, Any]:
+    """Временной ряд GPU по воркерам (ClickHouse)."""
+    client = _ch()
+    if not client:
+        return {"source": "unavailable", "series": [], "workers": []}
+    try:
+        rows = client.query(
+            f"SELECT toStartOfMinute(timestamp) AS ts, worker_id, avg(gpu_util) "
+            f"FROM worker_metrics_minute "
+            f"WHERE timestamp > now() - INTERVAL {int(minutes)} MINUTE "
+            f"GROUP BY ts, worker_id ORDER BY ts"
+        ).result_rows
+        points: dict[str, list[dict[str, Any]]] = {}
+        for ts, wid, util in rows:
+            key = str(wid)
+            points.setdefault(key, []).append(
+                {
+                    "time": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+                    "load": round(float(util or 0), 1),
+                }
+            )
+        flat: list[dict[str, Any]] = []
+        all_times: set[str] = set()
+        for pts in points.values():
+            for p in pts:
+                all_times.add(p["time"])
+        for t in sorted(all_times):
+            row: dict[str, Any] = {"time": t[-8:] if len(t) > 8 else t}
+            for wid, pts in points.items():
+                match = next((p for p in pts if p["time"] == t), None)
+                if match:
+                    short = wid if len(wid) <= 14 else f"{wid[:12]}…"
+                    row[short] = match["load"]
+            flat.append(row)
+        return {"source": "clickhouse", "minutes": minutes, "series": flat, "workers": list(points.keys())}
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("worker_gpu_series: %s", exc)
+        return {"source": "error", "error": str(exc), "series": [], "workers": []}
+
+
 def record_worker_metrics(worker_id: str, gpu: dict[str, Any], cpu: float, ram: float) -> None:
     temp = float(gpu.get("gpu_temp") or 0)
     util = float(gpu.get("gpu_util") or gpu.get("utilization") or 0)
