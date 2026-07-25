@@ -175,6 +175,48 @@ def _grabcut_remove(img: Image.Image) -> tuple[Image.Image, float, float] | None
         return None
 
 
+def _frame_usable(name: str, ratio: float, *, min_ratio: float, max_ratio: float) -> bool:
+    """Маска пригодна для пайплайна: не fallback и доля объекта в кадре в норме."""
+    if name == "copy_rgba":
+        return False
+    return min_ratio <= ratio <= max_ratio
+
+
+def _view00_index(files: list[Path]) -> int:
+    for i, f in enumerate(files):
+        if f.name.lower().startswith("view_00"):
+            return i
+    return 0
+
+
+def _segmentation_hard_fail(
+    stats: list[dict],
+    files: list[Path],
+    *,
+    min_ratio: float,
+    max_ratio: float,
+    hard_min_conf: float,
+) -> str | None:
+    """Жёсткий провал только при реально битой сегментации (не из-за порога quality)."""
+    if not stats:
+        return "no_frames"
+    view_i = _view00_index(files)
+    v0 = stats[view_i]
+    if not _frame_usable(v0["method"], v0["ratio"], min_ratio=min_ratio, max_ratio=max_ratio):
+        return f"view_00_unusable method={v0['method']} ratio={v0['ratio']:.3f}"
+    usable = sum(
+        1
+        for s in stats
+        if _frame_usable(s["method"], s["ratio"], min_ratio=min_ratio, max_ratio=max_ratio)
+    )
+    if usable == 0:
+        return "no_usable_masks"
+    avg_conf = float(np.mean([s["confidence"] for s in stats]))
+    if avg_conf < hard_min_conf:
+        return f"avg_conf={avg_conf:.3f} < hard_min={hard_min_conf}"
+    return None
+
+
 def process_one(
     src: Path,
     dst: Path,
@@ -223,10 +265,23 @@ def process_one(
         valid.sort(key=lambda x: x[2], reverse=True)
         name, ratio, conf, out_im = valid[0]
         out_im.save(dst)
-        return {"method": name, "ratio": ratio, "confidence": conf, "ok": conf >= conf_thr}
+        usable = _frame_usable(name, ratio, min_ratio=min_ratio, max_ratio=max_ratio)
+        return {
+            "method": name,
+            "ratio": ratio,
+            "confidence": conf,
+            "ok": usable,
+            "quality_ok": conf >= conf_thr,
+        }
 
     img.convert("RGBA").save(dst)
-    return {"method": "copy_rgba", "ratio": 1.0, "confidence": 0.0, "ok": False}
+    return {
+        "method": "copy_rgba",
+        "ratio": 1.0,
+        "confidence": 0.0,
+        "ok": False,
+        "quality_ok": False,
+    }
 
 
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
@@ -247,7 +302,9 @@ def _stub_copy_nobg(files: list[Path], out: Path) -> list[dict]:
     for f in files:
         dst = out / (f.stem + ".png")
         Image.open(f).convert("RGBA").save(dst)
-        stats.append({"method": "stub_copy", "ratio": 1.0, "confidence": 1.0, "ok": True})
+        stats.append(
+            {"method": "stub_copy", "ratio": 1.0, "confidence": 1.0, "ok": True, "quality_ok": True}
+        )
     return stats
 
 
@@ -279,35 +336,53 @@ def main(task_dir: str) -> None:
         meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         return
 
-    conf = float(os.getenv("NOBG_CONFIDENCE", "0.85"))
+  # Порог качества для score/alerts; не блокирует пайплайн (rembg conf ≈ 0.55+ratio*0.4).
+    quality_target = float(os.getenv("NOBG_CONFIDENCE", "0.85"))
+    hard_min = float(os.getenv("NOBG_HARD_FAIL_MIN", "0.35"))
     min_r = float(os.getenv("NOBG_MIN_RATIO", "0.10"))
     max_r = float(os.getenv("NOBG_MAX_RATIO", "0.95"))
     stats = []
     weak = 0
+    low_quality = 0
     for f in files:
         dst = out / (f.stem + ".png")
-        info = process_one(f, dst, conf_thr=conf, min_ratio=min_r, max_ratio=max_r)
+        info = process_one(f, dst, conf_thr=quality_target, min_ratio=min_r, max_ratio=max_r)
         print(f"[remove_background] {f.name} → {info}")
         stats.append(info)
         if not info["ok"]:
             weak += 1
+        if not info.get("quality_ok", info["ok"]):
+            low_quality += 1
 
     meta_path = root / "task_meta.json"
     meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
     avg_conf = float(np.mean([s["confidence"] for s in stats])) if stats else 0.0
+    quality_warning = avg_conf < quality_target or low_quality > 0
+    fail_reason = _segmentation_hard_fail(
+        stats,
+        files,
+        min_ratio=min_r,
+        max_ratio=max_r,
+        hard_min_conf=hard_min,
+    )
     meta["segmentation"] = {
         "frames": stats,
         "avg_confidence": avg_conf,
-        "threshold": conf,
+        "threshold": quality_target,
+        "hard_fail_min": hard_min,
         "weak_frames": weak,
+        "low_quality_frames": low_quality,
+        "quality_warning": quality_warning,
     }
     meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
 
-    # §6.1.1: средняя уверенность ≥ 0.85, иначе fail (воркер повторит / другой узел)
-    if avg_conf < conf and weak == len(files):
-        print(f"[remove_background] failed_segmentation avg_conf={avg_conf:.3f}")
+    if fail_reason:
+        print(f"[remove_background] failed_segmentation {fail_reason}")
         raise SystemExit(3)
-    print(f"[remove_background] done {len(files)} avg_conf={avg_conf:.3f} weak={weak}")
+    print(
+        f"[remove_background] done {len(files)} avg_conf={avg_conf:.3f} "
+        f"weak={weak} low_quality={low_quality} warn={quality_warning}"
+    )
 
 
 if __name__ == "__main__":

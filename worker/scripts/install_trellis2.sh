@@ -24,7 +24,7 @@ export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"
 _install_basic_pip() {
   echo "[install_trellis2] базовые pip-зависимости"
   pip3 install --no-cache-dir \
-    easydict opencv-python-headless trimesh transformers kornia timm zstandard \
+    easydict opencv-python-headless trimesh "transformers==4.57.6" kornia timm zstandard \
     imageio imageio-ffmpeg tqdm ninja huggingface_hub
   pip3 install --no-cache-dir xformers || echo "[warn] xformers не установлен"
   pip3 install --no-cache-dir \

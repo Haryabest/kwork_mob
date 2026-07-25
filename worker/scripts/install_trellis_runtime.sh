@@ -61,6 +61,10 @@ fi
 
 python3 -c "import o_voxel; import flex_gemm; print('[trellis-runtime] o_voxel+flex_gemm OK')"
 
+if [ -f /app/scripts/patch_trellis2_dinov3.py ]; then
+  python3 /app/scripts/patch_trellis2_dinov3.py || true
+fi
+
 PYTHONPATH="${TRELLIS_ROOT}:${PYTHONPATH:-}" python3 - <<'PY'
 from trellis2.pipelines import Trellis2ImageTo3DPipeline  # noqa: F401
 

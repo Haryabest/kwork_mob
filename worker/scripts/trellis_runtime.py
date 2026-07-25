@@ -108,13 +108,12 @@ def get_pipeline():
             _pipeline_kind = "trellis2_image_to_3d"
             return _pipeline
         except Exception as exc:
+            detail = repr(exc)
             raise ImportError(
-                "TRELLIS.2 не установлен. Соберите GPU-образ:\n"
-                "  docker build --build-arg INSTALL_TRELLIS=1 --build-arg TRELLIS_VERSION=2 "
-                "-t kwork-worker:trellis2 .\n"
-                "Repo: https://github.com/microsoft/TRELLIS.2\n"
-                "Weights: microsoft/TRELLIS.2-4B\n"
-                f"Детали: {exc}"
+                "TRELLIS.2 pipeline load failed. "
+                "Build: docker build --build-arg INSTALL_TRELLIS=1 "
+                "--build-arg TRELLIS_VERSION=2 -t kwork-worker:trellis2 .\n"
+                f"Details: {detail}"
             ) from exc
 
     # TRELLIS v1 (legacy)
