@@ -220,6 +220,34 @@ def _export_result(result, output: Path) -> None:
     raise RuntimeError(f"Не удалось сохранить результат TRELLIS: {type(result)}")
 
 
+def _sampler_params(prefix: str, defaults: dict) -> dict:
+    """Параметры sampler из env (как в ComfyUI / app.py TRELLIS.2)."""
+    out = dict(defaults)
+    steps = os.getenv(f"TRELLIS2_{prefix}_STEPS")
+    if steps is not None:
+        out["steps"] = int(steps)
+    gs = os.getenv(f"TRELLIS2_{prefix}_GUIDANCE")
+    if gs is not None:
+        out["guidance_strength"] = float(gs)
+    gr = os.getenv(f"TRELLIS2_{prefix}_GUIDANCE_RESCALE")
+    if gr is not None:
+        out["guidance_rescale"] = float(gr)
+    rt = os.getenv(f"TRELLIS2_{prefix}_RESCALE_T")
+    if rt is not None:
+        out["rescale_t"] = float(rt)
+    return out
+
+
+def _pipeline_type_resolved() -> str:
+    raw = os.getenv("TRELLIS2_PIPELINE_TYPE", "512").strip()
+    # как в app.py: 1024 → 1024_cascade (лучше качество, как на YouTube)
+    if raw == "1024":
+        return "1024_cascade"
+    if raw == "1536":
+        return "1536_cascade"
+    return raw
+
+
 def run_trellis2(task_dir: Path, output: Path) -> Path:
     """TRELLIS.2: image→3D с native PBR (view_00 из photos_nobg)."""
     import torch
@@ -235,8 +263,30 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
         torch.cuda.empty_cache()
 
     pipe = get_pipeline()
-    pipeline_type = os.getenv("TRELLIS2_PIPELINE_TYPE", "512")
-    meshes = pipe.run(image, preprocess_image=False, pipeline_type=pipeline_type)
+    pipeline_type = _pipeline_type_resolved()
+    run_kwargs = {
+        "preprocess_image": False,
+        "pipeline_type": pipeline_type,
+        "tex_slat_sampler_params": _sampler_params(
+            "TEX",
+            {"steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.5, "rescale_t": 3.0},
+        ),
+        "shape_slat_sampler_params": _sampler_params(
+            "SHAPE",
+            {"steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.5, "rescale_t": 3.0},
+        ),
+        "sparse_structure_sampler_params": _sampler_params(
+            "SS",
+            {"steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.7, "rescale_t": 5.0},
+        ),
+    }
+    logger.info(
+        "TRELLIS.2 run pipeline_type=%s tex_steps=%s texture_size=%s",
+        pipeline_type,
+        run_kwargs["tex_slat_sampler_params"].get("steps"),
+        _texture_size_for_task(task_dir),
+    )
+    meshes = pipe.run(image, **run_kwargs)
     if not meshes:
         raise RuntimeError("TRELLIS.2 вернул пустой результат")
 

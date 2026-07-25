@@ -32,5 +32,6 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y -qq nodejs
 npm uninstall -g @gltf-transform/cli 2>/dev/null || true
 npm install -g @gltf-transform/cli
+npm install -g --include=optional sharp
 gltf-transform --help >/dev/null
 echo "[gltf-transform] OK node=$(node -v)"
