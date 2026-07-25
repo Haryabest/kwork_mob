@@ -158,7 +158,7 @@ def _texture_size_for_task(task_dir: Path) -> int:
                 return 2048
         except Exception:  # noqa: BLE001
             pass
-    return int(os.getenv("TRELLIS2_TEXTURE_SIZE", "1024"))
+    return int(os.getenv("TRELLIS2_TEXTURE_SIZE", "2048"))
 
 
 def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -> None:
@@ -238,7 +238,7 @@ def _sampler_params(prefix: str, defaults: dict) -> dict:
 
 
 def _pipeline_type_resolved() -> str:
-    raw = os.getenv("TRELLIS2_PIPELINE_TYPE", "512").strip()
+    raw = os.getenv("TRELLIS2_PIPELINE_TYPE", "1024").strip()
     # как в app.py: 1024 → 1024_cascade (лучше качество, как на YouTube)
     if raw == "1024":
         return "1024_cascade"
@@ -268,15 +268,18 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
         "pipeline_type": pipeline_type,
         "tex_slat_sampler_params": _sampler_params(
             "TEX",
-            {"steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.5, "rescale_t": 3.0},
+            # HF Space defaults (Material Generation)
+            {"steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.0, "rescale_t": 3.0},
         ),
         "shape_slat_sampler_params": _sampler_params(
             "SHAPE",
-            {"steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.5, "rescale_t": 3.0},
+            # HF Space defaults (Shape Generation)
+            {"steps": 12, "guidance_strength": 7.5, "guidance_rescale": 0.5, "rescale_t": 3.0},
         ),
         "sparse_structure_sampler_params": _sampler_params(
             "SS",
-            {"steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.7, "rescale_t": 5.0},
+            # HF Space defaults (Sparse Structure)
+            {"steps": 12, "guidance_strength": 7.5, "guidance_rescale": 0.7, "rescale_t": 5.0},
         ),
     }
     logger.info(
