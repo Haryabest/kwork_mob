@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import secrets
 import string
 from datetime import datetime, timezone
 from typing import Any
 
 import bcrypt
+from app.core.config import settings
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +23,40 @@ _ALPHABET = "".join(c for c in string.ascii_uppercase + string.digits if c not i
 
 def generate_plain_code(length: int = 12) -> str:
     return "".join(secrets.choice(_ALPHABET) for _ in range(length))
+
+
+def _code_cipher_key() -> bytes:
+    return hashlib.sha256(settings.JWT_SECRET.encode()).digest()
+
+
+def encrypt_code_for_admin(plain: str) -> str:
+    data = plain.strip().upper().encode()
+    key = _code_cipher_key()
+    xored = bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
+    return base64.urlsafe_b64encode(xored).decode()
+
+
+def decrypt_code_for_admin(enc: str) -> str | None:
+    try:
+        data = base64.urlsafe_b64decode(enc.encode())
+        key = _code_cipher_key()
+        plain = bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
+        return plain.decode()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def code_meta(plain: str) -> dict[str, str]:
+    return {"code_enc": encrypt_code_for_admin(plain)}
+
+
+def reveal_code(meta: dict | None) -> str | None:
+    if not isinstance(meta, dict):
+        return None
+    enc = meta.get("code_enc")
+    if not enc:
+        return None
+    return decrypt_code_for_admin(str(enc))
 
 
 def hash_code(plain: str) -> str:

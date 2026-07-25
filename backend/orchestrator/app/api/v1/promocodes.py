@@ -109,10 +109,12 @@ async def admin_list(db: AsyncSession = Depends(get_db)):
                 PromocodeUsage.promocode_id == p.id
             )
         )
+        code = promo_svc.reveal_code(p.meta if isinstance(p.meta, dict) else None)
         items.append(
             {
                 "id": p.id,
                 "code_prefix": p.code_prefix,
+                "code": code,
                 "name": p.name,
                 "discount_type": p.discount_type,
                 "discount_value": p.discount_value,
@@ -152,6 +154,7 @@ async def admin_create(
         tier=body.tier,
         user_id=body.user_id,
         company_id=body.company_id,
+        meta=promo_svc.code_meta(plain),
     )
     db.add(row)
     await db.commit()

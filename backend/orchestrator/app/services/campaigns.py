@@ -23,7 +23,7 @@ from app.models import (
     User,
 )
 from app.services import email as email_svc
-from app.services.promocodes import generate_plain_code, hash_code
+from app.services.promocodes import code_meta, generate_plain_code, hash_code
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,8 @@ async def _create_promo(
     meta: dict | None = None,
 ) -> tuple[Promocode, str]:
     plain = generate_plain_code()
+    promo_meta = dict(meta or {})
+    promo_meta.update(code_meta(plain))
     row = Promocode(
         code_hash=hash_code(plain),
         code_prefix=plain[:4],
@@ -88,7 +90,7 @@ async def _create_promo(
         expires_at=expires_at,
         is_active=True,
         user_id=user_id,
-        meta=meta or {},
+        meta=promo_meta,
     )
     db.add(row)
     await db.flush()

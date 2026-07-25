@@ -10,7 +10,7 @@ from app.core.config import settings
 
 SESSION_KEYS: dict[str, int] = {
     "staff_jwt_access_expire_minutes": 480,
-    "staff_idle_timeout_minutes": 30,
+    "staff_idle_timeout_minutes": 43200,
     "staff_jwt_refresh_expire_days": 30,
 }
 
@@ -23,7 +23,7 @@ def env_defaults() -> dict[str, int]:
             getattr(settings, "STAFF_JWT_ACCESS_EXPIRE_MINUTES", 480) or 480
         ),
         "staff_idle_timeout_minutes": int(
-            getattr(settings, "STAFF_IDLE_TIMEOUT_MINUTES", 30) or 30
+            getattr(settings, "STAFF_IDLE_TIMEOUT_MINUTES", 43200) or 43200
         ),
         "staff_jwt_refresh_expire_days": int(
             getattr(settings, "JWT_REFRESH_EXPIRE_DAYS", 30) or 30
@@ -47,7 +47,7 @@ def merge_settings(stored: dict | None) -> dict[str, int]:
                 continue
             if k == "staff_jwt_access_expire_minutes" and not (15 <= v <= 24 * 60):
                 continue
-            if k == "staff_idle_timeout_minutes" and not (5 <= v <= 12 * 60):
+            if k == "staff_idle_timeout_minutes" and not (5 <= v <= 30 * 24 * 60):
                 continue
             if k == "staff_jwt_refresh_expire_days" and not (1 <= v <= 90):
                 continue

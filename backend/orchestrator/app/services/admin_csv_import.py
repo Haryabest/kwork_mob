@@ -189,6 +189,7 @@ async def import_promocodes_csv(db: AsyncSession, content: str) -> dict[str, Any
         row_p = Promocode(
             code_hash=promo_svc.hash_code(plain),
             code_prefix=plain[:4],
+            meta=promo_svc.code_meta(plain),
             name=row.get("name") or None,
             discount_type=dtype,
             discount_value=dval,

@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     JWT_RSA_PUBLIC_KEY: str = ""
     JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 30
-    JWT_REFRESH_SESSION_DAYS: int = 7  # без «Запомнить меня» (§2.3)
+    JWT_REFRESH_SESSION_DAYS: int = 30  # сессия без «Запомнить меня» (§2.3)
 
     # §2.2.2 DaData / ФНС
     DADATA_API_KEY: str = ""
@@ -303,7 +303,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ADMIN_2FA_REQUIRED", "ADMIN_2FA_ENABLED"),
     )
     STAFF_JWT_ACCESS_EXPIRE_MINUTES: int = 480  # 8 часов по ТЗ
-    STAFF_IDLE_TIMEOUT_MINUTES: int = 30
+    STAFF_IDLE_TIMEOUT_MINUTES: int = 43200  # 30 дней
 
     # §2.7 ПД at rest (AES-256-GCM)
     PD_ENCRYPTION_KEY: str = ""  # base64url, 32 bytes

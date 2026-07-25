@@ -182,10 +182,12 @@ async def award_bonus(db: AsyncSession, *, model: Model3D, user_id: int) -> tupl
         from datetime import timedelta
 
         from app.models import Promocode
-        from app.services.promocodes import generate_plain_code, hash_code
+        from app.services.promocodes import code_meta, generate_plain_code, hash_code
 
         plain = generate_plain_code(12)
         dtype = "percent" if cfg.bonus_type == "discount_percent" else "fixed"
+        promo_meta = {"source": "publication_bonus", "model_uuid": model.uuid}
+        promo_meta.update(code_meta(plain))
         promo = Promocode(
             code_hash=hash_code(plain),
             code_prefix=plain[:4],
@@ -197,7 +199,7 @@ async def award_bonus(db: AsyncSession, *, model: Model3D, user_id: int) -> tupl
             expires_at=datetime.now(timezone.utc) + timedelta(days=cfg.promocode_ttl_days),
             is_active=True,
             user_id=user_id,
-            meta={"source": "publication_bonus", "model_uuid": model.uuid},
+            meta=promo_meta,
         )
         db.add(promo)
         await db.flush()

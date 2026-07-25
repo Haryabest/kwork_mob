@@ -50,7 +50,7 @@ class TestAlertBody(BaseModel):
 
 class StaffSessionSettingsBody(BaseModel):
     staff_jwt_access_expire_minutes: int = Field(default=480, ge=15, le=1440)
-    staff_idle_timeout_minutes: int = Field(default=30, ge=5, le=720)
+    staff_idle_timeout_minutes: int = Field(default=43200, ge=5, le=43200)
     staff_jwt_refresh_expire_days: int = Field(default=30, ge=1, le=90)
 
 

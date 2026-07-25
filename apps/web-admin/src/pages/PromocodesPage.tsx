@@ -1,5 +1,5 @@
-import { Button, Center, Group, Loader, Modal, NumberInput, Select, Stack, TextInput, Text } from '@mantine/core';
-import { IconPlus } from '@tabler/icons-react';
+import { ActionIcon, Button, Center, Group, Loader, Modal, NumberInput, Select, Stack, Text, TextInput } from '@mantine/core';
+import { IconCopy, IconPlus } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useEffect, useState } from 'react';
 import { PageHeader, ShellTable, StateBadge } from '../components/Panel';
@@ -7,6 +7,7 @@ import { api, getApiError } from '../services/api';
 
 type Promo = {
   id: number;
+  code?: string | null;
   code_prefix?: string;
   name?: string;
   discount_type: string;
@@ -18,6 +19,21 @@ type Promo = {
   tier?: string | null;
   total_discount?: number;
 };
+
+function displayCode(p: Promo): string {
+  if (p.code) return p.code;
+  if (p.code_prefix) return `${p.code_prefix}…`;
+  return '—';
+}
+
+async function copyCode(code: string) {
+  try {
+    await navigator.clipboard.writeText(code);
+    notifications.show({ color: 'teal', message: 'Промокод скопирован' });
+  } catch {
+    notifications.show({ color: 'red', message: 'Не удалось скопировать' });
+  }
+}
 
 export default function PromocodesPage() {
   const [items, setItems] = useState<Promo[]>([]);
@@ -102,7 +118,7 @@ export default function PromocodesPage() {
     <>
       <PageHeader
         title="Промокоды"
-        description="Хэш в БД, код показывается один раз (§8.5)"
+        description="Полный код виден владельцу · хэш в БД (§8.5)"
         action={
           <Group>
             <Button component="label" variant="light" loading={importing}>
@@ -125,26 +141,41 @@ export default function PromocodesPage() {
         }
       />
       <ShellTable
-        headers={['Префикс', 'Название', 'Скидка', 'Использовано', 'Тариф', 'Статус', '']}
+        headers={['Код', 'Название', 'Скидка', 'Использовано', 'Тариф', 'Статус', '']}
         rows={
           items.length
-            ? items.map((p) => [
-                <Text key={`c-${p.id}`} fw={600}>
-                  {p.code_prefix}****
-                </Text>,
-                p.name ?? '—',
-                p.discount_type === 'percent' ? `${p.discount_value}%` : `${p.discount_value} ₽`,
-                `${p.used_count}${p.max_uses != null ? ` / ${p.max_uses}` : ''}`,
-                p.tier ?? 'любой',
-                <StateBadge key={`s-${p.id}`} value={p.is_active ? 'Активен' : 'Выкл'} color={p.is_active ? 'teal' : 'gray'} />,
-                p.is_active ? (
-                  <Button key={`d-${p.id}`} size="xs" variant="light" color="red" onClick={() => void deactivate(p.id)}>
-                    Отключить
-                  </Button>
-                ) : (
-                  '—'
-                ),
-              ])
+            ? items.map((p) => {
+                const code = displayCode(p);
+                return [
+                  <Group key={`c-${p.id}`} gap={6} wrap="nowrap">
+                    <Text fw={600} ff="monospace" size="sm">
+                      {code}
+                    </Text>
+                    {p.code ? (
+                      <ActionIcon
+                        variant="subtle"
+                        size="sm"
+                        aria-label="Скопировать"
+                        onClick={() => void copyCode(p.code!)}
+                      >
+                        <IconCopy size={14} />
+                      </ActionIcon>
+                    ) : null}
+                  </Group>,
+                  p.name ?? '—',
+                  p.discount_type === 'percent' ? `${p.discount_value}%` : `${p.discount_value} ₽`,
+                  `${p.used_count}${p.max_uses != null ? ` / ${p.max_uses}` : ''}`,
+                  p.tier ?? 'любой',
+                  <StateBadge key={`s-${p.id}`} value={p.is_active ? 'Активен' : 'Выкл'} color={p.is_active ? 'teal' : 'gray'} />,
+                  p.is_active ? (
+                    <Button key={`d-${p.id}`} size="xs" variant="light" color="red" onClick={() => void deactivate(p.id)}>
+                      Отключить
+                    </Button>
+                  ) : (
+                    '—'
+                  ),
+                ];
+              })
             : [['—', 'Нет промокодов', '—', '—', '—', '—', '—']]
         }
       />
@@ -173,9 +204,14 @@ export default function PromocodesPage() {
             ]}
           />
           {plainCode && (
-            <Text fw={700} c="teal">
-              Код (один раз): {plainCode}
-            </Text>
+            <Group gap="xs">
+              <Text fw={700} c="teal" ff="monospace">
+                {plainCode}
+              </Text>
+              <ActionIcon variant="light" onClick={() => void copyCode(plainCode)} aria-label="Скопировать">
+                <IconCopy size={16} />
+              </ActionIcon>
+            </Group>
           )}
           <Group>
             <Button onClick={() => void create()}>Создать</Button>

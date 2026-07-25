@@ -102,7 +102,7 @@ export default function SettingsPage() {
   const [upsellHistory, setUpsellHistory] = useState<UpsellHist[]>([]);
   const [session, setSession] = useState<SessionSettings>({
     staff_jwt_access_expire_minutes: 480,
-    staff_idle_timeout_minutes: 30,
+    staff_idle_timeout_minutes: 43200,
     staff_jwt_refresh_expire_days: 30,
   });
 
@@ -459,14 +459,14 @@ export default function SettingsPage() {
             />
             <NumberInput
               label="Неактивность до выхода, мин"
-              description="По ТЗ: 30"
+              description="43200 = 30 дней"
               value={session.staff_idle_timeout_minutes}
               min={5}
-              max={720}
+              max={43200}
               onChange={(v) =>
                 setSession((s) => ({
                   ...s,
-                  staff_idle_timeout_minutes: Number(v) || 30,
+                  staff_idle_timeout_minutes: Number(v) || 43200,
                 }))
               }
             />

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KWork Mob — Admin (Materialize)</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: Roboto, sans-serif; background: #fafafa; }
+    .sidenav { width: 280px; }
+    .sidenav li>a { height: 44px; line-height: 44px; }
+    .brand-sidebar { padding: 20px 24px; background: linear-gradient(135deg, #1565c0, #0d47a1); color: #fff; }
+    .brand-sidebar h5 { margin: 0; font-weight: 500; }
+  .main-wrap { margin-left: 280px; padding: 0 24px 48px; }
+    @media (max-width: 992px) { .main-wrap { margin-left: 0; } }
+    .kpi-card { border-radius: 8px; }
+    .kpi-card .card-content { padding: 20px 24px; }
+    .kpi-value { font-size: 2rem; font-weight: 300; color: #1565c0; margin: 8px 0 0; }
+    .vpn-chip { background: #e3f2fd; color: #1565c0; padding: 6px 14px; border-radius: 16px; font-size: 13px; }
+    .page-view { display: none; }
+    .page-view.active { display: block; }
+    nav .active { background: rgba(21,101,192,.12); border-right: 3px solid #1565c0; }
+    .fab-support { position: fixed; bottom: 24px; right: 24px; }
+    .collection .collection-item.active { background: #e3f2fd; border-left: 4px solid #1565c0; }
+    .worker-status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+    .worker-status.online { background: #4caf50; }
+    .worker-status.warn { background: #ff9800; }
+    .dark-mode body { background: #121212; color: #e0e0e0; }
+    .dark-mode .card { background: #1e1e1e; }
+    .dark-mode .collection { border-color: #333; }
+    .dark-mode .collection .collection-item { background: #1e1e1e; border-color: #333; color: #e0e0e0; }
+  </style>
+</head>
+<body>
+  <ul id="slide-out" class="sidenav sidenav-fixed">
+    <li>
+      <div class="brand-sidebar">
+        <h5>KWork Mob Admin</h5>
+        <small>§11 Веб-панель владельца</small>
+        <div style="margin-top:12px">
+          <span class="white-text badge blue darken-3">VPN</span>
+          <span class="white-text badge grey darken-2">2FA</span>
+        </div>
+      </div>
+    </li>
+    <li><div class="divider"></div></li>
+    <li><a href="#!" class="nav-link active" data-view="dash"><i class="material-icons">dashboard</i>Дашборд</a></li>
+    <li><a href="#!" class="nav-link" data-view="workers"><i class="material-icons">memory</i>Воркеры</a></li>
+    <li><a href="#!" class="nav-link" data-view="users"><i class="material-icons">people</i>Пользователи</a></li>
+    <li><a href="#!" class="nav-link" data-view="b2b"><i class="material-icons">business</i>B2B компании</a></li>
+    <li><a href="#!" class="nav-link" data-view="promo"><i class="material-icons">local_offer</i>Промокоды</a></li>
+    <li><a href="#!" class="nav-link" data-view="campaigns"><i class="material-icons">campaign</i>Кампании</a></li>
+    <li><a href="#!" class="nav-link" data-view="support"><i class="material-icons">support_agent</i>Поддержка</a></li>
+    <li><a href="#!" class="nav-link" data-view="moderation"><i class="material-icons">gavel</i>NSFW</a></li>
+    <li><a href="#!" class="nav-link" data-view="storage"><i class="material-icons">storage</i>Кластер хранения</a></li>
+    <li><a href="#!" class="nav-link" data-view="tax"><i class="material-icons">receipt_long</i>Налоги</a></li>
+    <li><a href="#!" class="nav-link" data-view="legal"><i class="material-icons">description</i>Юр. документы</a></li>
+    <li><a href="#!" class="nav-link" data-view="logs"><i class="material-icons">article</i>Логи</a></li>
+    <li><a href="#!" class="nav-link" data-view="settings"><i class="material-icons">settings</i>Настройки</a></li>
+    <li><div class="divider"></div></li>
+    <li><a href="#!"><i class="material-icons">exit_to_app</i>Выход</a></li>
+  </ul>
+
+  <header>
+    <nav class="blue darken-2 hide-on-large-only">
+      <div class="nav-wrapper">
+        <a href="#" data-target="slide-out" class="sidenav-trigger"><i class="material-icons">menu</i></a>
+        <a class="brand-logo center" style="font-size:1.2rem">KWork Admin</a>
+      </div>
+    </nav>
+    <div class="main-wrap" style="margin-top: 16px;">
+      <div class="row valign-wrapper" style="margin-bottom: 0;">
+        <div class="col s12 m8">
+          <span class="vpn-chip"><i class="material-icons tiny" style="vertical-align:middle">vpn_lock</i> WireGuard · Redis OK · PG sync</span>
+        </div>
+        <div class="col s12 m4 right-align">
+          <a class="btn-flat waves-effect" id="themeBtn"><i class="material-icons">brightness_4</i></a>
+          <span class="grey-text">admin@example.com</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-wrap">
+    <!-- DASHBOARD -->
+    <section class="page-view active" id="view-dash">
+      <h4 class="grey-text text-darken-2" style="font-weight:400">Главный дашборд</h4>
+      <p class="grey-text">ClickHouse + Grafana · §11.2</p>
+      <div class="row">
+        <div class="col s12 m6 l3">
+          <div class="card kpi-card hoverable">
+            <div class="card-content">
+              <span class="grey-text">Активные заказы</span>
+              <p class="kpi-value">142</p>
+              <span class="new badge blue" data-badge-caption="">+12%</span>
+            </div>
+          </div>
+        </div>
+        <div class="col s12 m6 l3">
+          <div class="card kpi-card hoverable">
+            <div class="card-content">
+              <span class="grey-text">EWT очередь</span>
+              <p class="kpi-value">4.2 <small>мин</small></p>
+            </div>
+          </div>
+        </div>
+        <div class="col s12 m6 l3">
+          <div class="card kpi-card hoverable">
+            <div class="card-content">
+              <span class="grey-text">Воркеры</span>
+              <p class="kpi-value">18<small>/22</small></p>
+            </div>
+          </div>
+        </div>
+        <div class="col s12 m6 l3">
+          <div class="card kpi-card hoverable">
+            <div class="card-content">
+              <span class="grey-text">Quality ≥0.7</span>
+              <p class="kpi-value green-text">87%</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col s12 l8">
+          <div class="card">
+            <div class="card-content">
+              <span class="card-title">Поступление задач</span>
+              <canvas id="chartMain" height="100"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="col s12 l4">
+          <div class="card">
+            <div class="card-content">
+              <span class="card-title">Выручка</span>
+              <h4 class="blue-text">284 500 ₽</h4>
+              <p class="grey-text">Возвраты NSFW: 12 400 ₽</p>
+              <p class="grey-text">Облако: 1 240 ₽/ч</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-content">
+              <span class="card-title">Оценки · §11.2.4</span>
+              <p>4–5 звёзд: <strong>82%</strong> <span class="green-text">(цель 80%)</span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WORKERS -->
+    <section class="page-view" id="view-workers">
+      <h4 style="font-weight:400">Управление воркерами</h4>
+      <a class="btn waves-effect waves-light blue"><i class="material-icons left">cloud</i>Облачный воркер</a>
+      <a class="btn-flat waves-effect">Deploy JSON</a>
+      <div class="card" style="margin-top:16px">
+        <div class="card-content"><canvas id="chartGpuM" height="90"></canvas></div>
+      </div>
+      <table class="striped highlight responsive-table card">
+        <thead>
+          <tr><th>ID</th><th>GPU</th><th>Статус</th><th>Загрузка</th><th>VRAM</th><th>T°</th><th>Grace</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="worker-status online"></span><code>client-gpu-01</code></td>
+            <td>RTX 5060 Ti</td><td>busy</td>
+            <td><div class="progress blue" style="height:6px"><div class="determinate" style="width:92%"></div></div> 92%</td>
+            <td>11.2/16 GB</td><td>72°C</td><td>25s</td>
+            <td><a class="btn-small blue lighten-1">Логи</a></td>
+          </tr>
+          <tr>
+            <td><span class="worker-status online"></span><code>cloud-rtx4090-03</code></td>
+            <td>RTX 4090</td><td>idle</td>
+            <td><div class="progress green" style="height:6px"><div class="determinate" style="width:8%"></div></div> 8%</td>
+            <td>2.1/24 GB</td><td>45°C</td><td>25s</td>
+            <td><a class="btn-small blue lighten-1">Логи</a></td>
+          </tr>
+          <tr>
+            <td><span class="worker-status warn"></span><code>cloud-rtx4090-07</code></td>
+            <td>RTX 4090</td><td>overheated</td><td>—</td><td>—</td><td>91°C</td><td>—</td>
+            <td><a class="btn-small orange">Maintenance</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- PROMO -->
+    <section class="page-view" id="view-promo">
+      <div class="row valign-wrapper">
+        <div class="col"><h4 style="font-weight:400;margin:0">Промокоды</h4></div>
+        <div class="col right-align"><a class="btn blue waves-effect"><i class="material-icons left">add</i>Создать</a></div>
+      </div>
+      <table class="striped card">
+        <thead><tr><th>Код</th><th>Название</th><th>Скидка</th><th>Использовано</th><th>Статус</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>KAJ5X7M2N9PQ</code> <a href="#!" class="btn-flat btn-small" onclick="M.toast({html:'Скопировано'})"><i class="material-icons tiny">content_copy</i></a></td>
+            <td>Летняя акция</td><td>10%</td><td>24 / 100</td>
+            <td><span class="green-text">Активен</span></td>
+            <td><a class="btn-flat red-text">Отключить</a></td>
+          </tr>
+          <tr>
+            <td><code>SCC7FREE100X</code> <a href="#!" class="btn-flat btn-small"><i class="material-icons tiny">content_copy</i></a></td>
+            <td>мимими</td><td>100%</td><td>0 / 10</td>
+            <td><span class="green-text">Активен</span></td>
+            <td><a class="btn-flat red-text">Отключить</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- SUPPORT -->
+    <section class="page-view" id="view-support">
+      <h4 style="font-weight:400">Обращения · §11.9</h4>
+      <div class="row">
+        <div class="col s12 m4">
+          <ul class="collection">
+            <li class="collection-item active">#1042 GLB <span class="new badge red" data-badge-caption="">new</span></li>
+            <li class="collection-item">#1041 NSFW возврат</li>
+            <li class="collection-item">#1040 Оплата ЮKassa</li>
+          </ul>
+        </div>
+        <div class="col s12 m8">
+          <div class="card">
+            <div class="card-content">
+              <div class="chip">seller@shop.ru</div>
+              <div class="chip">47 заказов</div>
+              <div class="chip">128 400 ₽</div>
+              <p style="margin-top:16px;padding:12px;background:#f5f5f5;border-radius:4px">Здравствуйте, кнопка скачать неактивна после генерации модели…</p>
+              <a class="btn orange lighten-1 waves-effect" style="margin-top:12px"><i class="material-icons left">smart_toy</i>Ollama черновик</a>
+              <div class="input-field" style="margin-top:20px">
+                <textarea id="reply" class="materialize-textarea"></textarea>
+                <label for="reply">Ответ</label>
+              </div>
+              <a class="btn blue waves-effect">Отправить</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STORAGE -->
+    <section class="page-view" id="view-storage">
+      <h4 style="font-weight:400">Storage Health · §11.16</h4>
+      <div class="row">
+        <div class="col s12 m6">
+          <div class="card green lighten-5">
+            <div class="card-content">
+              <span class="card-title green-text text-darken-2">🟢 Primary · ПК-1</span>
+              <p>Tailscale 100.64.0.12 · Docker: PG, Redis, MinIO, CH</p>
+              <p>CPU 34% · RAM 28/64 GB · NVMe 62%</p>
+            </div>
+          </div>
+        </div>
+        <div class="col s12 m6">
+          <div class="card orange lighten-5">
+            <div class="card-content">
+              <span class="card-title orange-text text-darken-2">🟡 Replica · ПК-2</span>
+              <p>ClickHouse lag 45s · SMART warning</p>
+              <a class="btn orange darken-1">Диагностика</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODERATION -->
+    <section class="page-view" id="view-moderation">
+      <h4 style="font-weight:400">NSFW-модерация</h4>
+      <table class="striped">
+        <thead><tr><th>Дата</th><th>Пользователь</th><th>Refunded</th><th>Статус</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>26.07 00:12</td><td>user@mail.ru</td><td>да</td><td>ожидает</td><td><a class="btn-small blue">Проверить</a></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  <section class="page-view" id="view-users"><h4>Пользователи</h4><p class="grey-text">§11.6 · виртуализация таблиц</p></section>
+  <section class="page-view" id="view-b2b"><h4>B2B</h4><p class="grey-text">Лимиты, API-ключи, блокировка</p></section>
+  <section class="page-view" id="view-campaigns"><h4>Кампании</h4><p class="grey-text">§11.7 конструктор</p></section>
+  <section class="page-view" id="view-tax"><h4>Налоги</h4><p class="grey-text">§11.13 самозанятый / ИП / ООО</p></section>
+  <section class="page-view" id="view-legal"><h4>Юр. документы</h4><p class="grey-text">§11.11 версионирование</p></section>
+  <section class="page-view" id="view-logs"><h4>Логи</h4><p class="grey-text">§11.5 экспорт CSV</p></section>
+  <section class="page-view" id="view-settings"><h4>Настройки</h4><p class="grey-text">Тарифы §11.4, алерты</p></section>
+  </main>
+
+  <a class="btn-floating btn-large blue fab-support waves-effect waves-light"><i class="material-icons">chat</i></a>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      M.Sidenav.init(document.querySelectorAll('.sidenav'), { edge: 'left' });
+      M.FormSelect.init(document.querySelectorAll('select'));
+    });
+    document.querySelectorAll('.nav-link').forEach((a) => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.nav-link').forEach((x) => x.classList.remove('active'));
+        a.classList.add('active');
+        document.querySelectorAll('.page-view').forEach((v) => v.classList.remove('active'));
+        const el = document.getElementById('view-' + a.dataset.view);
+        if (el) el.classList.add('active');
+      });
+    });
+    document.getElementById('themeBtn').onclick = () => document.body.classList.toggle('dark-mode');
+    new Chart(document.getElementById('chartMain'), {
+      type: 'bar',
+      data: {
+        labels: ['00', '04', '08', '12', '16', '20'],
+        datasets: [{ label: 'Задачи', data: [8, 12, 45, 62, 55, 38], backgroundColor: 'rgba(21,101,192,.7)' }]
+      },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+    new Chart(document.getElementById('chartGpuM'), {
+      type: 'line',
+      data: {
+        labels: Array(10).fill(''),
+        datasets: [{ data: [15,40,70,88,92,90,85,88,92,92], borderColor: '#1565c0', tension: 0.3, fill: false }]
+      },
+      options: { responsive: true, scales: { y: { min: 0, max: 100 } }, plugins: { legend: { display: false } } }
+    });
+  </script>
+</body>
+</html>
