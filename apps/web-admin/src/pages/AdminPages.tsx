@@ -3,8 +3,9 @@ import { IconDownload, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-re
 import { notifications } from '@mantine/notifications';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { HealthCard, MetricGrid, PageHeader, ShellTable, StateBadge } from '../components/Panel';
+import { GpuHistoryPoint, WorkerGpuLineChart } from '../components/WorkerGpuLineChart';
 import { VirtualShellTable } from '../components/VirtualShellTable';
 import { api, getApiError } from '../services/api';
 
@@ -103,9 +104,7 @@ export function WorkersPage() {
   const [logItems, setLogItems] = useState<Array<{ timestamp: string; level: string; message: string }>>([]);
   const [logLoading, setLogLoading] = useState(false);
   const [detailWorker, setDetailWorker] = useState<WorkerItem | null>(null);
-  const [gpuSeries, setGpuSeries] = useState<Array<Record<string, string | number>>>([]);
-  const [gpuSeriesWorkers, setGpuSeriesWorkers] = useState<string[]>([]);
-  const [liveGpu, setLiveGpu] = useState<Array<{ id: string; load: number }>>([]);
+  const [gpuHistory, setGpuHistory] = useState<GpuHistoryPoint[]>([]);
 
   async function openWorkerLogs(workerId: string) {
     setLogWorkerId(workerId);
@@ -141,16 +140,26 @@ export function WorkersPage() {
     setSummary(w.data.summary);
     const workerItems = w.data.items ?? [];
     setItems(workerItems);
-    setLiveGpu(
-      workerItems.map((x) => ({
-        id: x.id.length > 12 ? `${x.id.slice(0, 10)}…` : x.id,
-        load: Math.round(x.gpu_load ?? 0),
-      })),
+    const now = new Date().toLocaleTimeString('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    const values = Object.fromEntries(
+      workerItems.map((x) => [x.id, Math.round(x.gpu_load ?? 0)]),
     );
-    if (series.data.series?.length) {
-      setGpuSeries(series.data.series);
-      setGpuSeriesWorkers(series.data.workers ?? []);
-    }
+    setGpuHistory((prev) => {
+      const point: GpuHistoryPoint = { t: now, values };
+      if (prev.length === 0 && series.data.series?.length) {
+        const workers = series.data.workers ?? [];
+        const seeded = series.data.series.map((row) => ({
+          t: String(row.time ?? '').slice(11, 19) || String(row.time ?? ''),
+          values: Object.fromEntries(workers.map((id) => [id, Number(row[id] ?? 0)])),
+        }));
+        return [...seeded.slice(-179), point];
+      }
+      return [...prev.slice(-179), point];
+    });
     setCloud(c.data.items ?? []);
     setRules(r.data.items ?? []);
     setCosts(cost.data);
@@ -167,20 +176,6 @@ export function WorkersPage() {
     }, 5000);
     return () => window.clearInterval(timer);
   }, []);
-
-  const gpuChart = useMemo(() => liveGpu, [liveGpu]);
-
-  const gpuLineKeys = useMemo(() => {
-    if (gpuSeriesWorkers.length) {
-      return gpuSeriesWorkers.map((w) => (w.length > 14 ? `${w.slice(0, 12)}…` : w));
-    }
-    return gpuChart.map((g) => g.id);
-  }, [gpuSeriesWorkers, gpuChart]);
-
-  const gpuLineData = useMemo(() => {
-    if (gpuSeries.length) return gpuSeries;
-    return gpuChart.map((g) => ({ time: 'сейчас', [g.id]: g.load }));
-  }, [gpuSeries, gpuChart]);
 
   const costChart = useMemo(
     () =>
@@ -251,34 +246,9 @@ export function WorkersPage() {
                 Загрузка GPU по воркерам §11.2.6
               </Text>
               <Text size="xs" c="dimmed" mb="xs">
-                обновление каждые 5 с · столбец — сейчас, линия — 15 мин (ClickHouse)
+                обновление каждые 5 с · последние 15 мин
               </Text>
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={gpuLineData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,87,184,0.12)" />
-                  <XAxis dataKey="time" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
-                  <Tooltip />
-                  {gpuLineKeys.map((key, i) => (
-                    <Line
-                      key={key}
-                      type="monotone"
-                      dataKey={key}
-                      stroke={['#0057b8', '#0381E9', '#0b7a73'][i % 3]}
-                      dot={false}
-                      strokeWidth={2}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-              <ResponsiveContainer width="100%" height={120}>
-                <BarChart data={gpuChart} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="id" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
-                  <Tooltip />
-                  <Bar dataKey="load" fill="#0057b8" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <WorkerGpuLineChart history={gpuHistory} />
             </Card>
           )}
           {costChart.length > 0 && (
