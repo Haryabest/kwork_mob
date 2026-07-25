@@ -48,6 +48,32 @@ class TestAlertBody(BaseModel):
     channel: str = "dual"  # telegram | email | dual
 
 
+class StaffSessionSettingsBody(BaseModel):
+    staff_jwt_access_expire_minutes: int = Field(default=480, ge=15, le=1440)
+    staff_idle_timeout_minutes: int = Field(default=30, ge=5, le=720)
+    staff_jwt_refresh_expire_days: int = Field(default=30, ge=1, le=90)
+
+
+@router.get("/session/settings")
+async def get_staff_session_settings(db: AsyncSession = Depends(get_db)):
+    from app.services import staff_session_settings as sess_cfg
+
+    cfg = await sess_cfg.load_settings(db)
+    await db.commit()
+    return {"settings": cfg, "keys": list(sess_cfg.SESSION_KEYS.keys())}
+
+
+@router.put("/session/settings")
+async def put_staff_session_settings(
+    body: StaffSessionSettingsBody, db: AsyncSession = Depends(get_db)
+):
+    from app.services import staff_session_settings as sess_cfg
+
+    cfg = await sess_cfg.save_settings(db, body.model_dump())
+    await db.commit()
+    return {"ok": True, "settings": cfg}
+
+
 @router.get("/tariffs")
 async def get_tariffs(db: AsyncSession = Depends(get_db)):
     return {"items": await tariff_svc.list_tariffs(db)}

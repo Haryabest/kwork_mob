@@ -89,7 +89,7 @@ type PublicationFunnel = {
 const TABS = [
   { id: 'ops', label: 'Операции' },
   { id: 'finance', label: 'Финансы' },
-  { id: 'b2b', label: 'B2B' },
+  { id: 'b2b', label: 'Корп. клиенты' },
   { id: 'publications', label: 'Публикации' },
   { id: 'quality', label: 'Качество' },
   { id: 'moderation', label: 'Модерация' },
@@ -135,7 +135,7 @@ function FunnelSteps({ f }: { f: Funnel | undefined }) {
         </div>
       ))}
       <Text size="xs" c="dimmed" mt="md">
-        gen→verify: {Math.round((f.conversion?.generated_to_verified ?? 0) * 100)}% · цель KPI ≥60%
+        ген.→вериф.: {Math.round((f.conversion?.generated_to_verified ?? 0) * 100)}% · цель КПЭ ≥60%
       </Text>
     </div>
   );
@@ -258,18 +258,18 @@ export default function DashboardPage() {
         <div>
           <Title order={2}>Дашборд</Title>
           <Text c="#6d6c77" size="sm" mt={6}>
-            §11.2 · ClickHouse + PostgreSQL · WebSocket {live ? 'live' : '…'} · fallback 60с
+            §11.2 · ClickHouse + PostgreSQL · WebSocket {live ? 'в эфире' : '…'} · обновление 60с
           </Text>
         </div>
         <Group>
           <Badge variant="light" color={queueHealth ? 'teal' : 'gray'} radius="sm">
-            Redis OK
+            Redis в норме
           </Badge>
           <Badge variant="light" color={pgSynced ? 'teal' : 'orange'} radius="sm">
             PG {pgSynced ? 'актуальна' : 'расхождение'}
           </Badge>
           <Badge variant="light" color={live ? 'teal' : 'gray'} radius="sm">
-            {live ? 'WS live' : 'WS offline'}
+            {live ? 'WS в эфире' : 'WS офлайн'}
           </Badge>
           <Badge variant="light" color="brand" radius="sm">
             {data?.source ?? '—'}
@@ -292,7 +292,7 @@ export default function DashboardPage() {
             {ops?.queued ?? 0}
           </Text>
           <Text size="xs" c="dimmed">
-            processing: {ops?.processing ?? 0}
+            в обработке: {ops?.processing ?? 0}
           </Text>
         </div>
         <div className="vz-surface">
@@ -320,7 +320,7 @@ export default function DashboardPage() {
         <div className="vz-surface">
           <Group justify="space-between">
             <Text size="sm" c="#6d6c77">
-              NSFW / оценки ≥4
+              НСФВ / оценки ≥4
             </Text>
             <IconAlertTriangle size={18} color="#0057b8" />
           </Group>
@@ -363,8 +363,8 @@ export default function DashboardPage() {
         <div className="vz-grid vz-grid-2-lg">
           <div className="vz-surface">
             <Text fw={600}>EWT очереди</Text>
-            <Text mt="md">normal: {fmtSec(ops?.ewt_normal_sec ?? 0)}</Text>
-            <Text>high: {fmtSec(ops?.ewt_high_sec ?? 0)}</Text>
+            <Text mt="md">обычная: {fmtSec(ops?.ewt_normal_sec ?? 0)}</Text>
+            <Text>приоритетная: {fmtSec(ops?.ewt_high_sec ?? 0)}</Text>
             <Text fw={600} mt="lg">
               Статусы заказов
             </Text>
@@ -417,7 +417,7 @@ export default function DashboardPage() {
             </Text>
             {(data?.queues ?? []).map((q) => (
               <Text key={q.queue} mt={4}>
-                {q.queue}: {q.length} (avg wait {fmtSec(q.avg_wait)})
+                {q.queue}: {q.length} (ср. ожидание {fmtSec(q.avg_wait)})
               </Text>
             ))}
             <Text fw={600} mt="lg">
@@ -464,7 +464,7 @@ export default function DashboardPage() {
             </Text>
           </div>
           <div className="vz-surface">
-            <Text fw={600}>NSFW withheld 7д</Text>
+            <Text fw={600}>НСФВ удержано 7д</Text>
             <Text size="xl" fw={700} mt="md" className="vz-metric-value">
               {fmtRub(fin?.nsfw_withheld_7d_rub ?? 0)}
             </Text>
@@ -479,7 +479,7 @@ export default function DashboardPage() {
             <Text size="xl" fw={700} mt="md">
               {data?.b2b.companies_active ?? 0}
             </Text>
-            <Text mt="sm">Photographer: {data?.b2b.photographers_active ?? 0}</Text>
+            <Text mt="sm">Фотографы: {data?.b2b.photographers_active ?? 0}</Text>
           </div>
           <div className="vz-surface">
             <Text fw={600}>Топ компаний (7д)</Text>
@@ -522,7 +522,7 @@ export default function DashboardPage() {
                 onChange={(e) => setDateTo(e.currentTarget.value)}
               />
               <NumberInput
-                label="Company ID"
+                label="ID компании"
                 placeholder="все"
                 value={companyFilter}
                 onChange={setCompanyFilter}
@@ -562,7 +562,7 @@ export default function DashboardPage() {
             </Text>
             <FunnelSteps f={pubFunnel?.by_segment.company} />
             <Text fw={600} mt="lg">
-              WB / Ozon (verified)
+              WB / Ozon (верифицировано)
             </Text>
             <Text size="sm">
               WB: {pubFunnel?.funnel.by_marketplace?.verified?.wb ?? 0} · Ozon:{' '}
@@ -638,7 +638,7 @@ export default function DashboardPage() {
 
       {tab === 'moderation' && (
         <div className="vz-surface">
-          <Text fw={600}>NSFW-блокировки (заказы)</Text>
+          <Text fw={600}>Блокировки НСФВ (заказы)</Text>
           <Text size="xl" fw={700} mt="md">
             {data?.moderation.nsfw_blocked ?? 0}
           </Text>

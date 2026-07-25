@@ -70,7 +70,7 @@ export default function MarketplacePage() {
 
   async function saveCred() {
     if (!marketplace || apiKey.length < 8) {
-      return notifications.show({ color: 'red', message: 'API key ≥ 8 символов' });
+      return notifications.show({ color: 'red', message: 'API-ключ ≥ 8 символов' });
     }
     setBusy(true);
     try {
@@ -82,7 +82,7 @@ export default function MarketplacePage() {
         enabled: true,
       });
       setApiKey('');
-      notifications.show({ color: 'teal', message: 'Credentials сохранены' });
+      notifications.show({ color: 'teal', message: 'Учётные данные сохранены' });
       await load();
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
@@ -93,7 +93,7 @@ export default function MarketplacePage() {
 
   async function manualUpload() {
     if (!uploadModel.trim() || !uploadSku.trim() || !uploadMp) {
-      return notifications.show({ color: 'red', message: 'model_uuid и SKU обязательны' });
+      return notifications.show({ color: 'red', message: 'UUID модели и SKU обязательны' });
     }
     setBusy(true);
     try {
@@ -102,7 +102,7 @@ export default function MarketplacePage() {
         marketplace: uploadMp,
         sku: uploadSku.trim(),
       });
-      notifications.show({ color: 'teal', message: 'Upload запущен' });
+      notifications.show({ color: 'teal', message: 'Загрузка запущена' });
       setUploadModel('');
       setUploadSku('');
       await load();
@@ -117,11 +117,11 @@ export default function MarketplacePage() {
     <div className="vz-page">
       <div className="vz-page-header">
         <div>
-          <Title order={2}>Marketplace API</Title>
+          <Title order={2}>API маркетплейсов</Title>
           <Text c="#6d6c77" size="sm" mt={6}>
-            WB/Ozon credentials · upload enabled:{' '}
+            Учётные данные WB/Ozon · загрузка включена:{' '}
             <Badge color={status.upload_enabled ? 'teal' : 'gray'} variant="light">
-              {status.upload_enabled ? 'on' : 'off'}
+              {status.upload_enabled ? 'вкл' : 'выкл'}
             </Badge>
           </Text>
         </div>
@@ -145,14 +145,14 @@ export default function MarketplacePage() {
               value={marketplace}
               onChange={setMarketplace}
             />
-            <PasswordInput label="API key" value={apiKey} onChange={(e) => setApiKey(e.currentTarget.value)} />
+            <PasswordInput label="API-ключ" value={apiKey} onChange={(e) => setApiKey(e.currentTarget.value)} />
             <TextInput
               label="Client ID (Ozon)"
               value={clientId}
               onChange={(e) => setClientId(e.currentTarget.value)}
             />
             <TextInput
-              label="Company ID (пусто = глобальный)"
+              label="ID компании (пусто = глобальный)"
               value={companyId}
               onChange={(e) => setCompanyId(e.currentTarget.value)}
             />
@@ -164,15 +164,15 @@ export default function MarketplacePage() {
 
         <div className="vz-surface">
           <Text fw={600} mb="md">
-            Credentials
+            Учётные данные
           </Text>
           <Table>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>MP</Table.Th>
-                <Table.Th>Company</Table.Th>
-                <Table.Th>Key</Table.Th>
-                <Table.Th>On</Table.Th>
+                <Table.Th>МП</Table.Th>
+                <Table.Th>Компания</Table.Th>
+                <Table.Th>Ключ</Table.Th>
+                <Table.Th>Вкл</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -205,11 +205,11 @@ export default function MarketplacePage() {
 
       <div className="vz-surface" style={{ marginTop: '1.5rem' }}>
         <Text fw={600} mb="md">
-          Ручной upload §7.6
+          Ручная загрузка §7.6
         </Text>
         <Stack maw={480}>
           <TextInput
-            label="Model UUID"
+            label="UUID модели"
             value={uploadModel}
             onChange={(e) => setUploadModel(e.currentTarget.value)}
           />
@@ -224,23 +224,23 @@ export default function MarketplacePage() {
             onChange={setUploadMp}
           />
           <Button loading={busy} onClick={() => void manualUpload()}>
-            Upload
+            Загрузить
           </Button>
         </Stack>
       </div>
 
       <div className="vz-surface" style={{ marginTop: '1.5rem' }}>
         <Text fw={600} mb="md">
-          Upload logs
+          Журнал загрузок
         </Text>
         <Table>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>ID</Table.Th>
-              <Table.Th>Model</Table.Th>
-              <Table.Th>MP</Table.Th>
-              <Table.Th>Status</Table.Th>
-              <Table.Th>When</Table.Th>
+              <Table.Th>Модель</Table.Th>
+              <Table.Th>МП</Table.Th>
+              <Table.Th>Статус</Table.Th>
+              <Table.Th>Когда</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>

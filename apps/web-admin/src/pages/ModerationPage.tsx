@@ -96,7 +96,12 @@ function slaLabel(r: Report) {
   return <Text size="sm">{r.hours_left != null ? `${r.hours_left}ч` : '—'}</Text>;
 }
 
-/** §10.8 / §11 — NSFW queue + age-gate viewer + blacklist */
+const BLACKLIST_CATEGORY_LABELS: Record<string, string> = {
+  general: 'общее',
+  brand: 'бренд',
+  product: 'товар',
+  nsfw: 'НСФВ (18+)',
+};
 export default function ModerationPage() {
   const [tab, setTab] = useState<string | null>('nsfw');
   const [items, setItems] = useState<Report[]>([]);
@@ -227,7 +232,7 @@ export default function ModerationPage() {
       const { data } = await api.post<{ overdue: number; alerts_sent: number }>('/admin/nsfw/escalate');
       notifications.show({
         color: 'orange',
-        message: `Escalate: overdue=${data.overdue}, alerts sent=${data.alerts_sent}`,
+        message: `Эскалация: просрочено=${data.overdue}, отправлено алертов=${data.alerts_sent}`,
       });
       await load();
     } catch (e) {
@@ -307,7 +312,7 @@ export default function ModerationPage() {
     <>
       <PageHeader
         title="Модерация"
-        description="NSFW SLA 24ч · age-gate 18+ · чёрный список (§10.8 / §11)"
+        description="НСФВ, уровень сервиса 24ч · проверка возраста 18+ · чёрный список (§10.8 / §11)"
         action={
           <Group gap="xs">
             {tab === 'nsfw' && (
@@ -322,7 +327,7 @@ export default function ModerationPage() {
                   onClick={() => void escalateNow()}
                   disabled={!overdue}
                 >
-                  Escalate overdue
+                  Эскалировать просроченные
                 </Button>
               </>
             )}
@@ -353,7 +358,7 @@ export default function ModerationPage() {
       <Tabs value={tab} onChange={setTab} mb="md">
         <Tabs.List>
           <Tabs.Tab value="nsfw">
-            NSFW
+            НСФВ
             {overdue > 0 ? (
               <Badge ml={6} size="sm" color="red">
                 {overdue}
@@ -361,7 +366,7 @@ export default function ModerationPage() {
             ) : null}
           </Tabs.Tab>
           <Tabs.Tab value="age">Проверки возраста</Tabs.Tab>
-          <Tabs.Tab value="forbidden">Forbidden category</Tabs.Tab>
+          <Tabs.Tab value="forbidden">Запрещённые категории</Tabs.Tab>
         </Tabs.List>
       </Tabs>
 
@@ -373,20 +378,20 @@ export default function ModerationPage() {
               { label: 'Просрочено >24ч', value: String(overdue), color: overdue ? 'red' : 'teal' },
               { label: 'Срочно ≤6ч', value: String(sla?.urgent ?? 0), color: 'orange' },
               {
-                label: 'SLA met (sample)',
+                label: 'Уровень сервиса соблюдён (выборка)',
                 value: `${slaPct}%`,
                 color: sla?.sla_ok === false ? 'red' : 'teal',
               },
-              { label: 'Verified 24ч', value: String(sla?.verified_24h ?? 0) },
-              { label: 'Blacklist', value: String(blacklist.length) },
+              { label: 'Проверено 24ч', value: String(sla?.verified_24h ?? 0) },
+              { label: 'Чёрный список', value: String(blacklist.length) },
             ]}
           />
           <SimpleGrid cols={{ base: 1, sm: 2 }} mb="md">
             <Stack gap={6}>
               <Group justify="space-between">
-                <Text size="sm">Соблюдение SLA 24ч</Text>
+                <Text size="sm">Соблюдение уровня сервиса 24ч</Text>
                 <Text size="sm" c="dimmed">
-                  avg left: {sla?.avg_hours_left ?? '—'}ч · oldest: {sla?.oldest_pending_hours ?? '—'}ч
+                  ср. осталось: {sla?.avg_hours_left ?? '—'}ч · самый старый: {sla?.oldest_pending_hours ?? '—'}ч
                 </Text>
               </Group>
               <Progress
@@ -412,7 +417,7 @@ export default function ModerationPage() {
             />
           </SimpleGrid>
           <ShellTable
-            headers={['ID', 'Превью', 'Заказ', 'Пользователь', 'Причина', 'SLA', 'Refund', 'Действия']}
+            headers={['ID', 'Превью', 'Заказ', 'Пользователь', 'Причина', 'Уровень сервиса', 'Возврат', 'Действия']}
             rows={
               items.length
                 ? items.map((r) => [
@@ -446,7 +451,7 @@ export default function ModerationPage() {
                     r.refunded ? <StateBadge key={`rf-${r.id}`} value="да" color="teal" /> : 'нет',
                     r.verified ? (
                       <Badge key={`v-${r.id}`} color="gray">
-                        verified
+                        проверено
                       </Badge>
                     ) : (
                       <Group key={`a-${r.id}`} gap={6}>
@@ -484,7 +489,7 @@ export default function ModerationPage() {
                 { label: 'События', value: String(ageSummary?.events ?? 0) },
                 { label: 'Успех', value: String(ageSummary?.passed ?? 0), color: 'teal' },
                 { label: 'Отказ / <18', value: String(ageSummary?.failed ?? 0), color: 'red' },
-                { label: 'Verified users', value: String(ageSummary?.verified_users ?? 0) },
+                { label: 'Верифицированные', value: String(ageSummary?.verified_users ?? 0) },
               ]}
             />
             <Select
@@ -506,10 +511,10 @@ export default function ModerationPage() {
           ) : (
             <>
               <Text fw={600} mb="sm">
-                Журнал age_verification
+                Журнал проверки возраста
               </Text>
               <ShellTable
-                headers={['ID', 'User', 'Email', 'Age', 'Результат', 'Категория', 'Когда']}
+                headers={['ID', 'Пользователь', 'Эл. почта', 'Возраст', 'Результат', 'Категория', 'Когда']}
                 rows={
                   ageEvents.length
                     ? ageEvents.map((e) => [
@@ -519,11 +524,11 @@ export default function ModerationPage() {
                         e.age != null ? String(e.age) : '—',
                         e.success ? (
                           <Badge key={`ok-${e.id}`} color="teal">
-                            ok
+                            в норме
                           </Badge>
                         ) : (
                           <Badge key={`fail-${e.id}`} color="red">
-                            fail
+                            сбой
                           </Badge>
                         ),
                         e.category || '—',
@@ -533,10 +538,10 @@ export default function ModerationPage() {
                 }
               />
               <Text fw={600} mt="lg" mb="sm">
-                Пользователи с age_verified_at
+                Пользователи с подтверждённым возрастом
               </Text>
               <ShellTable
-                headers={['User', 'Email', 'DOB', 'Возраст', 'Verified at', 'Status']}
+                headers={['Пользователь', 'Эл. почта', 'Дата рождения', 'Возраст', 'Верифицирован', 'Статус']}
                 rows={
                   ageUsers.length
                     ? ageUsers.map((u) => [
@@ -547,7 +552,7 @@ export default function ModerationPage() {
                         u.age_verified_at ? u.age_verified_at.slice(0, 19).replace('T', ' ') : '—',
                         u.status || '—',
                       ])
-                    : [['—', 'Нет verified', '—', '—', '—', '—']]
+                    : [['—', 'Нет верифицированных', '—', '—', '—', '—']]
                 }
               />
             </>
@@ -563,7 +568,7 @@ export default function ModerationPage() {
             </Center>
           ) : (
             <ShellTable
-              headers={['Время', 'User', 'Company', 'Категории', 'Payload']}
+              headers={['Время', 'Пользователь', 'Компания', 'Категории', 'Данные']}
               rows={
                 forbiddenEvents.length
                   ? forbiddenEvents.map((e) => [
@@ -583,7 +588,7 @@ export default function ModerationPage() {
       <Modal
         opened={!!preview}
         onClose={() => setPreview(null)}
-        title={preview ? `Фото block #${preview.blockId}` : ''}
+        title={preview ? `Фото блока #${preview.blockId}` : ''}
         size="xl"
       >
         <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }}>
@@ -613,10 +618,10 @@ export default function ModerationPage() {
               value={newCat}
               onChange={setNewCat}
               data={[
-                { value: 'general', label: 'general' },
-                { value: 'brand', label: 'brand' },
-                { value: 'product', label: 'product' },
-                { value: 'nsfw', label: 'nsfw' },
+                { value: 'general', label: 'общее' },
+                { value: 'brand', label: 'бренд' },
+                { value: 'product', label: 'товар' },
+                { value: 'nsfw', label: 'НСФВ (18+)' },
               ]}
               w={140}
             />
@@ -629,7 +634,7 @@ export default function ModerationPage() {
             rows={blacklist.map((w) => [
               String(w.id),
               w.word,
-              w.category,
+              w.category in BLACKLIST_CATEGORY_LABELS ? BLACKLIST_CATEGORY_LABELS[w.category] : w.category,
               <Button key={w.id} size="xs" color="red" variant="light" onClick={() => void removeWord(w.id)}>
                 Удалить
               </Button>,

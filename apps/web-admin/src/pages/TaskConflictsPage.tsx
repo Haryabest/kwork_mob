@@ -36,9 +36,9 @@ export default function TaskConflictsPage() {
     <div className="vz-page">
       <div className="vz-page-header">
         <div>
-          <Title order={2}>Task conflicts</Title>
+          <Title order={2}>Конфликты задач</Title>
           <Text c="#6d6c77" size="sm" mt={6}>
-            Redlock / duplicate completion · {items.length} записей
+            Redlock / дублирующее завершение · {items.length} записей
           </Text>
         </div>
         <Button leftSection={<IconRefresh size={16} />} variant="light" onClick={() => void load()}>
@@ -49,10 +49,10 @@ export default function TaskConflictsPage() {
         <Table.Thead>
           <Table.Tr>
             <Table.Th>ID</Table.Th>
-            <Table.Th>Task</Table.Th>
-            <Table.Th>Worker</Table.Th>
-            <Table.Th>Reason</Table.Th>
-            <Table.Th>Details</Table.Th>
+            <Table.Th>Задача</Table.Th>
+            <Table.Th>Воркер</Table.Th>
+            <Table.Th>Причина</Table.Th>
+            <Table.Th>Детали</Table.Th>
             <Table.Th>Когда</Table.Th>
           </Table.Tr>
         </Table.Thead>

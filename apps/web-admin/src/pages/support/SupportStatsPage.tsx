@@ -46,7 +46,7 @@ export default function SupportStatsPage() {
 
   return (
     <>
-      <PageHeader title="Статистика поддержки" description="SLA, нагрузка агентов и качество ответов (§11.9)" />
+      <PageHeader title="Статистика поддержки" description="Уровень сервиса, нагрузка агентов и качество ответов (§11.9)" />
       <MetricGrid
         items={[
           { label: 'Всего обращений', value: String(stats.total_tickets) },
@@ -69,7 +69,7 @@ export default function SupportStatsPage() {
           />
         </Card>
         <Card withBorder>
-          <Text fw={600}>SLA</Text>
+          <Text fw={600}>Уровень сервиса</Text>
           <Text c="dimmed" size="sm" mt="sm">
             Цель первого ответа в рабочие часы — ≤ 2 ч (§1.4).
           </Text>
@@ -80,7 +80,7 @@ export default function SupportStatsPage() {
         <Card withBorder>
           <Text fw={600}>ИИ-помощник (Ollama)</Text>
           <Text size="sm" mt="sm" c={ollama?.ok ? 'teal' : 'orange'}>
-            {ollama?.ok ? `Доступен · ${ollama.model ?? 'model'}` : 'Недоступен — проверьте OLLAMA_URL'}
+            {ollama?.ok ? `Доступен · ${ollama.model ?? 'модель'}` : 'Недоступен — проверьте OLLAMA_URL'}
           </Text>
           <Text size="xs" c="dimmed" mt="xs">
             Кнопка «Предложить ответ ИИ» в карточке обращения §11.6

@@ -31,7 +31,7 @@ const SOURCE_OPTIONS = [
   { value: 'api', label: 'API' },
   { value: 'audit', label: 'Аудит' },
   { value: 'orchestrator', label: 'Оркестратор' },
-  { value: 'segmentation', label: 'Segmentation' },
+  { value: 'segmentation', label: 'Сегментация' },
 ];
 
 const LEVEL_OPTIONS = [
@@ -142,7 +142,7 @@ export default function LogsPage() {
       URL.revokeObjectURL(url);
     } catch (e) {
       downloadCsv(items);
-      notifications.show({ color: 'yellow', message: `CSV fallback: ${getApiError(e)}` });
+      notifications.show({ color: 'yellow', message: `CSV резервный вариант: ${getApiError(e)}` });
     }
   }
 
@@ -179,7 +179,7 @@ export default function LogsPage() {
         </Group>
         {backend && (
           <Text size="xs" c="dimmed">
-            backend: {backend}
+            бэкенд: {backend}
           </Text>
         )}
       </Stack>

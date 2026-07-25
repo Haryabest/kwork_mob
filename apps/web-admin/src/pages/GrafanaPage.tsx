@@ -49,7 +49,7 @@ export default function GrafanaPage() {
         <div>
           <Title order={2}>Grafana</Title>
           <Text c="#6d6c77" size="sm">
-            Мониторинг §11.1 — задайте GRAFANA_EMBED_URL. Интерактивные графики KPI — в{' '}
+            Мониторинг §11.1 — задайте GRAFANA_EMBED_URL. Интерактивные графики КПЭ — в{' '}
             <Text component={Link} to="/" size="sm" c="brand">
               Дашборде §11.2.6
             </Text>

@@ -46,27 +46,42 @@ class StaffTotpSetupStart(BaseModel):
 
 async def _issue_tokens(db: AsyncSession, user: User) -> TokenResponse:
     from app.services import auth as auth_service
+    from app.services import staff_session_settings as sess_cfg
 
     await auth_service.revoke_other_refresh_sessions(db, user.id)
-    access = create_access_token(user.id, role=user.staff_role or "", extra={"staff": True})
-    refresh, jti, expires_at = create_refresh_token(user.id, remember_me=True)
+    session_cfg = await sess_cfg.load_settings(db)
+    access = create_access_token(
+        user.id,
+        role=user.staff_role or "",
+        extra={"staff": True},
+        access_expire_minutes=session_cfg["staff_jwt_access_expire_minutes"],
+    )
+    refresh, jti, expires_at = create_refresh_token(
+        user.id,
+        remember_me=True,
+        refresh_expire_days=session_cfg["staff_jwt_refresh_expire_days"],
+    )
     db.add(RefreshToken(user_id=user.id, jti=jti, expires_at=expires_at, remember_me=True))
     return TokenResponse(access_token=access, refresh_token=refresh)
 
 
 @router.get("/vpn-status")
-async def vpn_status(request: Request):
+async def vpn_status(request: Request, db: AsyncSession = Depends(get_db)):
     """Проверка, видит ли API клиента как VPN."""
     from app.core.vpn import client_ip
+    from app.services import staff_session_settings as sess_cfg
 
     ip = client_ip(request)
+    session_cfg = await sess_cfg.load_settings(db)
     return {
         "ip": ip,
         "vpn_required": settings.ADMIN_VPN_REQUIRED,
         "vpn_ok": is_vpn_ip(ip) if settings.ADMIN_VPN_REQUIRED else True,
         "allowed_cidrs": settings.vpn_cidrs if settings.ADMIN_VPN_REQUIRED else [],
         "two_fa_required": settings.ADMIN_2FA_REQUIRED,
-        "idle_timeout_minutes": settings.STAFF_IDLE_TIMEOUT_MINUTES,
+        "idle_timeout_minutes": session_cfg["staff_idle_timeout_minutes"],
+        "jwt_access_expire_minutes": session_cfg["staff_jwt_access_expire_minutes"],
+        "jwt_refresh_expire_days": session_cfg["staff_jwt_refresh_expire_days"],
     }
 
 

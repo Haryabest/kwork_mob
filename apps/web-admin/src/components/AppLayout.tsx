@@ -53,36 +53,36 @@ const NAV: {
   icon: typeof IconChartBar;
 }[] = [
   { path: '/', label: 'Дашборд', roles: ['admin'], icon: IconChartBar },
-  { path: '/ops', label: 'Ops / DoD', roles: ['admin'], icon: IconActivity },
+  { path: '/ops', label: 'Операции / критерии готовности', roles: ['admin'], icon: IconActivity },
   { path: '/workers', label: 'Воркеры', roles: ['admin'], icon: IconServer },
-  { path: '/soft-launch', label: 'Soft launch', roles: ['admin'], icon: IconRocket },
+  { path: '/soft-launch', label: 'Мягкий запуск', roles: ['admin'], icon: IconRocket },
   { path: '/maintenance', label: 'Обслуживание', roles: ['admin'], icon: IconTool },
-  { path: '/webhooks', label: 'B2B Webhooks', roles: ['admin'], icon: IconWebhook },
+  { path: '/webhooks', label: 'B2B вебхуки', roles: ['admin'], icon: IconWebhook },
   { path: '/users', label: 'Пользователи', roles: ['admin'], icon: IconUsers },
-  { path: '/companies', label: 'B2B', roles: ['admin'], icon: IconBuilding },
+  { path: '/companies', label: 'B2B компании', roles: ['admin'], icon: IconBuilding },
   { path: '/invitations', label: 'Приглашения', roles: ['admin'], icon: IconUserPlus },
-  { path: '/marketplace', label: 'Marketplace API', roles: ['admin'], icon: IconUpload },
-  { path: '/access-log', label: 'Access log', roles: ['admin'], icon: IconHistory },
-  { path: '/task-conflicts', label: 'Task conflicts', roles: ['admin'], icon: IconShield },
-  { path: '/watermark-verify', label: 'Watermark verify', roles: ['admin'], icon: IconShieldCheck },
+  { path: '/marketplace', label: 'API маркетплейсов', roles: ['admin'], icon: IconUpload },
+  { path: '/access-log', label: 'Журнал доступа', roles: ['admin'], icon: IconHistory },
+  { path: '/task-conflicts', label: 'Конфликты задач', roles: ['admin'], icon: IconShield },
+  { path: '/watermark-verify', label: 'Проверка водяного знака', roles: ['admin'], icon: IconShieldCheck },
   { path: '/grafana', label: 'Grafana', roles: ['admin'], icon: IconChartBar },
-  { path: '/audit-export', label: 'Audit export', roles: ['admin'], icon: IconHistory },
-  { path: '/b2b-api-usage', label: 'B2B API usage', roles: ['admin'], icon: IconBuilding },
+  { path: '/audit-export', label: 'Экспорт аудита', roles: ['admin'], icon: IconHistory },
+  { path: '/b2b-api-usage', label: 'Использование B2B API', roles: ['admin'], icon: IconBuilding },
   { path: '/segmentation', label: 'Сегментация', roles: ['admin'], icon: IconScan },
   { path: '/promocodes', label: 'Промокоды', roles: ['admin'], icon: IconDiscount2 },
   { path: '/campaigns', label: 'Кампании', roles: ['admin'], icon: IconStack2 },
   { path: '/analytics', label: 'Аналитика', roles: ['admin'], icon: IconChartBar },
-  { path: '/push', label: 'Push', roles: ['admin'], icon: IconBell },
+  { path: '/push', label: 'Push-уведомления', roles: ['admin'], icon: IconBell },
   { path: '/moderation', label: 'Модерация', roles: ['admin'], icon: IconShield },
   { path: '/tax', label: 'Налоги', roles: ['admin'], icon: IconReceipt },
   { path: '/legal', label: 'Юр. документы', roles: ['admin'], icon: IconScale },
   { path: '/settings', label: 'Настройки', roles: ['admin'], icon: IconSettings },
   { path: '/logs', label: 'Логи', roles: ['admin'], icon: IconFileText },
-  { path: '/user-events', label: 'User events', roles: ['admin'], icon: IconHistory },
-  { path: '/alert-log', label: 'Alert log', roles: ['admin'], icon: IconBell },
+  { path: '/user-events', label: 'События пользователей', roles: ['admin'], icon: IconHistory },
+  { path: '/alert-log', label: 'Журнал алертов', roles: ['admin'], icon: IconBell },
   { path: '/storage', label: 'Хранилище', roles: ['admin'], icon: IconServer },
   { path: '/support/tickets', label: 'Обращения', roles: ['admin', 'support_agent'], icon: IconMessages },
-  { path: '/support/faq', label: 'FAQ', roles: ['admin', 'support_agent'], icon: IconHelp },
+  { path: '/support/faq', label: 'ЧаВО', roles: ['admin', 'support_agent'], icon: IconHelp },
   { path: '/support/stats', label: 'Статистика поддержки', roles: ['admin', 'support_agent'], icon: IconChartBar },
 ];
 
@@ -129,7 +129,7 @@ export default function AppLayout() {
                 3dvektor
               </Text>
               <Text size="xs" c="#6d6c77" visibleFrom="xs">
-                {user ? STAFF_ROLE_LABELS[user.role] : 'Staff'}
+                {user ? STAFF_ROLE_LABELS[user.role] : 'Сотрудник'}
               </Text>
             </Box>
           </Group>
@@ -140,7 +140,7 @@ export default function AppLayout() {
                 color={vpnStatus.vpn_required && !vpnStatus.vpn_ok ? 'red' : 'teal'}
                 title={vpnStatus.ip ? `IP: ${vpnStatus.ip}` : undefined}
               >
-                VPN {vpnStatus.vpn_ok || !vpnStatus.vpn_required ? 'OK' : '—'}
+                VPN {vpnStatus.vpn_ok || !vpnStatus.vpn_required ? 'в норме' : 'нет'}
               </Badge>
             )}
             <Badge variant="light" color="brand" visibleFrom="sm" maw={180} style={{ overflow: 'hidden' }}>

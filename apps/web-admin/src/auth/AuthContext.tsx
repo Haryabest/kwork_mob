@@ -2,7 +2,6 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { StaffRole } from './roles';
 import { api, authStorage, getApiError } from '../services/api';
 
-const IDLE_MS = 30 * 60 * 1000;
 const ACTIVITY_KEY = 'staff_last_activity';
 
 export interface StaffUser {
@@ -26,7 +25,13 @@ export interface TotpSetupResult {
 
 interface AuthContextValue {
   user: StaffUser | null;
-  vpnStatus: { vpn_required: boolean; vpn_ok: boolean; ip?: string } | null;
+  vpnStatus: {
+    vpn_required: boolean;
+    vpn_ok: boolean;
+    ip?: string;
+    idle_timeout_minutes?: number;
+    jwt_access_expire_minutes?: number;
+  } | null;
   startLogin: (email: string, password: string) => Promise<StaffLoginResult>;
   setup2fa: (challengeToken: string) => Promise<TotpSetupResult>;
   confirm2fa: (challengeToken: string, code: string) => Promise<void>;
@@ -88,6 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           vpn_required: Boolean(data.vpn_required),
           vpn_ok: Boolean(data.vpn_ok),
           ip: data.ip,
+          idle_timeout_minutes: Number(data.idle_timeout_minutes) || 30,
+          jwt_access_expire_minutes: Number(data.jwt_access_expire_minutes) || 480,
         }),
       )
       .catch(() => setVpnStatus(null));
@@ -96,9 +103,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
 
+    const idleMs = (vpnStatus?.idle_timeout_minutes ?? 30) * 60 * 1000;
+
     const checkIdle = () => {
       const last = Number(localStorage.getItem(ACTIVITY_KEY) || 0);
-      if (last && Date.now() - last > IDLE_MS) {
+      if (last && Date.now() - last > idleMs) {
         authStorage.clear();
         setUser(null);
       }
@@ -119,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('keydown', onActivity);
       window.removeEventListener('click', onActivity);
     };
-  }, [user]);
+  }, [user, vpnStatus?.idle_timeout_minutes]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

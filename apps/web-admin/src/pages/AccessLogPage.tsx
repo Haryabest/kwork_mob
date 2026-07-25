@@ -70,7 +70,7 @@ export default function AccessLogPage() {
     <div className="vz-page">
       <div className="vz-page-header">
         <div>
-          <Title order={2}>Access log</Title>
+          <Title order={2}>Журнал доступа</Title>
           <Text c="#6d6c77" size="sm" mt={6}>
             Аудит скачиваний моделей §10.7.2 · всего {total}
           </Text>
@@ -98,7 +98,7 @@ export default function AccessLogPage() {
               }
             }}
           >
-            Monthly → MinIO
+            Ежемесячный экспорт → MinIO
           </Button>
         </Group>
       </div>
@@ -107,8 +107,8 @@ export default function AccessLogPage() {
         <Group align="flex-end" wrap="wrap">
           <TextInput type="date" label="С" value={dateFrom} onChange={(e) => setDateFrom(e.currentTarget.value)} />
           <TextInput type="date" label="По" value={dateTo} onChange={(e) => setDateTo(e.currentTarget.value)} />
-          <TextInput label="Company ID" value={companyId} onChange={(e) => setCompanyId(e.currentTarget.value)} maw={120} />
-          <TextInput label="Model UUID" value={modelUuid} onChange={(e) => setModelUuid(e.currentTarget.value)} maw={280} />
+          <TextInput label="ID компании" value={companyId} onChange={(e) => setCompanyId(e.currentTarget.value)} maw={120} />
+          <TextInput label="UUID модели" value={modelUuid} onChange={(e) => setModelUuid(e.currentTarget.value)} maw={280} />
           <Button onClick={() => void load()}>Фильтр</Button>
         </Group>
       </div>
@@ -118,10 +118,10 @@ export default function AccessLogPage() {
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Время</Table.Th>
-              <Table.Th>User</Table.Th>
-              <Table.Th>Company</Table.Th>
-              <Table.Th>Model</Table.Th>
-              <Table.Th>Format</Table.Th>
+              <Table.Th>Пользователь</Table.Th>
+              <Table.Th>Компания</Table.Th>
+              <Table.Th>Модель</Table.Th>
+              <Table.Th>Формат</Table.Th>
               <Table.Th>IP</Table.Th>
             </Table.Tr>
           </Table.Thead>

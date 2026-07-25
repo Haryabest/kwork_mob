@@ -56,7 +56,7 @@ export default function UserEventsPage() {
   return (
     <div className="vz-page">
       <PageHeader
-        title="User events"
+        title="События пользователей"
         description="§12.1 — события пользователей из PostgreSQL"
         action={
           <Button leftSection={<IconRefresh size={16} />} variant="light" onClick={() => void load()}>
@@ -67,10 +67,10 @@ export default function UserEventsPage() {
 
       <Stack className="vz-surface" mb="md">
         <Group grow align="flex-end">
-          <TextInput label="User ID" value={userId} onChange={(e) => setUserId(e.currentTarget.value)} />
-          <TextInput label="Company ID" value={companyId} onChange={(e) => setCompanyId(e.currentTarget.value)} />
+          <TextInput label="ID пользователя" value={userId} onChange={(e) => setUserId(e.currentTarget.value)} />
+          <TextInput label="ID компании" value={companyId} onChange={(e) => setCompanyId(e.currentTarget.value)} />
           <Select
-            label="Event type"
+            label="Тип события"
             clearable
             searchable
             data={types.map((t) => ({ value: t, label: t }))}
@@ -97,7 +97,7 @@ export default function UserEventsPage() {
         </Center>
       ) : (
         <ShellTable
-          headers={['Время', 'User', 'Company', 'Тип', 'Payload']}
+          headers={['Время', 'Пользователь', 'Компания', 'Тип', 'Данные']}
           rows={items.map((r) => [
             r.created_at ? new Date(r.created_at).toLocaleString('ru-RU') : '—',
             String(r.user_id ?? '—'),

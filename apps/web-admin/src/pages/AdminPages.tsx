@@ -181,14 +181,14 @@ export function WorkersPage() {
     <>
       <PageHeader
         title="Воркеры"
-        description="GPU-очередь · Intelion/Immers create/start/stop · авто-масштаб"
+        description="GPU-очередь · Intelion/Immers создание/запуск/остановка · авто-масштаб"
         action={
           <Group>
             <Button variant="light" leftSection={<IconDownload size={16} />} onClick={() => void downloadDeploy('worker')}>
               Deploy JSON
             </Button>
             <Button variant="subtle" size="compact-sm" onClick={() => void downloadDeploy('cloud')}>
-              Cloud env
+              Переменные cloud
             </Button>
             <Button leftSection={<IconPlus size={16} />} onClick={() => setCreateOpen(true)}>
               Облачный инстанс
@@ -202,11 +202,11 @@ export function WorkersPage() {
       <MetricGrid
         items={[
           { label: 'Онлайн', value: String(summary.online), hint: `из ${summary.total}`, color: 'teal' },
-          { label: 'Очередь normal', value: String(summary.queue_normal) },
-          { label: 'Очередь high', value: String(summary.queue_high) },
-          { label: 'Burn ₽/ч', value: String(costs.burn_rub_per_hour), hint: `сегодня ${costs.today_rub} ₽ · месяц ${costs.month_rub} ₽`, color: costs.budget_blocked ? 'red' : undefined },
+          { label: 'Очередь обычная', value: String(summary.queue_normal) },
+          { label: 'Очередь приоритетная', value: String(summary.queue_high) },
+          { label: 'Расход ₽/ч', value: String(costs.burn_rub_per_hour), hint: `сегодня ${costs.today_rub} ₽ · месяц ${costs.month_rub} ₽`, color: costs.budget_blocked ? 'red' : undefined },
           ...(costs.budget_blocked
-            ? [{ label: 'Cloud budget', value: 'STOP', color: 'red' as const }]
+            ? [{ label: 'Бюджет cloud', value: 'СТОП', color: 'red' as const }]
             : []),
         ]}
       />
@@ -231,7 +231,7 @@ export function WorkersPage() {
           {costChart.length > 0 && (
             <Card withBorder p="md">
               <Text fw={600} mb="sm">
-                Cloud burn по часам §11.2.6
+                Расход облака по часам §11.2.6
               </Text>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={costChart} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
@@ -249,24 +249,24 @@ export function WorkersPage() {
       <Card withBorder mb="md">
         <Stack gap="sm">
           <Group justify="space-between">
-            <Text fw={600}>TRELLIS rollout §18</Text>
+            <Text fw={600}>Раскатка TRELLIS §18</Text>
             {rollout.mixed_versions && (
-              <StateBadge value="mixed versions" color="orange" />
+              <StateBadge value="смешанные версии" color="orange" />
             )}
           </Group>
           <SimpleGrid cols={{ base: 1, md: 3 }}>
             <TextInput
-              label="Target version"
+              label="Целевая версия"
               value={targetVersion}
               onChange={(e) => setTargetVersion(e.currentTarget.value)}
             />
             <TextInput
-              label="Default docker image"
+              label="Docker-образ по умолчанию"
               value={defaultImage}
               onChange={(e) => setDefaultImage(e.currentTarget.value)}
             />
             <Text size="sm" c="dimmed" mt={28}>
-              maintenance: {rollout.maintenance_count} ·{' '}
+              обслуживание: {rollout.maintenance_count} ·{' '}
               {Object.entries(rollout.workers_by_version)
                 .map(([v, n]) => `${v}:${n}`)
                 .join(' · ') || 'нет версий'}
@@ -288,20 +288,20 @@ export function WorkersPage() {
                 }
               }}
             >
-              Сохранить rollout
+              Сохранить раскатку
             </Button>
           </Group>
         </Stack>
       </Card>
       <ShellTable
-        headers={['Воркер', 'Статус', 'IP', 'Task', 'TRELLIS', 'GPU', 'VRAM', '°C', 'Вес', 'Grace', 'Действия']}
+        headers={['Воркер', 'Статус', 'IP', 'Задача', 'TRELLIS', 'GPU', 'VRAM', '°C', 'Вес', 'Пауза', 'Действия']}
         rows={
           items.length
             ? items.map((w) => [
                 w.id,
                 <Group key={`s-${w.id}`} gap={6}>
                   <StateBadge value={w.status} color={w.status === 'online' ? 'teal' : 'orange'} />
-                  {w.maintenance && <StateBadge value="maint" color="orange" />}
+                  {w.maintenance && <StateBadge value="обслуж." color="orange" />}
                 </Group>,
                 w.tailscale_ip ?? '—',
                 w.current_task_id ? String(w.current_task_id).slice(0, 8) : '—',
@@ -371,47 +371,47 @@ export function WorkersPage() {
                       }
                     }}
                   >
-                    {w.maintenance ? 'Maint OFF' : 'Maint ON'}
+                    {w.maintenance ? 'Обслуж. ВЫКЛ' : 'Обслуж. ВКЛ'}
                   </Button>
                   <Button
                     size="xs"
                     variant="light"
                     onClick={async () => {
-                      const ver = window.prompt('Rollout version', rollout.target_version || '2');
+                      const ver = window.prompt('Версия раскатки', rollout.target_version || '2');
                       if (!ver) return;
                       try {
                         await api.post(`/admin/workers/${w.id}/trellis/rollout`, {
                           trellis_version: ver,
                           docker_image: defaultImage || undefined,
                         });
-                        notifications.show({ color: 'teal', message: 'Rollout queued (maintenance ON)' });
+                        notifications.show({ color: 'teal', message: 'Раскатка в очереди (обслуживание ВКЛ)' });
                         await load();
                       } catch (e) {
                         notifications.show({ color: 'red', message: getApiError(e) });
                       }
                     }}
                   >
-                    Rollout
+                    Раскатка
                   </Button>
                   <Button
                     size="xs"
                     color="orange"
                     variant="light"
                     onClick={async () => {
-                      const ver = window.prompt('Rollback version', '1');
+                      const ver = window.prompt('Версия отката', '1');
                       if (!ver) return;
                       try {
                         await api.post(`/admin/workers/${w.id}/trellis/rollback`, {
                           trellis_version: ver,
                         });
-                        notifications.show({ color: 'orange', message: 'Rollback pinned' });
+                        notifications.show({ color: 'orange', message: 'Откат закреплён' });
                         await load();
                       } catch (e) {
                         notifications.show({ color: 'red', message: getApiError(e) });
                       }
                     }}
                   >
-                    Rollback
+                    Откат
                   </Button>
                   <Button
                     size="xs"
@@ -441,11 +441,11 @@ export function WorkersPage() {
                       }
                     }}
                   >
-                    Complete
+                    Завершить
                   </Button>
                 </Group>,
               ])
-            : [['—', 'Нет воркеров', '—', 'Heartbeat ещё не приходил', '—', '—', '—']]
+            : [['—', 'Нет воркеров', '—', 'Сигнал heartbeat ещё не приходил', '—', '—', '—']]
         }
       />
 
@@ -469,12 +469,12 @@ export function WorkersPage() {
         )}
       </Modal>
 
-      <PageHeader title="Облачные инстансы" description={`Месяц: ${costs.month_rub} ₽ · прогноз 24ч: ${costs.forecast_24h_rub ?? 0} ₽ · running: ${costs.running_instances}`} />
+      <PageHeader title="Облачные инстансы" description={`Месяц: ${costs.month_rub} ₽ · прогноз 24ч: ${costs.forecast_24h_rub ?? 0} ₽ · запущено: ${costs.running_instances}`} />
       {scaleStatus?.pending_approval ? (
         <Card withBorder mb="md" p="md">
           <Group justify="space-between">
             <Text size="sm">
-              Semi-auto: очередь {scaleStatus.pending?.queue ?? scaleStatus.queue} — требуется подтверждение owner
+              Полуавто: очередь {scaleStatus.pending?.queue ?? scaleStatus.queue} — требуется подтверждение владельца
             </Text>
             <Button
               size="sm"
@@ -499,7 +499,7 @@ export function WorkersPage() {
         </Card>
       ) : null}
       <ShellTable
-        headers={['Провайдер', 'Instance', 'Worker', 'GPU', 'Статус', '₽/ч', '']}
+        headers={['Провайдер', 'Инстанс', 'Воркер', 'GPU', 'Статус', '₽/ч', '']}
         rows={
           cloud.length
             ? cloud.map((c) => [
@@ -526,7 +526,7 @@ export function WorkersPage() {
                       }
                     }}
                   >
-                    Start
+                    Запуск
                   </Button>
                   <Button
                     size="xs"
@@ -545,7 +545,7 @@ export function WorkersPage() {
                       }
                     }}
                   >
-                    Stop
+                    Стоп
                   </Button>
                   <Button
                     size="xs"
@@ -564,7 +564,7 @@ export function WorkersPage() {
                       }
                     }}
                   >
-                    Terminate
+                    Удалить
                   </Button>
                 </Group>,
               ])
@@ -574,7 +574,7 @@ export function WorkersPage() {
 
       <PageHeader
         title="Авто-масштаб"
-        description="Celery каждые 30с · semi-auto owner approve · idle stop 5 мин"
+        description="Celery каждые 30с · полуавто с подтверждением владельца · остановка при простое 5 мин"
         action={
           <Group>
             <Button
@@ -612,13 +612,13 @@ export function WorkersPage() {
                 }
               }}
             >
-              Run once
+              Запустить разово
             </Button>
           </Group>
         }
       />
       <ShellTable
-        headers={['Имя', 'Порог Q', 'Launch', 'Провайдер', 'GPU', 'Idle мин', 'Max', 'Auto', 'Active', '']}
+        headers={['Имя', 'Порог Q', 'Запуск', 'Провайдер', 'GPU', 'Простой, мин', 'Макс.', 'Авто', 'Активно', '']}
         rows={
           rules.length
             ? rules.map((r) => [
@@ -629,13 +629,13 @@ export function WorkersPage() {
                 r.gpu,
                 String(r.idle_timeout_min),
                 String(r.max_cloud_workers),
-                r.auto_launch ? 'да' : 'semi',
+                r.auto_launch ? 'да' : 'полуавто',
                 r.is_active ? 'да' : 'нет',
                 <Group key={`re-${r.id}`} gap={4}>
                   <Button size="xs" variant="subtle" onClick={() => {
                     setRuleDraft({ ...r });
                     setRuleOpen(true);
-                  }}>Edit</Button>
+                  }}>Изменить</Button>
                   <ActionIcon color="red" variant="subtle" onClick={async () => {
                     try {
                       await api.delete(`/admin/cloud/autoscaling/rules/${r.id}`);
@@ -656,12 +656,12 @@ export function WorkersPage() {
         <Stack>
           <TextInput label="Имя" value={ruleDraft.name} onChange={(e) => setRuleDraft({ ...ruleDraft, name: e.currentTarget.value })} />
           <NumberInput label="Порог очереди" value={ruleDraft.queue_threshold} onChange={(v) => setRuleDraft({ ...ruleDraft, queue_threshold: Number(v) || 20 })} />
-          <NumberInput label="Launch count" value={ruleDraft.launch_count} onChange={(v) => setRuleDraft({ ...ruleDraft, launch_count: Number(v) || 1 })} min={1} max={10} />
+          <NumberInput label="Число запусков" value={ruleDraft.launch_count} onChange={(v) => setRuleDraft({ ...ruleDraft, launch_count: Number(v) || 1 })} min={1} max={10} />
           <Select label="Провайдер" data={[{ value: 'intelion', label: 'Intelion' }, { value: 'immers', label: 'Immers' }]} value={ruleDraft.provider} onChange={(v) => setRuleDraft({ ...ruleDraft, provider: v ?? 'intelion' })} />
           <TextInput label="GPU" value={ruleDraft.gpu} onChange={(e) => setRuleDraft({ ...ruleDraft, gpu: e.currentTarget.value })} />
-          <NumberInput label="Idle timeout (мин)" value={ruleDraft.idle_timeout_min} onChange={(v) => setRuleDraft({ ...ruleDraft, idle_timeout_min: Number(v) || 30 })} />
-          <NumberInput label="Max cloud workers" value={ruleDraft.max_cloud_workers} onChange={(v) => setRuleDraft({ ...ruleDraft, max_cloud_workers: Number(v) || 5 })} />
-          <Select label="Auto launch" data={[{ value: 'false', label: 'Semi-auto (owner approve)' }, { value: 'true', label: 'Auto launch' }]} value={ruleDraft.auto_launch ? 'true' : 'false'} onChange={(v) => setRuleDraft({ ...ruleDraft, auto_launch: v === 'true' })} />
+          <NumberInput label="Таймаут простоя (мин)" value={ruleDraft.idle_timeout_min} onChange={(v) => setRuleDraft({ ...ruleDraft, idle_timeout_min: Number(v) || 30 })} />
+          <NumberInput label="Макс. cloud-воркеров" value={ruleDraft.max_cloud_workers} onChange={(v) => setRuleDraft({ ...ruleDraft, max_cloud_workers: Number(v) || 5 })} />
+          <Select label="Автозапуск" data={[{ value: 'false', label: 'Полуавто (подтверждение владельца)' }, { value: 'true', label: 'Автозапуск' }]} value={ruleDraft.auto_launch ? 'true' : 'false'} onChange={(v) => setRuleDraft({ ...ruleDraft, auto_launch: v === 'true' })} />
           <Button loading={busy} onClick={async () => {
             setBusy(true);
             try {
@@ -745,10 +745,10 @@ export function UsersPage() {
     <>
       <PageHeader title="Пользователи" description="Селлеры, статусы учётных записей и право на забвение" />
       <Group mb="md">
-        <TextInput placeholder="Поиск по ID, email" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
+        <TextInput placeholder="Поиск по ID, эл. почта" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
       </Group>
       <VirtualShellTable
-        headers={['ID', 'Пользователь', 'Email', 'Рейтинг', 'Активность', 'Статус', '']}
+        headers={['ID', 'Пользователь', 'Эл. почта', 'Рейтинг', 'Активность', 'Статус', '']}
         rows={filtered.map((user) => [
           String(user.id),
           user.full_name || '—',
@@ -858,7 +858,7 @@ export function UserDetailPage() {
       />
       <Card withBorder mt="md">
         <Group justify="space-between" mb="sm">
-          <Text fw={600}>OAuth audit</Text>
+          <Text fw={600}>Аудит OAuth</Text>
           <Button
             size="xs"
             variant="light"
@@ -880,11 +880,11 @@ export function UserDetailPage() {
               }
             }}
           >
-            Export CSV
+            Экспорт CSV
           </Button>
         </Group>
         <ShellTable
-          headers={['ID', 'Action', 'Details', 'When']}
+          headers={['ID', 'Действие', 'Детали', 'Когда']}
           rows={
             auditItems.length
               ? auditItems.map((r) => [
@@ -1197,7 +1197,7 @@ export function CompanyDetailPage() {
             <Text fw={600}>Реквизиты</Text>
             <Text size="sm">Баланс: {company.balance.toLocaleString('ru-RU')} ₽</Text>
             <TextInput
-              label="Force TRELLIS version (§18.4.2)"
+              label="Принудительная версия TRELLIS (§18.4.2)"
               placeholder="default / 1 / 2"
               value={forceTrellis}
               onChange={(e) => setForceTrellis(e.currentTarget.value)}
@@ -1216,7 +1216,7 @@ export function CompanyDetailPage() {
                 }
               }}
             >
-              Сохранить TRELLIS pin
+              Сохранить закрепление TRELLIS
             </Button>
             <Text size="sm">
               Заказов: {stats.orders} · Выручка: {stats.revenue.toLocaleString('ru-RU')} ₽
@@ -1264,7 +1264,7 @@ export function CompanyDetailPage() {
                     e.expires_at ? new Date(e.expires_at).toLocaleString('ru-RU') : '—',
                     e.status === 'completed' ? (
                       <Button key={`dl${e.id}`} size="xs" variant="light" onClick={() => void downloadExport(e.id)}>
-                        Presign
+                        Presign-ссылка
                       </Button>
                     ) : (
                       '—'
@@ -1277,7 +1277,7 @@ export function CompanyDetailPage() {
         <Card withBorder>
           <Text fw={600} mb="sm">Сотрудники и лимиты (§11.6)</Text>
           <ShellTable
-            headers={['User ID', 'Роль', 'Заказов', 'Лимит ₽/мес', '']}
+            headers={['ID пользователя', 'Роль', 'Заказов', 'Лимит ₽/мес', '']}
             rows={company.members.map((m) => [
               String(m.user_id),
               m.role,
@@ -1366,7 +1366,7 @@ export function CompanyDetailPage() {
             </Button>
           </Group>
           <ShellTable
-            headers={['Название', 'Prefix', 'Активен', '']}
+            headers={['Название', 'Префикс', 'Активен', '']}
             rows={
               apiKeys.length
                 ? apiKeys.map((k) => [
@@ -1391,7 +1391,7 @@ export function CompanyDetailPage() {
         <Card withBorder>
           <Text fw={600} mb="sm">Приглашения (§11.6)</Text>
           <ShellTable
-            headers={['Email', 'Роль', 'Статус', '']}
+            headers={['Эл. почта', 'Роль', 'Статус', '']}
             rows={
               invites.length
                 ? invites.map((inv) => [
@@ -1417,7 +1417,7 @@ export function CompanyDetailPage() {
         <Card withBorder>
           <Text fw={600} mb="sm">Аудит (§10.7.7)</Text>
           <ShellTable
-            headers={['Действие', 'User', 'Когда']}
+            headers={['Действие', 'Пользователь', 'Когда']}
             rows={
               logs.length
                 ? logs.slice(0, 20).map((r) => [
@@ -1450,7 +1450,7 @@ export function CompanyDetailPage() {
           <Button onClick={saveMemberLimits}>Сохранить</Button>
         </Stack>
       </Modal>
-      <PageHeader title="Shoot-links (§3.15.4)" description="Созданные / истёкшие / успешные съёмки" />
+      <PageHeader title="Ссылки на съёмку (§3.15.4)" description="Созданные / истёкшие / успешные съёмки" />
       <MetricGrid
         items={[
           { label: 'Создано', value: String(sl.created ?? 0) },
@@ -1458,13 +1458,13 @@ export function CompanyDetailPage() {
           { label: 'Истекли', value: String(sl.expired ?? 0) },
           { label: 'Успешные', value: String(sl.success ?? 0), color: 'teal' },
           {
-            label: 'Conversion',
+            label: 'Конверсия',
             value: `${((sl.conversion_rate ?? 0) * 100).toFixed(1)}%`,
           },
         ]}
       />
       <ShellTable
-        headers={['ID', 'Token', 'Статус', 'Uses', 'Создана']}
+        headers={['ID', 'Токен', 'Статус', 'Использований', 'Создана']}
         rows={
           shootRecent.length
             ? shootRecent.map((r) => [
@@ -1556,7 +1556,7 @@ export function InvitationsPage() {
         <Center py="xl"><Loader color="brand" /></Center>
       ) : (
         <ShellTable
-          headers={['Email', 'Компания', 'Роль', 'Статус', 'Срок', '']}
+          headers={['Эл. почта', 'Компания', 'Роль', 'Статус', 'Срок', '']}
           rows={
             items.length
               ? items.map((inv) => [
@@ -1913,7 +1913,7 @@ export function StoragePage() {
     <>
       <PageHeader
         title="Кластер хранения"
-        description="MinIO SMART / disk / replication / PG lag §11.16 / §12.4.1"
+        description="MinIO SMART / диск / репликация / отставание PG §11.16 / §12.4.1"
         action={
           <Group>
             <Button leftSection={<IconRefresh size={16} />} onClick={check}>
@@ -1924,14 +1924,14 @@ export function StoragePage() {
               onClick={async () => {
                 try {
                   const { data } = await api.post('/storage/init');
-                  notifications.show({ color: 'green', message: `Buckets: ${(data.buckets || []).join(', ')}` });
+                  notifications.show({ color: 'green', message: `Бакеты: ${(data.buckets || []).join(', ')}` });
                   await check();
                 } catch (e) {
                   notifications.show({ color: 'red', message: getApiError(e) });
                 }
               }}
             >
-              Init buckets
+              Инициализировать бакеты
             </Button>
             <Button
               variant="light"
@@ -1940,7 +1940,7 @@ export function StoragePage() {
                   const { data } = await api.post('/storage/encryption/apply');
                   notifications.show({
                     color: 'teal',
-                    message: `SSE: ${data.encryption?.mode ?? 'ok'}`,
+                    message: `SSE: ${data.encryption?.mode ?? 'в норме'}`,
                   });
                   await check();
                 } catch (e) {
@@ -1948,7 +1948,7 @@ export function StoragePage() {
                 }
               }}
             >
-              Apply SSE
+              Применить SSE
             </Button>
             <Button
               variant="light"
@@ -1962,11 +1962,11 @@ export function StoragePage() {
                     thresholds?: Record<string, number>;
                   }>('/admin/storage-alerts/check');
                   setLastCheck(
-                    `sent=${(data.alerts_sent || []).join(',') || 'none'} · free ${data.free_percent ?? '—'}%`,
+                    `отправлено=${(data.alerts_sent || []).join(',') || 'нет'} · свободно ${data.free_percent ?? '—'}%`,
                   );
                   notifications.show({
                     color: 'teal',
-                    message: `Cluster alerts: ${data.status} · used ${data.used_percent ?? '—'}% · ${(data.alerts_sent || []).join(',') || 'none'}`,
+                    message: `Алерты кластера: ${data.status} · занято ${data.used_percent ?? '—'}% · ${(data.alerts_sent || []).join(',') || 'нет'}`,
                   });
                   await check();
                 } catch (e) {
@@ -1974,7 +1974,7 @@ export function StoragePage() {
                 }
               }}
             >
-              Check disk/SMART/repl→alerts
+              Проверить диск/SMART/репл.→алерты
             </Button>
             <Button
               variant="light"
@@ -1986,14 +1986,14 @@ export function StoragePage() {
                   );
                   notifications.show({
                     color: data.result?.ok !== false ? 'teal' : 'orange',
-                    message: `Force Resync MinIO: ${data.mode} · ${data.result?.error || 'ok'}`,
+                    message: `Принудительная ресинхр. MinIO: ${data.mode} · ${data.result?.error || 'в норме'}`,
                   });
                 } catch (e) {
                   notifications.show({ color: 'red', message: getApiError(e) });
                 }
               }}
             >
-              Force Resync MinIO
+              Принудительный resync MinIO
             </Button>
             <Button
               variant="light"
@@ -2005,14 +2005,14 @@ export function StoragePage() {
                   );
                   notifications.show({
                     color: data.result?.ok !== false ? 'teal' : 'orange',
-                    message: `Restart Patroni: ${data.mode} · ${data.result?.error || 'ok'}`,
+                    message: `Перезапуск Patroni: ${data.mode} · ${data.result?.error || 'в норме'}`,
                   });
                 } catch (e) {
                   notifications.show({ color: 'red', message: getApiError(e) });
                 }
               }}
             >
-              Restart Patroni Replication
+              Перезапуск репликации Patroni
             </Button>
             <Button
               variant="light"
@@ -2028,7 +2028,7 @@ export function StoragePage() {
                   }>('/admin/storage/fio-test');
                   notifications.show({
                     color: data.result?.ok !== false ? 'teal' : 'orange',
-                    message: `FIO ${data.duration_sec || 10}s: ${data.mode} · ${data.result?.error || 'ok'}`,
+                    message: `FIO ${data.duration_sec || 10}с: ${data.mode} · ${data.result?.error || 'в норме'}`,
                   });
                 } catch (e) {
                   notifications.show({ color: 'red', message: getApiError(e) });
@@ -2062,7 +2062,7 @@ export function StoragePage() {
       <Modal
         opened={logsOpen}
         onClose={() => setLogsOpen(false)}
-        title="Docker / Loki logs §11.16.4"
+        title="Логи Docker / Loki §11.16.4"
         size="xl"
       >
         <Stack>
@@ -2108,7 +2108,7 @@ export function StoragePage() {
             </Button>
             {logBackend ? (
               <Text size="xs" c="dimmed" mt={28}>
-                backend: {logBackend}
+                бэкенд: {logBackend}
               </Text>
             ) : null}
           </Group>
@@ -2123,7 +2123,7 @@ export function StoragePage() {
       </Modal>
       {lastCheck ? (
         <Text size="sm" c="dimmed" mb="sm">
-          Last alert check: {lastCheck}
+          Последняя проверка алертов: {lastCheck}
         </Text>
       ) : null}
       {(clusterCards?.nodes || []).length > 0 && (
@@ -2141,11 +2141,11 @@ export function StoragePage() {
                 </Badge>
               </Group>
               <Text size="sm" mt="sm">
-                disk: {n.disk?.device || '—'} · health={n.disk?.health || '—'} · used=
+                диск: {n.disk?.device || '—'} · состояние={n.disk?.health || '—'} · занято=
                 {n.disk?.used_percent != null ? `${n.disk.used_percent}%` : '—'}
               </Text>
               <Text size="xs" c="dimmed" mt={4}>
-                heartbeat age: {n.last_seen_age_sec != null ? `${n.last_seen_age_sec}s` : '—'}
+                возраст сигнала: {n.last_seen_age_sec != null ? `${n.last_seen_age_sec}с` : '—'}
               </Text>
             </Card>
           ))}
@@ -2159,26 +2159,26 @@ export function StoragePage() {
             Режим: <b>{enc.mode || health.encryption?.mode || '—'}</b>
           </Text>
           <Text size="xs" c="dimmed" mt={4}>
-            KMS key:{' '}
+            Ключ KMS:{' '}
             {enc.kms_key_configured || health.encryption?.kms_key_configured
-              ? enc.kms_key_id_masked || health.encryption?.kms_key_id_masked || 'yes'
+              ? enc.kms_key_id_masked || health.encryption?.kms_key_id_masked || 'да'
               : 'не задан (fallback SSE-S3 при режиме sse-kms)'}
           </Text>
         </Card>
         <Card withBorder>
           <Text fw={600}>SMART / диск §11.16.5</Text>
           <Text size="sm" mt="sm">
-            status: {health.smart?.status ?? '—'} · used:{' '}
-            {health.used_percent != null ? `${health.used_percent}%` : '—'} · free:{' '}
+            состояние: {health.smart?.status ?? '—'} · занято:{' '}
+            {health.used_percent != null ? `${health.used_percent}%` : '—'} · свободно:{' '}
             {health.free_percent != null ? `${health.free_percent}%` : '—'}
-            {health.alert_disk_critical ? ' 🚨 critical' : health.alert_disk_high ? ' ⚠ >85%' : ''}
+            {health.alert_disk_critical ? ' 🚨 критично' : health.alert_disk_high ? ' ⚠ >85%' : ''}
           </Text>
           <Text size="xs" c="dimmed" mt={4}>
             {health.smart?.note}
           </Text>
           {(health.smart_disks || []).length > 0 && (
             <ShellTable
-              headers={['Device', 'Health', 'Temp', 'Realloc', 'Wear %']}
+              headers={['Устройство', 'Состояние', 'Темп.', 'Переназнач.', 'Износ %']}
               rows={(health.smart_disks || []).map((d) => [
                 d.device || d.model || '—',
                 d.health || '—',
@@ -2195,11 +2195,11 @@ export function StoragePage() {
           <Text fw={600}>Репликация §11.16.2</Text>
           <Text size="sm" mt="sm">
             MinIO:{' '}
-            {health.alert_replication_failed ? '⚠ Failed' : repl.length ? 'OK' : 'нет данных (MINIO_HA_JSON)'}
+            {health.alert_replication_failed ? '⚠ Сбой' : repl.length ? 'в норме' : 'нет данных (MINIO_HA_JSON)'}
           </Text>
           {repl.length > 0 && (
             <ShellTable
-              headers={['Bucket', 'Status', 'Pending', 'Failed min']}
+              headers={['Бакет', 'Статус', 'Ожидает', 'Сбой мин']}
               rows={repl.map((r) => [
                 r.bucket || '—',
                 r.status || '—',
@@ -2209,13 +2209,13 @@ export function StoragePage() {
             />
           )}
           <Text size="sm" mt="md">
-            PostgreSQL: role={pg.role || '—'} · lag=
+            PostgreSQL: роль={pg.role || '—'} · отставание=
             {pg.lag_bytes != null ? `${Math.round(Number(pg.lag_bytes) / (1024 * 1024))} MB` : '—'} · wal=
             {pg.wal_state || pg.state || '—'}
           </Text>
           {nodes.length > 0 && (
             <ShellTable
-              headers={['Node', 'Age sec', 'Last seen']}
+              headers={['Узел', 'Возраст сек', 'Последний сигнал']}
               rows={nodes.map((n) => [
                 n.id || n.name || '—',
                 n.last_seen_age_sec != null ? String(n.last_seen_age_sec) : '—',
@@ -2225,15 +2225,15 @@ export function StoragePage() {
           )}
         </Card>
         <Card withBorder>
-          <Text fw={600}>Write Activity Heartbeat §11.16 / §23.4</Text>
+          <Text fw={600}>Сигнал активности записи §11.16 / §23.4</Text>
           <Text size="sm" mt="sm">
-            load: {writeAct?.under_load ? 'да' : 'нет'} · queued={writeAct?.queued_tasks ?? '—'} ·
-            processing={writeAct?.processing_tasks ?? '—'}
+            нагрузка: {writeAct?.under_load ? 'да' : 'нет'} · в очереди={writeAct?.queued_tasks ?? '—'} ·
+            в обработке={writeAct?.processing_tasks ?? '—'}
           </Text>
           <Text size="sm" mt={4}>
-            last write: {writeAct?.last_write_at ?? '—'} · stale:{' '}
-            {writeAct?.stale_seconds != null ? `${Math.round(writeAct.stale_seconds)}s` : '—'}
-            {writeAct?.freeze_indicator ? ' 🔴 freeze' : ''}
+            последняя запись: {writeAct?.last_write_at ?? '—'} · устарело:{' '}
+            {writeAct?.stale_seconds != null ? `${Math.round(writeAct.stale_seconds)}с` : '—'}
+            {writeAct?.freeze_indicator ? ' 🔴 заморозка' : ''}
           </Text>
           <Text size="xs" c="dimmed" mt={4}>
             PG tx/1h: {writeAct?.pg_tx_1h ?? '—'} · порог алерта 10 мин при нагрузке
@@ -2253,18 +2253,18 @@ export function StoragePage() {
                 setWriteAct((prev) => ({ ...(prev || {}), ...data }));
                 notifications.show({
                   color: data.critical ? 'red' : data.freeze_indicator ? 'orange' : 'teal',
-                  message: `Write check: stale=${data.stale_seconds ?? '—'}s · critical=${String(data.critical)} · sent=${String(data.alert_sent)}`,
+                  message: `Проверка записи: устарело=${data.stale_seconds ?? '—'}с · критично=${String(data.critical)} · отправлено=${String(data.alert_sent)}`,
                 });
               } catch (e) {
                 notifications.show({ color: 'red', message: getApiError(e) });
               }
             }}
           >
-            Check write→alerts
+            Проверить запись→алерты
           </Button>
         </Card>
         <Card withBorder>
-          <Text fw={600}>Node availability timeline §11.16.3</Text>
+          <Text fw={600}>Таймлайн доступности узлов §11.16.3</Text>
           <Group mt="xs" mb="sm" gap="sm">
             <Select
               label="Период"
@@ -2322,7 +2322,7 @@ export function StoragePage() {
             </Button>
           </Group>
           <Text size="xs" c="dimmed" mb="sm">
-            Heartbeat Tailscale · {timeline?.days || timelineDays}д
+            Сигнал Tailscale · {timeline?.days || timelineDays} дн.
           </Text>
           {(timeline?.nodes || []).length === 0 && (
             <Text size="sm" c="dimmed">
@@ -2336,7 +2336,7 @@ export function StoragePage() {
                   {n.node_name || n.node_id}
                 </Text>
                 <Text size="xs" c="dimmed">
-                  uptime {n.uptime_percent ?? '—'}% · offline {n.offline_sec ?? 0}s
+                  доступность {n.uptime_percent ?? '—'}% · офлайн {n.offline_sec ?? 0}с
                 </Text>
               </Group>
               <div
@@ -2363,9 +2363,9 @@ export function StoragePage() {
           ))}
         </Card>
         <Card withBorder>
-          <Text fw={600}>Disk fill forecast / wearout §23.7</Text>
+          <Text fw={600}>Прогноз заполнения диска / износ §23.7</Text>
           <Text size="sm" mt="sm">
-            used: {forecast?.current_used_percent ?? '—'}% · рост:{' '}
+            занято: {forecast?.current_used_percent ?? '—'}% · рост:{' '}
             {forecast?.growth_percent_per_day != null ? `${forecast.growth_percent_per_day}%/день` : '—'}
           </Text>
           <Text size="sm" mt={4}>
@@ -2377,7 +2377,7 @@ export function StoragePage() {
           </Text>
           {(forecast?.wearout || []).length > 0 && (
             <ShellTable
-              headers={['Device', 'Wear %', 'Realloc', 'Replace?']}
+              headers={['Устройство', 'Износ %', 'Переназнач.', 'Замена?']}
               rows={(forecast?.wearout || []).map((w) => [
                 w.device || '—',
                 w.wear_percent != null ? String(w.wear_percent) : '—',
@@ -2388,21 +2388,21 @@ export function StoragePage() {
           )}
           {forecast?.wearout_alert ? (
             <Text size="xs" c="red" mt="xs">
-              Wearout &lt;15% или битые сектора — планировать замену
+              Износ &lt;15% или битые сектора — планировать замену
             </Text>
           ) : null}
         </Card>
         <Card withBorder>
-          <Text fw={600}>Buckets</Text>
+          <Text fw={600}>Бакеты</Text>
           <Text size="sm" mt="sm">
             {(health.buckets || []).join(', ') || health.error || '—'}
           </Text>
         </Card>
         <Card withBorder>
-          <Text fw={600}>Usage</Text>
+          <Text fw={600}>Использование</Text>
           {(health.usage || []).map((u) => (
             <Text size="sm" key={u.bucket} mt={4}>
-              {u.bucket}: {u.objects ?? 0} obj · {Math.round((u.bytes || 0) / 1024 / 1024)} MB
+              {u.bucket}: {u.objects ?? 0} объектов · {Math.round((u.bytes || 0) / 1024 / 1024)} MB
               {u.error ? ` (${u.error})` : ''}
             </Text>
           ))}

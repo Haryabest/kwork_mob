@@ -54,7 +54,7 @@ export default function FaqEditorPage() {
   return (
     <>
       <Title order={2} mb="xs">
-        FAQ
+        ЧаВО
       </Title>
       <Text c="dimmed" size="sm" mb="lg">
         Редактирование вопросов/ответов с версионированием

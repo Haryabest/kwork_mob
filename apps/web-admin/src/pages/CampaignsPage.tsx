@@ -48,7 +48,7 @@ type CampaignStats = {
 };
 
 const SEGMENTS = [
-  { value: '{}', label: 'Все с marketing_opt_in' },
+  { value: '{}', label: 'Все с согласием на маркетинг' },
   { value: '{"account_type":"individual"}', label: 'Физлица' },
   { value: '{"account_type":"legal"}', label: 'Юрлица' },
   { value: '{"has_orders":true}', label: 'С заказами' },
@@ -57,13 +57,13 @@ const SEGMENTS = [
   { value: '{"gender":"female"}', label: 'Пол: женский' },
   { value: '{"region":"Москва"}', label: 'Регион: Москва' },
   { value: '{"card_bank":"Сбер"}', label: 'Банк: Сбер' },
-  { value: '{"marketing_opt_in_only":false}', label: 'Без фильтра opt-in' },
+  { value: '{"marketing_opt_in_only":false}', label: 'Без фильтра согласия' },
 ];
 
 const CHANNELS = [
-  { value: 'email', label: 'Email' },
-  { value: 'push', label: 'Push' },
-  { value: 'dual', label: 'Email + Push' },
+  { value: 'email', label: 'Эл. почта' },
+  { value: 'push', label: 'Push-уведомления' },
+  { value: 'dual', label: 'Эл. почта + push' },
 ];
 
 const TEMPLATE_HINTS: Record<string, string> = {
@@ -73,7 +73,7 @@ const TEMPLATE_HINTS: Record<string, string> = {
   timed_discount: 'Таймерная скидка с TTL',
   free_generation: 'Бесплатная генерация (промокод)',
   upsell_discount: 'Скидка на апсейл',
-  custom_push: 'Произвольный push/email',
+  custom_push: 'Произвольный push/эл. почта',
 };
 
 function segmentJson(useCustom: boolean, custom: string, preset: string | null) {
@@ -207,7 +207,7 @@ export default function CampaignsPage() {
     <>
       <PageHeader
         title="Кампании"
-        description="Конструктор, A/B, воронка ROI (§11.7)"
+        description="Конструктор, A/B-тест, воронка окупаемости (§11.7)"
         action={<Button onClick={() => setOpened(true)}>Новая кампания</Button>}
       />
       <SimpleGrid cols={{ base: 1, lg: 2 }} mb="md">
@@ -215,12 +215,12 @@ export default function CampaignsPage() {
           items={[
             { label: 'Охват (последняя)', value: String(last?.reach ?? '—') },
             { label: 'Отправлено', value: String(last?.sent ?? '—') },
-            { label: 'ROI', value: last?.roi != null ? String(last.roi) : '—' },
+            { label: 'Окупаемость', value: last?.roi != null ? String(last.roi) : '—' },
           ]}
         />
       </SimpleGrid>
       <ShellTable
-        headers={['ID', 'Название', 'Шаблон', 'Статус', 'Баннер imp.', 'Баннер clk.', 'CTR', 'Бюджет', 'Действия']}
+        headers={['ID', 'Название', 'Шаблон', 'Статус', 'Баннер показы', 'Баннер клики', 'Кликабельность', 'Бюджет', 'Действия']}
         rows={items.map((c) => [
           String(c.id),
           c.name,
@@ -240,7 +240,7 @@ export default function CampaignsPage() {
               Стоп
             </Button>
             <Button size="xs" variant="subtle" onClick={() => void showStats(c.id)}>
-              A/B · ROI
+              A/B · окупаемость
             </Button>
           </Group>,
         ])}
@@ -251,16 +251,16 @@ export default function CampaignsPage() {
           <Stack gap="md">
             <Group gap="xs">
               {stats.ab_enabled && <Badge color="violet">A/B</Badge>}
-              <Badge variant="light">CTR {(Number(stats.ctr || 0) * 100).toFixed(2)}%</Badge>
+              <Badge variant="light">Кликабельность {(Number(stats.ctr || 0) * 100).toFixed(2)}%</Badge>
             </Group>
             <MetricGrid
               items={[
-                { label: 'Reach', value: String(stats.funnel?.reach ?? stats.reach ?? 0) },
-                { label: 'Sent', value: String(stats.funnel?.sent ?? stats.sent ?? 0) },
-                { label: 'Clicked', value: String(stats.funnel?.clicked ?? stats.clicked ?? 0) },
-                { label: 'Converted', value: String(stats.funnel?.converted ?? 0) },
-                { label: 'Revenue', value: `${stats.revenue_rub ?? 0} ₽` },
-                { label: 'ROI', value: stats.roi != null ? String(stats.roi) : '—' },
+                { label: 'Охват', value: String(stats.funnel?.reach ?? stats.reach ?? 0) },
+                { label: 'Отправлено', value: String(stats.funnel?.sent ?? stats.sent ?? 0) },
+                { label: 'Клики', value: String(stats.funnel?.clicked ?? stats.clicked ?? 0) },
+                { label: 'Конверсии', value: String(stats.funnel?.converted ?? 0) },
+                { label: 'Выручка', value: `${stats.revenue_rub ?? 0} ₽` },
+                { label: 'Окупаемость', value: stats.roi != null ? String(stats.roi) : '—' },
               ]}
             />
             {variantRows.length > 0 && (
@@ -268,7 +268,7 @@ export default function CampaignsPage() {
                 <Text fw={600} size="sm">
                   По вариантам A/B
                 </Text>
-                <ShellTable headers={['Variant', 'Sent', 'Clicks', 'Failed', 'CTR']} rows={variantRows} />
+                <ShellTable headers={['Вариант', 'Отправлено', 'Клики', 'Сбои', 'Кликабельность']} rows={variantRows} />
               </>
             )}
           </Stack>
@@ -294,7 +294,7 @@ export default function CampaignsPage() {
           {useCustomSegment ? (
             <Textarea
               label="Сегмент (JSON)"
-              description='gender, region, card_bank, min_balance, has_orders, marketing_opt_in_only'
+              description="пол, регион, банк карты, мин. баланс, есть заказы, только с согласием на маркетинг"
               minRows={3}
               value={customSegment}
               onChange={(e) => setCustomSegment(e.currentTarget.value)}
@@ -319,7 +319,7 @@ export default function CampaignsPage() {
           <TextInput label="Заголовок письма" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
           <Textarea label="Текст" minRows={4} value={body} onChange={(e) => setBody(e.currentTarget.value)} />
           <TextInput
-            label="CTA URL (через click tracker)"
+            label="Ссылка CTA (через трекер кликов)"
             description="Ссылка в письме пойдёт через GET /api/v1/campaigns/{id}/click"
             placeholder="https://…"
             value={ctaUrl}

@@ -44,9 +44,9 @@ export default function B2bApiUsagePage() {
 
   return (
     <>
-      <PageHeader title="B2B API usage" description="Использование API-ключей §11.5" />
+      <PageHeader title="Использование B2B API" description="Использование API-ключей §11.5" />
       <ShellTable
-        headers={['Компания', 'Ключи', 'Used 7д', 'Заказы 7д', 'Выручка', 'Last used']}
+        headers={['Компания', 'Ключи', 'Исп. 7д', 'Заказы 7д', 'Выручка', 'Последнее исп.']}
         rows={items.map((r) => [
           r.company_name || `#${r.company_id}`,
           String(r.active_keys),

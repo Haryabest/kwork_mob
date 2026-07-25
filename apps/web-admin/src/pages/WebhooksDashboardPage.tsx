@@ -101,7 +101,7 @@ export default function WebhooksDashboardPage() {
       );
       notifications.show({
         color: res.ok ? 'teal' : 'orange',
-        message: `Retry #${id}: ${res.status}`,
+        message: `Повтор #${id}: ${res.status}`,
       });
       detailHandlers.close();
       await load();
@@ -117,8 +117,8 @@ export default function WebhooksDashboardPage() {
   return (
     <>
       <PageHeader
-        title="B2B Webhooks"
-        description="Retries · DLQ · success rate 24ч (§14.5.4)"
+        title="B2B вебхуки"
+        description="Повторы · очередь недоставленных · успешность 24ч (§14.5.4)"
         action={
           <Group>
             <Select
@@ -137,17 +137,17 @@ export default function WebhooksDashboardPage() {
       />
       <MetricGrid
         items={[
-          { label: 'Pending retries', value: String(data?.pending ?? 0), color: 'orange' },
-          { label: 'DLQ', value: String(data?.dlq ?? 0), color: data?.dlq ? 'red' : 'teal' },
-          { label: 'Delivered 24ч', value: String(data?.delivered_24h ?? 0), color: 'teal' },
-          { label: 'Success 24ч', value: `${rate}%`, color: rate >= 95 ? 'teal' : 'orange' },
-          { label: 'Active hooks', value: String(data?.hooks_active ?? 0) },
+          { label: 'Ожидают повтора', value: String(data?.pending ?? 0), color: 'orange' },
+          { label: 'Недоставленные', value: String(data?.dlq ?? 0), color: data?.dlq ? 'red' : 'teal' },
+          { label: 'Доставлено 24ч', value: String(data?.delivered_24h ?? 0), color: 'teal' },
+          { label: 'Успешность 24ч', value: `${rate}%`, color: rate >= 95 ? 'teal' : 'orange' },
+          { label: 'Активные вебхуки', value: String(data?.hooks_active ?? 0) },
         ]}
       />
       <Stack mt="md">
-        <Title order={4}>Ожидают retry / DLQ</Title>
+        <Title order={4}>Ожидают повтора / недоставленные</Title>
         <ShellTable
-          headers={['ID', 'Company', 'Hook', 'Event', 'Status', 'Attempt', 'Next retry', 'Error', '']}
+          headers={['ID', 'Компания', 'Вебхук', 'Событие', 'Статус', 'Попытка', 'След. повтор', 'Ошибка', '']}
           rows={
             (data?.items || []).length
               ? (data?.items || []).map((d) => [
@@ -165,21 +165,21 @@ export default function WebhooksDashboardPage() {
                   </Text>,
                   <Group key={`a-${d.id}`} gap={4} wrap="nowrap">
                     <Button size="xs" variant="light" onClick={() => void openDetail(d.id)}>
-                      Detail
+                      Подробнее
                     </Button>
                     {d.status !== 'delivered' && (
                       <Button size="xs" loading={retryBusy === d.id} onClick={() => void retry(d.id)}>
-                        Retry
+                        Повторить
                       </Button>
                     )}
                   </Group>,
                 ])
-              : [['—', '—', 'Нет pending/DLQ', '—', '—', '—', '—', '—', '—']]
+              : [['—', '—', 'Нет ожидающих или недоставленных', '—', '—', '—', '—', '—', '—']]
           }
         />
       </Stack>
 
-      <Modal opened={detailOpen} onClose={detailHandlers.close} title={`Delivery #${detail?.id ?? ''}`} size="lg">
+      <Modal opened={detailOpen} onClose={detailHandlers.close} title={`Доставка #${detail?.id ?? ''}`} size="lg">
         <Stack>
           <Text size="sm">
             {detail?.company_name || (detail?.company_id != null ? `#${detail.company_id}` : '—')} ·{' '}
@@ -200,7 +200,7 @@ export default function WebhooksDashboardPage() {
           </Code>
           {detail && detail.status !== 'delivered' ? (
             <Button loading={retryBusy === detail.id} onClick={() => void retry(detail.id)}>
-              Manual retry
+              Ручной повтор
             </Button>
           ) : null}
         </Stack>

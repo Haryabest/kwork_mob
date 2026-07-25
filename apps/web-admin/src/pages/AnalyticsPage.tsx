@@ -15,7 +15,29 @@ const ANALYTICS_EVENT_TYPES = [
   'checkout_pay',
   'shoot_step',
   'shoot_step_retry',
-];
+] as const;
+
+const EVENT_LABELS: Record<string, string> = {
+  screen_view: 'Просмотр экрана',
+  shoot_complete: 'Съёмка завершена',
+  checkout_pay: 'Оплата',
+  shoot_step: 'Шаг съёмки',
+  shoot_step_retry: 'Повтор шага съёмки',
+};
+
+const SCREEN_LABELS: Record<string, string> = {
+  oauth_login: 'Вход через OAuth',
+  oauth_link: 'Привязка OAuth',
+  oauth_unlink: 'Отвязка OAuth',
+};
+
+function labelEvent(event: string): string {
+  return EVENT_LABELS[event] ?? event.replace(/_/g, ' ');
+}
+
+function labelScreen(screen: string): string {
+  return SCREEN_LABELS[screen] ?? screen.replace(/_/g, ' ');
+}
 
 type ScreenRow = { screen: string; views: number };
 type ScreensData = {
@@ -129,7 +151,7 @@ export default function AnalyticsPage() {
       const { data } = await api.post<{ synced: number; pending: number }>('/admin/analytics/sync');
       notifications.show({
         color: 'teal',
-        message: `Синхронизировано: ${data.synced}, pending: ${data.pending}`,
+        message: `Синхронизировано: ${data.synced}, ожидает: ${data.pending}`,
       });
       await load();
     } catch (e) {
@@ -214,15 +236,15 @@ export default function AnalyticsPage() {
   return (
     <>
       <PageHeader
-        title="Аналитика mobile"
-        description="screen_view breakdown · raw events · PG→CH sync §19.20"
+        title="Аналитика мобильного приложения"
+        description="разбивка screen_view · сырые события · синхронизация PG→CH §19.20"
         action={
           <Group>
             <Button leftSection={<IconRefresh size={16} />} variant="light" onClick={() => void load()}>
               Обновить
             </Button>
             <Button loading={syncing} onClick={() => void runSync()}>
-              PG→CH sync
+              PG→CH синхронизация
             </Button>
           </Group>
         }
@@ -230,19 +252,19 @@ export default function AnalyticsPage() {
       <MetricGrid
         items={[
           {
-            label: 'Pending CH sync',
+            label: 'Ожидает синхр. CH',
             value: String(sync?.pending_ch_sync ?? '—'),
             color: sync?.alert ? 'red' : 'teal',
-            hint: sync?.alert ? `>${sync?.alert_threshold}` : 'OK',
+            hint: sync?.alert ? `>${sync?.alert_threshold}` : 'в норме',
           },
-          { label: 'Views', value: String(screens?.total_views ?? 0), hint: `${screens?.days ?? days}д` },
-          { label: 'oauth_login', value: String(screens?.oauth_login_views ?? 0) },
-          { label: 'oauth_link', value: String(screens?.oauth_link_views ?? 0) },
-          { label: 'audit oauth_login', value: String(oauthAudit?.oauth_login ?? 0) },
-          { label: 'audit oauth_link', value: String(oauthAudit?.oauth_link ?? 0) },
-          { label: 'audit oauth_unlink', value: String(oauthAudit?.oauth_unlink ?? 0) },
-          { label: 'Source', value: screens?.source ?? '—' },
-          { label: 'Screens', value: String(screens?.items?.length ?? 0) },
+          { label: 'Просмотры', value: String(screens?.total_views ?? 0), hint: `${screens?.days ?? days}д` },
+          { label: 'Просмотры: вход через OAuth', value: String(screens?.oauth_login_views ?? 0) },
+          { label: 'Просмотры: привязка OAuth', value: String(screens?.oauth_link_views ?? 0) },
+          { label: 'Аудит: вход через OAuth', value: String(oauthAudit?.oauth_login ?? 0) },
+          { label: 'Аудит: привязка OAuth', value: String(oauthAudit?.oauth_link ?? 0) },
+          { label: 'Аудит: отвязка OAuth', value: String(oauthAudit?.oauth_unlink ?? 0) },
+          { label: 'Источник', value: screens?.source ?? '—' },
+          { label: 'Экраны', value: String(screens?.items?.length ?? 0) },
         ]}
       />
       <Group mb="md" align="flex-end">
@@ -258,35 +280,35 @@ export default function AnalyticsPage() {
           w={140}
         />
         <Select
-          label="Screen (график)"
-          placeholder="Top 8"
+          label="Экран (график)"
+          placeholder="Топ 8"
           clearable
-          data={(screens?.items ?? []).map((r) => ({ value: r.screen, label: r.screen }))}
+          data={(screens?.items ?? []).map((r) => ({ value: r.screen, label: labelScreen(r.screen) }))}
           value={chartScreen}
           onChange={setChartScreen}
           w={180}
         />
         <Select
-          label="Screen категория"
+          label="Категория экрана"
           placeholder="все"
           clearable
           data={[
-            { value: 'oauth', label: 'OAuth (oauth_*)' },
-            { value: 'app', label: 'App (без oauth_)' },
+            { value: 'oauth', label: 'Вход через OAuth' },
+            { value: 'app', label: 'Приложение (остальные экраны)' },
           ]}
           value={screenCategory}
           onChange={setScreenCategory}
           w={200}
         />
         <Button variant="light" leftSection={<IconDownload size={16} />} onClick={() => void exportScreensCsv()}>
-          Screens CSV
+          Экраны CSV
         </Button>
-        {sync?.alert && <Badge color="red">CH sync backlog</Badge>}
+        {sync?.alert && <Badge color="red">Очередь синхр. CH</Badge>}
       </Group>
       {chartData.length > 0 && (
         <Card withBorder mb="md" p="md">
           <Title order={5} mb="sm">
-            Screen views по дням ({chartScreen ?? `top ${timeseries?.screens?.length ?? 0}`},{' '}
+            Просмотры экранов по дням ({chartScreen ?? `топ ${timeseries?.screens?.length ?? 0}`},{' '}
             {timeseries?.source})
           </Title>
           <ResponsiveContainer width="100%" height={280}>
@@ -311,13 +333,13 @@ export default function AnalyticsPage() {
         </Card>
       )}
       <ShellTable
-        headers={['Screen', 'Views']}
-        rows={(screens?.items ?? []).map((r) => [r.screen, String(r.views)])}
+        headers={['Экран', 'Просмотры']}
+        rows={(screens?.items ?? []).map((r) => [labelScreen(r.screen), String(r.views)])}
       />
 
-      <PageHeader title="OAuth audit_log" description="audit_log oauth_* §2.2.3" />
+      <PageHeader title="Аудит OAuth" description="журнал аудита входа и привязки §2.2.3" />
       <ShellTable
-        headers={['ID', 'User', 'Action', 'Provider', 'Platform', 'Created']}
+        headers={['ID', 'Пользователь', 'Действие', 'Провайдер', 'Платформа', 'Создано']}
         rows={oauthAuditLogs.map((r) => [
           String(r.id),
           r.user_id ? (
@@ -334,10 +356,10 @@ export default function AnalyticsPage() {
         ])}
       />
 
-      <PageHeader title="Raw events" description="Фильтр user_id / даты · export CSV" />
+      <PageHeader title="Сырые события" description="Фильтр ID пользователя / даты · экспорт CSV" />
       <Group mb="md" align="flex-end">
         <NumberInput
-          label="User ID"
+          label="ID пользователя"
           placeholder="все"
           value={userId}
           onChange={setUserId}
@@ -347,20 +369,20 @@ export default function AnalyticsPage() {
         <TextInput type="date" label="С" value={dateFrom} onChange={(e) => setDateFrom(e.currentTarget.value)} w={160} />
         <TextInput type="date" label="По" value={dateTo} onChange={(e) => setDateTo(e.currentTarget.value)} w={160} />
         <Select
-          label="Event"
+          label="Событие"
           placeholder="все"
           clearable
-          data={ANALYTICS_EVENT_TYPES.map((e) => ({ value: e, label: e }))}
+          data={ANALYTICS_EVENT_TYPES.map((e) => ({ value: e, label: labelEvent(e) }))}
           value={eventFilter}
           onChange={setEventFilter}
           w={180}
         />
         <Select
-          label="Screen"
+          label="Экран"
           placeholder="все"
           clearable
           searchable
-          data={(screens?.items ?? []).map((r) => ({ value: r.screen, label: r.screen }))}
+          data={(screens?.items ?? []).map((r) => ({ value: r.screen, label: labelScreen(r.screen) }))}
           value={screenFilter}
           onChange={setScreenFilter}
           w={200}
@@ -369,7 +391,7 @@ export default function AnalyticsPage() {
           Загрузить
         </Button>
         <Button variant="light" leftSection={<IconDownload size={16} />} onClick={() => void exportEventsCsv()}>
-          Export CSV
+          Экспорт CSV
         </Button>
       </Group>
       <Group mb="sm" gap="xs">
@@ -396,13 +418,13 @@ export default function AnalyticsPage() {
         </Button>
       </Group>
       <ShellTable
-        headers={['ID', 'User', 'Event', 'Time', 'Props']}
+        headers={['ID', 'Пользователь', 'Событие', 'Время', 'Свойства']}
         rows={
           events.length
             ? events.map((e) => [
                 String(e.id),
                 String(e.user_id),
-                e.event,
+                labelEvent(e.event),
                 e.event_ts?.slice(0, 19) ?? '—',
                 <Text key={`p${e.id}`} size="xs" lineClamp={1}>
                   {JSON.stringify(e.props ?? {})}

@@ -198,8 +198,25 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str) -> tuple[str, str
     user.last_login_at = datetime.now(timezone.utc)
     remember = bool(token_row.remember_me)
     token_row.revoked = True
-    access_token = create_access_token(user.id, role=user.staff_role or "user")
-    new_refresh, new_jti, expires_at = create_refresh_token(user.id, remember_me=remember)
+    staff = user.staff_role in (UserRole.ADMIN.value, UserRole.SUPPORT_AGENT.value)
+    if staff:
+        from app.services import staff_session_settings as sess_cfg
+
+        cfg = await sess_cfg.load_settings(db)
+        access_token = create_access_token(
+            user.id,
+            role=user.staff_role or "user",
+            extra={"staff": True},
+            access_expire_minutes=cfg["staff_jwt_access_expire_minutes"],
+        )
+        new_refresh, new_jti, expires_at = create_refresh_token(
+            user.id,
+            remember_me=remember,
+            refresh_expire_days=cfg["staff_jwt_refresh_expire_days"],
+        )
+    else:
+        access_token = create_access_token(user.id, role=user.staff_role or "user")
+        new_refresh, new_jti, expires_at = create_refresh_token(user.id, remember_me=remember)
     db.add(RefreshToken(user_id=user.id, jti=new_jti, expires_at=expires_at, remember_me=remember))
     await db.commit()
     return access_token, new_refresh

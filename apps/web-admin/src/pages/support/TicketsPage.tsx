@@ -60,7 +60,13 @@ export default function TicketsPage() {
         <TextInput placeholder="Поиск по ID или email" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
         <Select
           placeholder="Статус"
-          data={['Все', 'new', 'answered', 'waiting_user', 'closed']}
+          data={[
+            { value: 'Все', label: 'Все' },
+            { value: 'new', label: 'Новое' },
+            { value: 'answered', label: 'Отвечено' },
+            { value: 'waiting_user', label: 'Ожидает пользователя' },
+            { value: 'closed', label: 'Закрыто' },
+          ]}
           value={status}
           onChange={setStatus}
         />

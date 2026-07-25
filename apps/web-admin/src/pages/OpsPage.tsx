@@ -78,7 +78,7 @@ export default function OpsPage() {
       );
       notifications.show({
         color: 'teal',
-        message: `Enqueued ${data.enqueued} за ${data.elapsed_sec}s`,
+        message: `В очереди ${data.enqueued} за ${data.elapsed_sec}с`,
       });
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
@@ -101,12 +101,12 @@ export default function OpsPage() {
   return (
     <>
       <PageHeader
-        title="Ops / DoD"
-        description="§1.4 KPI · HA cutover · mesh · TRELLIS · Debezium · load test"
+        title="Операции / критерии готовности"
+        description="§1.4 КПЭ · переключение высокой доступности · mesh · TRELLIS · Debezium · нагрузочный тест"
         action={
           <Group>
             <Button leftSection={<IconDownload size={16} />} variant="light" onClick={() => void exportDod()}>
-              DoD CSV
+              Экспорт критериев CSV
             </Button>
             <Button leftSection={<IconRefresh size={16} />} variant="light" onClick={() => void load()}>
               Обновить
@@ -118,25 +118,25 @@ export default function OpsPage() {
       <MetricGrid
         items={[
           {
-            label: 'DoD §1.4',
+            label: 'Критерии §1.4',
             value: `${passed}/${total}`,
             color: dod?.summary.ready ? 'teal' : 'orange',
-            hint: dod?.summary.ready ? 'ready' : 'needs staging verify',
+            hint: dod?.summary.ready ? 'готово' : 'нужна проверка staging',
           },
           {
-            label: 'HA cutover',
-            value: cutover?.ready ? 'ready' : 'check',
-            hint: `${cutover?.passed ?? '—'}/${cutover?.total ?? '—'} checks`,
+            label: 'Переключение ВД',
+            value: cutover?.ready ? 'готово' : 'проверить',
+            hint: `${cutover?.passed ?? '—'}/${cutover?.total ?? '—'} проверок`,
           },
           {
-            label: 'TRELLIS online',
+            label: 'TRELLIS онлайн',
             value: String(trellis?.trellis_online ?? 0),
-            hint: trellis?.production_ready ? 'prod ready' : 'no GPU worker',
+            hint: trellis?.production_ready ? 'продакшн готов' : 'нет GPU-воркера',
           },
           {
-            label: 'MinIO VIP',
-            value: vip?.ok ? 'OK' : '—',
-            hint: String(vip?.vip ?? vip?.active_endpoint ?? 'not configured'),
+            label: 'VIP-адрес MinIO',
+            value: vip?.ok ? 'в норме' : '—',
+            hint: String(vip?.vip ?? vip?.active_endpoint ?? 'не настроен'),
           },
         ]}
       />
@@ -144,16 +144,16 @@ export default function OpsPage() {
       <SimpleGrid cols={{ base: 1, md: 2 }} mt="md">
         <div className="vz-surface">
           <Text fw={600} mb="sm">
-            DoD checks
+            Проверки критериев готовности
           </Text>
           <Progress value={(passed / total) * 100} mb="md" color={dod?.summary.ready ? 'teal' : 'orange'} />
           <ShellTable
-            headers={['Метрика', 'Значение', 'Pass']}
+            headers={['Метрика', 'Значение', 'Результат']}
             rows={(dod?.checks ?? []).map((c) => [
               c.metric,
               String(c.value ?? '—'),
               <Badge key={c.metric} color={c.pass ? 'teal' : 'red'} variant="light">
-                {c.pass ? 'ok' : 'fail'}
+                {c.pass ? 'в норме' : 'сбой'}
               </Badge>,
             ])}
           />
@@ -162,38 +162,38 @@ export default function OpsPage() {
         <Stack>
           <div className="vz-surface">
             <Text fw={600} mb="sm">
-              HA / Infra
+              HA / инфраструктура
             </Text>
-            <Text size="sm">Mesh online: {String(mesh?.online ?? '—')}/{String(mesh?.total ?? '—')}</Text>
-            <Text size="sm">Debezium: {debezium?.configured ? (debezium?.ok ? 'RUNNING' : 'down') : 'not configured'}</Text>
+            <Text size="sm">Mesh онлайн: {String(mesh?.online ?? '—')}/{String(mesh?.total ?? '—')}</Text>
+            <Text size="sm">Debezium: {debezium?.configured ? (debezium?.ok ? 'РАБОТАЕТ' : 'недоступен') : 'не настроен'}</Text>
             <Text size="sm" c="dimmed" mt="xs">
-              Sync mode: {String(debezium?.sync_mode ?? 'celery')}
+              Режим синхронизации: {String(debezium?.sync_mode ?? 'celery')}
             </Text>
           </div>
 
           <div className="vz-surface">
             <Text fw={600} mb="sm">
-              Load test §1.4
+              Нагрузочный тест §1.4
             </Text>
             <Group align="flex-end">
-              <NumberInput label="Orders" value={loadCount} onChange={setLoadCount} min={1} max={500} maw={120} />
+              <NumberInput label="Заказы" value={loadCount} onChange={setLoadCount} min={1} max={500} maw={120} />
               <Button loading={loadBusy} onClick={() => void runLoadTest()}>
-                Enqueue
+                В очередь
               </Button>
             </Group>
           </div>
 
           <div className="vz-surface">
             <Text fw={600} mb="sm">
-              TRELLIS workers
+              TRELLIS-воркеры
             </Text>
             <ShellTable
-              headers={['ID', 'Status', 'TRELLIS', 'Online']}
+              headers={['ID', 'Статус', 'TRELLIS', 'Онлайн']}
               rows={((trellis?.workers as Array<Record<string, unknown>>) ?? []).map((w) => [
                 String(w.worker_id),
                 String(w.status),
-                w.has_trellis ? 'yes' : 'no',
-                w.online ? 'yes' : 'no',
+                w.has_trellis ? 'да' : 'нет',
+                w.online ? 'да' : 'нет',
               ])}
             />
           </div>

@@ -52,7 +52,7 @@ export default function SegmentationPage() {
     <>
       <PageHeader
         title="Сегментация"
-        description="DeepLab/SAM fallback и failed §11.2.5"
+        description="DeepLab/SAM fallback и сбои §11.2.5"
         action={
           <Group>
             <Button variant="light" onClick={() => void load()}>
@@ -64,10 +64,10 @@ export default function SegmentationPage() {
       <MetricGrid
         items={[
           { label: 'Событий (7д)', value: String(data?.total ?? 0) },
-          { label: 'Fallback', value: `${fallbackPct}%`, color: fallbackPct > 15 ? 'orange' : 'teal' },
-          { label: 'Failed', value: `${failedPct}%`, color: failedPct > 5 ? 'red' : 'teal' },
+          { label: 'Резерв', value: `${fallbackPct}%`, color: fallbackPct > 15 ? 'orange' : 'teal' },
+          { label: 'Сбои', value: `${failedPct}%`, color: failedPct > 5 ? 'red' : 'teal' },
           {
-            label: 'Avg confidence',
+            label: 'Ср. уверенность',
             value: data?.avg_confidence != null ? String(data.avg_confidence) : '—',
           },
         ]}
@@ -75,7 +75,7 @@ export default function SegmentationPage() {
       <SimpleGrid cols={{ base: 1, md: 2 }} mt="md">
         <Card withBorder>
           <Text fw={600} mb="sm">
-            Fallback rate
+            Доля fallback
           </Text>
           <Progress value={fallbackPct} color={fallbackPct > 15 ? 'orange' : 'brand'} />
           <Text size="sm" c="dimmed" mt="xs">
@@ -101,7 +101,7 @@ export default function SegmentationPage() {
           По устройству
         </Text>
         <ShellTable
-          headers={['Устройство', 'Всего', 'Fallback', 'Failed']}
+          headers={['Устройство', 'Всего', 'Резерв', 'Сбои']}
           rows={
             data?.by_device?.length
               ? data.by_device.map((d) => [

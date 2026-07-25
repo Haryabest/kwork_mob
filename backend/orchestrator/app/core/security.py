@@ -81,8 +81,12 @@ def create_access_token(
     role: str = UserRole.USER.value,
     *,
     extra: dict[str, Any] | None = None,
+    access_expire_minutes: int | None = None,
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_ACCESS_EXPIRE_MINUTES)
+    minutes = access_expire_minutes
+    if minutes is None:
+        minutes = settings.JWT_ACCESS_EXPIRE_MINUTES
+    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "type": TokenType.ACCESS.value,
@@ -102,10 +106,14 @@ def refresh_token_expire_days(remember_me: bool) -> int:
 
 
 def create_refresh_token(
-    user_id: int, jti: str | None = None, remember_me: bool = False
+    user_id: int,
+    jti: str | None = None,
+    remember_me: bool = False,
+    *,
+    refresh_expire_days: int | None = None,
 ) -> tuple[str, str, datetime]:
     token_jti = jti or str(uuid.uuid4())
-    days = refresh_token_expire_days(remember_me)
+    days = refresh_expire_days if refresh_expire_days is not None else refresh_token_expire_days(remember_me)
     expires_at = datetime.now(timezone.utc) + timedelta(days=days)
     token = _encode_token(
         {

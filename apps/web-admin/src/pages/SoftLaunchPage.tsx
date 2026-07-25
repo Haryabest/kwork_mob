@@ -46,22 +46,22 @@ type SoftKpi = {
 };
 
 const FALLBACK_ITEMS: CheckItem[] = [
-  { id: 'env', section: 'Секреты', label: 'Prod secrets / PD_ENCRYPTION / Vault' },
-  { id: 'yookassa', section: 'Секреты', label: 'ЮKassa + webhook' },
-  { id: 'vpn2fa', section: 'Секреты', label: 'Admin VPN + 2FA' },
-  { id: 'alembic', section: 'Инфра', label: 'Alembic upgrade head' },
-  { id: 'minio', section: 'Инфра', label: 'MinIO buckets + lifecycle' },
-  { id: 'backup', section: 'Инфра', label: 'PG backup → MinIO' },
-  { id: 'gpu_e2e', section: 'GPU', label: 'TRELLIS.2 E2E exit 0 (без stub)' },
-  { id: 'burn', section: 'GPU', label: 'Cloud burn ₽/ч в лимите' },
+  { id: 'env', section: 'Секреты', label: 'Прод-секреты / шифрование ПД / хранилище секретов' },
+  { id: 'yookassa', section: 'Секреты', label: 'ЮKassa + вебхук' },
+  { id: 'vpn2fa', section: 'Секреты', label: 'VPN админа + двухфакторная аутентификация' },
+  { id: 'alembic', section: 'Инфра', label: 'Миграции БД до последней версии' },
+  { id: 'minio', section: 'Инфра', label: 'Бакеты MinIO + политики хранения' },
+  { id: 'backup', section: 'Инфра', label: 'Резервная копия PG → MinIO' },
+  { id: 'gpu_e2e', section: 'GPU', label: 'Сквозной тест TRELLIS.2 без заглушки' },
+  { id: 'burn', section: 'GPU', label: 'Расход облака ₽/ч в лимите' },
   { id: 'tax', section: 'Платежи', label: 'Налоговый режим владельца' },
   { id: 'payment', section: 'Платежи', label: 'Тестовый платёж + чек' },
-  { id: 'funnel', section: 'Продукт', label: 'Заказ → gen → download → verify' },
-  { id: 'b2b', section: 'Продукт', label: 'B2B invite / roles / webhooks' },
-  { id: 'support', section: 'Support', label: 'FAQ + ticket create/reply' },
-  { id: 'nsfw', section: 'Support', label: 'NSFW queue + refund' },
-  { id: 'mobile', section: 'Mobile', label: 'Guided Dome + thermal + push' },
-  { id: 'alerts', section: 'Gate', label: 'Telegram alerts + rollback plan' },
+  { id: 'funnel', section: 'Продукт', label: 'Заказ → генерация → скачивание → верификация' },
+  { id: 'b2b', section: 'Продукт', label: 'Корп. приглашения / роли / вебхуки' },
+  { id: 'support', section: 'Поддержка', label: 'ЧаВО + создание/ответ тикета' },
+  { id: 'nsfw', section: 'Поддержка', label: 'Очередь НСФВ + возврат' },
+  { id: 'mobile', section: 'Мобильное', label: 'Наведённая съёмка «Купол» + термоконтроль + push-уведомления' },
+  { id: 'alerts', section: 'Порог запуска', label: 'Алерты Telegram + план отката' },
 ];
 
 function pct(v: number) {
@@ -169,15 +169,15 @@ export default function SoftLaunchPage() {
     <div className="vz-page">
       <div className="vz-page-header">
         <div>
-          <Title order={2}>Soft launch</Title>
+          <Title order={2}>Мягкий запуск</Title>
           <Text c="#6d6c77" size="sm" mt={6}>
-            KPI + чеклист (backend) · {done}/{items.length}
-            {savingCheck ? ' · saving…' : ''}
+            КПЭ + чеклист (сервер) · {done}/{items.length}
+            {savingCheck ? ' · сохранение…' : ''}
           </Text>
         </div>
         <Group>
           <Badge variant="light" color={burn != null && burn > 0 ? 'orange' : 'brand'}>
-            Burn: {burn == null ? '—' : `${burn} ₽/ч`}
+            Расход: {burn == null ? '—' : `${burn} ₽/ч`}
           </Badge>
           <Select
             data={[
@@ -196,7 +196,7 @@ export default function SoftLaunchPage() {
             loading={loadingKpi}
             onClick={() => void loadKpi()}
           >
-            KPI
+            КПЭ
           </Button>
           <Button
             leftSection={<IconDownload size={16} />}
@@ -218,13 +218,13 @@ export default function SoftLaunchPage() {
               }
             }}
           >
-            KPI CSV
+            КПЭ CSV
           </Button>
           <Button leftSection={<IconChecklist size={16} />} variant="light" onClick={() => void loadChecklist()}>
-            Checklist
+            Чеклист
           </Button>
           <Button leftSection={<IconChecklist size={16} />} variant="light" onClick={() => void loadBurn()}>
-            Burn
+            Расход
           </Button>
           <Button
             component="a"
@@ -240,7 +240,7 @@ export default function SoftLaunchPage() {
               });
             }}
           >
-            Docs
+            Документация
           </Button>
         </Group>
       </div>
@@ -251,17 +251,17 @@ export default function SoftLaunchPage() {
             <Group justify="space-between" mb="md">
               <Text fw={600}>Воронка публикации</Text>
               <Badge color={kpi.kpi.target_conversion_60 ? 'teal' : 'orange'} variant="light">
-                conv {pct(kpi.kpi.funnel_conversion)} {kpi.kpi.target_conversion_60 ? '≥60%' : '<60%'}
+                конв. {pct(kpi.kpi.funnel_conversion)} {kpi.kpi.target_conversion_60 ? '≥60%' : '<60%'}
               </Badge>
             </Group>
             <Stack gap="sm">
-              <BarRow label="Generated" value={kpi.funnel.generated} max={funnelMax} />
-              <BarRow label="Downloaded" value={kpi.funnel.downloaded} max={funnelMax} color="cyan" />
-              <BarRow label="Links" value={kpi.funnel.links_added} max={funnelMax} color="grape" />
-              <BarRow label="Verified" value={kpi.funnel.verified} max={funnelMax} color="teal" />
+              <BarRow label="Генерации" value={kpi.funnel.generated} max={funnelMax} />
+              <BarRow label="Скачивания" value={kpi.funnel.downloaded} max={funnelMax} color="cyan" />
+              <BarRow label="Ссылки" value={kpi.funnel.links_added} max={funnelMax} color="grape" />
+              <BarRow label="Верификации" value={kpi.funnel.verified} max={funnelMax} color="teal" />
             </Stack>
             <Text size="xs" c="#6d6c77" mt="md">
-              gen→download {pct(kpi.kpi.gen_to_download)} · models {kpi.models_created}
+              ген.→скач. {pct(kpi.kpi.gen_to_download)} · модели {kpi.models_created}
             </Text>
           </div>
 
@@ -269,7 +269,7 @@ export default function SoftLaunchPage() {
             <Group justify="space-between" mb="md">
               <Text fw={600}>Заказы / финансы</Text>
               <Badge color={kpi.kpi.cancel_rate_ok ? 'teal' : 'red'} variant="light">
-                cancel {pct(kpi.orders.cancel_rate)}
+                отмены {pct(kpi.orders.cancel_rate)}
               </Badge>
             </Group>
             <SimpleGrid cols={2} mb="md">
@@ -281,19 +281,19 @@ export default function SoftLaunchPage() {
               </div>
               <div>
                 <Text size="xs" c="#6d6c77">
-                  Completed
+                  Завершено
                 </Text>
                 <Text fw={700}>{kpi.orders.completed}</Text>
               </div>
               <div>
                 <Text size="xs" c="#6d6c77">
-                  Revenue
+                  Выручка
                 </Text>
                 <Text fw={700}>{kpi.finance.revenue_rub} ₽</Text>
               </div>
               <div>
                 <Text size="xs" c="#6d6c77">
-                  NSFW block
+                  Блокировки НСФВ
                 </Text>
                 <Text fw={700}>{kpi.orders.nsfw_blocked}</Text>
               </div>

@@ -67,7 +67,7 @@ export function GrafanaNativeCharts({ workers, ordersHourly }: Props) {
       {gpuChart.length > 0 && (
         <Card withBorder p="md">
           <Text fw={600} mb="sm">
-            GPU util / temp (15м)
+            Загрузка GPU / темп. (15м)
           </Text>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={gpuChart} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>

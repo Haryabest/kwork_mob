@@ -77,7 +77,7 @@ export default function AlertLogPage() {
     <div className="vz-page">
       <div className="vz-page-header">
         <div>
-          <Title order={2}>Alert log</Title>
+          <Title order={2}>Журнал алертов</Title>
           <Text c="#6d6c77" size="sm" mt={6}>
             История алертов §12.4.3 · {total} записей
           </Text>
@@ -98,7 +98,7 @@ export default function AlertLogPage() {
       <Group mb="md" align="flex-end">
         <TextInput
           label="Тип события"
-          placeholder="queue_length"
+          placeholder="длина_очереди"
           value={eventType}
           onChange={(e) => setEventType(e.currentTarget.value)}
           w={180}
@@ -107,8 +107,8 @@ export default function AlertLogPage() {
           label="Канал"
           clearable
           data={[
-            { value: 'telegram', label: 'telegram' },
-            { value: 'email', label: 'email' },
+            { value: 'telegram', label: 'Telegram' },
+            { value: 'email', label: 'Эл. почта' },
           ]}
           value={channel}
           onChange={setChannel}
@@ -118,8 +118,8 @@ export default function AlertLogPage() {
           label="Доставка"
           clearable
           data={[
-            { value: '1', label: 'ok' },
-            { value: '0', label: 'fail' },
+            { value: '1', label: 'в норме' },
+            { value: '0', label: 'сбой' },
           ]}
           value={okFilter}
           onChange={setOkFilter}
@@ -135,9 +135,9 @@ export default function AlertLogPage() {
             <Table.Th>Когда</Table.Th>
             <Table.Th>Тип</Table.Th>
             <Table.Th>Канал</Table.Th>
-            <Table.Th>OK</Table.Th>
-            <Table.Th>Company</Table.Th>
-            <Table.Th>Worker</Table.Th>
+            <Table.Th>Доставлено</Table.Th>
+            <Table.Th>Компания</Table.Th>
+            <Table.Th>Воркер</Table.Th>
             <Table.Th>Текст / ошибка</Table.Th>
           </Table.Tr>
         </Table.Thead>

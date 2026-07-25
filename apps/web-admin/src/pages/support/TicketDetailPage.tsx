@@ -17,6 +17,16 @@ type TicketUser = {
   created_at?: string | null;
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  new: 'Новое',
+  answered: 'Отвечено',
+  waiting_user: 'Ожидает пользователя',
+  closed: 'Закрыто',
+  resolved: 'Решено',
+  open: 'Открыто',
+  escalated: 'Эскалировано',
+};
+
 export default function TicketDetailPage() {
   const { id } = useParams();
   const [reply, setReply] = useState('');
@@ -83,7 +93,7 @@ export default function TicketDetailPage() {
     <Grid.Col span={{ base: 12, md: 8 }}>
       <Group gap="sm" mb="xs">
         <Title order={2}>Обращение #{id}</Title>
-        <Badge variant="light">{status}</Badge>
+        <Badge variant="light">{STATUS_LABELS[status] ?? status}</Badge>
         {category && <Badge variant="outline">{category}</Badge>}
       </Group>
       {subject && (

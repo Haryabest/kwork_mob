@@ -43,32 +43,38 @@ type Thresholds = Record<string, number>;
 
 const THRESHOLD_LABELS: Record<string, string> = {
   queue_alert_length: 'Длина очереди',
-  all_busy_alert_minutes: 'Все busy, мин',
-  worker_offline_alert_seconds: 'Worker offline, сек',
-  gpu_temp_alert_c: 'GPU temp, °C',
-  yookassa_error_streak: 'YooKassa errors streak',
-  yookassa_webhook_fail_streak: 'YooKassa webhook fail streak',
-  company_webhook_fail_streak: 'Company webhook fail streak',
+  all_busy_alert_minutes: 'Все заняты, мин',
+  worker_offline_alert_seconds: 'Воркер офлайн, сек',
+  gpu_temp_alert_c: 'Температура GPU, °C',
+  yookassa_error_streak: 'Серия ошибок ЮKassa',
+  yookassa_webhook_fail_streak: 'Серия сбоев вебхука ЮKassa',
+  company_webhook_fail_streak: 'Серия сбоев вебхука компании',
   company_low_balance_rub: 'Низкий баланс компании, ₽',
-  company_suspicious_orders_10m: 'Подозрительные заказы / окно',
+  company_suspicious_orders_10m: 'Подозрительные заказы за окно',
   company_suspicious_window_min: 'Окно подозрительности, мин',
-  shoot_link_mass_limit_per_hour: 'Shoot-link mass / час',
-  shoot_link_mass_block_hours: 'Shoot-link block, ч',
+  shoot_link_mass_limit_per_hour: 'Лимит ссылок на съёмку в час',
+  shoot_link_mass_block_hours: 'Блокировка ссылок на съёмку, ч',
   publication_conversion_alert_ratio: 'Конверсия публикации (доля)',
-  fallback_segmentation_alert_ratio: 'Fallback сегментация (доля)',
-  api_key_default_daily_limit: 'API key daily default',
-  storage_disk_free_min_percent: 'Disk free min %',
-  storage_ssd_wear_min_percent: 'SSD remaining min %',
-  storage_temp_alert_c: 'Storage temp °C',
-  storage_pg_lag_alert_bytes: 'PG lag bytes',
-  storage_minio_repl_fail_minutes: 'MinIO repl fail, мин',
-  storage_node_offline_seconds: 'Storage node offline, сек',
-  storage_write_stale_minutes: 'Write stale (нагрузка), мин',
-  storage_write_freeze_minutes: 'Write freeze indicator, мин',
-  cloud_monthly_budget_rub: 'Cloud GPU budget месяц, ₽ (0=∞)',
-  cloud_daily_budget_rub: 'Cloud GPU budget день, ₽ (0=∞)',
-  cloud_burn_alert_rub_per_hour: 'Cloud burn alert, ₽/ч',
-  analytics_ch_sync_pending_max: 'Analytics CH sync backlog max',
+  fallback_segmentation_alert_ratio: 'Доля fallback-сегментации',
+  api_key_default_daily_limit: 'Суточный лимит API-ключа по умолчанию',
+  storage_disk_free_min_percent: 'Мин. свободное место на диске, %',
+  storage_ssd_wear_min_percent: 'Мин. ресурс SSD, %',
+  storage_temp_alert_c: 'Температура хранилища, °C',
+  storage_pg_lag_alert_bytes: 'Отставание PG, байт',
+  storage_minio_repl_fail_minutes: 'Сбой репликации MinIO, мин',
+  storage_node_offline_seconds: 'Узел хранилища офлайн, сек',
+  storage_write_stale_minutes: 'Устаревшая запись (нагрузка), мин',
+  storage_write_freeze_minutes: 'Индикатор заморозки записи, мин',
+  cloud_monthly_budget_rub: 'Бюджет облачных GPU за месяц, ₽ (0=∞)',
+  cloud_daily_budget_rub: 'Бюджет облачных GPU за день, ₽ (0=∞)',
+  cloud_burn_alert_rub_per_hour: 'Алерт расхода облака, ₽/ч',
+  analytics_ch_sync_pending_max: 'Макс. отставание синхронизации CH',
+};
+
+type SessionSettings = {
+  staff_jwt_access_expire_minutes: number;
+  staff_idle_timeout_minutes: number;
+  staff_jwt_refresh_expire_days: number;
 };
 
 export default function SettingsPage() {
@@ -94,9 +100,14 @@ export default function SettingsPage() {
   const [upsellDraft, setUpsellDraft] = useState<Record<string, number | string>>({});
   const [upsellActive, setUpsellActive] = useState<Record<string, boolean>>({});
   const [upsellHistory, setUpsellHistory] = useState<UpsellHist[]>([]);
+  const [session, setSession] = useState<SessionSettings>({
+    staff_jwt_access_expire_minutes: 480,
+    staff_idle_timeout_minutes: 30,
+    staff_jwt_refresh_expire_days: 30,
+  });
 
   async function load() {
-    const [t, h, a, e, b, u, uh] = await Promise.all([
+    const [t, h, a, e, b, u, uh, sess] = await Promise.all([
       api.get<{ items: Tariff[] }>('/admin/tariffs'),
       api.get<{ items: Hist[] }>('/admin/tariffs/history'),
       api.get<{
@@ -118,6 +129,7 @@ export default function SettingsPage() {
       }>('/admin/cloud/publication/bonus-settings'),
       api.get<{ items: Upsell[] }>('/admin/upsells'),
       api.get<{ items: UpsellHist[] }>('/admin/upsells/history'),
+      api.get<{ settings: SessionSettings }>('/admin/session/settings'),
     ]);
     setTariffs(t.data.items ?? []);
     const sm = t.data.items?.find((x) => x.code === 'small');
@@ -150,6 +162,9 @@ export default function SettingsPage() {
     setUpsellDraft(Object.fromEntries(ups.map((x) => [x.code, x.amount_rub])));
     setUpsellActive(Object.fromEntries(ups.map((x) => [x.code, x.is_active])));
     setUpsellHistory(uh.data.items ?? []);
+    if (sess.data.settings) {
+      setSession((prev) => ({ ...prev, ...sess.data.settings }));
+    }
   }
 
   useEffect(() => {
@@ -164,6 +179,16 @@ export default function SettingsPage() {
       await api.patch('/admin/tariffs/large', { amount_rub: Number(large), note: 'admin UI' });
       await api.patch('/admin/tariffs/import_glb', { amount_rub: Number(importGlb), note: 'admin UI' });
       notifications.show({ color: 'teal', message: 'Тарифы сохранены' });
+      await load();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    }
+  }
+
+  async function saveSession() {
+    try {
+      await api.put('/admin/session/settings', session);
+      notifications.show({ color: 'teal', message: 'Параметры сессии сохранены' });
       await load();
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
@@ -230,8 +255,8 @@ export default function SettingsPage() {
       notifications.show({
         color: data.ok ? 'teal' : 'orange',
         message: data.ok
-          ? `Отправлено (tg=${String(data.telegram)} email=${String(data.email)})`
-          : 'Не отправлено (проверьте token/chat/email)',
+          ? `Отправлено (tg=${String(data.telegram)} эл.почта=${String(data.email)})`
+          : 'Не отправлено (проверьте токен/чат/эл. почту)',
       });
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
@@ -359,7 +384,7 @@ export default function SettingsPage() {
             />
             <NumberInput label="Значение" value={bonusValue} onChange={setBonusValue} min={0} />
             <NumberInput label="TTL промокода, дней" value={bonusTtl} onChange={setBonusTtl} min={1} />
-            <NumberInput label="Max uses" value={bonusMaxUses} onChange={setBonusMaxUses} min={1} />
+            <NumberInput label="Макс. использований" value={bonusMaxUses} onChange={setBonusMaxUses} min={1} />
           </SimpleGrid>
           <Switch
             mt="md"
@@ -374,22 +399,22 @@ export default function SettingsPage() {
 
         <Card withBorder>
           <Text fw={600} mb="sm">
-            Каналы алертов (Telegram / Email §12.4.2)
+            Каналы алертов (Telegram / эл. почта §12.4.2)
           </Text>
           <Stack>
             <Switch label="Включить Telegram" checked={tgEnabled} onChange={(e) => setTgEnabled(e.currentTarget.checked)} />
             <TextInput
-              label="Bot token"
+              label="Токен бота"
               type="password"
               placeholder="оставьте пустым, чтобы не менять"
               value={tgToken}
               onChange={(e) => setTgToken(e.currentTarget.value)}
             />
-            <TextInput label="Chat ID" value={tgChat} onChange={(e) => setTgChat(e.currentTarget.value)} />
-            <Switch label="Включить Email" checked={emailEnabled} onChange={(e) => setEmailEnabled(e.currentTarget.checked)} />
+            <TextInput label="ID чата" value={tgChat} onChange={(e) => setTgChat(e.currentTarget.value)} />
+            <Switch label="Включить эл. почту" checked={emailEnabled} onChange={(e) => setEmailEnabled(e.currentTarget.checked)} />
             <TagsInput
-              label="Email получатели (до 5)"
-              description="Enter / запятая — новый адрес"
+              label="Получатели эл. почты (до 5)"
+              description="Enter или запятая — новый адрес"
               value={emailRecipients}
               onChange={(v) => setEmailRecipients(v.slice(0, 5))}
               maxTags={5}
@@ -399,16 +424,68 @@ export default function SettingsPage() {
             <Group>
               <Button onClick={() => void saveAlerts()}>Сохранить алерты</Button>
               <Button variant="light" onClick={() => void testAlert('dual')}>
-                Тест dual
+                Тест оба канала
               </Button>
               <Button variant="light" onClick={() => void testAlert('telegram')}>
-                Тест TG
+                Тест Telegram
               </Button>
               <Button variant="light" onClick={() => void testAlert('email')}>
-                Тест Email
+                Тест эл. почты
               </Button>
             </Group>
           </Stack>
+        </Card>
+
+        <Card withBorder id="staff-session">
+          <Text fw={600} mb="sm">
+            Сессия панели владельца §11.1
+          </Text>
+          <Text size="sm" c="dimmed" mb="md">
+            Токены доступа и обновления, авто-выход при неактивности. Применяется к новым входам; таймаут неактивности — на клиенте.
+          </Text>
+          <SimpleGrid cols={{ base: 1, sm: 3 }}>
+            <NumberInput
+              label="Срок токена доступа, мин"
+              description="По ТЗ: 480 (8 ч)"
+              value={session.staff_jwt_access_expire_minutes}
+              min={15}
+              max={1440}
+              onChange={(v) =>
+                setSession((s) => ({
+                  ...s,
+                  staff_jwt_access_expire_minutes: Number(v) || 480,
+                }))
+              }
+            />
+            <NumberInput
+              label="Неактивность до выхода, мин"
+              description="По ТЗ: 30"
+              value={session.staff_idle_timeout_minutes}
+              min={5}
+              max={720}
+              onChange={(v) =>
+                setSession((s) => ({
+                  ...s,
+                  staff_idle_timeout_minutes: Number(v) || 30,
+                }))
+              }
+            />
+            <NumberInput
+              label="Срок refresh-токена, дней"
+              value={session.staff_jwt_refresh_expire_days}
+              min={1}
+              max={90}
+              onChange={(v) =>
+                setSession((s) => ({
+                  ...s,
+                  staff_jwt_refresh_expire_days: Number(v) || 30,
+                }))
+              }
+            />
+          </SimpleGrid>
+          <Button mt="md" onClick={() => void saveSession()}>
+            Сохранить сессию
+          </Button>
         </Card>
 
         <Card withBorder id="alert-thresholds">
@@ -446,7 +523,7 @@ export default function SettingsPage() {
             Эскалации очереди
           </Text>
           <ShellTable
-            headers={['Task', 'Заказ', 'Статус', 'Count', 'Priority', 'Обновлён']}
+            headers={['Задача', 'Заказ', 'Статус', 'Счётчик', 'Приоритет', 'Обновлён']}
             rows={
               esc.length
                 ? esc.map((x) => [

@@ -85,7 +85,7 @@ export default function MaintenancePage() {
           <Title order={2}>Обслуживание</Title>
           <Text c="#6d6c77" size="sm" mt={6}>
             SMART · очистка логов · тест бэкапа §23.7 · {done}/{items.length}
-            {saving ? ' · saving…' : ''}
+            {saving ? ' · сохранение…' : ''}
           </Text>
         </div>
         <Group>
@@ -131,7 +131,7 @@ export default function MaintenancePage() {
                 );
                 notifications.show({
                   color: data.result?.ok !== false ? 'teal' : 'orange',
-                  message: `Backup restore test: ${data.mode} · ${data.result?.error || 'ok'}`,
+                  message: `Тест восстановления бэкапа: ${data.mode} · ${data.result?.error || 'в норме'}`,
                 });
               } catch (e) {
                 notifications.show({ color: 'red', message: getApiError(e) });
@@ -153,13 +153,13 @@ export default function MaintenancePage() {
       <SimpleGrid cols={{ base: 1, md: 2 }} mb="lg">
         <div className="vz-surface">
           <Group justify="space-between" mb="sm">
-            <Text fw={600}>S.M.A.R.T. snapshot</Text>
+            <Text fw={600}>Снимок S.M.A.R.T.</Text>
             <Badge color={smart?.alert_disk_critical ? 'red' : smart?.ok ? 'teal' : 'orange'} variant="light">
-              {smart?.smart?.status || (smart?.ok ? 'ok' : '—')}
+              {smart?.smart?.status || (smart?.ok ? 'в норме' : '—')}
             </Badge>
           </Group>
           <Text size="sm">
-            used: {smart?.used_percent != null ? `${smart.used_percent}%` : '—'} · free:{' '}
+            занято: {smart?.used_percent != null ? `${smart.used_percent}%` : '—'} · свободно:{' '}
             {smart?.free_percent != null ? `${smart.free_percent}%` : '—'}
           </Text>
           <Text size="xs" c="dimmed" mt={4}>
@@ -168,11 +168,11 @@ export default function MaintenancePage() {
           <Stack gap={4} mt="md">
             {(smart?.smart_disks || []).slice(0, 6).map((d, i) => (
               <Text key={d.device || i} size="xs">
-                {d.device || 'disk'}: {d.health || '—'}
+                {d.device || 'диск'}: {d.health || '—'}
                 {d.temp_c != null ? ` · ${d.temp_c}°C` : ''}
-                {d.reallocated_sectors != null ? ` · realloc ${d.reallocated_sectors}` : ''}
+                {d.reallocated_sectors != null ? ` · переназначено ${d.reallocated_sectors}` : ''}
                 {d.wear_percent != null || d.remaining_life_percent != null
-                  ? ` · wear ${d.wear_percent ?? d.remaining_life_percent}%`
+                  ? ` · износ ${d.wear_percent ?? d.remaining_life_percent}%`
                   : ''}
               </Text>
             ))}

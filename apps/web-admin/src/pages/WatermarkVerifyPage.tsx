@@ -59,7 +59,7 @@ export default function WatermarkVerifyPage() {
 
   async function verifyMinio() {
     if (!bucket.trim() || !key.trim()) {
-      notifications.show({ color: 'yellow', message: 'Укажите bucket и key' });
+      notifications.show({ color: 'yellow', message: 'Укажите бакет и ключ' });
       return;
     }
     setBusy(true);
@@ -78,7 +78,7 @@ export default function WatermarkVerifyPage() {
 
   async function verifyModel() {
     if (!modelUuid.trim()) {
-      notifications.show({ color: 'yellow', message: 'Укажите model_uuid' });
+      notifications.show({ color: 'yellow', message: 'Укажите UUID модели' });
       return;
     }
     setBusy(true);
@@ -100,7 +100,7 @@ export default function WatermarkVerifyPage() {
     <div className="vz-page">
       <div className="vz-page-header">
         <div>
-          <Title order={2}>Watermark verify</Title>
+          <Title order={2}>Проверка водяного знака</Title>
           <Text c="#6d6c77" size="sm" mt={6}>
             Проверка HMAC/DWT в GLB · §5.12 / §11.2
           </Text>
@@ -115,7 +115,7 @@ export default function WatermarkVerifyPage() {
           <Tabs.Tab value="minio" leftSection={<IconShieldCheck size={16} />}>
             MinIO объект
           </Tabs.Tab>
-          <Tabs.Tab value="model">По model_uuid</Tabs.Tab>
+          <Tabs.Tab value="model">По UUID модели</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="upload" pt="md">
@@ -138,9 +138,9 @@ export default function WatermarkVerifyPage() {
         <Tabs.Panel value="minio" pt="md">
           <Card withBorder p="md">
             <Stack gap="md">
-              <TextInput label="Bucket" value={bucket} onChange={(e) => setBucket(e.currentTarget.value)} />
+              <TextInput label="Бакет" value={bucket} onChange={(e) => setBucket(e.currentTarget.value)} />
               <TextInput
-                label="Key"
+                label="Ключ"
                 placeholder="orders/123/model.glb"
                 value={key}
                 onChange={(e) => setKey(e.currentTarget.value)}
@@ -156,7 +156,7 @@ export default function WatermarkVerifyPage() {
           <Card withBorder p="md">
             <Stack gap="md">
               <TextInput
-                label="model_uuid"
+                label="UUID модели"
                 placeholder="uuid модели"
                 value={modelUuid}
                 onChange={(e) => setModelUuid(e.currentTarget.value)}
@@ -173,7 +173,7 @@ export default function WatermarkVerifyPage() {
         <Card withBorder p="md" mt="md">
           <Group mb="sm">
             <Text fw={600}>Результат</Text>
-            <Badge color={valid ? 'green' : 'red'}>{valid ? 'VALID' : 'INVALID'}</Badge>
+            <Badge color={valid ? 'green' : 'red'}>{valid ? 'ВАЛИДЕН' : 'НЕВАЛИДЕН'}</Badge>
           </Group>
           {result.error && (
             <Text c="red" size="sm" mb="sm">
@@ -181,11 +181,11 @@ export default function WatermarkVerifyPage() {
             </Text>
           )}
           <Stack gap={4}>
-            <Text size="sm">user_id: {result.user_id ?? '—'}</Text>
-            <Text size="sm">company_id: {result.company_id ?? '—'}</Text>
-            <Text size="sm">order_id: {result.order_id ?? '—'}</Text>
-            <Text size="sm">timestamp: {result.timestamp ?? '—'}</Text>
-            <Text size="sm">watermark: {result.watermark ?? '—'}</Text>
+            <Text size="sm">Пользователь: {result.user_id ?? '—'}</Text>
+            <Text size="sm">Компания: {result.company_id ?? '—'}</Text>
+            <Text size="sm">Заказ: {result.order_id ?? '—'}</Text>
+            <Text size="sm">Метка времени: {result.timestamp ?? '—'}</Text>
+            <Text size="sm">Водяной знак: {result.watermark ?? '—'}</Text>
           </Stack>
           {result.extras && (
             <Code block mt="md" style={{ whiteSpace: 'pre-wrap' }}>

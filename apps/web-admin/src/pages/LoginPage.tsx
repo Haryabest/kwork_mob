@@ -137,10 +137,10 @@ export default function LoginPage() {
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              3dvektor Staff
+              3dvektor Панель
             </Title>
             <Text c="#6d6c77" size="sm">
-              VPN (WireGuard/Tailscale) + 2FA (TOTP) · JWT 8ч · idle 30 мин
+              VPN (WireGuard/Tailscale) + двухфакторная аутентификация (TOTP) · токен 8 ч · неактивность 30 мин
             </Text>
           </div>
 
@@ -151,7 +151,7 @@ export default function LoginPage() {
           ) : (
             <Alert icon={<IconInfoCircle size={16} />} color="brand" variant="light">
               {vpnStatus?.vpn_required
-                ? `VPN OK (${vpnStatus.ip}). Далее пароль и код Authenticator.`
+                ? `VPN в норме (${vpnStatus.ip}). Далее пароль и код из приложения-аутентификатора.`
                 : 'VPN в этом окружении не обязателен (ADMIN_VPN_REQUIRED=false). 2FA обязательна.'}
             </Alert>
           )}
@@ -167,7 +167,7 @@ export default function LoginPage() {
             <form onSubmit={onCredentials}>
               <Stack gap="sm">
                 <TextInput
-                  label="Email"
+                  label="Эл. почта"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.currentTarget.value)}
@@ -193,7 +193,7 @@ export default function LoginPage() {
           {step === 'setup' && (
             <Stack gap="sm">
               <Text size="sm">Отсканируйте QR в Google Authenticator / Authy:</Text>
-              {qr && <Image src={qr} alt="TOTP QR" w={200} mx="auto" />}
+              {qr && <Image src={qr} alt="QR-код TOTP" w={200} mx="auto" />}
               {secret && (
                 <Text size="xs" c="dimmed" ta="center">
                   Или введите секрет вручную: <Code>{secret}</Code>

@@ -97,7 +97,7 @@ export default function PushPage() {
     try {
       const payload: { title: string; body: string; user_id?: number } = {
         title: title || 'KWork Mob test',
-        body: body || 'Push E2E OK',
+        body: body || 'Сквозной тест push: ОК',
       };
       if (testUserId) payload.user_id = Number(testUserId);
       const { data } = await api.post<{
@@ -107,11 +107,11 @@ export default function PushPage() {
         fcm_configured: boolean;
       }>('/admin/campaigns/push/test', payload);
       setResult(
-        `E2E: devices=${data.devices}, fcm=${data.fcm_configured}, push=${data.delivered_push}, email=${data.email_fallback}`,
+        `Сквозной тест: устройств=${data.devices}, fcm=${data.fcm_configured}, push=${data.delivered_push}, email=${data.email_fallback}`,
       );
       notifications.show({
         color: data.delivered_push || data.email_fallback ? 'teal' : 'orange',
-        message: data.delivered_push ? 'Push доставлен' : data.email_fallback ? 'Email fallback' : 'Нет доставки',
+        message: data.delivered_push ? 'Push доставлен' : data.email_fallback ? 'Резервная эл. почта' : 'Нет доставки',
       });
     } catch (e) {
       notifications.show({ color: 'red', message: getApiError(e) });
@@ -135,9 +135,9 @@ export default function PushPage() {
       <MetricGrid
         items={[
           {
-            label: 'Open rate 30д',
+            label: 'Открываемость 30д',
             value: `${Math.round((openStats?.open_rate ?? 0) * 100)}%`,
-            hint: `opened ${openStats?.total_opened ?? 0} / ${openStats?.total_delivered ?? 0}`,
+            hint: `открыто ${openStats?.total_opened ?? 0} / ${openStats?.total_delivered ?? 0}`,
           },
         ]}
       />
@@ -160,7 +160,7 @@ export default function PushPage() {
           onChange={(e) => setSendAt(e.currentTarget.value)}
         />
         <TextInput
-          label="E2E user_id (опц.)"
+          label="ID пользователя для сквозного теста (опц.)"
           placeholder="пусто = текущий staff"
           value={testUserId}
           onChange={(e) => setTestUserId(e.currentTarget.value)}
@@ -173,7 +173,7 @@ export default function PushPage() {
             Запланировать
           </Button>
           <Button loading={busy} variant="light" onClick={() => void sendTest()}>
-            Push E2E тест
+            Сквозной тест push
           </Button>
         </Group>
         {result && <Center>{result}</Center>}
@@ -181,14 +181,14 @@ export default function PushPage() {
         </Tabs.Panel>
         <Tabs.Panel value="history" pt="md">
       <ShellTable
-        headers={['ID', 'Заголовок', 'Статус', 'Reach', 'Open %', 'Когда']}
+        headers={['ID', 'Заголовок', 'Статус', 'Охват', 'Открытия %', 'Когда']}
         rows={history.map((h) => {
           const stat = openStats?.items?.find((i) => i.id === h.id);
           return [
           String(h.id),
           h.title,
           <Badge key={h.id} color={h.status === 'sent' ? 'teal' : h.status === 'scheduled' ? 'blue' : 'gray'} variant="light">
-            {h.status}
+            {h.status === 'sent' ? 'отправлено' : h.status === 'scheduled' ? 'запланировано' : h.status}
           </Badge>,
           String(h.stats?.reach ?? '—'),
           stat ? `${Math.round((stat.open_rate ?? 0) * 100)}%` : '—',
@@ -205,7 +205,7 @@ export default function PushPage() {
         </Tabs.Panel>
         <Tabs.Panel value="optouts" pt="md">
           <ShellTable
-            headers={['ID', 'Email', 'Имя']}
+            headers={['ID', 'Эл. почта', 'Имя']}
             rows={
               optOuts.length
                 ? optOuts.map((u) => [String(u.id), u.email || '—', u.full_name || '—'])

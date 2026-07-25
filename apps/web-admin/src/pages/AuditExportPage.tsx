@@ -63,7 +63,7 @@ export default function AuditExportPage() {
   return (
     <Stack gap="lg">
       <PageHeader
-        title="Audit export"
+        title="Экспорт аудита"
         description="Ежемесячный экспорт audit/access в MinIO §10.5"
         action={
           <Group>

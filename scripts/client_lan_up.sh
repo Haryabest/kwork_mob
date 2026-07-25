@@ -29,6 +29,13 @@ WORKER_REDIS_URL="${WORKER_REDIS_URL:-redis://host.docker.internal:6382/0}"
 NOBG_CONFIDENCE="${NOBG_CONFIDENCE:-0.85}"
 NOBG_HARD_FAIL_MIN="${NOBG_HARD_FAIL_MIN:-0.35}"
 COMPRESS_ALLOW_OVER_LIMIT="${COMPRESS_ALLOW_OVER_LIMIT:-1}"
+if [[ -z "${WORKER_DOCKER_IMAGE:-}" ]]; then
+  if docker image inspect kwork-worker:trellis2-runtime >/dev/null 2>&1; then
+    WORKER_DOCKER_IMAGE=kwork-worker:trellis2-runtime
+  else
+    WORKER_DOCKER_IMAGE=kwork-worker:trellis2
+  fi
+fi
 
 echo "[client_lan] HOST=$HOST"
 echo "[client_lan] docker compose up…"
@@ -38,8 +45,8 @@ echo "[client_lan] migrations…"
 docker compose exec -T orchestrator alembic upgrade head
 docker compose exec -T orchestrator python scripts/seed_staff.py || true
 
-if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
-  echo "[client_lan] GPU worker…"
+if docker image inspect "${WORKER_DOCKER_IMAGE}" >/dev/null 2>&1 || docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
+  echo "[client_lan] GPU worker (image=${WORKER_DOCKER_IMAGE})…"
   chmod +x "$ROOT/worker/entrypoint.sh" "$ROOT/worker/scripts/"*.sh 2>/dev/null || true
   docker volume create kwork_worker_state >/dev/null 2>&1 || true
   mkdir -p "${HF_CACHE_DIR:-$HOME/hf_cache}"
@@ -94,10 +101,10 @@ if docker image inspect kwork-worker:trellis2 >/dev/null 2>&1; then
     -e HF_TOKEN="${HF_TOKEN:-}" \
     -e QUALITY_THRESHOLD="${QUALITY_THRESHOLD:-0.4}" \
     -e WATERMARK_HMAC_SECRET="${WATERMARK_HMAC_SECRET:-change-me-watermark-secret}" \
-    kwork-worker:trellis2
+    "${WORKER_DOCKER_IMAGE}"
   fi
 else
-  echo "[client_lan] образ kwork-worker:trellis2 не найден — воркер пропущен"
+  echo "[client_lan] образ ${WORKER_DOCKER_IMAGE:-kwork-worker:trellis2} не найден — воркер пропущен"
 fi
 
 cat <<EOF

@@ -68,7 +68,7 @@ export default function TaxPage() {
 
   async function downloadPdf(kind: 'invoice' | 'act') {
     const id = Number(orderId);
-    if (!id) return notifications.show({ color: 'red', message: 'Укажите order_id' });
+    if (!id) return notifications.show({ color: 'red', message: 'Укажите ID заказа' });
     try {
       const { data } = await api.post<Blob>(`/admin/tax/${kind}/${id}`, null, { responseType: 'blob' });
       const url = URL.createObjectURL(data);
@@ -190,7 +190,7 @@ export default function TaxPage() {
         </Button>
         <Group align="flex-end">
           <TextInput
-            label="Order ID"
+            label="ID заказа"
             placeholder="123"
             value={orderId}
             onChange={(e) => setOrderId(e.currentTarget.value)}
@@ -210,10 +210,10 @@ export default function TaxPage() {
             value={taxQuarter}
             onChange={setTaxQuarter}
             data={[
-              { value: '1', label: 'Q1' },
-              { value: '2', label: 'Q2' },
-              { value: '3', label: 'Q3' },
-              { value: '4', label: 'Q4' },
+              { value: '1', label: 'К1' },
+              { value: '2', label: 'К2' },
+              { value: '3', label: 'К3' },
+              { value: '4', label: 'К4' },
             ]}
             maw={100}
           />
