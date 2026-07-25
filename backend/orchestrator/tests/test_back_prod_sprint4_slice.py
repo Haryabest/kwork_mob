@@ -67,15 +67,15 @@ def test_admin_dod_routes():
     assert load_test_queue.__name__ == "load_test_queue"
 
 
-def test_remove_background_deeplab_first():
+def test_remove_background_rmbg2_primary():
     from pathlib import Path
 
     text = (
         Path(__file__).resolve().parents[3] / "worker" / "scripts" / "remove_background.py"
     ).read_text(encoding="utf-8")
-    marker = "# §6.1.1: DeepLab primary"
-    block = text[text.find(marker) : text.find(marker) + 400]
-    dl_pos = block.find("_deeplab_remove")
-    rem_pos = block.find("_rembg_remove")
-    assert dl_pos != -1 and rem_pos != -1
-    assert dl_pos < rem_pos
+    assert "_rmbg2_remove" in text
+    assert 'os.getenv("NOBG_ENGINE", "rmbg2")' in text
+    rmbg_pos = text.find("_rmbg2_remove")
+    legacy_pos = text.find("_legacy_methods")
+    assert rmbg_pos != -1 and legacy_pos != -1
+    assert rmbg_pos < legacy_pos

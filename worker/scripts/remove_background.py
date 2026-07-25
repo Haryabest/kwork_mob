@@ -1,4 +1,4 @@
-"""Двухступенчатое удаление фона §6.1.1: rembg → DeepLabV3+ → SAM → GrabCut."""
+"""Удаление фона: briaai/RMBG-2.0 (primary) + legacy DeepLab/SAM fallback."""
 
 from __future__ import annotations
 
@@ -10,7 +10,21 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+_rmbg2_model = None
 _sam_predictor = None
+_deeplab_model = None
+
+
+def _nobg_engine() -> str:
+    return (os.getenv("NOBG_ENGINE", "rmbg2") or "rmbg2").strip().lower()
+
+
+def _view00_only() -> bool:
+    raw = (os.getenv("NOBG_VIEW00_ONLY") or "").strip().lower()
+    if raw in ("1", "true", "yes", "0", "false", "no"):
+        return raw in ("1", "true", "yes")
+    ver = (os.getenv("TRELLIS_VERSION") or "2").strip().lower()
+    return ver in ("2", "trellis2", "trellis.2")
 
 
 def _mask_ratio(mask: np.ndarray) -> float:
@@ -29,7 +43,6 @@ def _apply_mask_rgba(img: Image.Image, mask: np.ndarray) -> Image.Image:
 
 
 def _mask_metrics(mask: np.ndarray) -> dict:
-    """Оценка полноты маски: rembg часто режет белый объект на светлом фоне."""
     fg = mask > 10 if mask.dtype != np.uint8 or mask.max() > 1 else mask.astype(bool)
     if not np.any(fg):
         return {
@@ -60,6 +73,72 @@ def _alpha_from_rgba(im: Image.Image) -> np.ndarray:
     return np.array(im.convert("RGBA"))[:, :, 3]
 
 
+def _get_rmbg2():
+    global _rmbg2_model
+    if _rmbg2_model is not None:
+        return _rmbg2_model
+    try:
+        import torch
+        from transformers import AutoModelForImageSegmentation
+    except Exception as exc:  # noqa: BLE001
+        print(f"[remove_background] RMBG-2.0 import failed: {exc}")
+        return None
+    model_id = (os.getenv("NOBG_MODEL_ID") or "briaai/RMBG-2.0").strip()
+    token = (os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN") or "").strip() or None
+    try:
+        torch.set_float32_matmul_precision("high")
+        model = AutoModelForImageSegmentation.from_pretrained(
+            model_id,
+            trust_remote_code=True,
+            token=token,
+        )
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+        model.eval()
+        _rmbg2_model = (model, device)
+        print(f"[remove_background] RMBG-2.0 loaded ({model_id}) device={device}")
+        return _rmbg2_model
+    except Exception as exc:  # noqa: BLE001
+        print(f"[remove_background] RMBG-2.0 load failed: {exc}")
+        return None
+
+
+def _rmbg2_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | None:
+    loaded = _get_rmbg2()
+    if loaded is None:
+        return None
+    model, device = loaded
+    try:
+        import torch
+        from torchvision import transforms
+
+        size = int(os.getenv("NOBG_INPUT_SIZE", "1024"))
+        rgb = img.convert("RGB")
+        transform_image = transforms.Compose(
+            [
+                transforms.Resize((size, size)),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
+        )
+        input_tensor = transform_image(rgb).unsqueeze(0).to(device)
+        with torch.no_grad():
+            preds = model(input_tensor)[-1].sigmoid().cpu()
+        pred = preds[0].squeeze().numpy()
+        mask_pil = transforms.ToPILImage()(pred).resize(rgb.size, Image.BILINEAR)
+        mask = np.array(mask_pil)
+        fg = (mask > int(os.getenv("NOBG_MASK_THRESHOLD", "128"))).astype(np.uint8)
+        out = _apply_mask_rgba(rgb, fg)
+        metrics = _mask_metrics(fg)
+        ratio = metrics["ratio"]
+        conf = float(np.mean(mask[fg.astype(bool)]) / 255.0) if fg.any() else 0.0
+        conf = min(0.99, max(0.5, conf))
+        return out, ratio, conf, metrics
+    except Exception as exc:  # noqa: BLE001
+        print(f"[remove_background] RMBG-2.0 failed: {exc}")
+        return None
+
+
 def _rembg_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | None:
     try:
         from rembg import remove
@@ -88,9 +167,6 @@ def _rembg_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | 
     except Exception as exc:  # noqa: BLE001
         print(f"[remove_background] rembg failed: {exc}")
         return None
-
-
-_deeplab_model = None
 
 
 def _deeplab_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | None:
@@ -163,8 +239,6 @@ def _sam_remove(img: Image.Image, seed_mask: np.ndarray | None = None) -> tuple[
     if predictor is None:
         return None
     try:
-        import torch
-
         rgb = np.array(img.convert("RGB"))
         h, w = rgb.shape[:2]
         predictor.set_image(rgb)
@@ -179,7 +253,6 @@ def _sam_remove(img: Image.Image, seed_mask: np.ndarray | None = None) -> tuple[
                 multimask_output=True,
             )
         else:
-            # центральная точка + box по кадру
             box = np.array([w * 0.1, h * 0.1, w * 0.9, h * 0.9])
             masks, scores, _ = predictor.predict(
                 point_coords=np.array([[w // 2, h // 2]]),
@@ -224,7 +297,6 @@ def _grabcut_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] 
 
 
 def _frame_usable(name: str, ratio: float, *, min_ratio: float, max_ratio: float) -> bool:
-    """Маска пригодна для пайплайна: не fallback и доля объекта в кадре в норме."""
     if name == "copy_rgba":
         return False
     return min_ratio <= ratio <= max_ratio
@@ -245,7 +317,6 @@ def _segmentation_hard_fail(
     max_ratio: float,
     hard_min_conf: float,
 ) -> str | None:
-    """Жёсткий провал только при реально битой сегментации (не из-за порога quality)."""
     if not stats:
         return "no_frames"
     view_i = _view00_index(files)
@@ -279,13 +350,11 @@ def _method_rank(
     min_ratio: float,
     max_ratio: float,
 ) -> tuple:
-    """Выше = лучше. Приоритет: полная маска, затем площадь, затем confidence."""
     coverage = bool(metrics.get("coverage_ok"))
     in_ratio = min_ratio <= ratio <= max_ratio
     height = float(metrics.get("height_frac") or 0.0)
     width = float(metrics.get("width_frac") or 0.0)
-    # SAM/grabcut предпочтительнее rembg при неполной маске
-    method_bonus = {"sam": 0.02, "grabcut": 0.01, "deeplab": 0.005}.get(name, 0.0)
+    method_bonus = {"rmbg2": 0.05, "sam": 0.02, "grabcut": 0.01, "deeplab": 0.005}.get(name, 0.0)
     return (
         1 if coverage else 0,
         1 if in_ratio else 0,
@@ -293,6 +362,30 @@ def _method_rank(
         ratio,
         conf + method_bonus,
     )
+
+
+def _legacy_methods(img: Image.Image) -> list[tuple[str, Image.Image, float, float, dict]]:
+    methods: list[tuple[str, Image.Image, float, float, dict]] = []
+    dl = _deeplab_remove(img)
+    if dl:
+        methods.append(("deeplab", dl[0], dl[1], dl[2], dl[3]))
+    rem = _rembg_remove(img)
+    if rem:
+        methods.append(("rembg", rem[0], rem[1], rem[2], rem[3]))
+    seed = None
+    if dl:
+        seed = (np.array(dl[0])[:, :, 3] > 10).astype(np.uint8)
+    elif rem:
+        seed = (np.array(rem[0])[:, :, 3] > 10).astype(np.uint8)
+    best_coverage = any(m[4].get("coverage_ok") for m in methods)
+    if not best_coverage or os.getenv("NOBG_ALWAYS_SAM", "0").lower() in ("1", "true", "yes"):
+        sam = _sam_remove(img, seed)
+        if sam:
+            methods.append(("sam", sam[0], sam[1], sam[2], sam[3]))
+    gc = _grabcut_remove(img)
+    if gc:
+        methods.append(("grabcut", gc[0], gc[1], gc[2], gc[3]))
+    return methods
 
 
 def process_one(
@@ -304,30 +397,16 @@ def process_one(
     max_ratio: float = 0.95,
 ) -> dict:
     img = Image.open(src)
+    engine = _nobg_engine()
     methods: list[tuple[str, Image.Image, float, float, dict]] = []
 
-    dl = _deeplab_remove(img)
-    if dl:
-        methods.append(("deeplab", dl[0], dl[1], dl[2], dl[3]))
-    rem = _rembg_remove(img)
-    if rem:
-        methods.append(("rembg", rem[0], rem[1], rem[2], rem[3]))
+    if engine != "legacy":
+        rmbg = _rmbg2_remove(img)
+        if rmbg:
+            methods.append(("rmbg2", rmbg[0], rmbg[1], rmbg[2], rmbg[3]))
 
-    seed = None
-    if dl:
-        seed = (np.array(dl[0])[:, :, 3] > 10).astype(np.uint8)
-    elif rem:
-        seed = (np.array(rem[0])[:, :, 3] > 10).astype(np.uint8)
-
-    best_coverage = any(m[4].get("coverage_ok") for m in methods)
-    if not best_coverage or os.getenv("NOBG_ALWAYS_SAM", "0").lower() in ("1", "true", "yes"):
-        sam = _sam_remove(img, seed)
-        if sam:
-            methods.append(("sam", sam[0], sam[1], sam[2], sam[3]))
-
-    gc = _grabcut_remove(img)
-    if gc:
-        methods.append(("grabcut", gc[0], gc[1], gc[2], gc[3]))
+    if not methods or os.getenv("NOBG_FALLBACK_LEGACY", "0").lower() in ("1", "true", "yes"):
+        methods.extend(_legacy_methods(img))
 
     if not methods:
         img.convert("RGBA").save(dst)
@@ -366,7 +445,6 @@ _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def _photo_files(photos: Path) -> list[Path]:
-    """Только ракурсы view_XX.*; игнорируем metadata.json, source.zip и пр."""
     all_images = sorted(
         p for p in photos.iterdir() if p.is_file() and p.suffix.lower() in _IMAGE_SUFFIXES
     )
@@ -374,8 +452,17 @@ def _photo_files(photos: Path) -> list[Path]:
     return views if views else all_images
 
 
+def _select_files(files: list[Path]) -> list[Path]:
+    if not _view00_only():
+        return files
+    for f in files:
+        if f.name.lower().startswith("view_00"):
+            print(f"[remove_background] TRELLIS.2: только {f.name} (NOBG_VIEW00_ONLY)")
+            return [f]
+    return files[:1]
+
+
 def _stub_copy_nobg(files: list[Path], out: Path) -> list[dict]:
-    """Stub / WORKER_REAL_NOBG=0: копируем JPEG → PNG без ML."""
     stats: list[dict] = []
     for f in files:
         dst = out / (f.stem + ".png")
@@ -393,7 +480,7 @@ def main(task_dir: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     photos.mkdir(parents=True, exist_ok=True)
 
-    files = _photo_files(photos)
+    files = _select_files(_photo_files(photos))
     if not files:
         print(f"[remove_background] нет фото в {photos}")
         raise SystemExit(2)
@@ -414,7 +501,6 @@ def main(task_dir: str) -> None:
         meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         return
 
-    # Порог качества для score/alerts; не блокирует пайплайн (rembg conf ≈ 0.55+ratio*0.4).
     quality_target = float(os.getenv("NOBG_CONFIDENCE", "0.85"))
     hard_min = float(os.getenv("NOBG_HARD_FAIL_MIN", "0.35"))
     min_r = float(os.getenv("NOBG_MIN_RATIO", "0.10"))
@@ -444,6 +530,8 @@ def main(task_dir: str) -> None:
         hard_min_conf=hard_min,
     )
     meta["segmentation"] = {
+        "engine": _nobg_engine(),
+        "model": os.getenv("NOBG_MODEL_ID", "briaai/RMBG-2.0"),
         "frames": stats,
         "avg_confidence": avg_conf,
         "threshold": quality_target,
@@ -451,6 +539,7 @@ def main(task_dir: str) -> None:
         "weak_frames": weak,
         "low_quality_frames": low_quality,
         "quality_warning": quality_warning,
+        "view00_only": _view00_only(),
     }
     meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
 

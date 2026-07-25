@@ -13,6 +13,8 @@ scipy
 redis
 httpx
 pytest
+transformers>=4.44.0
+kornia>=0.7.0
 rembg>=2.0.50
 onnxruntime-gpu>=1.16.0; platform_system!="Darwin"
 onnxruntime>=1.16.0; platform_system=="Darwin"

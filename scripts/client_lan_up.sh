@@ -87,8 +87,12 @@ if docker image inspect "${WORKER_DOCKER_IMAGE}" >/dev/null 2>&1 || docker image
     -e TRELLIS2_TEX_GUIDANCE="${TRELLIS2_TEX_GUIDANCE:-1}" \
     -e TRELLIS2_TEX_GUIDANCE_RESCALE="${TRELLIS2_TEX_GUIDANCE_RESCALE:-0}" \
     -e TRELLIS2_TEX_RESCALE_T="${TRELLIS2_TEX_RESCALE_T:-3}" \
-    -e TRELLIS2_LOW_VRAM="${TRELLIS2_LOW_VRAM:-1}" \
+    -e TRELLIS2_LOW_VRAM="${TRELLIS2_LOW_VRAM:-0}" \
     -e ATTN_BACKEND="${ATTN_BACKEND:-xformers}" \
+    -e PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
+    -e NOBG_ENGINE="${NOBG_ENGINE:-rmbg2}" \
+    -e NOBG_MODEL_ID="${NOBG_MODEL_ID:-briaai/RMBG-2.0}" \
+    -e NOBG_VIEW00_ONLY="${NOBG_VIEW00_ONLY:-1}" \
     -e ORCHESTRATOR_WS_URL="ws://host.docker.internal:8000/ws/worker" \
     -e ORCHESTRATOR_HTTP_URL="http://host.docker.internal:8000" \
     -e REDIS_URL="${WORKER_REDIS_URL}" \

@@ -40,4 +40,4 @@ docker build --build-arg INSTALL_TRELLIS=1 --build-arg DOWNLOAD_WEIGHTS=1 \
 
 ## Без фона
 
-`WORKER_REAL_NOBG=1` → rembg / DeepLab / GrabCut.
+`WORKER_REAL_NOBG=1` → **briaai/RMBG-2.0** (`NOBG_ENGINE=rmbg2`, по умолчанию только `view_00` для TRELLIS.2).
