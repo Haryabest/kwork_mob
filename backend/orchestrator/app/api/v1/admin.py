@@ -905,7 +905,16 @@ async def list_workers(_: dict = Depends(require_admin), db: AsyncSession = Depe
 
     rows = (await db.scalars(select(WorkerNode).order_by(WorkerNode.id))).all()
     lengths = await queue_service.queue_lengths()
-    online = sum(1 for w in rows if w.status == "online")
+    now = datetime.now(timezone.utc)
+    online = 0
+    for w in rows:
+        hb = w.last_heartbeat
+        if not hb or w.status not in ("idle", "busy", "online", "overheated"):
+            continue
+        if hb.tzinfo is None:
+            hb = hb.replace(tzinfo=timezone.utc)
+        if (now - hb).total_seconds() < 20:
+            online += 1
     hub = {h["worker_id"]: h for h in await worker_hub.list_snapshot()}
     return {
         "summary": {

@@ -300,7 +300,10 @@ export function WorkersPage() {
             ? items.map((w) => [
                 w.id,
                 <Group key={`s-${w.id}`} gap={6}>
-                  <StateBadge value={w.status} color={w.status === 'online' ? 'teal' : 'orange'} />
+                  <StateBadge
+                    value={w.status}
+                    color={['online', 'idle', 'busy', 'overheated'].includes(w.status) ? 'teal' : 'orange'}
+                  />
                   {w.maintenance && <StateBadge value="обслуж." color="orange" />}
                 </Group>,
                 w.tailscale_ip ?? '—',
