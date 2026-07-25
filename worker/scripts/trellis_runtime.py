@@ -86,6 +86,22 @@ def _require_nobg_dir(task_dir: Path) -> Path:
     return photos_nobg
 
 
+def _resolve_low_vram() -> bool:
+    raw = os.getenv("TRELLIS2_LOW_VRAM")
+    if raw is not None:
+        return raw.lower() in ("1", "true", "yes")
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            # RTX 5060 Ti / 5070 16GB — без low_vram часто OOM при inference
+            return gb < 20.0
+    except Exception:  # noqa: BLE001
+        pass
+    return True
+
+
 def get_pipeline():
     global _pipeline, _pipeline_kind
     if _pipeline is not None:
@@ -108,7 +124,7 @@ def get_pipeline():
             _progress("import Trellis2ImageTo3DPipeline…")
             from trellis2.pipelines import Trellis2ImageTo3DPipeline  # type: ignore
 
-            low_vram = os.getenv("TRELLIS2_LOW_VRAM", "1").lower() in ("1", "true", "yes")
+            low_vram = _resolve_low_vram()
             _progress(f"from_pretrained({weights})… смотрите nvidia-smi — растёт VRAM")
             pipe = Trellis2ImageTo3DPipeline.from_pretrained(weights)
             _progress(f"weights loaded in {time.monotonic() - t0:.0f}s, low_vram={low_vram}")

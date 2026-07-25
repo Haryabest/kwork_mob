@@ -73,6 +73,23 @@ def _alpha_from_rgba(im: Image.Image) -> np.ndarray:
     return np.array(im.convert("RGBA"))[:, :, 3]
 
 
+def _release_rmbg2() -> None:
+    global _rmbg2_model
+    if _rmbg2_model is None:
+        return
+    try:
+        import torch
+
+        model, _device = _rmbg2_model
+        del model
+        _rmbg2_model = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        print("[remove_background] RMBG-2.0 VRAM released", flush=True)
+    except Exception:  # noqa: BLE001
+        _rmbg2_model = None
+
+
 def _get_rmbg2():
     global _rmbg2_model
     if _rmbg2_model is not None:
@@ -550,6 +567,7 @@ def main(task_dir: str) -> None:
         f"[remove_background] done {len(files)} avg_conf={avg_conf:.3f} "
         f"weak={weak} low_quality={low_quality} warn={quality_warning}"
     )
+    _release_rmbg2()
 
 
 if __name__ == "__main__":

@@ -359,9 +359,20 @@ class WorkerAgent:
             else:
                 os.environ[key] = val
 
+    @staticmethod
+    def _cuda_empty_cache() -> None:
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:  # noqa: BLE001
+            pass
+
     def _run_trellis_inprocess(self, task_dir: Path, env: dict) -> None:
         backup = self._apply_script_env(env)
         try:
+            self._cuda_empty_cache()
             from trellis_runtime import preflight_cuda, run_trellis
 
             if os.getenv("TRELLIS_ALLOW_STUB_FALLBACK", "0").lower() in ("1", "true", "yes"):
@@ -451,6 +462,8 @@ class WorkerAgent:
                 if name == "remove_background.py" and result.returncode == 3:
                     raise RuntimeError(f"failed_segmentation: {name} failed ({result.returncode}): {err}")
                 raise RuntimeError(f"{name} failed ({result.returncode}): {err}")
+        if name == "remove_background.py":
+            self._cuda_empty_cache()
         logger.info("Finished step %s in %.1fs", name, time.monotonic() - t0)
 
     async def _notify_event(self, payload: dict) -> None:

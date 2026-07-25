@@ -37,4 +37,8 @@ if [ -f /app/scripts/install_gltf_transform.sh ]; then
   bash /app/scripts/install_gltf_transform.sh || true
 fi
 
+if [ -f /app/scripts/prefetch_worker_models.sh ]; then
+  bash /app/scripts/prefetch_worker_models.sh || true
+fi
+
 exec "$@"
