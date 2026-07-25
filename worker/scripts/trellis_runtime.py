@@ -26,6 +26,12 @@ _pipeline = None
 _pipeline_kind: str | None = None
 
 
+def _progress(msg: str) -> None:
+    """Видно в docker logs (subprocess stdout + worker_agent)."""
+    logger.info(msg)
+    print(f"[trellis_runtime] {msg}", flush=True)
+
+
 def trellis_version() -> str:
     return os.getenv("TRELLIS_VERSION", "2").strip().lower()
 
@@ -83,29 +89,38 @@ def _require_nobg_dir(task_dir: Path) -> Path:
 def get_pipeline():
     global _pipeline, _pipeline_kind
     if _pipeline is not None:
+        _progress("pipeline cache hit — skip load")
         return _pipeline
 
+    import time
+
+    t0 = time.monotonic()
     _ensure_path()
     import torch
 
     weights = os.getenv("TRELLIS_WEIGHTS", "microsoft/TRELLIS.2-4B")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     ver = trellis_version()
-    logger.info("Loading TRELLIS.%s device=%s weights=%s", ver, device, weights)
+    _progress(f"Loading TRELLIS.{ver} device={device} weights={weights} (3–8 мин при первом запуске)")
 
     if ver in ("2", "trellis2", "trellis.2"):
         try:
+            _progress("import Trellis2ImageTo3DPipeline…")
             from trellis2.pipelines import Trellis2ImageTo3DPipeline  # type: ignore
 
             low_vram = os.getenv("TRELLIS2_LOW_VRAM", "1").lower() in ("1", "true", "yes")
+            _progress(f"from_pretrained({weights})… смотрите nvidia-smi — растёт VRAM")
             pipe = Trellis2ImageTo3DPipeline.from_pretrained(weights)
+            _progress(f"weights loaded in {time.monotonic() - t0:.0f}s, low_vram={low_vram}")
             pipe.low_vram = low_vram
             if device == "cuda" and hasattr(pipe, "cuda"):
+                _progress("pipe.cuda()…")
                 pipe.cuda()
             elif hasattr(pipe, "to"):
                 pipe.to(device)
             _pipeline = pipe
             _pipeline_kind = "trellis2_image_to_3d"
+            _progress(f"pipeline ready in {time.monotonic() - t0:.0f}s total")
             return _pipeline
         except Exception as exc:
             detail = repr(exc)
@@ -263,6 +278,7 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
 
     pipe = get_pipeline()
     pipeline_type = _pipeline_type_resolved()
+    _progress(f"inference start pipeline_type={pipeline_type} …")
     run_kwargs = {
         "preprocess_image": False,
         "pipeline_type": pipeline_type,
@@ -289,6 +305,7 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
         _texture_size_for_task(task_dir),
     )
     meshes = pipe.run(image, **run_kwargs)
+    _progress("inference done, export GLB…")
     if not meshes:
         raise RuntimeError("TRELLIS.2 вернул пустой результат")
 

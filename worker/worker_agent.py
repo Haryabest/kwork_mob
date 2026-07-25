@@ -339,6 +339,51 @@ class WorkerAgent:
         except Exception:  # noqa: BLE001
             return False
 
+    def _apply_script_env(self, env: dict) -> dict[str, str | None]:
+        """Временно применить env для in-process скриптов."""
+        backup: dict[str, str | None] = {}
+        for key, val in env.items():
+            backup[key] = os.environ.get(key)
+            os.environ[key] = val
+        scripts = str(SCRIPTS_DIR)
+        cur = os.environ.get("PYTHONPATH", "")
+        parts = [p for p in (scripts, cur) if p]
+        os.environ["PYTHONPATH"] = os.pathsep.join(parts)
+        return backup
+
+    @staticmethod
+    def _restore_script_env(backup: dict[str, str | None]) -> None:
+        for key, val in backup.items():
+            if val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = val
+
+    def _run_trellis_inprocess(self, task_dir: Path, env: dict) -> None:
+        backup = self._apply_script_env(env)
+        try:
+            from trellis_runtime import preflight_cuda, run_trellis
+
+            if os.getenv("TRELLIS_ALLOW_STUB_FALLBACK", "0").lower() in ("1", "true", "yes"):
+                try:
+                    preflight_cuda()
+                    output = task_dir / "raw_mesh.glb"
+                    run_trellis(task_dir, output)
+                except Exception as exc:  # noqa: BLE001
+                    from glb_stub import write_minimal_glb
+
+                    output = task_dir / "raw_mesh.glb"
+                    logger.warning("[trellis_generate] fallback stub (%s)", exc)
+                    write_minimal_glb(output, task_dir)
+            else:
+                preflight_cuda()
+                output = task_dir / "raw_mesh.glb"
+                run_trellis(task_dir, output)
+            size = output.stat().st_size if output.exists() else 0
+            logger.info("[trellis_generate.py] TRELLIS.2 → %s (%s bytes)", output, size)
+        finally:
+            self._restore_script_env(backup)
+
     def _run_script_stream(self, name: str, script: Path, task_dir: Path, env: dict) -> None:
         process = subprocess.Popen(
             [PYTHON, str(script), str(task_dir)],
@@ -382,7 +427,14 @@ class WorkerAgent:
                 pass
         t0 = time.monotonic()
         logger.info("Starting step %s", name)
-        if SUBPROCESS_STREAM:
+        inprocess_trellis = (
+            name == "trellis_generate.py"
+            and PIPELINE_MODE == "trellis"
+            and os.getenv("WORKER_TRELLIS_INPROCESS", "1").lower() in ("1", "true", "yes")
+        )
+        if inprocess_trellis:
+            self._run_trellis_inprocess(task_dir, env)
+        elif SUBPROCESS_STREAM:
             self._run_script_stream(name, script, task_dir, env)
         else:
             result = subprocess.run(
@@ -812,6 +864,26 @@ class WorkerAgent:
 
         preflight_cuda()
 
+    def _warmup_trellis_sync(self) -> None:
+        sys.path.insert(0, str(_resolve_scripts_dir()))
+        from trellis_runtime import get_pipeline
+
+        logger.info("TRELLIS warmup: загрузка весов в фоне…")
+        get_pipeline()
+        logger.info("TRELLIS warmup: готово")
+
+    async def _warmup_trellis_bg(self) -> None:
+        if os.getenv("WORKER_WARMUP_TRELLIS", "1").lower() not in ("1", "true", "yes"):
+            return
+        if PIPELINE_MODE != "trellis":
+            return
+        if os.getenv("WORKER_TRELLIS_INPROCESS", "1").lower() not in ("1", "true", "yes"):
+            return
+        try:
+            await asyncio.to_thread(self._warmup_trellis_sync)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("TRELLIS warmup failed: %s", exc)
+
     def _capabilities(self) -> list[str]:
         caps = [
             "trellis",
@@ -868,6 +940,7 @@ class WorkerAgent:
                     async with self._ws_connect_cm(url, headers) as ws:
                         self._ws = ws
                         await ws.send(json.dumps(self._ready_payload()))
+                        asyncio.create_task(self._warmup_trellis_bg())
                         backoff = 1
                         hb = asyncio.create_task(self.send_heartbeat(ws))
                         mx = asyncio.create_task(self.send_metrics(ws))
