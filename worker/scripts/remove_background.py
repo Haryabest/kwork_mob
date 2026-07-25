@@ -28,21 +28,63 @@ def _apply_mask_rgba(img: Image.Image, mask: np.ndarray) -> Image.Image:
     return Image.fromarray(arr, "RGBA")
 
 
-def _rembg_remove(img: Image.Image) -> tuple[Image.Image, float, float] | None:
+def _mask_metrics(mask: np.ndarray) -> dict:
+    """Оценка полноты маски: rembg часто режет белый объект на светлом фоне."""
+    fg = mask > 10 if mask.dtype != np.uint8 or mask.max() > 1 else mask.astype(bool)
+    if not np.any(fg):
+        return {
+            "ratio": 0.0,
+            "height_frac": 0.0,
+            "width_frac": 0.0,
+            "coverage_ok": False,
+        }
+    ys, xs = np.where(fg)
+    h, w = fg.shape[:2]
+    height_frac = (ys.max() - ys.min() + 1) / max(h, 1)
+    width_frac = (xs.max() - xs.min() + 1) / max(w, 1)
+    ratio = float(fg.mean())
+    min_h = float(os.getenv("NOBG_MIN_HEIGHT_FRAC", "0.45"))
+    min_w = float(os.getenv("NOBG_MIN_WIDTH_FRAC", "0.22"))
+    coverage_ok = height_frac >= min_h and width_frac >= min_w and ratio >= float(
+        os.getenv("NOBG_MIN_RATIO", "0.10")
+    )
+    return {
+        "ratio": ratio,
+        "height_frac": round(height_frac, 4),
+        "width_frac": round(width_frac, 4),
+        "coverage_ok": coverage_ok,
+    }
+
+
+def _alpha_from_rgba(im: Image.Image) -> np.ndarray:
+    return np.array(im.convert("RGBA"))[:, :, 3]
+
+
+def _rembg_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | None:
     try:
         from rembg import remove
     except Exception:
         return None
     try:
-        out = remove(img.convert("RGB"))
+        kwargs: dict = {}
+        if os.getenv("REMBG_ALPHA_MATTING", "1").lower() in ("1", "true", "yes"):
+            kwargs.update(
+                {
+                    "alpha_matting": True,
+                    "alpha_matting_foreground_threshold": 240,
+                    "alpha_matting_background_threshold": 20,
+                    "alpha_matting_erode_size": 10,
+                }
+            )
+        out = remove(img.convert("RGB"), **kwargs)
         if not isinstance(out, Image.Image):
             out = Image.open(__import__("io").BytesIO(out)).convert("RGBA")
         else:
             out = out.convert("RGBA")
-        alpha = np.array(out)[:, :, 3]
-        ratio = _mask_ratio(alpha > 10)
+        metrics = _mask_metrics(_alpha_from_rgba(out))
+        ratio = metrics["ratio"]
         conf = min(0.99, 0.55 + ratio * 0.4)
-        return out, ratio, conf
+        return out, ratio, conf, metrics
     except Exception as exc:  # noqa: BLE001
         print(f"[remove_background] rembg failed: {exc}")
         return None
@@ -51,7 +93,7 @@ def _rembg_remove(img: Image.Image) -> tuple[Image.Image, float, float] | None:
 _deeplab_model = None
 
 
-def _deeplab_remove(img: Image.Image) -> tuple[Image.Image, float, float] | None:
+def _deeplab_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | None:
     global _deeplab_model
     try:
         import torch
@@ -83,7 +125,9 @@ def _deeplab_remove(img: Image.Image) -> tuple[Image.Image, float, float] | None
         ratio = _mask_ratio(fg)
         if mean_conf < 0.5:
             return None
-        return _apply_mask_rgba(rgb, fg), ratio, mean_conf
+        out = _apply_mask_rgba(rgb, fg)
+        metrics = _mask_metrics(fg)
+        return out, ratio, mean_conf, metrics
     except Exception as exc:  # noqa: BLE001
         print(f"[remove_background] DeepLab failed: {exc}")
         return None
@@ -114,7 +158,7 @@ def _get_sam():
         return None
 
 
-def _sam_remove(img: Image.Image, seed_mask: np.ndarray | None = None) -> tuple[Image.Image, float, float] | None:
+def _sam_remove(img: Image.Image, seed_mask: np.ndarray | None = None) -> tuple[Image.Image, float, float, dict] | None:
     predictor = _get_sam()
     if predictor is None:
         return None
@@ -147,13 +191,15 @@ def _sam_remove(img: Image.Image, seed_mask: np.ndarray | None = None) -> tuple[
         fg = masks[best].astype(np.uint8)
         conf = float(scores[best])
         ratio = _mask_ratio(fg)
-        return _apply_mask_rgba(img, fg), ratio, conf
+        out = _apply_mask_rgba(img, fg)
+        metrics = _mask_metrics(fg)
+        return out, ratio, conf, metrics
     except Exception as exc:  # noqa: BLE001
         print(f"[remove_background] SAM failed: {exc}")
         return None
 
 
-def _grabcut_remove(img: Image.Image) -> tuple[Image.Image, float, float] | None:
+def _grabcut_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | None:
     try:
         import cv2
     except Exception:
@@ -164,12 +210,14 @@ def _grabcut_remove(img: Image.Image) -> tuple[Image.Image, float, float] | None
         mask = np.zeros((h, w), np.uint8)
         bgd = np.zeros((1, 65), np.float64)
         fgd = np.zeros((1, 65), np.float64)
-        margin = max(2, min(h, w) // 20)
+        margin = max(2, min(h, w) // 30)
         rect = (margin, margin, w - 2 * margin, h - 2 * margin)
-        cv2.grabCut(rgb, mask, rect, bgd, fgd, 5, cv2.GC_INIT_WITH_RECT)
+        cv2.grabCut(rgb, mask, rect, bgd, fgd, 8, cv2.GC_INIT_WITH_RECT)
         fg = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 1, 0).astype(np.uint8)
         ratio = _mask_ratio(fg)
-        return _apply_mask_rgba(img, fg), ratio, 0.6
+        out = _apply_mask_rgba(img, fg)
+        metrics = _mask_metrics(fg)
+        return out, ratio, 0.6, metrics
     except Exception as exc:  # noqa: BLE001
         print(f"[remove_background] GrabCut failed: {exc}")
         return None
@@ -204,6 +252,11 @@ def _segmentation_hard_fail(
     v0 = stats[view_i]
     if not _frame_usable(v0["method"], v0["ratio"], min_ratio=min_ratio, max_ratio=max_ratio):
         return f"view_00_unusable method={v0['method']} ratio={v0['ratio']:.3f}"
+    if not v0.get("coverage_ok", True):
+        return (
+            f"view_00_incomplete height={v0.get('height_frac')} "
+            f"width={v0.get('width_frac')}"
+        )
     usable = sum(
         1
         for s in stats
@@ -217,6 +270,31 @@ def _segmentation_hard_fail(
     return None
 
 
+def _method_rank(
+    name: str,
+    ratio: float,
+    conf: float,
+    metrics: dict,
+    *,
+    min_ratio: float,
+    max_ratio: float,
+) -> tuple:
+    """Выше = лучше. Приоритет: полная маска, затем площадь, затем confidence."""
+    coverage = bool(metrics.get("coverage_ok"))
+    in_ratio = min_ratio <= ratio <= max_ratio
+    height = float(metrics.get("height_frac") or 0.0)
+    width = float(metrics.get("width_frac") or 0.0)
+    # SAM/grabcut предпочтительнее rembg при неполной маске
+    method_bonus = {"sam": 0.02, "grabcut": 0.01, "deeplab": 0.005}.get(name, 0.0)
+    return (
+        1 if coverage else 0,
+        1 if in_ratio else 0,
+        height + width,
+        ratio,
+        conf + method_bonus,
+    )
+
+
 def process_one(
     src: Path,
     dst: Path,
@@ -226,61 +304,61 @@ def process_one(
     max_ratio: float = 0.95,
 ) -> dict:
     img = Image.open(src)
-    methods: list[tuple[str, tuple]] = []
+    methods: list[tuple[str, Image.Image, float, float, dict]] = []
 
-    # §6.1.1: DeepLab primary, rembg fallback
     dl = _deeplab_remove(img)
     if dl:
-        methods.append(("deeplab", dl))
+        methods.append(("deeplab", dl[0], dl[1], dl[2], dl[3]))
     rem = _rembg_remove(img)
     if rem:
-        methods.append(("rembg", rem))
+        methods.append(("rembg", rem[0], rem[1], rem[2], rem[3]))
 
-    # SAM: если DeepLab/rembg слабые по confidence — обязательный fallback §6.1.1
-    need_sam = True
-    if dl and dl[2] >= conf_thr and min_ratio <= dl[1] <= max_ratio:
-        need_sam = False
-    if rem and rem[2] >= conf_thr and min_ratio <= rem[1] <= max_ratio:
-        need_sam = False
-    if need_sam:
-        seed = None
-        if dl:
-            seed = (np.array(dl[0])[:, :, 3] > 10).astype(np.uint8)
-        elif rem:
-            seed = (np.array(rem[0])[:, :, 3] > 10).astype(np.uint8)
+    seed = None
+    if dl:
+        seed = (np.array(dl[0])[:, :, 3] > 10).astype(np.uint8)
+    elif rem:
+        seed = (np.array(rem[0])[:, :, 3] > 10).astype(np.uint8)
+
+    best_coverage = any(m[4].get("coverage_ok") for m in methods)
+    if not best_coverage or os.getenv("NOBG_ALWAYS_SAM", "0").lower() in ("1", "true", "yes"):
         sam = _sam_remove(img, seed)
         if sam:
-            methods.append(("sam", sam))
+            methods.append(("sam", sam[0], sam[1], sam[2], sam[3]))
 
     gc = _grabcut_remove(img)
     if gc:
-        methods.append(("grabcut", gc))
+        methods.append(("grabcut", gc[0], gc[1], gc[2], gc[3]))
 
-    # выбираем лучший по confidence среди валидных ratio
-    valid = [(n, r, c, im) for n, (im, r, c) in methods if min_ratio <= r <= max_ratio]
-    if not valid:
-        valid = [(n, r, c, im) for n, (im, r, c) in methods]
-
-    if valid:
-        valid.sort(key=lambda x: x[2], reverse=True)
-        name, ratio, conf, out_im = valid[0]
-        out_im.save(dst)
-        usable = _frame_usable(name, ratio, min_ratio=min_ratio, max_ratio=max_ratio)
+    if not methods:
+        img.convert("RGBA").save(dst)
         return {
-            "method": name,
-            "ratio": ratio,
-            "confidence": conf,
-            "ok": usable,
-            "quality_ok": conf >= conf_thr,
+            "method": "copy_rgba",
+            "ratio": 1.0,
+            "confidence": 0.0,
+            "ok": False,
+            "quality_ok": False,
+            "coverage_ok": False,
         }
 
-    img.convert("RGBA").save(dst)
+    methods.sort(
+        key=lambda m: _method_rank(
+            m[0], m[2], m[3], m[4], min_ratio=min_ratio, max_ratio=max_ratio
+        ),
+        reverse=True,
+    )
+    name, out_im, ratio, conf, metrics = methods[0]
+    out_im.save(dst)
+    usable = _frame_usable(name, ratio, min_ratio=min_ratio, max_ratio=max_ratio)
+    coverage_ok = bool(metrics.get("coverage_ok"))
     return {
-        "method": "copy_rgba",
-        "ratio": 1.0,
-        "confidence": 0.0,
-        "ok": False,
-        "quality_ok": False,
+        "method": name,
+        "ratio": ratio,
+        "confidence": conf,
+        "ok": usable and coverage_ok,
+        "quality_ok": conf >= conf_thr,
+        "coverage_ok": coverage_ok,
+        "height_frac": metrics.get("height_frac"),
+        "width_frac": metrics.get("width_frac"),
     }
 
 
@@ -336,7 +414,7 @@ def main(task_dir: str) -> None:
         meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         return
 
-  # Порог качества для score/alerts; не блокирует пайплайн (rembg conf ≈ 0.55+ratio*0.4).
+    # Порог качества для score/alerts; не блокирует пайплайн (rembg conf ≈ 0.55+ratio*0.4).
     quality_target = float(os.getenv("NOBG_CONFIDENCE", "0.85"))
     hard_min = float(os.getenv("NOBG_HARD_FAIL_MIN", "0.35"))
     min_r = float(os.getenv("NOBG_MIN_RATIO", "0.10"))
