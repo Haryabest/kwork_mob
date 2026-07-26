@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc && rm -rf /var/lib/apt/lists/*
+    libpq-dev gcc docker.io docker-compose-plugin && rm -rf /var/lib/apt/lists/*
 
 # Сначала только код пакета app, потом установка (alembic — не Python-пакет)
 COPY pyproject.toml .

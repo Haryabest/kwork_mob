@@ -55,6 +55,7 @@ const NAV: {
   { path: '/', label: 'Дашборд', roles: ['admin'], icon: IconChartBar },
   { path: '/ops', label: 'Операции / критерии готовности', roles: ['admin'], icon: IconActivity },
   { path: '/workers', label: 'Воркеры', roles: ['admin'], icon: IconServer },
+  { path: '/trellis-settings', label: 'Настройка TRELLIS', roles: ['admin'], icon: IconTool },
   { path: '/soft-launch', label: 'Мягкий запуск', roles: ['admin'], icon: IconRocket },
   { path: '/maintenance', label: 'Обслуживание', roles: ['admin'], icon: IconTool },
   { path: '/webhooks', label: 'B2B вебхуки', roles: ['admin'], icon: IconWebhook },

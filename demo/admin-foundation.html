@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KWork Mob Admin — Foundation 6</title>
+  <link href="https://cdn.jsdelivr.net/npm/foundation-sites@6.8.1/dist/css/foundation.min.css" rel="stylesheet" />
+  <link href="admin-demo-base.css" rel="stylesheet" />
+  <style>
+    :root { --demo-primary: #1779ba; }
+  .shell { display: flex; min-height: 100vh; }
+    .sidebar { width: 250px; background: #2c3840; color: #fefefe; padding: 1rem; flex-shrink: 0; }
+    .sidebar .menu a { color: #e6e6e6; font-size: 0.85rem; padding: 0.5rem 0.75rem; border-radius: 4px; }
+    .sidebar .menu a.active { background: #1779ba; color: #fff; }
+    .sidebar-title { font-weight: bold; margin-bottom: 0.25rem; }
+    .main-panel { flex: 1; background: #f3f3f3; }
+    .top-bar { background: #1779ba; color: #fff; padding: 0.5rem 1rem; }
+    #app { padding: 1.5rem; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <p class="sidebar-title">KWork Mob</p>
+    <p style="font-size:0.75rem;opacity:.6;margin-bottom:1rem">Foundation 6 · §11</p>
+    <ul class="menu vertical" id="nav"></ul>
+  </aside>
+  <div class="main-panel">
+    <div class="top-bar">
+      <span>🔒 VPN · Redis OK · PG sync</span>
+      <button class="button tiny secondary float-right" id="themeBtn" style="margin:0">Тема</button>
+    </div>
+    <div id="app" class="grid-container fluid"></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/foundation-sites@6.8.1/dist/js/foundation.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script src="admin-pages-content.js"></script>
+<script>
+  $(document).foundation();
+  ADMIN_NAV.forEach((n) => { nav.innerHTML += `<li><a class="nav-item" href="#" data-page="${n.id}">${n.icon} ${n.label}</a></li>`; });
+  bindAdminPage('app', '.nav-item', { primary: '#1779ba', secondary: '#3adb76' });
+  themeBtn.onclick = () => document.querySelector('.main-panel').classList.toggle('dark');
+</script>
+</body>
+</html>

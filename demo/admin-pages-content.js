@@ -1,16 +1,16 @@
 /** Общий контент вкладок web-admin §11 — подключается во все demo-варианты */
 window.ADMIN_PAGES = {
   dashboard: `
-    <div class="pg-head"><div><h1>Главный дашборд</h1><p class="muted">§11.2 · ClickHouse агрегаты · WebSocket live</p></motion.div>
+    <div class="pg-head"><div><h1>Главный дашборд</h1><p class="muted">§11.2 · ClickHouse агрегаты · WebSocket live</p></div>
     <select class="demo-select"><option>Сегодня</option><option>7 дней</option><option>30 дней</option></select></div>
-    <motion.div class="demo-kpi-grid">
+    <div class="demo-kpi-grid">
       <div class="demo-kpi"><span class="muted">Заказы в работе</span><strong>142</strong><span class="tag tag-ok">+12%</span></div>
-      <div class="demo-kpi"><span class="muted">EWT normal / high</span><strong>4.2 / 1.1 мин</strong></motion.div>
+      <div class="demo-kpi"><span class="muted">EWT normal / high</span><strong>4.2 / 1.1 мин</strong></div>
       <div class="demo-kpi"><span class="muted">Воркеры онлайн</span><strong>18 / 22</strong><span class="tag tag-warn">1 overheated</span></div>
       <div class="demo-kpi"><span class="muted">Quality ≥0.7</span><strong>87%</strong><span class="tag tag-ok">цель 80%</span></div>
     </div>
     <div class="demo-grid-2">
-      <div class="demo-card"><h3>Поступление задач · §11.2.1</h3><canvas id="ch-tasks" height="200"></canvas></div>
+      <div class="demo-card"><h3>Поступление задач · §11.2.1</h3><div class="chart-wrap"><canvas id="ch-tasks"></canvas></div></div>
       <div>
         <div class="demo-card mb"><h3>Выручка · §11.2.2</h3><p class="big">284 500 ₽</p><p class="muted">Возвраты NSFW: 12 400 ₽ · ЮKassa: 8 535 ₽</p></div>
         <div class="demo-card"><h3>Очередь</h3><p>queue:normal <strong>89</strong> · queue:high <strong class="danger">12</strong></p>
@@ -33,7 +33,7 @@ window.ADMIN_PAGES = {
   workers: `
     <div class="pg-head"><h1>Управление воркерами · §11.3</h1>
     <div><button class="demo-btn primary">☁️ Облачный инстанс</button> <button class="demo-btn">Deploy JSON</button></div></div>
-    <div class="demo-card mb"><h3>Загрузка GPU · §11.2.6</h3><canvas id="ch-gpu" height="180"></canvas></motion.div>
+    <div class="demo-card mb"><h3>Загрузка GPU · §11.2.6</h3><div class="chart-wrap"><canvas id="ch-gpu"></canvas></div></div>
     <table class="demo-table">
       <thead><tr><th>ID</th><th>GPU</th><th>TRELLIS</th><th>Статус</th><th>GPU%</th><th>VRAM</th><th>T°</th><th>Вес</th><th>Grace</th><th></th></tr></thead>
       <tbody>
@@ -44,12 +44,12 @@ window.ADMIN_PAGES = {
     </table>
     <div class="demo-card mt"><h3>Облачные инстансы</h3>
     <table class="demo-table"><thead><tr><th>Провайдер</th><th>GPU</th><th>₽/ч</th><th>Статус</th><th></th></tr></thead>
-    <tbody><tr><td>Intelion</td><td>RTX 4090</td><td>89</td><td><span class="tag tag-ok">running</span></td><td><button class="demo-btn sm danger">Стоп</button></td></tr></tbody></table></motion.div>`,
+    <tbody><tr><td>Intelion</td><td>RTX 4090</td><td>89</td><td><span class="tag tag-ok">running</span></td><td><button class="demo-btn sm danger">Стоп</button></td></tr></tbody></table></div>`,
 
   storage: `
     <h1>Кластер хранения · §11.16</h1>
     <div class="demo-kpi-grid">
-      <motion.div class="demo-card border-ok"><h3>🟢 Primary · Дом ПК-1</h3>
+      <div class="demo-card border-ok"><h3>🟢 Primary · Дом ПК-1</h3>
         <p>Tailscale <code>100.64.0.12</code> · ping 12ms</p>
         <p>PostgreSQL · Redis · MinIO · ClickHouse — <strong>running</strong></p>
         <p>CPU 34% · RAM 28/64 GB · NVMe 62% · Temp 48°C</p>
@@ -63,7 +63,7 @@ window.ADMIN_PAGES = {
         <button class="demo-btn sm primary">Диагностика</button>
       </div>
     </div>
-    <div class="demo-card mt"><h3>История доступности узлов · §11.16.3</h3><canvas id="ch-uptime" height="120"></canvas></div>`,
+    <div class="demo-card mt"><h3>История доступности узлов · §11.16.3</h3><div class="chart-wrap chart-wrap--sm"><canvas id="ch-uptime"></canvas></div></div>`,
 
   users: `
     <div class="pg-head"><h1>Пользователи · §11.6</h1>
@@ -104,7 +104,7 @@ window.ADMIN_PAGES = {
     </table>`,
 
   campaigns: `
-    <motion.div class="pg-head"><h1>Маркетинговые кампании · §11.7</h1><button class="demo-btn primary">+ Новая кампания</button></div>
+    <div class="pg-head"><h1>Маркетинговые кампании · §11.7</h1><button class="demo-btn primary">+ Новая кампания</button></div>
     <table class="demo-table mb">
       <thead><tr><th>Название</th><th>Шаблон</th><th>Статус</th><th>Охват</th><th>Конверсия</th><th>ROI</th><th></th></tr></thead>
       <tbody>
@@ -150,7 +150,7 @@ window.ADMIN_PAGES = {
       </tbody>
     </table>
     <div class="demo-card"><h3>Проверка заказа #8821</h3>
-    <div class="demo-thumbs">${Array(12).fill(0).map((_, i) => `<div class="demo-thumb">кадр ${i + 1}</motion.div>`).join('')}</div>
+    <div class="demo-thumbs">${Array(12).fill(0).map((_, i) => `<div class="demo-thumb">кадр ${i + 1}</div>`).join('')}</div>
     <div class="mt"><button class="demo-btn primary">✓ Легально (разблокировать)</button> <button class="demo-btn danger">✗ Нарушение (permanent)</button></div></div>
     <div class="demo-card mt"><h3>Чёрный список слов</h3>
     <textarea class="demo-input" rows="4">counterfeit-brand\nоружие\nнаркотики</textarea>
@@ -162,7 +162,7 @@ window.ADMIN_PAGES = {
       <p><label><input type="radio" name="tax" checked /> Самозанятый</label>
       <label class="ml"><input type="radio" name="tax" /> ИП</label>
       <label class="ml"><input type="radio" name="tax" /> ООО</label></p>
-      <motion.div class="demo-form mt">
+      <div class="demo-form mt">
         <label>ИНН<input class="demo-input" value="500123456789" /></label>
         <label>ФИО<input class="demo-input" value="Иванов И.И." /></label>
         <label>Телефон<input class="demo-input" value="+7 900 000-00-00" /></label>
@@ -187,7 +187,7 @@ window.ADMIN_PAGES = {
         <h3 class="mt">Согласия пользователей</h3>
         <p class="muted">Фильтр по user_id, версии · IP · user-agent</p>
       </div>
-    </motion.div>`,
+    </div>`,
 
   settings: `
     <h1>Настройки · §11.4 / §11.1</h1>
@@ -280,7 +280,7 @@ window.bindAdminPage = function (hostId, navSelector, colors) {
   const show = (id) => {
     host.innerHTML = window.ADMIN_PAGES[id] || '<p>Страница не найдена</p>';
     document.querySelectorAll(navSelector).forEach((n) => n.classList.toggle('active', n.dataset.page === id));
-    window.initAdminCharts(id, colors);
+    requestAnimationFrame(() => window.initAdminCharts(id, colors));
     host.querySelectorAll('[data-copy]').forEach((btn) => {
       btn.onclick = () => navigator.clipboard.writeText(btn.dataset.copy);
     });

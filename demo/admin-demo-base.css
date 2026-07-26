@@ -1,0 +1,73 @@
+/* Общие стили контента demo web-admin */
+.pg-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+.pg-head h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
+.muted { opacity: 0.65; font-size: 0.85rem; }
+.big { font-size: 1.75rem; font-weight: 700; margin: 0; }
+.danger { color: #dc3545; }
+.mt { margin-top: 16px; }
+.mb { margin-bottom: 16px; }
+.ml { margin-left: 16px; }
+.hidden { display: none !important; }
+
+.demo-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.demo-kpi { padding: 14px 16px; border-radius: 10px; border: 1px solid rgba(0,0,0,.08); background: rgba(255,255,255,.5); }
+.demo-kpi strong { display: block; font-size: 1.5rem; margin: 4px 0; }
+.demo-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+
+.demo-card { padding: 16px 18px; border-radius: 10px; border: 1px solid rgba(0,0,0,.08); background: rgba(255,255,255,.6); margin-bottom: 12px; }
+.demo-card h3 { margin: 0 0 12px; font-size: 1rem; font-weight: 600; }
+.demo-card.nopad { padding: 0; overflow: hidden; }
+.demo-card.border-ok { border-color: #198754; }
+.demo-card.border-warn { border-color: #ffc107; }
+
+.demo-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.demo-table th, .demo-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(0,0,0,.08); }
+.demo-table th { font-weight: 600; opacity: 0.8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.demo-table code { font-size: 0.8rem; }
+
+.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: rgba(0,0,0,.06); }
+.tag-ok { background: rgba(25,135,84,.15); color: #198754; }
+.tag-warn { background: rgba(255,193,7,.2); color: #997404; }
+.tag-danger { background: rgba(220,53,69,.15); color: #dc3545; }
+
+.demo-btn { padding: 6px 14px; border-radius: 6px; border: 1px solid rgba(0,0,0,.15); background: #fff; cursor: pointer; font-size: 0.85rem; }
+.demo-btn.primary { background: var(--demo-primary, #0057b8); color: #fff; border-color: transparent; }
+.demo-btn.danger { color: #dc3545; border-color: #dc3545; }
+.demo-btn.sm { padding: 4px 10px; font-size: 0.78rem; }
+
+.demo-input, .demo-select { padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(0,0,0,.15); font-size: 0.85rem; }
+.demo-input.full, .demo-select.full { width: 100%; box-sizing: border-box; }
+.demo-form label { display: block; margin-bottom: 10px; font-size: 0.85rem; }
+.demo-form label input, .demo-form label select, .demo-form label textarea { display: block; width: 100%; margin-top: 4px; box-sizing: border-box; }
+
+.demo-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+
+.demo-list-item { display: block; padding: 12px 16px; border-bottom: 1px solid rgba(0,0,0,.06); text-decoration: none; color: inherit; cursor: pointer; }
+.demo-list-item.active { background: rgba(0,87,184,.08); border-left: 3px solid var(--demo-primary, #0057b8); }
+
+.demo-bubble { background: rgba(0,0,0,.05); padding: 12px; border-radius: 8px; margin: 12px 0; }
+.demo-thumbs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.demo-thumb { aspect-ratio: 1; background: linear-gradient(135deg, #e9ecef, #dee2e6); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; opacity: 0.7; }
+
+.demo-bar { height: 8px; background: rgba(0,0,0,.08); border-radius: 4px; overflow: hidden; margin: 8px 0; }
+.demo-bar span { display: block; height: 100%; background: #198754; border-radius: 4px; }
+
+.demo-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+.demo-tab { padding: 8px 14px; border: none; background: rgba(0,0,0,.05); border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+.demo-tab.active { background: var(--demo-primary, #0057b8); color: #fff; }
+
+.chart-wrap {
+  position: relative;
+  height: 220px;
+  max-height: 220px;
+  width: 100%;
+  overflow: hidden;
+}
+.chart-wrap--sm { height: 160px; max-height: 160px; }
+.chart-wrap canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+canvas { max-width: 100%; }

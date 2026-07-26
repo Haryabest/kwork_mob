@@ -13,6 +13,7 @@ export const ROLE_ROUTES: Record<StaffRole, string[]> = {
     '/',
     '/ops',
     '/workers',
+    '/trellis-settings',
     '/users',
     '/users/:id',
     '/companies',

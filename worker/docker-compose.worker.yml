@@ -1,11 +1,13 @@
 # GPU worker — standalone deploy (§15.3)
-# Usage: copy deploy_worker.json env → .env.worker && docker compose -f docker-compose.worker.yml up -d
+# Env: worker/.env.worker (генерируется из web-admin → Настройка TRELLIS)
 
 services:
   worker:
-    image: ${WORKER_DOCKER_IMAGE:-kwork-worker:trellis2}
-    container_name: kwork-worker
+    image: ${WORKER_DOCKER_IMAGE:-kwork-worker:trellis2-runtime}
+    container_name: ${WORKER_CONTAINER_NAME:-kwork-worker}
     restart: unless-stopped
+    extra_hosts:
+      - "${WORKER_EXTRA_HOSTS:-host.docker.internal:host-gateway}"
     deploy:
       resources:
         reservations:
@@ -13,20 +15,38 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    volumes:
+      - ${WORKER_VOLUME_STATE:-kwork_worker_state}:/var/lib/worker
+      - ${WORKER_VOLUME_HF_CACHE:-/root/.cache/huggingface}:/root/.cache/huggingface
+      - ${WORKER_BIND_ENTRYPOINT:-./entrypoint.sh}:/usr/local/bin/worker_entrypoint.sh:ro
+      - ${WORKER_BIND_SCRIPTS:-./scripts}:/app/scripts:ro
+      - ${WORKER_BIND_AGENT:-./worker_agent.py}:/app/worker_agent.py:ro
     environment:
       WORKER_ID: ${WORKER_ID:-worker-1}
       WORKER_TOKEN: ${WORKER_TOKEN}
       ORCHESTRATOR_WS_URL: ${ORCHESTRATOR_WS_URL}
       ORCHESTRATOR_WS_FALLBACK_URL: ${ORCHESTRATOR_WS_FALLBACK_URL:-${ORCHESTRATOR_WS_URL}}
+      ORCHESTRATOR_HTTP_URL: ${ORCHESTRATOR_HTTP_URL:-}
       WORKER_PIPELINE_MODE: ${WORKER_PIPELINE_MODE:-trellis}
       TRELLIS_ALLOW_STUB_FALLBACK: ${TRELLIS_ALLOW_STUB_FALLBACK:-0}
       TRELLIS_VERSION: ${TRELLIS_VERSION:-2}
       TRELLIS2_PIPELINE_TYPE: ${TRELLIS2_PIPELINE_TYPE:-512}
+      TRELLIS2_TEXTURE_SIZE: ${TRELLIS2_TEXTURE_SIZE:-1024}
+      TRELLIS2_DECIMATION: ${TRELLIS2_DECIMATION:-150000}
       TRELLIS2_LOW_VRAM: ${TRELLIS2_LOW_VRAM:-1}
+      WORKER_TRELLIS_INPROCESS: ${WORKER_TRELLIS_INPROCESS:-1}
+      WORKER_WARMUP_TRELLIS: ${WORKER_WARMUP_TRELLIS:-1}
       ATTN_BACKEND: ${ATTN_BACKEND:-xformers}
+      PYTORCH_CUDA_ALLOC_CONF: ${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+      NOBG_ENGINE: ${NOBG_ENGINE:-rmbg2}
+      NOBG_VIEW00_ONLY: ${NOBG_VIEW00_ONLY:-1}
+      HF_TOKEN: ${HF_TOKEN:-}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       REDIS_URL: ${REDIS_URL:-}
       WATERMARK_HMAC_SECRET: ${WATERMARK_HMAC_SECRET:-}
       WORKER_SUBPROCESS_STREAM: ${WORKER_SUBPROCESS_STREAM:-1}
+
+volumes:
+  kwork_worker_state:

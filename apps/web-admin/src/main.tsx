@@ -15,6 +15,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import WorkersPage from './pages/WorkersPage';
+import TrellisSettingsPage from './pages/TrellisSettingsPage';
 import UsersPage from './pages/UsersPage';
 import CompaniesPage from './pages/CompaniesPage';
 import PromocodesPage from './pages/PromocodesPage';
@@ -75,6 +76,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/ops" element={<OpsPage />} />
                 <Route path="/workers" element={<WorkersPage />} />
+                <Route path="/trellis-settings" element={<TrellisSettingsPage />} />
                 <Route path="/soft-launch" element={<SoftLaunchPage />} />
                 <Route path="/maintenance" element={<MaintenancePage />} />
                 <Route path="/webhooks" element={<WebhooksDashboardPage />} />

@@ -46,6 +46,7 @@ apps/mobile/ios/
 
 # Worker checkpoints
 worker/checkpoints/
+worker/.env.worker
 
 # Coverage
 htmlcov/

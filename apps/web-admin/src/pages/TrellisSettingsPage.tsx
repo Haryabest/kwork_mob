@@ -1,0 +1,336 @@
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Center,
+  Code,
+  Group,
+  Loader,
+  ScrollArea,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
+import { IconPlayerPlay, IconRefresh, IconDeviceFloppy } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
+import { useCallback, useEffect, useState } from 'react';
+import { PageHeader, StateBadge } from '../components/Panel';
+import { api, getApiError } from '../services/api';
+
+type WorkerConfig = {
+  container_name: string;
+  docker_image: string;
+  worker_repo_path: string;
+  hf_cache_host_path: string;
+  state_volume: string;
+  extra_hosts: string;
+  deploy_enabled: boolean;
+  deploy_root: string;
+  compose_file: string;
+  env_file: string;
+  docker_available: boolean;
+  updated_at?: string | null;
+  applied_at?: string | null;
+  last_apply_ok?: boolean | null;
+  env: Record<string, string>;
+};
+
+type VerifyResult = {
+  ok: boolean;
+  message?: string;
+  container?: string;
+  status?: { running?: boolean; status?: string; image?: string };
+  mismatches?: Array<{ key: string; expected: string; actual: string }>;
+  applied_at?: string | null;
+  last_apply_ok?: boolean | null;
+};
+
+const MASK = '••••••••';
+
+const ENV_FIELDS: { key: string; label: string; secret?: boolean }[] = [
+  { key: 'WORKER_ID', label: 'WORKER_ID' },
+  { key: 'WORKER_TOKEN', label: 'WORKER_TOKEN', secret: true },
+  { key: 'WORKER_PIPELINE_MODE', label: 'WORKER_PIPELINE_MODE' },
+  { key: 'TRELLIS_VERSION', label: 'TRELLIS_VERSION' },
+  { key: 'TRELLIS2_PIPELINE_TYPE', label: 'TRELLIS2_PIPELINE_TYPE' },
+  { key: 'TRELLIS2_TEXTURE_SIZE', label: 'TRELLIS2_TEXTURE_SIZE' },
+  { key: 'TRELLIS2_DECIMATION', label: 'TRELLIS2_DECIMATION' },
+  { key: 'TRELLIS2_LOW_VRAM', label: 'TRELLIS2_LOW_VRAM' },
+  { key: 'WORKER_TRELLIS_INPROCESS', label: 'WORKER_TRELLIS_INPROCESS' },
+  { key: 'WORKER_WARMUP_TRELLIS', label: 'WORKER_WARMUP_TRELLIS' },
+  { key: 'ATTN_BACKEND', label: 'ATTN_BACKEND' },
+  { key: 'PYTORCH_CUDA_ALLOC_CONF', label: 'PYTORCH_CUDA_ALLOC_CONF' },
+  { key: 'NOBG_ENGINE', label: 'NOBG_ENGINE' },
+  { key: 'NOBG_VIEW00_ONLY', label: 'NOBG_VIEW00_ONLY' },
+  { key: 'HF_TOKEN', label: 'HF_TOKEN', secret: true },
+  { key: 'ORCHESTRATOR_WS_URL', label: 'ORCHESTRATOR_WS_URL' },
+  { key: 'ORCHESTRATOR_HTTP_URL', label: 'ORCHESTRATOR_HTTP_URL' },
+  { key: 'REDIS_URL', label: 'REDIS_URL' },
+  { key: 'MINIO_ENDPOINT', label: 'MINIO_ENDPOINT' },
+  { key: 'MINIO_ACCESS_KEY', label: 'MINIO_ACCESS_KEY', secret: true },
+  { key: 'MINIO_SECRET_KEY', label: 'MINIO_SECRET_KEY', secret: true },
+];
+
+export default function TrellisSettingsPage() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [cfg, setCfg] = useState<WorkerConfig | null>(null);
+  const [env, setEnv] = useState<Record<string, string>>({});
+  const [meta, setMeta] = useState({
+    container_name: 'kwork-worker',
+    docker_image: '',
+    worker_repo_path: '',
+    hf_cache_host_path: '',
+    state_volume: 'kwork_worker_state',
+    extra_hosts: 'host.docker.internal:host-gateway',
+  });
+  const [verify, setVerify] = useState<VerifyResult | null>(null);
+  const [logs, setLogs] = useState('');
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    const { data } = await api.get<WorkerConfig>('/admin/trellis/worker-config');
+    setCfg(data);
+    setMeta({
+      container_name: data.container_name,
+      docker_image: data.docker_image,
+      worker_repo_path: data.worker_repo_path,
+      hf_cache_host_path: data.hf_cache_host_path,
+      state_volume: data.state_volume,
+      extra_hosts: data.extra_hosts,
+    });
+    setEnv(data.env || {});
+  }, []);
+
+  const loadVerify = useCallback(async () => {
+    const { data } = await api.get<VerifyResult>('/admin/trellis/worker-config/verify');
+    setVerify(data);
+  }, []);
+
+  const loadLogs = useCallback(async () => {
+    setLogsLoading(true);
+    try {
+      const { data } = await api.get<{ raw?: string; items?: Array<{ message: string }> }>(
+        '/admin/trellis/worker-config/logs',
+        { params: { tail: 400 } },
+      );
+      setLogs(data.raw || (data.items || []).map((i) => i.message).join('\n'));
+    } catch (e) {
+      setLogs(getApiError(e));
+    } finally {
+      setLogsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load()
+      .then(() => loadVerify())
+      .catch((e) => notifications.show({ color: 'red', message: getApiError(e) }))
+      .finally(() => setLoading(false));
+  }, [load, loadVerify]);
+
+  function setEnvField(key: string, value: string) {
+    setEnv((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      const payload = {
+        ...meta,
+        env: Object.fromEntries(
+          ENV_FIELDS.map(({ key }) => [key, env[key] ?? '']).filter(([, v]) => v !== MASK),
+        ),
+      };
+      const { data } = await api.put<WorkerConfig>('/admin/trellis/worker-config', payload);
+      setCfg(data);
+      setEnv(data.env);
+      notifications.show({ color: 'teal', message: 'Настройки сохранены' });
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function apply() {
+    setApplying(true);
+    try {
+      await save();
+      const { data } = await api.post<{
+        ok: boolean;
+        message?: string;
+        verify?: VerifyResult;
+      }>('/admin/trellis/worker-config/apply');
+      setVerify(data.verify || null);
+      notifications.show({
+        color: data.ok ? 'teal' : 'red',
+        message: data.ok ? 'Контейнер перезапущен' : 'Ошибка apply',
+      });
+      await load();
+      await loadVerify();
+      await loadLogs();
+    } catch (e) {
+      notifications.show({ color: 'red', message: getApiError(e) });
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  if (loading || !cfg) {
+    return (
+      <Center py="xl">
+        <Loader color="brand" />
+      </Center>
+    );
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Настройка TRELLIS"
+        description="GPU-воркер: переменные docker run, apply и логи контейнера"
+        action={
+          <Group>
+            <Button variant="light" leftSection={<IconRefresh size={16} />} onClick={() => void loadVerify()}>
+              Проверить
+            </Button>
+            <Button variant="default" leftSection={<IconDeviceFloppy size={16} />} loading={saving} onClick={() => void save()}>
+              Сохранить
+            </Button>
+            <Button
+              leftSection={<IconPlayerPlay size={16} />}
+              loading={applying}
+              disabled={!cfg.deploy_enabled}
+              onClick={() => void apply()}
+            >
+              Применить и перезапустить
+            </Button>
+          </Group>
+        }
+      />
+
+      {!cfg.deploy_enabled && (
+        <Alert color="orange" mb="md" title="Docker deploy отключён">
+          На сервере задайте <Code>WORKER_DEPLOY_ENABLED=1</Code>, смонтируйте{' '}
+          <Code>/var/run/docker.sock</Code> и <Code>WORKER_DEPLOY_ROOT</Code> (путь к репозиторию).
+        </Alert>
+      )}
+
+      <SimpleGrid cols={{ base: 1, md: 2 }} mb="md">
+        <Card withBorder>
+          <Stack gap="sm">
+            <Title order={5}>Статус</Title>
+            <Group gap="xs">
+              <StateBadge
+                value={cfg.docker_available ? 'docker ok' : 'docker недоступен'}
+                color={cfg.docker_available ? 'teal' : 'red'}
+              />
+              <StateBadge
+                value={verify?.ok ? 'настройки совпадают' : 'есть расхождения'}
+                color={verify?.ok ? 'teal' : 'orange'}
+              />
+              {verify?.status?.running && <Badge color="green">контейнер running</Badge>}
+            </Group>
+            <Text size="xs" c="dimmed">
+              Корень: {cfg.deploy_root}
+            </Text>
+            <Text size="xs" c="dimmed">
+              Compose: {cfg.compose_file}
+            </Text>
+            {cfg.updated_at && (
+              <Text size="xs" c="dimmed">
+                Сохранено: {new Date(cfg.updated_at).toLocaleString('ru-RU')}
+              </Text>
+            )}
+            {cfg.applied_at && (
+              <Text size="xs" c="dimmed">
+                Применено: {new Date(cfg.applied_at).toLocaleString('ru-RU')}
+                {cfg.last_apply_ok === false ? ' (ошибка)' : ''}
+              </Text>
+            )}
+            {verify?.mismatches && verify.mismatches.length > 0 && (
+              <Stack gap={4}>
+                <Text size="sm" fw={600} c="orange">
+                  Расхождения:
+                </Text>
+                {verify.mismatches.map((m) => (
+                  <Text key={m.key} size="xs" c="dimmed">
+                    {m.key}
+                  </Text>
+                ))}
+              </Stack>
+            )}
+          </Stack>
+        </Card>
+
+        <Card withBorder>
+          <Stack gap="sm">
+            <Title order={5}>Docker</Title>
+            <TextInput
+              label="Имя контейнера"
+              value={meta.container_name}
+              onChange={(e) => setMeta({ ...meta, container_name: e.currentTarget.value })}
+            />
+            <TextInput
+              label="Образ"
+              value={meta.docker_image}
+              onChange={(e) => setMeta({ ...meta, docker_image: e.currentTarget.value })}
+            />
+            <TextInput
+              label="Путь к worker/ на хосте"
+              value={meta.worker_repo_path}
+              onChange={(e) => setMeta({ ...meta, worker_repo_path: e.currentTarget.value })}
+            />
+            <TextInput
+              label="HF cache на хосте"
+              value={meta.hf_cache_host_path}
+              onChange={(e) => setMeta({ ...meta, hf_cache_host_path: e.currentTarget.value })}
+            />
+            <TextInput
+              label="Volume state"
+              value={meta.state_volume}
+              onChange={(e) => setMeta({ ...meta, state_volume: e.currentTarget.value })}
+            />
+          </Stack>
+        </Card>
+      </SimpleGrid>
+
+      <Card withBorder mb="md">
+        <Title order={5} mb="sm">
+          Переменные окружения (-e)
+        </Title>
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+          {ENV_FIELDS.map(({ key, label, secret }) => (
+            <TextInput
+              key={key}
+              label={label}
+              type={secret ? 'password' : 'text'}
+              value={env[key] ?? ''}
+              placeholder={secret ? 'оставьте пустым, чтобы не менять' : ''}
+              onChange={(e) => setEnvField(key, e.currentTarget.value)}
+            />
+          ))}
+        </SimpleGrid>
+      </Card>
+
+      <Card withBorder>
+        <Group justify="space-between" mb="sm">
+          <Title order={5}>Логи контейнера</Title>
+          <Button size="xs" variant="light" loading={logsLoading} onClick={() => void loadLogs()}>
+            Обновить
+          </Button>
+        </Group>
+        <ScrollArea h={320}>
+          <Code block style={{ whiteSpace: 'pre-wrap', fontSize: 11 }}>
+            {logs || 'Нажмите «Обновить» для загрузки docker logs'}
+          </Code>
+        </ScrollArea>
+      </Card>
+    </>
+  );
+}

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KWork Mob Admin — UIkit 3</title>
+  <link href="https://cdn.jsdelivr.net/npm/uikit@3.21.1/dist/css/uikit.min.css" rel="stylesheet" />
+  <link href="admin-demo-base.css" rel="stylesheet" />
+  <style>
+    :root { --demo-primary: #1e87f0; }
+    .shell { display: flex; min-height: 100vh; }
+    .sidebar { width: 250px; background: #222; flex-shrink: 0; padding-bottom: 24px; }
+    .sidebar a.nav-item { display: block; color: rgba(255,255,255,.8); font-size: 0.85rem; padding: 8px 16px; text-decoration: none; }
+    .sidebar a.nav-item.active { background: #1e87f0; color: #fff; }
+    .sidebar-brand { padding: 20px 16px; color: #fff; border-bottom: 1px solid #333; }
+    .main-area { flex: 1; background: #f8f8f8; }
+    #app { padding: 24px; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand"><strong>KWork Mob</strong><br><small style="color:#888">UIkit 3</small></div>
+    <nav id="nav" class="uk-padding-small"></nav>
+  </aside>
+  <div class="main-area">
+    <nav class="uk-navbar-container" uk-navbar style="background:#1e87f0">
+      <div class="uk-navbar-left uk-padding-small uk-light"><span uk-icon="icon: lock"></span> VPN</div>
+      <div class="uk-navbar-right uk-padding-small"><button class="uk-button uk-button-default uk-button-small" id="themeBtn">Тема</button></div>
+    </nav>
+    <div id="app"></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/uikit@3.21.1/dist/js/uikit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script src="admin-pages-content.js"></script>
+<script>
+  ADMIN_NAV.forEach((n) => { nav.innerHTML += `<a class="nav-item" href="#" data-page="${n.id}">${n.icon} ${n.label}</a>`; });
+  bindAdminPage('app', '.nav-item', { primary: '#1e87f0', secondary: '#32d296' });
+  themeBtn.onclick = () => document.querySelector('.main-area').style.filter = document.querySelector('.main-area').style.filter ? '' : 'invert(1)';
+</script>
+</body>
+</html>

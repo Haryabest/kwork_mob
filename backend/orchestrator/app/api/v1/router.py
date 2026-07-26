@@ -7,6 +7,7 @@ from app.api.v1 import (
     admin_deploy,
     admin_finance,
     admin_logs,
+    admin_trellis_worker,
     auth,
     campaigns,
     cloud_admin,
@@ -48,6 +49,7 @@ api_router.include_router(tax.admin_router)
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Администрирование"])
 api_router.include_router(admin_deploy.router)
+api_router.include_router(admin_trellis_worker.router)
 api_router.include_router(admin_logs.router, prefix="/admin", tags=["Логи"])
 api_router.include_router(admin_finance.router, prefix="/admin", tags=["Тарифы и алерты"])
 api_router.include_router(cloud_admin.router, prefix="/admin", tags=["Облако GPU"])

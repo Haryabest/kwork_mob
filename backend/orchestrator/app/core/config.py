@@ -160,6 +160,12 @@ class Settings(BaseSettings):
 
     WORKER_TOKEN: str = "worker-dev-token"
 
+    # GPU worker Docker deploy из web-admin (§15.3)
+    WORKER_DEPLOY_ENABLED: bool = False
+    WORKER_DEPLOY_ROOT: str = ""  # корень репозитория на хосте, напр. /opt/kwork_mob
+    WORKER_DEPLOY_COMPOSE_FILE: str = "worker/docker-compose.worker.yml"
+    WORKER_DEPLOY_ENV_FILE: str = "worker/.env.worker"
+
     # Облако Intelion / Immers (§11.3.3 / §14.7)
     CLOUD_PROVIDER: str = "intelion"
     CLOUD_API_TOKEN: str = ""

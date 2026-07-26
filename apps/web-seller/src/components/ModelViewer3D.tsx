@@ -5,13 +5,21 @@ import { useCallback, useEffect, useState } from 'react';
 
 type Props = {
   src: string;
-  height?: number;
+  height?: number | string;
   autoRotate?: boolean;
+  background?: string;
+  borderRadius?: number | string;
 };
 
 type ModelViewerEl = HTMLElement & { loaded?: boolean };
 
-export function ModelViewer3D({ src, height = 320, autoRotate = false }: Props) {
+export function ModelViewer3D({
+  src,
+  height = 320,
+  autoRotate = false,
+  background = 'rgba(0,87,184,0.04)',
+  borderRadius = 12,
+}: Props) {
   const [scriptReady, setScriptReady] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -84,7 +92,7 @@ export function ModelViewer3D({ src, height = 320, autoRotate = false }: Props) 
 
   if (failed && !loaded) {
     return (
-      <Center h={height} style={{ background: 'rgba(0,87,184,0.04)', borderRadius: 12 }}>
+      <Center h={height} style={{ background, borderRadius }}>
         <Text c="#6d6c77" ta="center" px="md" size="sm">
           Не удалось отобразить GLB в браузере. Файл на сервере есть — попробуйте «Скачать GLB».
         </Text>
@@ -100,8 +108,8 @@ export function ModelViewer3D({ src, height = 320, autoRotate = false }: Props) 
             position: 'absolute',
             inset: 0,
             zIndex: 1,
-            background: 'rgba(0,87,184,0.04)',
-            borderRadius: 12,
+            background,
+            borderRadius,
             pointerEvents: 'none',
           }}
         >
@@ -125,8 +133,8 @@ export function ModelViewer3D({ src, height = 320, autoRotate = false }: Props) 
         style={{
           width: '100%',
           height,
-          background: 'rgba(0,87,184,0.04)',
-          borderRadius: 12,
+          background,
+          borderRadius,
         }}
       />
     </div>

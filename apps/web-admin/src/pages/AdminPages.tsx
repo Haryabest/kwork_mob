@@ -212,6 +212,9 @@ export function WorkersPage() {
         description="GPU-очередь · Intelion/Immers создание/запуск/остановка · авто-масштаб"
         action={
           <Group>
+            <Button component={Link} to="/trellis-settings" variant="light">
+              Настройка TRELLIS
+            </Button>
             <Button variant="light" leftSection={<IconDownload size={16} />} onClick={() => void downloadDeploy('worker')}>
               Deploy JSON
             </Button>

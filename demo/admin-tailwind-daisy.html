@@ -3,224 +3,44 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KWork Mob — Admin (Tailwind + DaisyUI)</title>
+  <title>KWork Mob Admin — Tailwind + DaisyUI</title>
   <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: { brand: { DEFAULT: '#6366f1', dark: '#4f46e5' } },
-          fontFamily: { sans: ['"DM Sans"', 'system-ui', 'sans-serif'] }
-        }
-      }
-    };
-  </script>
+  <link href="admin-demo-base.css" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    body { font-family: 'DM Sans', system-ui, sans-serif; }
-    .glass { background: rgba(255,255,255,.04); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.08); }
-    [data-theme="light"] .glass { background: rgba(255,255,255,.7); border-color: rgba(0,0,0,.06); }
-    .page { display: none; }
-    .page.active { display: block; }
-    .nav-item.active { background: linear-gradient(90deg, rgba(99,102,241,.25), transparent); border-left: 3px solid #6366f1; }
+    :root { --demo-primary: #6366f1; }
+    body { font-family: 'DM Sans', sans-serif; }
+    .shell { display: flex; min-height: 100vh; }
+    .sidebar { width: 240px; background: rgba(0,0,0,.25); border-right: 1px solid rgba(255,255,255,.08); padding: 16px; }
+    .sidebar a { display: block; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem; text-decoration: none; color: inherit; opacity: 0.75; margin-bottom: 2px; }
+    .sidebar a.active { background: rgba(99,102,241,.25); border-left: 3px solid #6366f1; opacity: 1; }
+    .topbar { padding: 10px 20px; border-bottom: 1px solid rgba(255,255,255,.08); display: flex; justify-content: space-between; align-items: center; }
+    #app { padding: 24px; max-width: 1200px; }
+    [data-theme="light"] .sidebar { background: #f8fafc; border-color: #e2e8f0; }
   </style>
 </head>
-<body class="bg-base-300 min-h-screen">
-  <div class="drawer lg:drawer-open">
-    <input id="drawer" type="checkbox" class="drawer-toggle" />
-    <div class="drawer-content flex flex-col">
-      <header class="navbar glass sticky top-0 z-20 px-4 lg:px-6">
-        <label for="drawer" class="btn btn-ghost drawer-button lg:hidden">☰</label>
-        <div class="flex-1">
-          <span class="badge badge-success badge-outline gap-1">VPN · WireGuard</span>
-          <span class="badge badge-info badge-outline ml-2">Redis OK</span>
-          <span class="badge badge-ghost ml-2">PG актуальна</span>
-        </div>
-        <label class="swap swap-rotate btn btn-ghost btn-circle">
-          <input type="checkbox" id="themeSwap" />
-          <span class="swap-on">☀️</span>
-          <span class="swap-off">🌙</span>
-        </label>
-        <div class="avatar placeholder ml-2">
-          <div class="bg-brand text-white rounded-full w-9"><span class="text-xs">AD</span></div>
-        </div>
-      </header>
-
-      <main class="p-4 lg:p-8 max-w-7xl mx-auto w-full">
-        <!-- Dashboard -->
-        <section class="page active" id="p-dashboard">
-          <div class="flex flex-wrap justify-between items-end gap-4 mb-8">
-            <div>
-              <p class="text-sm text-base-content/60 uppercase tracking-widest">§11.2 Дашборды</p>
-              <h1 class="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">Операционный центр</h1>
-            </div>
-            <div class="join">
-              <button class="btn btn-sm join-item btn-active">24ч</button>
-              <button class="btn btn-sm join-item">7д</button>
-              <button class="btn btn-sm join-item">30д</button>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div class="stat glass rounded-2xl"><div class="stat-title">Заказы</div><div class="stat-value text-brand">142</div><div class="stat-desc text-success">↑ 12% к вчера</div></div>
-            <div class="stat glass rounded-2xl"><div class="stat-title">EWT normal</div><div class="stat-value">4.2м</div><div class="stat-desc">high: 1.1м</div></div>
-            <div class="stat glass rounded-2xl"><div class="stat-title">GPU воркеры</div><div class="stat-value">18<span class="text-lg opacity-50">/22</span></div><div class="stat-desc"><span class="text-warning">1 overheated</span></div></div>
-            <div class="stat glass rounded-2xl"><div class="stat-title">Quality ≥0.7</div><div class="stat-value text-success">87%</div></div>
-          </div>
-          <div class="grid lg:grid-cols-3 gap-6">
-            <div class="lg:col-span-2 glass rounded-2xl p-5">
-              <h2 class="font-semibold mb-4">Поступление задач</h2>
-              <canvas id="c1" height="120"></canvas>
-            </div>
-            <div class="glass rounded-2xl p-5">
-              <h2 class="font-semibold mb-2">Финансы · §11.2.2</h2>
-              <p class="text-3xl font-bold">284 500 ₽</p>
-              <p class="text-sm opacity-60 mt-1">ЮKassa комиссия: 8 535 ₽</p>
-              <div class="divider my-3"></div>
-              <p class="text-sm">Возвраты NSFW <span class="float-right text-error">12 400 ₽</span></p>
-              <p class="text-sm mt-2">Облако ₽/ч <span class="float-right">1 240 ₽</span></p>
-            </div>
-          </div>
-          <div class="grid lg:grid-cols-2 gap-6 mt-6">
-            <div class="glass rounded-2xl p-5">
-              <h2 class="font-semibold mb-3">B2B топ · §11.2.3</h2>
-              <div class="overflow-x-auto">
-                <table class="table table-sm">
-                  <thead><tr><th>Компания</th><th>Заказы</th><th>₽</th></tr></thead>
-                  <tbody>
-                    <tr><td>ООО «МебельПро»</td><td>312</td><td>1.2M</td></tr>
-                    <tr><td>ИП Сидоров</td><td>89</td><td>340K</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div class="glass rounded-2xl p-5">
-              <h2 class="font-semibold mb-3">Сегментация · §11.2.5</h2>
-              <div class="flex gap-4 text-sm">
-                <div><span class="badge badge-success">DeepLab</span> 94.2%</div>
-                <div><span class="badge badge-warning">SAM fallback</span> 5.8%</div>
-              </div>
-              <progress class="progress progress-success w-full mt-4" value="94" max="100"></progress>
-            </div>
-          </div>
-        </section>
-
-        <section class="page" id="p-workers">
-          <h1 class="text-2xl font-bold mb-4">Воркеры · §11.3</h1>
-          <div class="flex gap-2 mb-4">
-            <button class="btn btn-primary btn-sm">☁️ Облачный инстанс</button>
-            <button class="btn btn-ghost btn-sm">Deploy JSON</button>
-          </div>
-          <div class="glass rounded-2xl p-4 mb-4"><canvas id="cGpu" height="100"></canvas></div>
-          <div class="overflow-x-auto glass rounded-2xl">
-            <table class="table">
-              <thead><tr><th>Worker</th><th>Status</th><th>GPU%</th><th>VRAM</th><th>Grace</th><th></th></tr></thead>
-              <tbody>
-                <tr><td class="font-mono text-xs">client-gpu-01</td><td><span class="badge badge-success">busy</span></td><td><progress class="progress progress-primary w-20" value="92" max="100"></progress></td><td>11.2/16</td><td>25s</td><td><button class="btn btn-xs">Логи</button></td></tr>
-                <tr><td class="font-mono text-xs">cloud-rtx4090-03</td><td><span class="badge badge-ghost">idle</span></td><td><progress class="progress w-20" value="8" max="100"></progress></td><td>2.1/24</td><td>25s</td><td><button class="btn btn-xs">Логи</button></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="page" id="p-promo">
-          <div class="flex justify-between items-center mb-4">
-            <h1 class="text-2xl font-bold">Промокоды · §11.7</h1>
-            <button class="btn btn-primary btn-sm">+ Создать</button>
-          </div>
-          <div class="glass rounded-2xl overflow-hidden">
-            <table class="table">
-              <thead><tr><th>Код</th><th>Скидка</th><th>Использовано</th><th></th></tr></thead>
-              <tbody>
-                <tr>
-                  <td class="font-mono">KAJ5X7M2N9PQ <button class="btn btn-ghost btn-xs" onclick="navigator.clipboard.writeText('KAJ5X7M2N9PQ')">📋</button></td>
-                  <td>10%</td><td>24/100</td>
-                  <td><button class="btn btn-error btn-xs btn-outline">Отключить</button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="page" id="p-support">
-          <h1 class="text-2xl font-bold mb-4">Поддержка · §11.9</h1>
-          <div class="grid lg:grid-cols-2 gap-4">
-            <ul class="menu glass rounded-2xl">
-              <li><a class="active">#1042 · GLB не скачивается <span class="badge badge-error">new</span></a></li>
-              <li><a>#1041 · NSFW возврат</a></li>
-            </ul>
-            <div class="glass rounded-2xl p-4">
-              <div class="alert alert-info text-sm py-2 mb-3">seller@shop.ru · 47 заказов</div>
-              <div class="chat chat-start mb-3"><div class="chat-bubble">Кнопка скачать серая после генерации</div></div>
-              <button class="btn btn-secondary btn-sm mb-2">🤖 Ollama черновик</button>
-              <textarea class="textarea textarea-bordered w-full" rows="3"></textarea>
-              <button class="btn btn-primary btn-sm mt-2">Отправить</button>
-            </div>
-          </div>
-        </section>
-
-        <section class="page" id="p-storage">
-          <h1 class="text-2xl font-bold mb-4">Storage Health · §11.16</h1>
-          <div class="grid md:grid-cols-2 gap-4">
-            <div class="card bg-base-100 shadow-xl border border-success/30">
-              <div class="card-body">
-                <h2 class="card-title text-success">🟢 Primary ПК-1</h2>
-                <p class="text-sm">MinIO · Postgres · Redis · CH — online</p>
-                <div class="card-actions"><button class="btn btn-sm">Ping</button></div>
-              </div>
-            </div>
-            <div class="card bg-base-100 shadow-xl border border-warning/30">
-              <div class="card-body">
-                <h2 class="card-title text-warning">🟡 Replica ПК-2</h2>
-                <p class="text-sm">CH replication lag 45s · SMART warn</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="page" id="p-moderation"><h1 class="text-2xl font-bold">NSFW · §11.10</h1><p class="opacity-60 mt-2">Ручная проверка 24ч, превью 12 кадров.</p></section>
-        <section class="page" id="p-settings"><h1 class="text-2xl font-bold">Настройки</h1><p class="opacity-60 mt-2">Тарифы, налоги §11.13, JWT сессия.</p></section>
-      </main>
+<body class="bg-base-300">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="font-bold text-lg mb-1">KWork Mob</div>
+    <p class="text-xs opacity-50 mb-4">Tailwind + DaisyUI</p>
+    <nav id="nav"></nav>
+  </aside>
+  <div class="flex-1">
+    <div class="topbar">
+      <span class="badge badge-success badge-outline">VPN OK</span>
+      <label class="swap swap-rotate btn btn-ghost btn-sm btn-circle"><input type="checkbox" id="themeSwap" /><span class="swap-on">☀️</span><span class="swap-off">🌙</span></label>
     </div>
-
-    <div class="drawer-side z-30">
-      <label for="drawer" class="drawer-overlay"></label>
-      <aside class="glass min-h-full w-72 p-4 text-base-content">
-        <div class="flex items-center gap-3 mb-8 px-2">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold">3D</div>
-          <div><div class="font-bold">KWork Mob</div><div class="text-xs opacity-50">Staff · DaisyUI</div></div>
-        </div>
-        <nav class="space-y-1 text-sm" id="sideNav">
-          <a href="#" class="nav-item active block px-3 py-2 rounded-lg" data-p="dashboard">📊 Дашборд</a>
-          <a href="#" class="nav-item block px-3 py-2 rounded-lg opacity-70" data-p="workers">🖥️ Воркеры</a>
-          <a href="#" class="nav-item block px-3 py-2 rounded-lg opacity-70" data-p="storage">💾 Кластер</a>
-          <a href="#" class="nav-item block px-3 py-2 rounded-lg opacity-70" data-p="promo">🏷️ Промокоды</a>
-          <a href="#" class="nav-item block px-3 py-2 rounded-lg opacity-70" data-p="support">💬 Поддержка</a>
-          <a href="#" class="nav-item block px-3 py-2 rounded-lg opacity-70" data-p="moderation">🛡️ NSFW</a>
-          <a href="#" class="nav-item block px-3 py-2 rounded-lg opacity-70" data-p="settings">⚙️ Настройки</a>
-        </nav>
-        <div class="absolute bottom-4 left-4 right-4 text-xs opacity-40">VPN+2FA · JWT 30д</div>
-      </aside>
-    </div>
+    <div id="app"></div>
   </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
-  <script>
-    document.getElementById('themeSwap').addEventListener('change', (e) => {
-      document.documentElement.setAttribute('data-theme', e.target.checked ? 'light' : 'dark');
-    });
-    document.querySelectorAll('#sideNav .nav-item').forEach((el) => {
-      el.addEventListener('click', (e) => {
-        e.preventDefault();
-        document.querySelectorAll('#sideNav .nav-item').forEach((x) => { x.classList.remove('active'); x.classList.add('opacity-70'); });
-        el.classList.add('active'); el.classList.remove('opacity-70');
-        document.querySelectorAll('.page').forEach((p) => p.classList.remove('active'));
-        document.getElementById('p-' + el.dataset.p).classList.add('active');
-      });
-    });
-    const o = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } };
-    new Chart(document.getElementById('c1'), { type: 'line', data: { labels: ['пн','вт','ср','чт','пт','сб','вс'], datasets: [{ data: [40,55,48,72,65,80,58], borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,.15)', fill: true, tension: 0.4 }] }, options: o });
-    new Chart(document.getElementById('cGpu'), { type: 'line', data: { labels: Array(12).fill(''), datasets: [{ data: [10,30,55,80,92,88,90,92,85,80,75,92], borderColor: '#a78bfa', tension: 0.35 }] }, options: { ...o, scales: { y: { min: 0, max: 100 } } } });
-  </script>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script src="admin-pages-content.js"></script>
+<script>
+  ADMIN_NAV.forEach((n) => { nav.innerHTML += `<a class="nav-item" href="#" data-page="${n.id}">${n.icon} ${n.label}</a>`; });
+  bindAdminPage('app', '.nav-item', { primary: '#818cf8', secondary: '#34d399' });
+  themeSwap.onchange = (e) => document.documentElement.setAttribute('data-theme', e.target.checked ? 'light' : 'dark');
+</script>
 </body>
 </html>

@@ -3,241 +3,50 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KWork Mob — Admin (Bootstrap 5)</title>
+  <title>KWork Mob Admin — Bootstrap 5</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <link href="admin-demo-base.css" rel="stylesheet" />
   <style>
-    :root { --brand: #0057b8; --brand-dark: #003d82; }
+    :root { --demo-primary: #0057b8; }
     body { font-size: 0.9rem; background: #f4f7fb; }
-    .sidebar { width: 260px; min-height: 100vh; background: linear-gradient(180deg, #0b1f3a 0%, #132f54 100%); }
-    .sidebar .nav-link { color: rgba(255,255,255,.75); border-radius: .5rem; margin: 1px 0; padding: .55rem .85rem; }
+    .shell { display: flex; min-height: 100vh; }
+    .sidebar { width: 250px; background: linear-gradient(180deg, #0b1f3a, #132f54); color: #fff; padding: 16px; flex-shrink: 0; }
+    .sidebar .nav-link { color: rgba(255,255,255,.75); border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; }
     .sidebar .nav-link:hover, .sidebar .nav-link.active { background: rgba(255,255,255,.12); color: #fff; }
-    .sidebar .nav-section { font-size: .65rem; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.4); margin: 1rem 0 .35rem .85rem; }
-    .brand-badge { background: var(--brand); }
-    .kpi-card { border: none; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-    .kpi-card .display-6 { font-size: 1.75rem; font-weight: 700; color: var(--brand); }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-    .chart-box { height: 220px; }
-    .vpn-banner { background: linear-gradient(90deg, #0d6efd, #0057b8); }
+    .main { flex: 1; }
+    .topbar { background: linear-gradient(90deg, #0d6efd, #0057b8); color: #fff; padding: 8px 20px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; }
+    #app { padding: 24px; }
     [data-bs-theme="dark"] body { background: #0f1419; }
-    [data-bs-theme="dark"] .kpi-card { background: #1a2332; }
-    .page-section { display: none; }
-    .page-section.active { display: block; }
+    [data-bs-theme="dark"] .demo-card, [data-bs-theme="dark"] .demo-kpi { background: #1a2332; border-color: #2a3544; color: #e0e0e0; }
   </style>
 </head>
 <body>
-<div class="d-flex">
-  <aside class="sidebar flex-shrink-0 p-3 text-white">
-    <div class="d-flex align-items-center gap-2 mb-4 px-2">
-      <span class="brand-badge rounded-3 px-2 py-1 fw-bold">3D</span>
-      <div>
-        <div class="fw-semibold">KWork Mob</div>
-        <small class="text-white-50">Staff Panel · §11</small>
-      </div>
-    </div>
-    <div class="px-2 mb-3">
-      <span class="badge text-bg-success"><i class="bi bi-shield-lock"></i> VPN OK</span>
-      <span class="badge text-bg-secondary ms-1">2FA</span>
-    </div>
-    <nav class="nav flex-column" id="nav">
-      <span class="nav-section">Обзор</span>
-      <a class="nav-link active" href="#" data-page="dashboard"><i class="bi bi-speedometer2 me-2"></i>Дашборд</a>
-      <a class="nav-link" href="#" data-page="workers"><i class="bi bi-gpu-card me-2"></i>Воркеры</a>
-      <a class="nav-link" href="#" data-page="storage"><i class="bi bi-hdd-stack me-2"></i>Кластер хранения</a>
-      <span class="nav-section">Клиенты</span>
-      <a class="nav-link" href="#" data-page="users"><i class="bi bi-people me-2"></i>Пользователи</a>
-      <a class="nav-link" href="#" data-page="b2b"><i class="bi bi-building me-2"></i>B2B компании</a>
-      <span class="nav-section">Маркетинг</span>
-      <a class="nav-link" href="#" data-page="promo"><i class="bi bi-tag me-2"></i>Промокоды</a>
-      <a class="nav-link" href="#" data-page="campaigns"><i class="bi bi-megaphone me-2"></i>Кампании</a>
-      <span class="nav-section">Поддержка</span>
-      <a class="nav-link" href="#" data-page="support"><i class="bi bi-chat-dots me-2"></i>Обращения</a>
-      <a class="nav-link" href="#" data-page="moderation"><i class="bi bi-shield-exclamation me-2"></i>NSFW</a>
-      <span class="nav-section">Система</span>
-      <a class="nav-link" href="#" data-page="settings"><i class="bi bi-gear me-2"></i>Настройки</a>
-      <a class="nav-link" href="#" data-page="logs"><i class="bi bi-journal-text me-2"></i>Логи</a>
-    </nav>
-    <div class="mt-auto pt-4 px-2 small text-white-50">
-      admin@example.com<br />Владелец сервиса
-    </div>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="d-flex align-items-center gap-2 mb-3"><span class="badge bg-primary">3D</span><strong>KWork Mob</strong></div>
+    <small class="text-white-50 d-block mb-3">Bootstrap 5 · §11</small>
+    <nav class="nav flex-column gap-1" id="nav"></nav>
+    <small class="text-white-50 mt-4 d-block">admin@example.com</small>
   </aside>
-
-  <main class="flex-grow-1 min-vh-100">
-    <header class="vpn-banner text-white px-4 py-2 d-flex justify-content-between align-items-center">
-      <small><i class="bi bi-wifi"></i> WireGuard · 192.168.0.177 · Redis OK · PostgreSQL актуальна</small>
-      <div>
-        <button class="btn btn-sm btn-light" id="themeToggle"><i class="bi bi-moon-stars"></i></button>
-        <button class="btn btn-sm btn-outline-light ms-1">Выход</button>
-      </div>
-    </header>
-
-    <div class="p-4">
-      <!-- DASHBOARD §11.2 -->
-      <section class="page-section active" id="page-dashboard">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-          <div>
-            <h1 class="h3 mb-1">Главный дашборд</h1>
-            <p class="text-muted mb-0">ClickHouse агрегаты · обновление по WebSocket</p>
-          </div>
-          <select class="form-select form-select-sm w-auto">
-            <option>Сегодня</option><option>7 дней</option><option>30 дней</option>
-          </select>
-        </div>
-        <div class="row g-3 mb-4">
-          <div class="col-md-3"><div class="card kpi-card"><div class="card-body"><small class="text-muted">Заказы в работе</small><div class="display-6">142</div><span class="badge text-bg-primary">+12%</span></div></div></div>
-          <div class="col-md-3"><div class="card kpi-card"><div class="card-body"><small class="text-muted">EWT обычная очередь</small><div class="display-6">4.2<span class="fs-6"> мин</span></div><span class="badge text-bg-warning">приоритет: 1.1 мин</span></div></div></div>
-          <div class="col-md-3"><div class="card kpi-card"><div class="card-body"><small class="text-muted">Воркеры онлайн</small><div class="display-6">18<span class="fs-6 text-muted">/22</span></div><span class="status-dot bg-success me-1"></span>1 overheated</div></div></div>
-          <div class="col-md-3"><div class="card kpi-card"><div class="card-body"><small class="text-muted">Quality ≥0.7</small><div class="display-6">87%</div><small class="text-success">цель ≥80%</small></div></div></div>
-        </div>
-        <div class="row g-3">
-          <div class="col-lg-8">
-            <div class="card kpi-card"><div class="card-header bg-white fw-semibold">Поступление задач · §11.2.1</div>
-              <div class="card-body"><canvas id="chartTasks" class="chart-box"></canvas></div>
-            </div>
-          </div>
-          <div class="col-lg-4">
-            <div class="card kpi-card mb-3"><div class="card-header bg-white fw-semibold">Выручка сегодня · §11.2.2</div>
-              <div class="card-body"><h2 class="text-primary mb-0">284 500 ₽</h2><small class="text-muted">возвраты NSFW: 12 400 ₽</small></div>
-            </div>
-            <div class="card kpi-card"><div class="card-header bg-white fw-semibold">Очередь</div>
-              <ul class="list-group list-group-flush">
-                <li class="list-group-item d-flex justify-content-between">queue:normal <span class="badge text-bg-secondary">89</span></li>
-                <li class="list-group-item d-flex justify-content-between">queue:high <span class="badge text-bg-danger">12</span></li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- WORKERS §11.3 -->
-      <section class="page-section" id="page-workers">
-        <h1 class="h3 mb-3">Управление воркерами</h1>
-        <div class="d-flex gap-2 mb-3">
-          <button class="btn btn-primary"><i class="bi bi-cloud-plus"></i> Запустить облачный</button>
-          <button class="btn btn-outline-secondary">Deploy JSON</button>
-        </div>
-        <div class="card kpi-card mb-3"><div class="card-body"><canvas id="chartGpu" style="height:200px"></canvas></div></div>
-        <div class="table-responsive card kpi-card">
-          <table class="table table-hover mb-0">
-            <thead class="table-light"><tr><th>ID</th><th>GPU</th><th>Статус</th><th>Загрузка</th><th>VRAM</th><th>Temp</th><th>Вес</th><th></th></tr></thead>
-            <tbody>
-              <tr><td><code>client-gpu-01</code></td><td>RTX 5060 Ti</td><td><span class="badge text-bg-success">busy</span></td><td><div class="progress" style="height:6px;width:80px"><div class="progress-bar" style="width:92%"></div></div> 92%</td><td>11.2/16 GB</td><td>72°C</td><td><input type="range" class="form-range" style="width:80px" value="80" /></td><td><button class="btn btn-sm btn-outline-secondary">Логи</button></td></tr>
-              <tr><td><code>cloud-rtx4090-03</code></td><td>RTX 4090</td><td><span class="badge text-bg-success">idle</span></td><td><div class="progress" style="height:6px;width:80px"><div class="progress-bar bg-success" style="width:8%"></div></div> 8%</td><td>2.1/24 GB</td><td>45°C</td><td><input type="range" class="form-range" style="width:80px" value="100" /></td><td><button class="btn btn-sm btn-outline-secondary">Логи</button></td></tr>
-              <tr><td><code>cloud-rtx4090-07</code></td><td>RTX 4090</td><td><span class="badge text-bg-warning">overheated</span></td><td>—</td><td>—</td><td>91°C</td><td>0</td><td><button class="btn btn-sm btn-outline-danger">Maintenance</button></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- STORAGE §11.16 -->
-      <section class="page-section" id="page-storage">
-        <h1 class="h3 mb-3">Здоровье кластера хранения</h1>
-        <div class="row g-3">
-          <div class="col-md-6">
-            <div class="card border-success kpi-card"><div class="card-header bg-success text-white">🟢 Primary · Дом ПК-1</div>
-              <div class="card-body small">
-                <p class="mb-1">Tailscale 100.64.0.12 · ping 12ms</p>
-                <p class="mb-1">PostgreSQL · Redis · MinIO · ClickHouse — <strong>running</strong></p>
-                <p class="mb-1">CPU 34% · RAM 28 GB / 64 GB · NVMe 62%</p>
-                <p class="mb-0 text-muted">MinIO replication: синхронно</p>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="card border-warning kpi-card"><div class="card-header bg-warning">🟡 Replica · Дом ПК-2</div>
-              <div class="card-body small">
-                <p class="mb-1">Tailscale 100.64.0.13 · ping 18ms</p>
-                <p class="mb-1">ClickHouse lag: <strong>45 сек</strong></p>
-                <p class="mb-1">SMART: предупреждение на /dev/nvme1</p>
-                <button class="btn btn-sm btn-outline-primary">Диагностика</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- PROMO §11.7 -->
-      <section class="page-section" id="page-promo">
-        <div class="d-flex justify-content-between mb-3"><h1 class="h3">Промокоды</h1><button class="btn btn-primary"><i class="bi bi-plus"></i> Создать</button></div>
-        <table class="table table-bordered bg-white">
-          <thead><tr><th>Код</th><th>Название</th><th>Скидка</th><th>Использовано</th><th>Статус</th><th></th></tr></thead>
-          <tbody>
-            <tr><td><code>KAJ5X7M2N9PQ</code> <button class="btn btn-sm btn-link p-0"><i class="bi bi-clipboard"></i></button></td><td>Летняя акция</td><td>10%</td><td>24 / 100</td><td><span class="badge text-bg-success">Активен</span></td><td><button class="btn btn-sm btn-outline-danger">Отключить</button></td></tr>
-            <tr><td><code>SCC7FREE100X</code> <button class="btn btn-sm btn-link p-0"><i class="bi bi-clipboard"></i></button></td><td>мимими</td><td>100%</td><td>0 / 10</td><td><span class="badge text-bg-success">Активен</span></td><td><button class="btn btn-sm btn-outline-danger">Отключить</button></td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- SUPPORT §11.9 -->
-      <section class="page-section" id="page-support">
-        <h1 class="h3 mb-3">Обращения в поддержку</h1>
-        <div class="row">
-          <div class="col-md-5">
-            <div class="list-group">
-              <a href="#" class="list-group-item list-group-item-action active"><span class="badge text-bg-danger float-end">новое</span>#1042 — Не скачивается GLB</a>
-              <a href="#" class="list-group-item list-group-item-action">#1041 — Возврат по NSFW <span class="badge text-bg-secondary">в работе</span></a>
-            </div>
-          </div>
-          <div class="col-md-7">
-            <div class="card kpi-card"><div class="card-body">
-              <div class="bg-light rounded p-2 mb-2 small">Пользователь: seller@shop.ru · 47 заказов · 128 400 ₽</div>
-              <div class="border rounded p-3 mb-2">Здравствуйте, после генерации кнопка скачать неактивна…</div>
-              <button class="btn btn-outline-primary btn-sm"><i class="bi bi-robot"></i> Предложить ответ ИИ (Ollama)</button>
-              <textarea class="form-control mt-2" rows="3" placeholder="Ответ…"></textarea>
-              <button class="btn btn-primary mt-2">Отправить</button>
-            </div></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Placeholder sections -->
-      <section class="page-section" id="page-users"><h1 class="h3">Пользователи · §11.6</h1><p class="text-muted">Виртуализированная таблица 50k+ записей, фильтр по статусу NSFW.</p></section>
-      <section class="page-section" id="page-b2b"><h1 class="h3">B2B-клиенты</h1><p class="text-muted">Лимиты, API-ключи, индивидуальные цены.</p></section>
-      <section class="page-section" id="page-campaigns"><h1 class="h3">Маркетинговые кампании</h1><p class="text-muted">Конструктор: промо, реферал, N-я бесплатно, таймер.</p></section>
-      <section class="page-section" id="page-moderation"><h1 class="h3">NSFW-модерация · §11.10</h1><p class="text-muted">12 кадров, Легально / Нарушение, refunded flag.</p></section>
-      <section class="page-section" id="page-settings"><h1 class="h3">Настройки</h1><p class="text-muted">Тарифы, grace period 25–30с, алерты Telegram.</p></section>
-      <section class="page-section" id="page-logs"><h1 class="h3">Логи · §11.5</h1><p class="text-muted">user_events, worker_agent, сегментация DeepLab/SAM.</p></section>
+  <div class="main">
+    <div class="topbar">
+      <span><i class="bi bi-shield-lock"></i> VPN · WireGuard · Redis OK</span>
+      <div><button class="btn btn-sm btn-light" id="themeBtn"><i class="bi bi-moon"></i></button> <button class="btn btn-sm btn-outline-light">Выход</button></div>
     </div>
-  </main>
+    <div id="app"></div>
+  </div>
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script src="admin-pages-content.js"></script>
 <script>
-  document.querySelectorAll('#nav .nav-link').forEach((a) => {
-    a.addEventListener('click', (e) => {
-      e.preventDefault();
-      document.querySelectorAll('#nav .nav-link').forEach((x) => x.classList.remove('active'));
-      a.classList.add('active');
-      document.querySelectorAll('.page-section').forEach((s) => s.classList.remove('active'));
-      document.getElementById('page-' + a.dataset.page).classList.add('active');
-    });
-  });
-  document.getElementById('themeToggle').onclick = () => {
-    const html = document.documentElement;
-    const dark = html.getAttribute('data-bs-theme') === 'dark';
-    html.setAttribute('data-bs-theme', dark ? 'light' : 'dark');
+  const nav = document.getElementById('nav');
+  ADMIN_NAV.forEach((n) => { nav.innerHTML += `<a class="nav-link nav-item" href="#" data-page="${n.id}">${n.icon} ${n.label}</a>`; });
+  bindAdminPage('app', '.nav-item', { primary: '#0057b8', secondary: '#198754' });
+  document.getElementById('themeBtn').onclick = () => {
+    const h = document.documentElement;
+    h.setAttribute('data-bs-theme', h.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark');
   };
-  const chartOpts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } };
-  new Chart(document.getElementById('chartTasks'), {
-    type: 'line',
-    data: {
-      labels: ['00', '04', '08', '12', '16', '20', '24'],
-      datasets: [{ data: [12, 8, 45, 62, 58, 71, 38], borderColor: '#0057b8', tension: 0.35, fill: true, backgroundColor: 'rgba(0,87,184,.1)' }]
-    },
-    options: chartOpts
-  });
-  new Chart(document.getElementById('chartGpu'), {
-    type: 'line',
-    data: {
-      labels: ['-15m', '', '', '', '', 'сейчас'],
-      datasets: [
-        { label: 'client-gpu-01', data: [20, 45, 80, 92, 88, 92], borderColor: '#0057b8', tension: 0.35 },
-        { label: 'cloud-03', data: [5, 8, 12, 10, 8, 8], borderColor: '#198754', tension: 0.35 }
-      ]
-    },
-    options: { ...chartOpts, plugins: { legend: { display: true, position: 'top' } }, scales: { y: { min: 0, max: 100 } } }
-  });
 </script>
 </body>
 </html>

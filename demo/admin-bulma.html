@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KWork Mob Admin — Bulma</title>
+  <link href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" rel="stylesheet" />
+  <link href="admin-demo-base.css" rel="stylesheet" />
+  <style>
+    :root { --demo-primary: #00d1b2; }
+    .shell { display: flex; min-height: 100vh; }
+    .sidebar { width: 250px; background: #363636; color: #fff; padding: 1rem; flex-shrink: 0; }
+    .sidebar a { display: block; color: rgba(255,255,255,.85); padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 2px; }
+    .sidebar a:hover { background: rgba(255,255,255,.1); color: #fff; }
+    .sidebar a.active { background: #00d1b2; color: #fff; }
+    .main-col { flex: 1; background: #f5f5f5; }
+    .hero.is-primary { padding: 0.75rem 1.5rem; min-height: auto; }
+    #app { padding: 1.5rem; }
+    .brand-title { font-weight: 700; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <p class="brand-title">KWork Mob</p>
+    <p class="is-size-7 has-text-grey-light mb-4">Bulma · §11</p>
+    <nav id="nav"></nav>
+    <p class="is-size-7 has-text-grey-light mt-5">admin@example.com</p>
+  </aside>
+  <div class="main-col">
+    <section class="hero is-primary is-small">
+      <div class="hero-body py-3">
+        <div class="container is-flex is-justify-content-space-between is-align-items-center">
+          <span class="tag is-success is-light"><span class="mdi mdi-shield-lock"></span> VPN OK</span>
+          <button class="button is-small is-light" id="themeBtn">Тема</button>
+        </div>
+      </div>
+    </section>
+    <div id="app" class="container is-fluid"></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script src="admin-pages-content.js"></script>
+<script>
+  ADMIN_NAV.forEach((n) => { nav.innerHTML += `<a class="nav-item" href="#" data-page="${n.id}"><span class="mdi mdi-circle-small"></span> ${n.label}</a>`; });
+  bindAdminPage('app', '.nav-item', { primary: '#00d1b2', secondary: '#3273dc' });
+  themeBtn.onclick = () => document.body.classList.toggle('has-background-dark');
+</script>
+</body>
+</html>
