@@ -258,6 +258,27 @@ def docker_cli_available() -> bool:
         return False
 
 
+def _compose_base_cmd() -> list[str]:
+    """docker compose (v2 plugin) или docker-compose (v1)."""
+    proc = subprocess.run(
+        ["docker", "compose", "version"],
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return ["docker", "compose"]
+    legacy = subprocess.run(
+        ["docker-compose", "version"],
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+    if legacy.returncode == 0:
+        return ["docker-compose"]
+    return ["docker", "compose"]
+
+
 def _run(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess[str]:
     logger.info("worker deploy: %s", " ".join(cmd))
     return subprocess.run(
@@ -318,10 +339,10 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     if not compose.is_file():
         raise HTTPException(404, f"Compose не найден: {compose}")
     env_path = write_env_file(stored)
+    compose_cmd = _compose_base_cmd()
     proc = _run(
         [
-            "docker",
-            "compose",
+            *compose_cmd,
             "-f",
             str(compose),
             "--env-file",

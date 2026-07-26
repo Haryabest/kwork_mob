@@ -3,7 +3,18 @@ FROM python:3.11-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc docker.io docker-compose-plugin && rm -rf /var/lib/apt/lists/*
+    libpq-dev gcc curl ca-certificates docker.io \
+    && rm -rf /var/lib/apt/lists/* \
+    && ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+         amd64) COMPOSE_ARCH=x86_64 ;; \
+         arm64) COMPOSE_ARCH=aarch64 ;; \
+         *) COMPOSE_ARCH="$ARCH" ;; \
+       esac \
+    && mkdir -p /usr/local/lib/docker/cli-plugins \
+    && curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-${COMPOSE_ARCH}" \
+         -o /usr/local/lib/docker/cli-plugins/docker-compose \
+    && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 # Сначала только код пакета app, потом установка (alembic — не Python-пакет)
 COPY pyproject.toml .
