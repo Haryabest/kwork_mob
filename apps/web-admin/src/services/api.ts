@@ -3,11 +3,24 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 const TOKEN_KEY = 'staff_access_token';
 const REFRESH_KEY = 'staff_refresh_token';
 
+/** Dev: всегда через Vite proxy (/api/v1 → 127.0.0.1:8000), без CORS. */
+export function getApiUrl(): string {
+  if (import.meta.env.DEV) return '/api/v1';
+  const envUrl = import.meta.env.VITE_API_URL as string | undefined;
+  if (envUrl?.startsWith('/')) return envUrl;
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname;
+    if (h !== 'localhost' && h !== '127.0.0.1') return '/api/v1';
+  }
+  return envUrl || 'http://localhost:8000/api/v1';
+}
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api/v1',
+  baseURL: getApiUrl(),
 });
 
 api.interceptors.request.use((config) => {
+  config.baseURL = config.baseURL || getApiUrl();
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;

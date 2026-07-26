@@ -226,6 +226,7 @@ async def get_config(*, masked: bool = True) -> dict[str, Any]:
     out["compose_file"] = str(_compose_file())
     out["env_file"] = str(_env_file())
     out["docker_available"] = docker_cli_available()
+    out["docker_status"] = docker_cli_status()
     if masked:
         out["env"] = _mask_env(out.get("env") or {})
     return out
@@ -243,19 +244,41 @@ async def save_config(payload: dict[str, Any], *, user_id: int | None = None) ->
     return await get_config(masked=True)
 
 
-def docker_cli_available() -> bool:
+def docker_cli_status() -> dict[str, object]:
     if not settings.WORKER_DEPLOY_ENABLED:
-        return False
+        return {
+            "available": False,
+            "reason": "WORKER_DEPLOY_ENABLED=0",
+            "hint": "Задайте WORKER_DEPLOY_ENABLED=1 в .env и перезапустите orchestrator",
+        }
     try:
         proc = subprocess.run(
             ["docker", "info"],
             capture_output=True,
+            text=True,
             timeout=15,
             check=False,
         )
-        return proc.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return False
+    except FileNotFoundError:
+        return {
+            "available": False,
+            "reason": "docker_not_found",
+            "hint": "Пересоберите образ orchestrator (Dockerfile ставит docker.io)",
+        }
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return {"available": False, "reason": "docker_error", "hint": str(exc)[:200]}
+    if proc.returncode == 0:
+        return {"available": True, "reason": "ok"}
+    err = ((proc.stderr or "") + (proc.stdout or "")).strip()[-400:]
+    return {
+        "available": False,
+        "reason": "docker_info_failed",
+        "hint": err or "docker info failed — смонтируйте /var/run/docker.sock",
+    }
+
+
+def docker_cli_available() -> bool:
+    return bool(docker_cli_status().get("available"))
 
 
 def _compose_base_cmd() -> list[str]:
@@ -327,9 +350,10 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     if not settings.WORKER_DEPLOY_ENABLED:
         raise HTTPException(503, "WORKER_DEPLOY_ENABLED=0 — управление Docker отключено")
     if not docker_cli_available():
+        diag = docker_cli_status()
         raise HTTPException(
             503,
-            "Docker CLI недоступен. Смонтируйте /var/run/docker.sock в orchestrator и установите docker CLI.",
+            diag.get("hint") or "Docker CLI недоступен. Смонтируйте /var/run/docker.sock в orchestrator.",
         )
     stored = await _redis_get()
     if not stored:
@@ -474,17 +498,26 @@ def verify_applied_config(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
 
 
 async def verify_stored_config() -> dict[str, Any]:
-    stored = await _redis_get()
-    if not stored:
-        stored = default_config()
-    else:
-        stored = dict(stored)
-        stored["env"] = _decrypt_env(stored.get("env") or {})
-    result = verify_applied_config(stored)
-    result["saved_at"] = stored.get("updated_at")
-    result["applied_at"] = stored.get("applied_at")
-    result["last_apply_ok"] = stored.get("last_apply_ok")
-    return result
+    try:
+        stored = await _redis_get()
+        if not stored:
+            stored = default_config()
+        else:
+            stored = dict(stored)
+            stored["env"] = _decrypt_env(stored.get("env") or {})
+        result = verify_applied_config(stored)
+        result["saved_at"] = stored.get("updated_at")
+        result["applied_at"] = stored.get("applied_at")
+        result["last_apply_ok"] = stored.get("last_apply_ok")
+        return result
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("verify_stored_config failed")
+        return {
+            "ok": False,
+            "message": str(exc)[:300],
+            "matches": {},
+            "mismatches": [],
+        }
 
 
 def fetch_logs(*, tail: int = 300) -> dict[str, Any]:

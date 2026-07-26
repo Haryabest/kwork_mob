@@ -32,6 +32,7 @@ type WorkerConfig = {
   compose_file: string;
   env_file: string;
   docker_available: boolean;
+  docker_status?: { available?: boolean; reason?: string; hint?: string };
   updated_at?: string | null;
   applied_at?: string | null;
   last_apply_ok?: boolean | null;
@@ -216,8 +217,13 @@ export default function TrellisSettingsPage() {
 
       {!cfg.deploy_enabled && (
         <Alert color="orange" mb="md" title="Docker deploy отключён">
-          На сервере задайте <Code>WORKER_DEPLOY_ENABLED=1</Code>, смонтируйте{' '}
-          <Code>/var/run/docker.sock</Code> и <Code>WORKER_DEPLOY_ROOT</Code> (путь к репозиторию).
+          Задайте <Code>WORKER_DEPLOY_ENABLED=1</Code> в <Code>.env</Code>, пересоберите orchestrator. Нужны{' '}
+          <Code>/var/run/docker.sock</Code> и <Code>WORKER_DEPLOY_ROOT=/repo</Code>.
+        </Alert>
+      )}
+      {cfg.deploy_enabled && !cfg.docker_available && cfg.docker_status?.hint && (
+        <Alert color="red" mb="md" title="Docker недоступен">
+          {cfg.docker_status.hint}
         </Alert>
       )}
 

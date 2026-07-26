@@ -1,5 +1,6 @@
 """Конфигурация приложения."""
 
+import os
 from pathlib import Path
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
@@ -212,6 +213,12 @@ class Settings(BaseSettings):
             host = api.hostname
             add(f"{scheme}://{host}:3000")
             add(f"{scheme}://{host}:3001")
+
+        client_host = os.getenv("CLIENT_HOST", "").strip()
+        if client_host:
+            add(f"http://{client_host}:3000")
+            add(f"http://{client_host}:3001")
+            add(f"http://{client_host}:8000")
 
         object.__setattr__(self, "CORS_ORIGINS", origins)
         return self
