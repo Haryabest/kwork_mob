@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import async_session
 from app.models import Promocode, PromocodeUsage, User
 
 # без похожих символов 0/O/1/l/I
@@ -108,11 +109,27 @@ def assert_promo_input_allowed(user: User) -> None:
         )
 
 
+async def _persist_user_promo_state(
+    user_id: int,
+    *,
+    attempts: int,
+    blocked_until: datetime | None,
+) -> None:
+    """Отдельная транзакция — счётчик попыток не откатывается при ошибке заказа."""
+    async with async_session() as sdb:
+        row = await sdb.get(User, user_id)
+        if not row:
+            return
+        row.promo_failed_attempts = attempts
+        row.promo_blocked_until = blocked_until
+        await sdb.commit()
+
+
 async def record_promo_failure(db: AsyncSession, user: User) -> dict[str, Any]:
     """Учесть неудачную попытку; вернуть метаданные для UI."""
     assert_promo_input_allowed(user)
     attempts = int(user.promo_failed_attempts or 0) + 1
-    user.promo_failed_attempts = attempts
+    blocked_until: datetime | None = None
     out: dict[str, Any] = {
         "failed_attempts": attempts,
         "show_warning": attempts == 2,
@@ -120,14 +137,18 @@ async def record_promo_failure(db: AsyncSession, user: User) -> dict[str, Any]:
         "blocked": False,
     }
     if attempts >= PROMO_MAX_ATTEMPTS:
-        user.promo_blocked_until = datetime.now(timezone.utc) + timedelta(days=PROMO_BLOCK_DAYS)
+        blocked_until = datetime.now(timezone.utc) + timedelta(days=PROMO_BLOCK_DAYS)
         out["blocked"] = True
-        out["blocked_until"] = user.promo_blocked_until.isoformat()
+        out["blocked_until"] = blocked_until.isoformat()
+    await _persist_user_promo_state(user.id, attempts=attempts, blocked_until=blocked_until)
+    user.promo_failed_attempts = attempts
+    user.promo_blocked_until = blocked_until
     await db.flush()
     return out
 
 
 async def reset_promo_attempts(db: AsyncSession, user: User) -> None:
+    await _persist_user_promo_state(user.id, attempts=0, blocked_until=None)
     user.promo_failed_attempts = 0
     user.promo_blocked_until = None
     await db.flush()

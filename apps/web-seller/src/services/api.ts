@@ -97,8 +97,12 @@ export function getPromoErrorMeta(error: unknown): {
       const obj = detail.detail as Record<string, unknown>;
       return {
         message: String(obj.message || apiMessage(error)),
-        showWarning: Boolean(obj.show_warning),
-        warningMessage: obj.warning_message ? String(obj.warning_message) : undefined,
+        showWarning: Boolean(obj.show_warning ?? obj.showWarning),
+        warningMessage: obj.warning_message
+          ? String(obj.warning_message)
+          : obj.warningMessage
+            ? String(obj.warningMessage)
+            : undefined,
       };
     }
   }

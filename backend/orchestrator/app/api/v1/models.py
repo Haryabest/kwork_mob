@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Body
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -678,9 +678,19 @@ async def restore_model_sources(
     return result
 
 
+class RegenerateRequest(BaseModel):
+    photo_count: int = Field(default=12, ge=1, le=12)
+    front_photo_source: str = Field(
+        default="copy_all",
+        pattern=r"^(copy_all|reuse_front|upload)$",
+        description="copy_all — все 12 ракурсов; reuse_front — view_00; upload — загрузка одного фото клиентом",
+    )
+
+
 @router.post("/{model_uuid}/regenerate")
 async def regenerate_model(
     model_uuid: str,
+    body: RegenerateRequest = Body(default_factory=RegenerateRequest),
     user: User = Depends(get_current_db_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -690,19 +700,26 @@ async def regenerate_model(
     from app.models import Order
     from app.services import photos as photos_service
 
+    opts = body
     model = await _get_owned_model(db, model_uuid, user)
     if not model.order_id:
         raise HTTPException(400, "Нет связанного заказа")
     order = await db.get(Order, model.order_id)
     if not order:
         raise HTTPException(404, "Заказ не найден")
-    try:
-        photos_service.require_all_photos(order.task_uuid)
-    except HTTPException as exc:
-        raise HTTPException(400, "Исходники недоступны — восстановите из облака") from exc
 
     new_uuid = str(uuid_lib.uuid4())
-    photos_service.copy_task_photos(order.task_uuid, new_uuid)
+    if opts.photo_count == 1 and opts.front_photo_source == "upload":
+        pass
+    elif opts.photo_count == 1 and opts.front_photo_source == "reuse_front":
+        photos_service.copy_front_photo_to_all_views(order.task_uuid, new_uuid)
+    else:
+        try:
+            photos_service.require_all_photos(order.task_uuid)
+        except HTTPException as exc:
+            raise HTTPException(400, "Исходники недоступны — восстановите из облака") from exc
+        photos_service.copy_task_photos(order.task_uuid, new_uuid)
+
     return {
         "ok": True,
         "task_uuid": new_uuid,
@@ -710,6 +727,9 @@ async def regenerate_model(
         "tier": order.tier,
         "company_id": order.company_id,
         "source_task_uuid": order.task_uuid,
+        "photo_count": opts.photo_count,
+        "front_photo_source": opts.front_photo_source,
+        "needs_upload": opts.photo_count == 1 and opts.front_photo_source == "upload",
     }
 
 

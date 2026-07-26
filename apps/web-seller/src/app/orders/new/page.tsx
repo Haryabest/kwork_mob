@@ -20,11 +20,12 @@ import {
 } from '@mantine/core';
 import { IconCamera, IconCheck, IconUpload } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
+import { useDisclosure } from '@mantine/hooks';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { SellerShell } from '../../../components/SellerShell';
 import { PageHeader, Surface } from '../../../components/ui';
-import { api, apiMessage } from '../../../services/api';
+import { api, apiMessage, getPromoErrorMeta } from '../../../services/api';
 
 const ANGLES = [
   'Фронт',
@@ -82,6 +83,8 @@ export default function NewOrderPage() {
   const [scaleD, setScaleD] = useState<number | string>(0.2);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [promoWarnOpen, { open: openPromoWarn, close: closePromoWarn }] = useDisclosure(false);
+  const [promoWarnText, setPromoWarnText] = useState('');
 
   const ready = files.every(Boolean);
   const needsAge = category === 'adult' && !ageVerified;
@@ -201,7 +204,12 @@ export default function NewOrderPage() {
       notifications.show({ color: 'teal', message: `Заказ #${order.id}: ${order.status}` });
       router.push(`/orders/${order.id}`);
     } catch (e) {
-      notifications.show({ color: 'red', message: apiMessage(e, String(e)) });
+      const meta = getPromoErrorMeta(e);
+      notifications.show({ color: 'red', message: meta.message });
+      if (meta.showWarning && meta.warningMessage) {
+        setPromoWarnText(meta.warningMessage);
+        openPromoWarn();
+      }
     } finally {
       setBusy(false);
     }
@@ -400,6 +408,13 @@ export default function NewOrderPage() {
             </Button>
             <Button onClick={confirmAgeModal}>Подтвердить</Button>
           </Group>
+        </Stack>
+      </Modal>
+
+      <Modal opened={promoWarnOpen} onClose={closePromoWarn} title="Предупреждение" centered>
+        <Stack>
+          <Text size="sm">{promoWarnText}</Text>
+          <Button onClick={closePromoWarn}>Понятно</Button>
         </Stack>
       </Modal>
     </SellerShell>

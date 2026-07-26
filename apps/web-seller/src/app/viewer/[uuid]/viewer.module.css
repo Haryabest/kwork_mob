@@ -21,57 +21,68 @@
   left: 0;
   right: 0;
   z-index: 20;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
-  align-items: start;
-  gap: 0.5rem;
-  padding: max(0.65rem, env(safe-area-inset-top)) 0.75rem 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  padding-top: max(1rem, env(safe-area-inset-top));
   pointer-events: none;
 }
 
-.backBtn {
+.leftCol {
   pointer-events: auto;
-  justify-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  max-width: min(440px, 58vw);
+}
+
+.actionsCol {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: stretch;
+  width: min(15rem, 34vw);
+  flex-shrink: 0;
 }
 
 .titleBlock {
-  pointer-events: none;
-  text-align: center;
-  padding: 0 0.25rem;
+  pointer-events: auto;
   min-width: 0;
 }
 
 .titleMain {
-  font-size: clamp(0.8rem, 2.4vw, 1rem);
+  font-size: clamp(0.82rem, 2.2vw, 1rem);
   font-weight: 600;
   color: #3d3830;
   line-height: 1.3;
 }
 
 .titleSub {
-  margin-top: 0.2rem;
-  font-size: clamp(0.72rem, 2.1vw, 0.88rem);
+  margin-top: 0.35rem;
+  font-size: clamp(0.72rem, 2vw, 0.86rem);
   color: #6b645a;
   line-height: 1.35;
-  word-break: break-word;
 }
 
-.actions {
-  pointer-events: auto;
-  justify-self: end;
+.nameRow {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 0.35rem;
-  justify-content: flex-end;
-  max-width: 100%;
+  flex-wrap: wrap;
 }
 
 .actionBtn {
   backdrop-filter: blur(8px);
-  background: rgba(255, 252, 247, 0.92) !important;
+  background: rgba(255, 252, 247, 0.94) !important;
   border: 1px solid rgba(61, 56, 48, 0.12) !important;
   color: #3d3830 !important;
   box-shadow: 0 2px 10px rgba(61, 56, 48, 0.08);
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .actionBtn:hover {
@@ -102,31 +113,27 @@
 
 @media (max-width: 768px) {
   .overlayTop {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
-    padding-inline: 0.5rem;
+    flex-direction: column;
+    padding: 0.85rem 1rem;
+    padding-top: max(0.85rem, env(safe-area-inset-top));
   }
 
-  .backBtn {
-    order: 1;
+  .leftCol,
+  .actionsCol {
+    max-width: 100%;
+    width: 100%;
   }
 
-  .titleBlock {
-    order: 2;
-    padding-block: 0.15rem;
-  }
-
-  .actions {
-    order: 3;
-    justify-self: stretch;
-    justify-content: flex-start;
+  .actionsCol {
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 
   .actionBtn {
     flex: 1 1 calc(50% - 0.35rem);
-    min-width: 7.5rem;
-    padding-inline: 0.5rem !important;
-    font-size: 0.78rem !important;
+    min-width: 9rem;
+    width: auto;
+    justify-content: center;
   }
 }
 

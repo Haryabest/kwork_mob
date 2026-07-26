@@ -279,6 +279,17 @@ async def upload_order_photos(
     return await photos_service.upload_files_to_prefix(task_uuid, files)
 
 
+@router.post("/photos/upload-single")
+async def upload_single_order_photo(
+    file: UploadFile = File(...),
+    task_uuid: str = Query(...),
+    user: User = Depends(get_current_db_user),
+):
+    """Одно фото для перегенерации по 1 ракурсу (репликация во все view_XX)."""
+    _ = user
+    return await photos_service.upload_single_replicated(task_uuid, file)
+
+
 @router.post("/create")
 async def create_order(
     body: OrderCreateRequest,

@@ -12,16 +12,7 @@ import { api, apiMessage } from '../../../../services/api';
 
 type Msg = { id: number; body: string; is_staff: boolean; created_at?: string | null };
 
-const STATUS_LABEL: Record<string, string> = {
-  new: 'Новое',
-  in_progress: 'В работе',
-  answered: 'Отвечено',
-  waiting_user: 'Ожидает вас',
-  closed: 'Закрыто',
-  resolved: 'Решено',
-};
-
-export default function TicketPage() {
+import { supportStatusLabel } from '../../../../lib/supportStatus';
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const [status, setStatus] = useState('');
@@ -81,7 +72,7 @@ export default function TicketPage() {
         description={`Обращение #${id}`}
         action={
           <Group gap="sm">
-            <Badge variant="light">{STATUS_LABEL[status] ?? status}</Badge>
+            <Badge variant="light">{supportStatusLabel(status)}</Badge>
             {!closed && (
               <Button variant="light" color="gray" onClick={() => void closeTicket()}>
                 Закрыть
@@ -159,7 +150,7 @@ export default function TicketPage() {
           <Stack gap="sm">
             <Text fw={600}>Детали</Text>
             <Text size="sm" c="#6d6c77">
-              Статус: {STATUS_LABEL[status] ?? status}
+              Статус: {supportStatusLabel(status)}
             </Text>
             {attachments.length > 0 && (
               <>

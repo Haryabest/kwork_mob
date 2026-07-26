@@ -125,6 +125,49 @@ def copy_task_photos(src_uuid: str, dst_uuid: str) -> None:
         )
 
 
+def copy_front_photo_to_all_views(src_uuid: str, dst_uuid: str) -> None:
+    """Перегенерация по 1 фото: view_00 исходника → все 12 ракурсов новой задачи."""
+    bucket = settings.MINIO_BUCKET_PHOTOS
+    src_key = f"{photos_prefix(src_uuid)}{VIEW_NAMES[0]}"
+    if not minio_service.object_exists(bucket, src_key):
+        raise HTTPException(400, "Фронтальное фото (view_00) недоступно в исходниках")
+    for name in VIEW_NAMES:
+        dst_key = f"{photos_prefix(dst_uuid)}{name}"
+        minio_service.client.copy_object(
+            CopySource={"Bucket": bucket, "Key": src_key},
+            Bucket=bucket,
+            Key=dst_key,
+        )
+
+
+async def upload_single_replicated(task_uuid: str, file: UploadFile) -> dict[str, Any]:
+    """Одно фото → view_00 и копия во все ракурсы (single-image pipeline)."""
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Пустой файл")
+    try:
+        minio_service.ensure_buckets()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"MinIO недоступен: {exc}") from exc
+    bucket = settings.MINIO_BUCKET_PHOTOS
+    content_type = file.content_type or "image/jpeg"
+    first_key = view_key(task_uuid, 0)
+    minio_service.upload_bytes(bucket, first_key, data, content_type=content_type)
+    for i in range(1, VIEW_COUNT):
+        key = view_key(task_uuid, i)
+        minio_service.client.copy_object(
+            CopySource={"Bucket": bucket, "Key": first_key},
+            Bucket=bucket,
+            Key=key,
+        )
+    return {
+        "task_uuid": task_uuid,
+        "photos_prefix": photos_prefix(task_uuid),
+        "bucket": bucket,
+        "replicated": VIEW_COUNT,
+    }
+
+
 def delete_task_photos(task_uuid: str) -> dict[str, Any]:
     """Удалить photos/{task_uuid}/ из MinIO (§3.15.4 TTL)."""
     bucket = settings.MINIO_BUCKET_PHOTOS

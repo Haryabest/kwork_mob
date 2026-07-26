@@ -31,23 +31,7 @@ type Ticket = {
   created_at?: string | null;
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  new: 'Новое',
-  in_progress: 'В работе',
-  answered: 'Отвечено',
-  waiting_user: 'Ожидает вас',
-  closed: 'Закрыто',
-  resolved: 'Решено',
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  new: 'blue',
-  in_progress: 'yellow',
-  answered: 'teal',
-  waiting_user: 'orange',
-  closed: 'gray',
-  resolved: 'gray',
-};
+import { SUPPORT_STATUS_COLOR, supportStatusLabel } from '../../lib/supportStatus';
 
 export default function SupportPage() {
   const [faq, setFaq] = useState<FaqItem[]>([]);
@@ -297,8 +281,8 @@ export default function SupportPage() {
                         <Table.Td>{t.category || '—'}</Table.Td>
                         <Table.Td>{t.created_at ? new Date(t.created_at).toLocaleString('ru-RU') : '—'}</Table.Td>
                         <Table.Td>
-                          <Badge variant="light" color={STATUS_COLOR[t.status] ?? 'brand'}>
-                            {STATUS_LABEL[t.status] ?? t.status}
+                          <Badge variant="light" color={SUPPORT_STATUS_COLOR[t.status] ?? 'brand'}>
+                            {supportStatusLabel(t.status)}
                           </Badge>
                         </Table.Td>
                       </Table.Tr>

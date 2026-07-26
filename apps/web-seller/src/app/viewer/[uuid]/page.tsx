@@ -1,8 +1,10 @@
 'use client';
 
 import {
+  ActionIcon,
   Button,
   Divider,
+  FileButton,
   Group,
   Loader,
   Menu,
@@ -16,7 +18,9 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconArrowLeft,
+  IconCheck,
   IconDownload,
+  IconPencil,
   IconRefresh,
   IconSparkles,
   IconStar,
@@ -89,6 +93,11 @@ export default function ViewerPage() {
 
   const [rating, setRating] = useState('5');
   const [regenMode, setRegenMode] = useState<string>('3');
+  const [singlePhotoSource, setSinglePhotoSource] = useState<'reuse_front' | 'upload'>('reuse_front');
+  const [regenPhoto, setRegenPhoto] = useState<File | null>(null);
+  const [nameDraft, setNameDraft] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [savingName, setSavingName] = useState(false);
   const [promocode, setPromocode] = useState('');
   const [promoPreview, setPromoPreview] = useState<PromoPreview | null>(null);
   const [promoWarnOpen, { open: openPromoWarn, close: closePromoWarn }] = useDisclosure(false);
@@ -97,7 +106,7 @@ export default function ViewerPage() {
   const [topupShortage, setTopupShortage] = useState(0);
   const [paying, setPaying] = useState(false);
 
-  const displayName = model?.display_name?.trim() || 'Без названия';
+  const displayName = nameDraft.trim() || model?.display_name?.trim() || 'Без названия';
   const payAmount = promoPreview?.final_amount ?? DEFAULT_PRICE;
 
   const regenHint = useMemo(
@@ -112,6 +121,7 @@ export default function ViewerPage() {
         api.get<{ balance: number }>('/user/me').catch(() => ({ data: { balance: 0 } })),
       ]);
       setModel(modelRes.data);
+      setNameDraft(modelRes.data.display_name?.trim() || '');
       setBalance(meRes.data.balance ?? 0);
     } catch (e) {
       notifications.show({ color: 'red', message: apiMessage(e) });
@@ -189,15 +199,51 @@ export default function ViewerPage() {
     }
   }
 
+  async function saveDisplayName() {
+    const next = nameDraft.trim();
+    if (!next) {
+      notifications.show({ color: 'red', message: 'Название не может быть пустым' });
+      return;
+    }
+    setSavingName(true);
+    try {
+      await api.patch(`/models/${uuid}`, { display_name: next });
+      setModel((prev) => (prev ? { ...prev, display_name: next } : prev));
+      setEditingName(false);
+      notifications.show({ color: 'teal', message: 'Название сохранено' });
+    } catch (e) {
+      notifications.show({ color: 'red', message: apiMessage(e) });
+    } finally {
+      setSavingName(false);
+    }
+  }
+
   async function createRegenOrder() {
+    if (regenMode === '1' && singlePhotoSource === 'upload' && !regenPhoto) {
+      notifications.show({ color: 'red', message: 'Загрузите фото для перегенерации' });
+      return;
+    }
     setBusy(true);
     try {
+      const photoCount = regenMode === '1' ? 1 : 12;
+      const frontSource = regenMode === '1' ? singlePhotoSource : 'copy_all';
       const { data } = await api.post<{
         task_uuid: string;
         category: string;
         tier: string;
         company_id?: number;
-      }>(`/models/${uuid}/regenerate`);
+        needs_upload?: boolean;
+      }>(`/models/${uuid}/regenerate`, {
+        photo_count: photoCount,
+        front_photo_source: frontSource,
+      });
+      if (data.needs_upload && regenPhoto) {
+        const form = new FormData();
+        form.append('file', regenPhoto);
+        await api.post(`/orders/photos/upload-single?task_uuid=${data.task_uuid}`, form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
       const { data: order } = await api.post<{
         id: number;
         status: string;
@@ -208,6 +254,7 @@ export default function ViewerPage() {
         category: data.category,
         tier: data.tier,
         company_id: data.company_id,
+        model_display_name: displayName,
         promocode: promocode.trim() || undefined,
       });
       if (typeof order.balance === 'number') setBalance(order.balance);
@@ -228,7 +275,12 @@ export default function ViewerPage() {
       notifications.show({ color: 'teal', message: `Заказ #${order.id} в очереди` });
       router.push(`/orders/${order.id}`);
     } catch (e) {
-      notifications.show({ color: 'red', message: apiMessage(e) });
+      const meta = getPromoErrorMeta(e);
+      notifications.show({ color: 'red', message: meta.message });
+      if (meta.showWarning && meta.warningMessage) {
+        setPromoWarnText(meta.warningMessage);
+        openPromoWarn();
+      }
     } finally {
       setBusy(false);
     }
@@ -296,6 +348,8 @@ export default function ViewerPage() {
     setPromocode('');
     setPromoPreview(null);
     setRegenMode('3');
+    setSinglePhotoSource('reuse_front');
+    setRegenPhoto(null);
   }
 
   return (
@@ -319,22 +373,62 @@ export default function ViewerPage() {
       </div>
 
       <header className={styles.overlayTop}>
+        <div className={styles.leftCol}>
         <Button
-          className={`${styles.backBtn} ${styles.actionBtn}`}
+          className={styles.actionBtn}
           variant="default"
           size="compact-sm"
           leftSection={<IconArrowLeft size={16} />}
           onClick={() => router.back()}
+          w="fit-content"
         >
           Назад
         </Button>
 
         <div className={styles.titleBlock}>
           <div className={styles.titleMain}>3DVektor · интерактивный просмотр</div>
-          <div className={styles.titleSub}>Название: {displayName}</div>
+          <div className={styles.titleSub}>Название модели</div>
+          {editingName ? (
+            <Group gap={6} mt={6} wrap="nowrap">
+              <TextInput
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.currentTarget.value)}
+                size="xs"
+                maxLength={120}
+                style={{ flex: 1 }}
+              />
+              <ActionIcon
+                variant="light"
+                color="teal"
+                loading={savingName}
+                aria-label="Сохранить"
+                onClick={() => void saveDisplayName()}
+              >
+                <IconCheck size={16} />
+              </ActionIcon>
+            </Group>
+          ) : (
+            <Group gap={6} mt={6} className={styles.nameRow}>
+              <Text fw={600} size="sm" style={{ wordBreak: 'break-word' }}>
+                {displayName}
+              </Text>
+              <ActionIcon
+                variant="subtle"
+                size="sm"
+                aria-label="Редактировать название"
+                onClick={() => {
+                  setNameDraft(model?.display_name?.trim() || displayName);
+                  setEditingName(true);
+                }}
+              >
+                <IconPencil size={14} />
+              </ActionIcon>
+            </Group>
+          )}
+        </div>
         </div>
 
-        <div className={styles.actions}>
+        <div className={styles.actionsCol}>
           <Menu shadow="md" width={280} position="bottom-end" withinPortal>
             <Menu.Target>
               <Button
@@ -448,6 +542,35 @@ export default function ViewerPage() {
           <Text size="sm" c="dimmed">
             {regenHint}
           </Text>
+
+          {regenMode === '1' && (
+            <Stack gap="sm">
+              <Text size="sm" fw={600}>
+                Источник фото
+              </Text>
+              <Radio.Group
+                value={singlePhotoSource}
+                onChange={(v) => setSinglePhotoSource(v as 'reuse_front' | 'upload')}
+              >
+                <Stack gap="xs">
+                  <Radio value="reuse_front" label="Использовать фронтальное фото из исходников" />
+                  <Radio value="upload" label="Загрузить новое фото" />
+                </Stack>
+              </Radio.Group>
+              {singlePhotoSource === 'upload' && (
+                <FileButton
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(file) => setRegenPhoto(file)}
+                >
+                  {(props) => (
+                    <Button {...props} variant="light">
+                      {regenPhoto ? regenPhoto.name : 'Выбрать файл'}
+                    </Button>
+                  )}
+                </FileButton>
+              )}
+            </Stack>
+          )}
 
           <Divider />
 
