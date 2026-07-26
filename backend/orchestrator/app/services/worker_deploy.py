@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -244,6 +245,18 @@ async def save_config(payload: dict[str, Any], *, user_id: int | None = None) ->
     return await get_config(masked=True)
 
 
+def _docker_bin() -> str | None:
+    for cand in (os.getenv("DOCKER_BIN", "").strip(), "docker", "/usr/bin/docker", "/usr/local/bin/docker"):
+        if not cand:
+            continue
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+        found = shutil.which(cand)
+        if found:
+            return found
+    return None
+
+
 def docker_cli_status() -> dict[str, object]:
     if not settings.WORKER_DEPLOY_ENABLED:
         return {
@@ -251,20 +264,25 @@ def docker_cli_status() -> dict[str, object]:
             "reason": "WORKER_DEPLOY_ENABLED=0",
             "hint": "Задайте WORKER_DEPLOY_ENABLED=1 в .env и перезапустите orchestrator",
         }
+    docker = _docker_bin()
+    if not docker:
+        return {
+            "available": False,
+            "reason": "docker_not_found",
+            "hint": (
+                "docker CLI не найден в orchestrator. "
+                "Выполните: docker compose build orchestrator && docker compose up -d orchestrator. "
+                "Либо смонтируйте /usr/bin/docker с хоста (см. docker-compose.yml)."
+            ),
+        }
     try:
         proc = subprocess.run(
-            ["docker", "info"],
+            [docker, "info"],
             capture_output=True,
             text=True,
             timeout=15,
             check=False,
         )
-    except FileNotFoundError:
-        return {
-            "available": False,
-            "reason": "docker_not_found",
-            "hint": "Пересоберите образ orchestrator (Dockerfile ставит docker.io)",
-        }
     except (subprocess.TimeoutExpired, OSError) as exc:
         return {"available": False, "reason": "docker_error", "hint": str(exc)[:200]}
     if proc.returncode == 0:
@@ -283,14 +301,15 @@ def docker_cli_available() -> bool:
 
 def _compose_base_cmd() -> list[str]:
     """docker compose (v2 plugin) или docker-compose (v1)."""
+    docker = _docker_bin() or "docker"
     proc = subprocess.run(
-        ["docker", "compose", "version"],
+        [docker, "compose", "version"],
         capture_output=True,
         timeout=10,
         check=False,
     )
     if proc.returncode == 0:
-        return ["docker", "compose"]
+        return [docker, "compose"]
     legacy = subprocess.run(
         ["docker-compose", "version"],
         capture_output=True,
@@ -299,7 +318,7 @@ def _compose_base_cmd() -> list[str]:
     )
     if legacy.returncode == 0:
         return ["docker-compose"]
-    return ["docker", "compose"]
+    return [docker, "compose"]
 
 
 def _run(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess[str]:
@@ -397,8 +416,9 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
 
 
 def _container_env_map(container_name: str) -> dict[str, str]:
+    docker = _docker_bin() or "docker"
     proc = _run(
-        ["docker", "inspect", container_name, "--format", "{{json .Config.Env}}"],
+        [docker, "inspect", container_name, "--format", "{{json .Config.Env}}"],
         timeout=30,
     )
     if proc.returncode != 0:
@@ -416,9 +436,10 @@ def _container_env_map(container_name: str) -> dict[str, str]:
 
 
 def _container_status(container_name: str) -> dict[str, Any]:
+    docker = _docker_bin() or "docker"
     proc = _run(
         [
-            "docker",
+            docker,
             "inspect",
             container_name,
             "--format",
@@ -527,7 +548,8 @@ def fetch_logs(*, tail: int = 300) -> dict[str, Any]:
         raise HTTPException(503, "Docker CLI недоступен")
     tail = max(50, min(int(tail), 2000))
     name = "kwork-worker"
-    proc = _run(["docker", "logs", "--tail", str(tail), name], timeout=60)
+    docker = _docker_bin() or "docker"
+    proc = _run([docker, "logs", "--tail", str(tail), name], timeout=60)
     text = (proc.stdout or "") + (proc.stderr or "")
     lines = text.splitlines()
     now = datetime.now(timezone.utc).isoformat()
