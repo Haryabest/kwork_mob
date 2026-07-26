@@ -27,7 +27,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModelViewer3D } from '../../../components/ModelViewer3D';
 import { loadModelPreviewBlobUrl, revokeModelPreviewUrl } from '../../../lib/modelPreview';
-import { api, apiMessage } from '../../../services/api';
+import { api, apiMessage, getPromoErrorMeta } from '../../../services/api';
 import styles from './viewer.module.css';
 
 type ModelMeta = {
@@ -91,6 +91,8 @@ export default function ViewerPage() {
   const [regenMode, setRegenMode] = useState<string>('3');
   const [promocode, setPromocode] = useState('');
   const [promoPreview, setPromoPreview] = useState<PromoPreview | null>(null);
+  const [promoWarnOpen, { open: openPromoWarn, close: closePromoWarn }] = useDisclosure(false);
+  const [promoWarnText, setPromoWarnText] = useState('');
   const [topupAmount, setTopupAmount] = useState<number | string>(DEFAULT_PRICE);
   const [topupShortage, setTopupShortage] = useState(0);
   const [paying, setPaying] = useState(false);
@@ -178,7 +180,12 @@ export default function ViewerPage() {
       });
     } catch (e) {
       setPromoPreview(null);
-      notifications.show({ color: 'red', message: apiMessage(e) });
+      const meta = getPromoErrorMeta(e);
+      notifications.show({ color: 'red', message: meta.message });
+      if (meta.showWarning && meta.warningMessage) {
+        setPromoWarnText(meta.warningMessage);
+        openPromoWarn();
+      }
     }
   }
 
@@ -505,6 +512,13 @@ export default function ViewerPage() {
           <Button component={Link} href="/balance" variant="subtle" size="xs">
             Перейти в раздел «Баланс»
           </Button>
+        </Stack>
+      </Modal>
+
+      <Modal opened={promoWarnOpen} onClose={closePromoWarn} title="Предупреждение" centered>
+        <Stack>
+          <Text size="sm">{promoWarnText}</Text>
+          <Button onClick={closePromoWarn}>Понятно</Button>
         </Stack>
       </Modal>
     </div>

@@ -36,6 +36,8 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     age_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    promo_failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    promo_blocked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

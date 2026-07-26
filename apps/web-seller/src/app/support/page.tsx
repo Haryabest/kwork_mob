@@ -6,13 +6,12 @@ import {
   Button,
   FileButton,
   Group,
-  Select,
   Stack,
   Table,
+  Tabs,
   Text,
   TextInput,
   Textarea,
-  Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
@@ -50,7 +49,6 @@ const STATUS_COLOR: Record<string, string> = {
   resolved: 'gray',
 };
 
-/** §20.7 Поддержка и FAQ */
 export default function SupportPage() {
   const [faq, setFaq] = useState<FaqItem[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -61,6 +59,7 @@ export default function SupportPage() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<string | null>('faq');
 
   async function load() {
     const [faqRes, ticketsRes] = await Promise.all([
@@ -147,146 +146,170 @@ export default function SupportPage() {
 
   return (
     <SellerShell>
-      <PageHeader title="Поддержка и FAQ" description="База знаний, обращения и диалоги со службой поддержки" />
+      <PageHeader
+        title="Поддержка"
+        description="База знаний, новые обращения и история диалогов со службой поддержки"
+      />
 
-      <div
-        style={{
-          display: 'grid',
-          gap: '1.5rem',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-        }}
-      >
-        <Surface style={{ gridColumn: '1 / -1' }}>
-          <Group justify="space-between" mb="md" wrap="wrap" gap="md">
-            <Title order={4}>Частые вопросы</Title>
-            <TextInput
-              placeholder="Поиск по FAQ"
-              value={search}
-              onChange={(e) => setSearch(e.currentTarget.value)}
-              maw={280}
-              w="100%"
-            />
-          </Group>
-          {filteredFaq.length === 0 ? (
-            <EmptyState title="FAQ пока пуст" hint="Вопросы появятся после публикации в staff-панели" />
-          ) : (
-            <Accordion variant="separated" radius="md">
-              {filteredFaq.map((item) => (
-                <Accordion.Item key={item.id} value={String(item.id)}>
-                  <Accordion.Control>
-                    <Text size="xs" c="#6d6c77" span>
-                      {item.category} ·{' '}
-                    </Text>
-                    {item.question}
-                  </Accordion.Control>
-                  <Accordion.Panel>
-                    <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                      {item.answer}
-                    </Text>
-                    <Button
-                      mt="sm"
-                      variant="light"
-                      size="xs"
-                      onClick={() => {
-                        setSubject(item.question.slice(0, 200));
-                        setCategory(item.category || 'Другое');
-                      }}
-                    >
-                      Задать вопрос по теме
-                    </Button>
-                  </Accordion.Panel>
-                </Accordion.Item>
-              ))}
-            </Accordion>
-          )}
-        </Surface>
+      <Surface>
+        <Tabs value={tab} onChange={setTab}>
+          <Tabs.List mb="lg">
+            <Tabs.Tab value="faq">Частые вопросы</Tabs.Tab>
+            <Tabs.Tab value="new">Новое обращение</Tabs.Tab>
+            <Tabs.Tab value="tickets">
+              Мои обращения{tickets.length ? ` (${tickets.length})` : ''}
+            </Tabs.Tab>
+          </Tabs.List>
 
-        <Surface>
-          <Title order={4} mb="md">
-            Новое обращение
-          </Title>
-          <Stack>
-            <TextInput label="Тема" required value={subject} onChange={(e) => setSubject(e.currentTarget.value)} size="md" />
-            <Select
-              label="Категория"
-              data={['Заказ', 'Оплата', 'Модель', 'Другое']}
-              value={category}
-              onChange={setCategory}
-              size="md"
-            />
-            <Textarea
-              label="Сообщение"
-              minRows={4}
-              required
-              value={message}
-              onChange={(e) => setMessage(e.currentTarget.value)}
-              size="md"
-            />
-            <Group>
-              <FileButton onChange={onFiles} accept="image/jpeg,image/png,application/pdf" multiple>
-                {(props) => (
-                  <Button {...props} variant="light" loading={uploading}>
-                    Скриншоты / PDF
-                  </Button>
-                )}
-              </FileButton>
-              <Text size="xs" c="dimmed">
-                до 5 файлов, ≤5 МБ
+          <Tabs.Panel value="faq">
+            <Group justify="space-between" mb="md" wrap="wrap">
+              <Text size="sm" c="#6d6c77" maw={520}>
+                Ответы на популярные вопросы. Не нашли ответ — создайте обращение во вкладке «Новое обращение».
               </Text>
+              <TextInput
+                placeholder="Поиск по FAQ"
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+                maw={320}
+                w="100%"
+              />
             </Group>
-            {attachments.length > 0 && (
-              <Stack gap={4}>
-                {attachments.map((a) => (
-                  <Text key={a.key} size="sm">
-                    {a.filename || a.key}
-                  </Text>
+            {filteredFaq.length === 0 ? (
+              <EmptyState title="FAQ пока пуст" hint="Вопросы появятся после публикации в staff-панели" />
+            ) : (
+              <Accordion variant="separated" radius="md">
+                {filteredFaq.map((item) => (
+                  <Accordion.Item key={item.id} value={String(item.id)}>
+                    <Accordion.Control>
+                      <Text size="xs" c="#6d6c77" span>
+                        {item.category} ·{' '}
+                      </Text>
+                      {item.question}
+                    </Accordion.Control>
+                    <Accordion.Panel>
+                      <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                        {item.answer}
+                      </Text>
+                      <Button
+                        mt="sm"
+                        variant="light"
+                        size="xs"
+                        onClick={() => {
+                          setSubject(item.question.slice(0, 200));
+                          setCategory(item.category || 'Другое');
+                          setTab('new');
+                        }}
+                      >
+                        Задать вопрос по теме
+                      </Button>
+                    </Accordion.Panel>
+                  </Accordion.Item>
                 ))}
-              </Stack>
+              </Accordion>
             )}
-            <Button w={{ base: '100%', sm: 'fit-content' }} loading={loading} onClick={() => void submitTicket()}>
-              Отправить
-            </Button>
-          </Stack>
-        </Surface>
+          </Tabs.Panel>
 
-        <Surface>
-          <Title order={4} mb="md">
-            Мои обращения
-          </Title>
-          {tickets.length === 0 ? (
-            <EmptyState title="Обращений пока нет" hint="Задайте вопрос — ответим в кабинете и на email" />
-          ) : (
-            <ScrollTable>
-              <Table verticalSpacing="md" miw={420}>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Тема</Table.Th>
-                    <Table.Th>Создано</Table.Th>
-                    <Table.Th>Статус</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {tickets.map((t) => (
-                    <Table.Tr key={t.id}>
-                      <Table.Td>
-                        <AnchorLike href={`/support/tickets/${t.id}`}>
-                          {t.subject || t.message.slice(0, 60)}
-                        </AnchorLike>
-                      </Table.Td>
-                      <Table.Td>{t.created_at ? new Date(t.created_at).toLocaleString('ru-RU') : '—'}</Table.Td>
-                      <Table.Td>
-                        <Badge variant="light" color={STATUS_COLOR[t.status] ?? 'brand'}>
-                          {STATUS_LABEL[t.status] ?? t.status}
-                        </Badge>
-                      </Table.Td>
+          <Tabs.Panel value="new">
+            <div
+              style={{
+                display: 'grid',
+                gap: '1.25rem',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              }}
+            >
+              <Stack gap="md">
+                <TextInput
+                  label="Тема"
+                  required
+                  value={subject}
+                  onChange={(e) => setSubject(e.currentTarget.value)}
+                />
+                <TextInput
+                  label="Категория"
+                  value={category || ''}
+                  onChange={(e) => setCategory(e.currentTarget.value || null)}
+                />
+                <Textarea
+                  label="Сообщение"
+                  minRows={8}
+                  required
+                  value={message}
+                  onChange={(e) => setMessage(e.currentTarget.value)}
+                />
+              </Stack>
+              <Stack gap="md">
+                <Text fw={600}>Вложения</Text>
+                <Text size="sm" c="#6d6c77">
+                  До 5 файлов, каждый не более 5 МБ. Форматы: JPEG, PNG, PDF.
+                </Text>
+                <Group>
+                  <FileButton onChange={onFiles} accept="image/jpeg,image/png,application/pdf" multiple>
+                    {(props) => (
+                      <Button {...props} variant="light" loading={uploading}>
+                        Прикрепить файлы
+                      </Button>
+                    )}
+                  </FileButton>
+                </Group>
+                {attachments.length > 0 && (
+                  <Stack gap={4}>
+                    {attachments.map((a) => (
+                      <Text key={a.key} size="sm">
+                        {a.filename || a.key}
+                      </Text>
+                    ))}
+                  </Stack>
+                )}
+                <Button loading={loading} onClick={() => void submitTicket()} w={{ base: '100%', sm: 240 }}>
+                  Отправить обращение
+                </Button>
+              </Stack>
+            </div>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="tickets">
+            {tickets.length === 0 ? (
+              <Stack align="center" py="xl" gap="md">
+                <EmptyState title="Обращений пока нет" hint="Задайте вопрос во вкладке «Новое обращение»" />
+                <Button variant="light" onClick={() => setTab('new')}>
+                  Создать обращение
+                </Button>
+              </Stack>
+            ) : (
+              <ScrollTable>
+                <Table verticalSpacing="md" miw={640}>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Тема</Table.Th>
+                      <Table.Th>Категория</Table.Th>
+                      <Table.Th>Создано</Table.Th>
+                      <Table.Th>Статус</Table.Th>
                     </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </ScrollTable>
-          )}
-        </Surface>
-      </div>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {tickets.map((t) => (
+                      <Table.Tr key={t.id}>
+                        <Table.Td>
+                          <AnchorLike href={`/support/tickets/${t.id}`}>
+                            {t.subject || t.message.slice(0, 60)}
+                          </AnchorLike>
+                        </Table.Td>
+                        <Table.Td>{t.category || '—'}</Table.Td>
+                        <Table.Td>{t.created_at ? new Date(t.created_at).toLocaleString('ru-RU') : '—'}</Table.Td>
+                        <Table.Td>
+                          <Badge variant="light" color={STATUS_COLOR[t.status] ?? 'brand'}>
+                            {STATUS_LABEL[t.status] ?? t.status}
+                          </Badge>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </ScrollTable>
+            )}
+          </Tabs.Panel>
+        </Tabs>
+      </Surface>
     </SellerShell>
   );
 }

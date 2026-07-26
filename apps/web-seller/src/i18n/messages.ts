@@ -11,7 +11,7 @@ const ru: Messages = {
     settings: 'Настройки',
   },
   shell: {
-    sellerCabinet: 'Кабинет селлера',
+    sellerCabinet: 'Личный кабинет',
     notifications: 'Уведомления',
     personalAccount: 'Личный кабинет',
     settings: 'Настройки',

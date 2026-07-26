@@ -1203,7 +1203,8 @@ async def company_transactions(
         tx_limit = limit
 
     rows = (await db.scalars(stmt.offset(tx_offset).limit(tx_limit))).all()
-    tx_items = [bal.transaction_to_dict(t, include_user=True) for t in rows]
+    order_names = await bal.load_order_names_for_transactions(db, rows)
+    tx_items = [bal.transaction_to_dict(t, include_user=True, order_names=order_names) for t in rows]
 
     if offset < pending_count:
         page = pending_items[offset : offset + limit]

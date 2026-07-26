@@ -69,6 +69,7 @@ export default function NewOrderPage() {
   const [files, setFiles] = useState<(File | null)[]>(Array(12).fill(null));
   const [category, setCategory] = useState<string | null>('other');
   const [tier, setTier] = useState<string | null>('small');
+  const [modelName, setModelName] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [ageVerified, setAgeVerified] = useState(false);
   const [ageModal, setAgeModal] = useState(false);
@@ -131,6 +132,10 @@ export default function NewOrderPage() {
 
   async function submit() {
     if (!ready || !category || !tier) return;
+    if (!modelName.trim()) {
+      notifications.show({ color: 'red', message: 'Укажите название модели' });
+      return;
+    }
     if (needsAge && !birthDate) {
       setAgeModal(true);
       notifications.show({ color: 'red', message: 'Для 18+ укажите дату рождения' });
@@ -159,6 +164,7 @@ export default function NewOrderPage() {
       }>('/orders/create', {
         category,
         tier,
+        model_display_name: modelName.trim(),
         task_uuid: prep.task_uuid,
         photos_prefix: prep.photos_prefix,
         forbidden_categories: [],
@@ -232,6 +238,15 @@ export default function NewOrderPage() {
               ]}
             />
           </Group>
+          <TextInput
+            label="Название модели"
+            placeholder="Например: Кроссовки Nike Air Max"
+            value={modelName}
+            onChange={(e) => setModelName(e.currentTarget.value)}
+            required
+            maxLength={120}
+            maw={480}
+          />
           {category === 'adult' && (
             <>
               {ageVerified ? (

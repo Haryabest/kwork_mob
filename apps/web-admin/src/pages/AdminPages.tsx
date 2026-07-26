@@ -823,6 +823,8 @@ export function UsersPage() {
       status: string;
       avg_rating?: number | null;
       last_activity?: string | null;
+      promo_input_blocked?: boolean;
+      promo_failed_attempts?: number;
     }>
   >([]);
   const [q, setQ] = useState('');
@@ -846,12 +848,23 @@ export function UsersPage() {
         <TextInput placeholder="Поиск по ID, эл. почта" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
       </Group>
       <VirtualShellTable
-        headers={['ID', 'Пользователь', 'Эл. почта', 'Рейтинг', 'Активность', 'Статус', '']}
+        headers={['ID', 'Пользователь', 'Эл. почта', 'Рейтинг', 'Промокод', 'Активность', 'Статус', '']}
         rows={filtered.map((user) => [
           String(user.id),
           user.full_name || '—',
           user.email,
           user.avg_rating != null ? String(user.avg_rating) : '—',
+          user.promo_input_blocked ? (
+            <Badge key={`p-${user.id}`} color="orange" variant="light">
+              Блок ввода
+            </Badge>
+          ) : user.promo_failed_attempts ? (
+            <Text key={`p-${user.id}`} size="sm">
+              {user.promo_failed_attempts}/3
+            </Text>
+          ) : (
+            '—'
+          ),
           user.last_activity ? new Date(user.last_activity).toLocaleString('ru-RU') : '—',
           <StateBadge key={user.id} value={user.status} color={user.status?.includes('active') ? 'teal' : 'orange'} />,
           <Button key={`b-${user.id}`} component={Link} to={`/users/${user.id}`} size="xs" variant="subtle">
@@ -872,6 +885,9 @@ export function UserDetailPage() {
     status: string;
     balance: number;
     orders_count: number;
+    promo_input_blocked?: boolean;
+    promo_failed_attempts?: number;
+    promo_blocked_until?: string | null;
     created_at?: string | null;
     orders: Array<{ id: number; status: string; amount: number; created_at?: string | null }>;
   } | null>(null);
@@ -909,7 +925,28 @@ export function UserDetailPage() {
               {user.email} · {user.created_at ? new Date(user.created_at).toLocaleDateString('ru-RU') : '—'}
             </Text>
             <StateBadge value={user.status} color={user.status?.includes('active') ? 'teal' : 'orange'} />
+            {user.promo_input_blocked && (
+              <Badge color="orange" variant="light">
+                Промокод заблокирован до{' '}
+                {user.promo_blocked_until
+                  ? new Date(user.promo_blocked_until).toLocaleString('ru-RU')
+                  : '—'}
+              </Badge>
+            )}
             <Group>
+              {user.promo_input_blocked && (
+                <Button
+                  color="teal"
+                  variant="light"
+                  onClick={async () => {
+                    await api.post(`/admin/users/${user.id}/promo-unban`);
+                    await load();
+                    notifications.show({ color: 'teal', message: 'Ограничение на промокод снято' });
+                  }}
+                >
+                  Разблокировать промокод
+                </Button>
+              )}
               <Button
                 color="orange"
                 variant="light"

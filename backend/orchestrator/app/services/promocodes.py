@@ -6,7 +6,7 @@ import base64
 import hashlib
 import secrets
 import string
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import bcrypt
@@ -89,6 +89,50 @@ async def find_promocode(db: AsyncSession, plain: str) -> Promocode | None:
     return None
 
 
+PROMO_WARNING_MESSAGE = (
+    "У вас осталась одна из трёх попыток ввести корректный промокод. "
+    "В случае неудачи вам может быть недоступен ввод промокода на 30 дней."
+)
+PROMO_BLOCK_DAYS = 30
+PROMO_MAX_ATTEMPTS = 3
+
+
+def assert_promo_input_allowed(user: User) -> None:
+    now = datetime.now(timezone.utc)
+    blocked_until = user.promo_blocked_until
+    if blocked_until and blocked_until > now:
+        until = blocked_until.astimezone(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+        raise HTTPException(
+            403,
+            f"Ввод промокода временно недоступен до {until}. Обратитесь в поддержку.",
+        )
+
+
+async def record_promo_failure(db: AsyncSession, user: User) -> dict[str, Any]:
+    """Учесть неудачную попытку; вернуть метаданные для UI."""
+    assert_promo_input_allowed(user)
+    attempts = int(user.promo_failed_attempts or 0) + 1
+    user.promo_failed_attempts = attempts
+    out: dict[str, Any] = {
+        "failed_attempts": attempts,
+        "show_warning": attempts == 2,
+        "warning_message": PROMO_WARNING_MESSAGE if attempts == 2 else None,
+        "blocked": False,
+    }
+    if attempts >= PROMO_MAX_ATTEMPTS:
+        user.promo_blocked_until = datetime.now(timezone.utc) + timedelta(days=PROMO_BLOCK_DAYS)
+        out["blocked"] = True
+        out["blocked_until"] = user.promo_blocked_until.isoformat()
+    await db.flush()
+    return out
+
+
+async def reset_promo_attempts(db: AsyncSession, user: User) -> None:
+    user.promo_failed_attempts = 0
+    user.promo_blocked_until = None
+    await db.flush()
+
+
 async def validate_for_user(
     db: AsyncSession,
     *,
@@ -97,20 +141,30 @@ async def validate_for_user(
     tier: str,
     company_id: int | None = None,
 ) -> dict[str, Any]:
+    assert_promo_input_allowed(user)
     promo = await find_promocode(db, plain)
     if not promo:
-        raise HTTPException(404, "Промокод не найден или неактивен")
+        meta = await record_promo_failure(db, user)
+        detail: dict[str, Any] = {"message": "Промокод не найден или неактивен", **meta}
+        raise HTTPException(404, detail=detail)
     now = datetime.now(timezone.utc)
     if promo.expires_at and promo.expires_at < now:
-        raise HTTPException(400, "Срок действия промокода истёк")
+        meta = await record_promo_failure(db, user)
+        raise HTTPException(400, detail={"message": "Срок действия промокода истёк", **meta})
     if promo.max_uses is not None and promo.used_count >= promo.max_uses:
-        raise HTTPException(400, "Лимит использований промокода исчерпан")
+        meta = await record_promo_failure(db, user)
+        raise HTTPException(400, detail={"message": "Лимит использований промокода исчерпан", **meta})
     if promo.tier and promo.tier != tier:
-        raise HTTPException(400, f"Промокод только для тарифа {promo.tier}")
+        meta = await record_promo_failure(db, user)
+        raise HTTPException(400, detail={"message": f"Промокод только для тарифа {promo.tier}", **meta})
     if promo.user_id and promo.user_id != user.id:
-        raise HTTPException(403, "Промокод персональный — недоступен этому пользователю")
+        meta = await record_promo_failure(db, user)
+        raise HTTPException(403, detail={"message": "Промокод персональный — недоступен этому пользователю", **meta})
     if promo.company_id and company_id and promo.company_id != company_id:
-        raise HTTPException(403, "Промокод привязан к другой компании")
+        meta = await record_promo_failure(db, user)
+        raise HTTPException(403, detail={"message": "Промокод привязан к другой компании", **meta})
+    if user.promo_failed_attempts:
+        await reset_promo_attempts(db, user)
     return {
         "id": promo.id,
         "code_prefix": promo.code_prefix,

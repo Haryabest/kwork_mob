@@ -1,13 +1,13 @@
 'use client';
 
-import { ActionIcon, Badge, Button, Card, Group, Stack, Text, Textarea, Paper, Anchor } from '@mantine/core';
+import { ActionIcon, Badge, Button, Group, Paper, Stack, Text, Textarea } from '@mantine/core';
 import { IconSend } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { SellerShell } from '../../../../components/SellerShell';
-import { PageHeader } from '../../../../components/ui';
+import { PageHeader, Surface } from '../../../../components/ui';
 import { api, apiMessage } from '../../../../services/api';
 
 type Msg = { id: number; body: string; is_staff: boolean; created_at?: string | null };
@@ -88,65 +88,56 @@ export default function TicketPage() {
               </Button>
             )}
             <Button component={Link} href="/support" variant="default">
-              К списку
+              К поддержке
             </Button>
           </Group>
         }
       />
-      <Stack gap="lg">
-        {attachments.length > 0 && (
-          <Card withBorder>
-            <Text fw={600} mb="xs">
-              Вложения
-            </Text>
-            <Stack gap={4}>
-              {attachments.map((url) => (
-                <Anchor key={url} href={url} target="_blank" rel="noreferrer" size="sm">
-                  {url.split('/').pop() || url}
-                </Anchor>
-              ))}
-            </Stack>
-          </Card>
-        )}
-        <Card withBorder mih={380}>
-          <Stack justify="space-between" h="100%" gap="md">
-            <Stack gap="sm">
-              {messages.length === 0 ? (
-                <Text c="dimmed" ta="center" py="xl">
-                  Сообщений пока нет
-                </Text>
-              ) : (
-                messages.map((m) => (
-                  <Paper
-                    key={m.id}
-                    p="sm"
-                    radius="md"
-                    bg={m.is_staff ? 'brand.0' : 'gray.0'}
-                    style={{ alignSelf: m.is_staff ? 'flex-start' : 'flex-end', maxWidth: '85%' }}
-                  >
-                    <Text size="xs" c="dimmed" mb={4}>
-                      {m.is_staff ? 'Поддержка' : 'Вы'}
-                      {m.created_at ? ` · ${new Date(m.created_at).toLocaleString('ru-RU')}` : ''}
-                    </Text>
-                    <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-                      {m.body}
-                    </Text>
-                  </Paper>
-                ))
-              )}
-            </Stack>
+
+      <div
+        style={{
+          display: 'grid',
+          gap: '1.25rem',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        }}
+      >
+        <Surface>
+          <Stack gap="md" mih={420}>
+            {messages.length === 0 ? (
+              <Text c="dimmed" ta="center" py="xl">
+                Сообщений пока нет
+              </Text>
+            ) : (
+              messages.map((m) => (
+                <Paper
+                  key={m.id}
+                  p="md"
+                  radius="md"
+                  bg={m.is_staff ? 'brand.0' : 'gray.0'}
+                  style={{ alignSelf: m.is_staff ? 'flex-start' : 'flex-end', maxWidth: '85%' }}
+                >
+                  <Text size="xs" c="dimmed" mb={4}>
+                    {m.is_staff ? 'Поддержка' : 'Вы'}
+                    {m.created_at ? ` · ${new Date(m.created_at).toLocaleString('ru-RU')}` : ''}
+                  </Text>
+                  <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                    {m.body}
+                  </Text>
+                </Paper>
+              ))
+            )}
             {!closed ? (
-              <Group align="end">
+              <Group align="flex-end" mt="auto" pt="md">
                 <Textarea
                   placeholder="Уточняющий вопрос…"
                   autosize
-                  minRows={2}
+                  minRows={3}
                   style={{ flex: 1 }}
                   value={text}
                   onChange={(e) => setText(e.currentTarget.value)}
                 />
                 <ActionIcon
-                  size="lg"
+                  size="xl"
                   color="brand"
                   aria-label="Отправить"
                   loading={sending}
@@ -157,13 +148,34 @@ export default function TicketPage() {
                 </ActionIcon>
               </Group>
             ) : (
-              <Text size="sm" c="dimmed">
+              <Text size="sm" c="dimmed" mt="auto">
                 Обращение закрыто — новые сообщения недоступны
               </Text>
             )}
           </Stack>
-        </Card>
-      </Stack>
+        </Surface>
+
+        <Surface>
+          <Stack gap="sm">
+            <Text fw={600}>Детали</Text>
+            <Text size="sm" c="#6d6c77">
+              Статус: {STATUS_LABEL[status] ?? status}
+            </Text>
+            {attachments.length > 0 && (
+              <>
+                <Text fw={600} mt="sm">
+                  Вложения
+                </Text>
+                {attachments.map((url) => (
+                  <Text key={url} component="a" href={url} target="_blank" rel="noreferrer" size="sm" c="brand">
+                    {url.split('/').pop() || url}
+                  </Text>
+                ))}
+              </>
+            )}
+          </Stack>
+        </Surface>
+      </div>
     </SellerShell>
   );
 }

@@ -30,6 +30,7 @@ type Tx = {
   user_id?: number;
   amount: number;
   type: string;
+  type_label?: string;
   description?: string;
   created_at?: string;
   status?: string;
@@ -52,6 +53,16 @@ const TX_TYPE_OPTIONS = [
   { value: 'charge', label: 'Списания' },
   { value: 'refund', label: 'Возвраты' },
 ];
+
+const TX_TYPE_LABELS: Record<string, string> = {
+  topup: 'Пополнение',
+  charge: 'Списание',
+  refund: 'Возврат',
+};
+
+function txTypeLabel(type: string, typeLabel?: string) {
+  return typeLabel || TX_TYPE_LABELS[type] || type;
+}
 
 function txStatusColor(status?: string) {
   if (status === 'failed') return 'red';
@@ -503,7 +514,7 @@ export default function BalancePage() {
               />
             )}
             <Select
-              label="На странице §20.3.4"
+              label="На странице"
               data={[
                 { value: '20', label: '20' },
                 { value: '50', label: '50' },
@@ -517,7 +528,7 @@ export default function BalancePage() {
 
           <Group mb="md" align="flex-end">
             <Select
-              label="Представления §20.3.4"
+              label="Представления"
               placeholder="Выберите"
               clearable
               value={presetId}
@@ -548,7 +559,7 @@ export default function BalancePage() {
                     {corporate && canFilterAuthors && <Table.Th>Сотрудник</Table.Th>}
                     <Table.Th>Тип</Table.Th>
                     <Table.Th>Сумма</Table.Th>
-                    <Table.Th>Статус §20.3.4</Table.Th>
+                    <Table.Th>Статус</Table.Th>
                     <Table.Th>Описание</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -570,7 +581,7 @@ export default function BalancePage() {
                       )}
                       <Table.Td>
                         <Badge variant="light" color="brand">
-                          {t.type}
+                          {txTypeLabel(t.type, t.type_label)}
                         </Badge>
                       </Table.Td>
                       <Table.Td fw={700} c={t.amount >= 0 ? 'teal' : 'red'}>

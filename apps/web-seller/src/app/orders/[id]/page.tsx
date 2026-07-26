@@ -7,6 +7,7 @@ import {
   Center,
   Group,
   Loader,
+  Progress,
   Stack,
   Text,
   Title,
@@ -26,6 +27,7 @@ type OrderDetail = {
   tier: string;
   status: string;
   amount: number;
+  model_display_name?: string | null;
   created_at?: string;
   queue_position?: number | null;
   ewt_sec?: number | null;
@@ -52,6 +54,8 @@ export default function OrderDetailPage() {
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState(false);
   const [lastEvent, setLastEvent] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [pipelineStep, setPipelineStep] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState<'invoice' | 'act' | null>(null);
   const userIdRef = useRef<number | null>(null);
 
@@ -99,9 +103,16 @@ export default function OrderDetailPage() {
               queue_position?: number;
               glb_url?: string;
               error?: string;
+              progress?: number;
+              pipeline_step?: string;
             };
             if (msg.type === 'order_status' && Number(msg.order_id) === Number(id)) {
               setLastEvent(`${msg.status} · ${new Date().toLocaleTimeString('ru-RU')}`);
+              if (typeof msg.progress === 'number') {
+                setProgress(Math.max(0, Math.min(100, msg.progress)));
+              }
+              if (msg.pipeline_step) setPipelineStep(msg.pipeline_step);
+              if (msg.status === 'completed') setProgress(100);
               setOrder((prev) =>
                 prev
                   ? {
@@ -206,7 +217,7 @@ export default function OrderDetailPage() {
   return (
     <SellerShell>
       <PageHeader
-        title={`Заказ #${order.id}`}
+        title={order.model_display_name || `Заказ #${order.id}`}
         description={order.task_uuid}
         action={
           <Group gap="sm">
@@ -258,6 +269,24 @@ export default function OrderDetailPage() {
         <Title order={4} mb="sm">
           Статус в реальном времени
         </Title>
+        {['queued', 'processing', 'paid'].includes(order.status) && (
+          <Stack gap={6} mb="md">
+            <Group justify="space-between">
+              <Text size="sm" fw={600}>
+                Прогресс генерации
+              </Text>
+              <Text size="sm" c="#6d6c77">
+                {Math.round(progress)}%
+              </Text>
+            </Group>
+            <Progress value={progress} size="lg" radius="xl" color="brand" animated={progress < 100} />
+            {pipelineStep && (
+              <Text size="xs" c="#6d6c77">
+                Этап: {pipelineStep}
+              </Text>
+            )}
+          </Stack>
+        )}
         <Text size="sm" c="#6d6c77">
           Позиция в очереди: {order.queue_position ?? '—'} · EWT:{' '}
           {order.ewt_sec != null ? `${Math.round(order.ewt_sec / 60)} мин` : '—'}
@@ -314,8 +343,8 @@ export default function OrderDetailPage() {
             </Button>
           </>
         )}
-        <Button variant="default" onClick={() => router.push('/orders')}>
-          К списку
+        <Button variant="default" onClick={() => router.push('/models')}>
+          К моделям
         </Button>
       </Group>
     </SellerShell>

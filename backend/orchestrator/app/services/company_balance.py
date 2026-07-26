@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import date, datetime, time, timezone
+import re
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -23,6 +24,66 @@ TX_STATUS_LABELS = {
     "failed": "Ошибка",
 }
 
+TX_TYPE_LABELS = {
+    "topup": "Пополнение",
+    "charge": "Списание",
+    "refund": "Возврат",
+}
+
+_ORDER_DESC_RE = re.compile(r"Заказ #(\d+)")
+
+
+def collect_order_names(rows: list[Transaction], orders_by_id: dict[int, object]) -> dict[int, str]:
+    names: dict[int, str] = {}
+    for t in rows:
+        m = _ORDER_DESC_RE.search(t.description or "")
+        if not m:
+            continue
+        oid = int(m.group(1))
+        order = orders_by_id.get(oid)
+        if not order:
+            continue
+        name = (getattr(order, "model_display_name", None) or "").strip()
+        if name:
+            names[oid] = name
+    return names
+
+
+async def load_order_names_for_transactions(db: AsyncSession, rows: list[Transaction]) -> dict[int, str]:
+    from app.models import Order
+
+    order_ids: list[int] = []
+    for t in rows:
+        m = _ORDER_DESC_RE.search(t.description or "")
+        if m:
+            order_ids.append(int(m.group(1)))
+    if not order_ids:
+        return {}
+    uniq = list(dict.fromkeys(order_ids))
+    orders = (await db.scalars(select(Order).where(Order.id.in_(uniq)))).all()
+    orders_by_id = {o.id: o for o in orders}
+    return collect_order_names(rows, orders_by_id)
+
+
+def order_charge_description(order) -> str:
+    name = (getattr(order, "model_display_name", None) or "").strip()
+    if name:
+        return name
+    return f"Заказ #{order.id}"
+
+
+def _resolve_tx_description(description: str | None, order_names: dict[int, str]) -> str | None:
+    if not description:
+        return description
+    m = _ORDER_DESC_RE.search(description)
+    if not m:
+        return description
+    order_id = int(m.group(1))
+    name = order_names.get(order_id)
+    if not name:
+        return description
+    return _ORDER_DESC_RE.sub(name, description, count=1)
+
 
 def transaction_status(t: Transaction) -> str:
     """§20.3.4 — статус операции для UI."""
@@ -34,13 +95,17 @@ def transaction_status(t: Transaction) -> str:
     return "succeeded"
 
 
-def transaction_to_dict(t: Transaction, *, include_user: bool = False) -> dict:
+def transaction_to_dict(t: Transaction, *, include_user: bool = False, order_names: dict[int, str] | None = None) -> dict:
     st = transaction_status(t)
+    description = t.description
+    if order_names:
+        description = _resolve_tx_description(description, order_names)
     out = {
         "id": t.id,
         "amount": t.amount,
         "type": t.tx_type,
-        "description": t.description,
+        "type_label": TX_TYPE_LABELS.get(t.tx_type, t.tx_type),
+        "description": description,
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "status": st,
         "status_label": TX_STATUS_LABELS.get(st, st),

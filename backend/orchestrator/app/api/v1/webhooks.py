@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models import Company, Order, Transaction, User
 from app.services.events import publish_order_status
+from app.services import company_balance as company_bal
 from app.services.queue import queue_service
 from app.services.task_lifecycle import try_queue_awaiting_orders
 from app.services.yookassa import yookassa_service
@@ -258,7 +259,7 @@ async def yookassa_webhook(request: Request, db: AsyncSession = Depends(get_db))
                     company_id=order.company_id,
                     amount=-order.amount,
                     tx_type="charge",
-                    description=f"Заказ #{order.id}",
+                    description=company_bal.order_charge_description(order),
                 )
             )
             user.balance -= order.amount

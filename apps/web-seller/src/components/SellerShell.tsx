@@ -27,7 +27,6 @@ import {
   IconHeadset,
   IconLogout,
   IconSettings,
-  IconShoppingCart,
   IconStack2,
   IconUsersGroup,
   IconDeviceDesktop,
@@ -48,7 +47,6 @@ import { QueueWsProvider, useQueueWs } from '../context/QueueWsContext';
 const NAV_KEYS = [
   { href: '/dashboard', key: 'dashboard' as const, icon: IconHome2 },
   { href: '/models', key: 'models' as const, icon: IconBox },
-  { href: '/orders', key: 'orders' as const, icon: IconShoppingCart },
   { href: '/balance', key: 'balance' as const, icon: IconCash },
   { href: '/team', key: 'team' as const, icon: IconUsersGroup },
   { href: '/support', key: 'support' as const, icon: IconHeadset },
@@ -209,7 +207,7 @@ function SellerShellInner({ children }: { children: ReactNode }) {
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                const showQueueDot = item.key === 'orders' && queuePending > 0;
+                const showQueueDot = item.key === 'models' && queuePending > 0;
                 return (
                   <NavLink
                     key={item.href}
@@ -222,13 +220,13 @@ function SellerShellInner({ children }: { children: ReactNode }) {
                         <Badge size="xs" color="teal" circle>
                           {queuePending > 99 ? '99+' : queuePending}
                         </Badge>
-                      ) : item.key === 'orders' && queueLive ? (
+                      ) : item.key === 'models' && queueLive ? (
                         <Badge size="xs" color="green" variant="dot" />
                       ) : null
                     }
                     active={active}
                     onClick={() => {
-                      if (item.key === 'orders') clearPending();
+                      if (item.key === 'models') clearPending();
                       close();
                     }}
                   />

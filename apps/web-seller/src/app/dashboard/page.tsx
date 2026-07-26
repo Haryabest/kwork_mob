@@ -16,15 +16,11 @@ export default function DashboardPage() {
   const thumbByUuid = data?.thumbByUuid ?? {};
 
   const activeOrders = orders.filter((o) => ['queued', 'processing', 'awaiting_payment', 'pending'].includes(o.status)).length;
-  const monthSpend = orders
-    .filter((o) => o.status !== 'cancelled' && o.status !== 'failed')
-    .reduce((s, o) => s + Math.abs(o.amount || 0), 0);
 
   const stats = [
     { label: 'Баланс', value: me ? `${me.balance.toLocaleString('ru-RU')} ₽` : '—', Icon: IconCash },
     { label: 'Генераций', value: String(models.length || orders.filter((o) => o.status === 'completed').length), Icon: IconBox },
     { label: 'Активных заказов', value: String(activeOrders), Icon: IconShoppingCart },
-    { label: 'Потрачено', value: `${monthSpend.toLocaleString('ru-RU')} ₽`, Icon: IconCash },
   ];
 
   const ownerStats =
@@ -166,9 +162,6 @@ export default function DashboardPage() {
             </Button>
             <Button component={Link} href="/team" variant="light" leftSection={<IconUsers size={16} />} fullWidth>
               Пригласить сотрудника
-            </Button>
-            <Button component={Link} href="/orders" variant="light" leftSection={<IconShoppingCart size={16} />} fullWidth>
-              Мои заказы
             </Button>
           </Stack>
         </Surface>

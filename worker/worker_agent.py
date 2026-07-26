@@ -625,6 +625,16 @@ class WorkerAgent:
                 await asyncio.to_thread(self.run_script, step, task_dir)
                 completed.append(step)
                 await asyncio.to_thread(self.save_checkpoint, task_dir, task_id, completed)
+                await self._notify_event(
+                    {
+                        "type": "task_progress",
+                        "task_id": task_id,
+                        "progress": round(100.0 * len(completed) / max(len(pipeline), 1), 1),
+                        "step": step,
+                        "completed_steps": len(completed),
+                        "total_steps": len(pipeline),
+                    }
+                )
                 if step == "remove_background.py":
                     seg = {}
                     meta_path = task_dir / "task_meta.json"

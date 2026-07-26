@@ -391,13 +391,14 @@ async def create_order(
         receipt_email=body.receipt_email or user.email,
         device_model=device_model,
         os_version=os_version,
-        model_display_name=(body.model_display_name or "").strip() or None,
+        model_display_name=body.model_display_name.strip(),
         target_marketplace=body.target_marketplace.value
         if body.target_marketplace.value != "wildberries"
         else "wb",
     )
     db.add(order)
     await db.flush()
+    charge_desc = company_bal.order_charge_description(order)
 
     amount = base_amount + upsell_amount
     discount = 0
@@ -443,7 +444,7 @@ async def create_order(
                 company=company,
                 amount=amount,
                 user=user,
-                description=f"Заказ #{order.id} ({body.tier.value})",
+                description=charge_desc,
                 order_id=order.id,
             )
             charged = True
@@ -455,7 +456,7 @@ async def create_order(
                 company_id=body.company_id,
                 amount=-amount,
                 tx_type="charge",
-                description=f"Заказ #{order.id} ({body.tier.value})",
+                description=charge_desc,
             )
         )
         charged = True
@@ -579,7 +580,7 @@ async def pay_order(
                 company_id=order.company_id,
                 amount=-order.amount,
                 tx_type="charge",
-                description=f"Заказ #{order.id}",
+                description=company_bal.order_charge_description(order),
             )
         )
         order.status = "queued"
@@ -658,6 +659,7 @@ async def get_order(
         "created_at": order.created_at.isoformat() if order.created_at else None,
         "queue_position": pos,
         "ewt_sec": ewt,
+        "model_display_name": order.model_display_name,
         "model": (
             {
                 "uuid": model.uuid,

@@ -22,7 +22,7 @@ import { notifications } from '@mantine/notifications';
 import { SellerShell } from '../../../components/SellerShell';
 import { ModelViewer3D } from '../../../components/ModelViewer3D';
 import { PageHeader, Surface } from '../../../components/ui';
-import { api, apiMessage } from '../../../services/api';
+import { api, apiMessage, getPromoErrorMeta } from '../../../services/api';
 import { loadModelPreviewBlobUrl, revokeModelPreviewUrl } from '../../../lib/modelPreview';
 
 type PubLink = {
@@ -99,6 +99,8 @@ export default function ModelDetailPage() {
     final_amount: number;
     base_amount: number;
   } | null>(null);
+  const [promoWarnOpen, { open: openPromoWarn, close: closePromoWarn }] = useDisclosure(false);
+  const [promoWarnText, setPromoWarnText] = useState('');
   const [rating, setRating] = useState<string | null>('5');
   const [mpStatus, setMpStatus] = useState<{
     upload_enabled: boolean;
@@ -225,7 +227,12 @@ export default function ModelDetailPage() {
       });
     } catch (e) {
       setPromoPreview(null);
-      notifications.show({ color: 'red', message: apiMessage(e) });
+      const meta = getPromoErrorMeta(e);
+      notifications.show({ color: 'red', message: meta.message });
+      if (meta.showWarning && meta.warningMessage) {
+        setPromoWarnText(meta.warningMessage);
+        openPromoWarn();
+      }
     }
   }
 
@@ -682,6 +689,13 @@ export default function ModelDetailPage() {
           <Button loading={busy} onClick={() => void submitRate()}>
             Отправить
           </Button>
+        </Stack>
+      </Modal>
+
+      <Modal opened={promoWarnOpen} onClose={closePromoWarn} title="Предупреждение" centered>
+        <Stack>
+          <Text size="sm">{promoWarnText}</Text>
+          <Button onClick={closePromoWarn}>Понятно</Button>
         </Stack>
       </Modal>
     </SellerShell>

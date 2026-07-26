@@ -34,6 +34,8 @@ class WorkerEvent(BaseModel):
     os_version: str | None = None
     segmentation: dict | None = None
     warning_size_exceeded: bool | None = None
+    progress: float | None = None
+    step: str | None = None
 
 
 def _verify_worker_token(authorization: str | None = Header(default=None)) -> None:
@@ -205,6 +207,20 @@ async def worker_event(body: WorkerEvent, _: None = Depends(_verify_worker_token
             )
             await db.commit()
         return {"ok": True, "status": "failed", "task_id": task_id}
+
+    if body.type == "task_progress":
+        from app.services.task_lifecycle import publish_order_progress
+
+        progress = float(body.progress or 0)
+        step = body.step
+        async with async_session() as db:
+            await publish_order_progress(
+                db,
+                task_id,
+                progress=progress,
+                step=str(step) if step else None,
+            )
+        return {"ok": True, "status": "progress", "task_id": task_id}
 
     raise HTTPException(400, f"Unsupported event type: {body.type}")
 

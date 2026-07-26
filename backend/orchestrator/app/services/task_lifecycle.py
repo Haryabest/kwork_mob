@@ -13,6 +13,7 @@ from app.core.database import async_session
 from app.core.redis import get_redis
 from app.models import Model3D, Order, TaskQueue, WorkerNode
 from app.services.events import publish_order_status
+from app.services import company_balance as company_bal
 from app.services.queue import queue_service
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,31 @@ async def mark_processing(db: AsyncSession, task_id: str, worker_id: str) -> Ord
                 extra={"worker_id": worker_id, "company_id": order.company_id},
             )
     return order
+
+
+async def publish_order_progress(
+    db: AsyncSession,
+    task_id: str,
+    *,
+    progress: float,
+    step: str | None = None,
+) -> None:
+    row = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))
+    if not row or not row.order_id:
+        return
+    order = await db.get(Order, row.order_id)
+    if not order:
+        return
+    await publish_order_status(
+        user_id=order.user_id,
+        order_id=order.id,
+        task_id=task_id,
+        status=order.status or "processing",
+        extra={
+            "progress": round(float(progress), 1),
+            "pipeline_step": step,
+        },
+    )
 
 
 async def mark_completed(
@@ -301,7 +327,7 @@ async def mark_completed(
         order_id=order.id,
         task_id=task_id,
         status="completed",
-        extra={"glb_url": glb_url, "company_id": order.company_id},
+        extra={"glb_url": glb_url, "company_id": order.company_id, "progress": 100},
     )
     return order
 
@@ -538,7 +564,7 @@ async def try_queue_awaiting_orders(db: AsyncSession, user_id: int) -> list[int]
                 company_id=order.company_id,
                 amount=-order.amount,
                 tx_type="charge",
-                description=f"Заказ #{order.id} (после оплаты)",
+                description=company_bal.order_charge_description(order),
             )
         )
         order.status = "queued"

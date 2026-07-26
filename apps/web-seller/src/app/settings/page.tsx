@@ -139,8 +139,6 @@ export default function SettingsPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [gender, setGender] = useState<string | null>(null);
-  const [region, setRegion] = useState('');
   const [oldPass, setOldPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
@@ -198,8 +196,6 @@ export default function SettingsPage() {
     setMe(m.data);
     setFullName(m.data.full_name || '');
     setPhone(m.data.phone || '');
-    setGender(m.data.gender || null);
-    setRegion(m.data.region || '');
     setMarketing(m.data.marketing_opt_in !== false);
     if (s.data.is_company_owner) {
       try {
@@ -402,7 +398,7 @@ export default function SettingsPage() {
   async function saveProfile() {
     setBusy(true);
     try {
-      await api.patch('/user/me', { full_name: fullName, phone, gender, region: region || null });
+      await api.patch('/user/me', { full_name: fullName, phone });
       notifications.show({ color: 'teal', message: t.settings.profileSaved });
       await load();
     } catch (e) {
@@ -550,7 +546,14 @@ export default function SettingsPage() {
         </Tabs.List>
 
         <Tabs.Panel value="profile">
-          <Surface style={{ maxWidth: 560 }}>
+          <Surface>
+            <div
+              style={{
+                display: 'grid',
+                gap: '1.25rem',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              }}
+            >
             <Stack gap="md">
               <Group>
                 <Avatar src={me?.avatar_url || undefined} radius="xl" size={72}>
@@ -586,35 +589,18 @@ export default function SettingsPage() {
               <TextInput label={t.settings.email} value={me?.email || ''} disabled size="md" />
               <TextInput label={t.settings.fullName} value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} size="md" />
               <TextInput label={t.settings.phone} value={phone} onChange={(e) => setPhone(e.currentTarget.value)} size="md" />
-              <Select
-                label="Пол"
-                placeholder="Не указано"
-                clearable
-                data={[
-                  { value: 'male', label: 'Мужской' },
-                  { value: 'female', label: 'Женский' },
-                  { value: 'unspecified', label: 'Не указано' },
-                ]}
-                value={gender}
-                onChange={setGender}
-              />
-              <TextInput
-                label="Регион"
-                description="Для маркетинговых акций и налогообложения"
-                value={region}
-                onChange={(e) => setRegion(e.currentTarget.value)}
-                size="md"
-              />
               {me?.card_bank_issuer ? (
                 <Text size="sm" c="dimmed">
                   Банк карты: {me.card_bank_issuer}
                 </Text>
               ) : null}
-              {twoFa?.is_company_owner && (
-                <>
-                  <Text fw={600} mt="md">
-                    Реквизиты компании (Owner)
-                  </Text>
+              <Button loading={busy} w={{ base: '100%', sm: 'fit-content' }} onClick={() => void saveProfile()}>
+                {t.settings.saveProfile}
+              </Button>
+            </Stack>
+            {twoFa?.is_company_owner && (
+              <Stack gap="md">
+                  <Text fw={600}>Реквизиты компании (Owner)</Text>
                   <TextInput label="ИНН" value={companyInn} onChange={(e) => setCompanyInn(e.currentTarget.value)} />
                   <TextInput label="Юр. наименование" value={legalName} onChange={(e) => setLegalName(e.currentTarget.value)} />
                   <TextInput label="Юр. адрес" value={legalAddress} onChange={(e) => setLegalAddress(e.currentTarget.value)} />
@@ -647,17 +633,14 @@ export default function SettingsPage() {
                   >
                     Сохранить реквизиты
                   </Button>
-                </>
-              )}
-              <Button loading={busy} w={{ base: '100%', sm: 'fit-content' }} onClick={() => void saveProfile()}>
-                {t.settings.saveProfile}
-              </Button>
-            </Stack>
+              </Stack>
+            )}
+            </div>
           </Surface>
         </Tabs.Panel>
 
         <Tabs.Panel value="security">
-          <Surface style={{ maxWidth: 560 }}>
+          <Surface>
             <Stack gap="md">
               <Text fw={600}>Смена пароля</Text>
               <PasswordInput label="Текущий пароль" value={oldPass} onChange={(e) => setOldPass(e.currentTarget.value)} />
@@ -988,7 +971,7 @@ export default function SettingsPage() {
         </Tabs.Panel>
 
         <Tabs.Panel value="notifications">
-          <Surface style={{ maxWidth: 560 }}>
+          <Surface>
             <Stack gap="md">
               <Switch
                 label="Маркетинговые рассылки §20.8.3"
@@ -1012,7 +995,7 @@ export default function SettingsPage() {
         </Tabs.Panel>
 
         <Tabs.Panel value="danger">
-          <Surface style={{ maxWidth: 560 }}>
+          <Surface>
             <Stack gap="md">
               <Text fw={700} c="red">
                 Удаление аккаунта

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { SellerShell } from '../../components/SellerShell';
+import { ModelThumb } from '../../components/ModelThumb';
 import { ModelsGridView } from '../../components/ModelsGridView';
 import { EmptyState, FilterRow, PageHeader, ScrollTable, Surface } from '../../components/ui';
 import { api, apiMessage } from '../../services/api';
@@ -102,7 +103,6 @@ export default function ModelsPage() {
   const [pageSize, setPageSize] = useState(20);
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
-  const [publishFilter, setPublishFilter] = useState<string | null>(null);
   const [category, setCategory] = useState<string | null>(null);
   const [tier, setTier] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState('');
@@ -125,7 +125,7 @@ export default function ModelsPage() {
       page,
       pageSize,
       search,
-      publishFilter,
+      publishFilter: null,
       category,
       tier,
       dateFrom,
@@ -164,7 +164,7 @@ export default function ModelsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, publishFilter, category, tier, dateFrom, dateTo, authorId, sort, orderStatus, company?.id, pageSize]);
+  }, [search, category, tier, dateFrom, dateTo, authorId, sort, orderStatus, company?.id, pageSize]);
 
   async function massExtendAll() {
     if (!window.confirm('Продлить хранение исходников для всех моделей компании? (лимит 3× на модель)')) {
@@ -250,14 +250,6 @@ export default function ModelsPage() {
             onChange={(e) => setDateTo(e.currentTarget.value)}
           />
           <Select
-            label="Публикация"
-            placeholder="Все"
-            clearable
-            value={publishFilter}
-            onChange={setPublishFilter}
-            data={PUBLISH_FILTER_OPTIONS}
-          />
-          <Select
             label="Категория"
             placeholder="Все"
             data={CATEGORY_OPTIONS}
@@ -315,7 +307,7 @@ export default function ModelsPage() {
 
         <Group justify="flex-end" mb="md">
           <Select
-            label="На странице §20.4"
+            label="На странице"
             data={PAGE_SIZE_OPTIONS}
             value={String(pageSize)}
             onChange={(v) => {
@@ -362,10 +354,9 @@ export default function ModelsPage() {
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Модель</Table.Th>
-                    <Table.Th>Заказ</Table.Th>
+                    <Table.Th>Фото</Table.Th>
                     <Table.Th>Категория</Table.Th>
                     <Table.Th>Создана</Table.Th>
-                    <Table.Th>Публикация</Table.Th>
                     <Table.Th />
                   </Table.Tr>
                 </Table.Thead>
@@ -373,16 +364,16 @@ export default function ModelsPage() {
                   {items.map((m) => (
                     <Table.Tr key={m.uuid}>
                       <Table.Td>
-                        <Text fw={600}>{m.display_name || `${m.uuid.slice(0, 8)}…`}</Text>
+                        <Text fw={600}>{m.display_name || 'Без названия'}</Text>
+                        <Text size="xs" c="#6d6c77">
+                          #{m.order_id}
+                        </Text>
                       </Table.Td>
-                      <Table.Td>#{m.order_id}</Table.Td>
+                      <Table.Td>
+                        <ModelThumb uuid={m.uuid} size={56} />
+                      </Table.Td>
                       <Table.Td>{CATEGORY_LABEL[m.category || ''] || m.category || '—'}</Table.Td>
                       <Table.Td>{m.created_at ? new Date(m.created_at).toLocaleString('ru-RU') : '—'}</Table.Td>
-                      <Table.Td>
-                        <Badge variant="light" color={publishBadgeColor(m.publish_status, m.order_status)}>
-                          {publishLabel(m.publish_status, m.order_status)}
-                        </Badge>
-                      </Table.Td>
                       <Table.Td>
                         <Button component={Link} href={`/models/${m.uuid}`} size="xs" variant="light">
                           Открыть

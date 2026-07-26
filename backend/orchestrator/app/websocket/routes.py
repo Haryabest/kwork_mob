@@ -364,12 +364,26 @@ async def worker_ws(websocket: WebSocket):
                     await worker_hub.set_busy(worker_id, task_id)
                     async with async_session() as db:
                         await mark_processing(db, task_id, worker_id)
+                        from app.services.task_lifecycle import publish_order_progress
+
+                        await publish_order_progress(db, task_id, progress=0, step="started")
                     await _worker_log(
                         level="info",
                         message="task_started",
                         worker_id=worker_id,
                         task_id=task_id,
                     )
+
+            elif msg_type == "task_progress":
+                task_id = str(data.get("task_id") or "")
+                if task_id:
+                    progress = float(data.get("progress") or 0)
+                    step = data.get("step")
+                    async with async_session() as db:
+                        from app.services.task_lifecycle import publish_order_progress
+
+                        await publish_order_progress(db, task_id, progress=progress, step=str(step) if step else None)
+                await websocket.send_json({"type": "ack", "of": "task_progress", "task_id": task_id})
 
             elif msg_type == "already_processed":
                 task_id = str(data.get("task_id") or "")

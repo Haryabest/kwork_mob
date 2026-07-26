@@ -85,3 +85,22 @@ export function apiMessage(error: unknown, fallback = 'Не удалось вы�
   }
   return fallback;
 }
+
+export function getPromoErrorMeta(error: unknown): {
+  message: string;
+  showWarning: boolean;
+  warningMessage?: string;
+} {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data as { detail?: unknown } | undefined;
+    if (typeof detail?.detail === 'object' && detail.detail !== null && !Array.isArray(detail.detail)) {
+      const obj = detail.detail as Record<string, unknown>;
+      return {
+        message: String(obj.message || apiMessage(error)),
+        showWarning: Boolean(obj.show_warning),
+        warningMessage: obj.warning_message ? String(obj.warning_message) : undefined,
+      };
+    }
+  }
+  return { message: apiMessage(error), showWarning: false };
+}

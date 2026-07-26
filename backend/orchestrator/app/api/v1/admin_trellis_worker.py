@@ -116,4 +116,4 @@ async def trellis_worker_logs(
     tail: int = Query(300, ge=50, le=2000),
     _: dict = Depends(require_admin),
 ):
-    return wd.fetch_logs(tail=tail)
+    return await wd.fetch_logs_async(tail=tail)

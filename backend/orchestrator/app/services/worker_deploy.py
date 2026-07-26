@@ -541,26 +541,56 @@ async def verify_stored_config() -> dict[str, Any]:
         }
 
 
-def fetch_logs(*, tail: int = 300) -> dict[str, Any]:
-    if not settings.WORKER_DEPLOY_ENABLED:
-        raise HTTPException(503, "WORKER_DEPLOY_ENABLED=0")
-    if not docker_cli_available():
-        raise HTTPException(503, "Docker CLI недоступен")
+def fetch_logs(*, tail: int = 300, container_name: str | None = None) -> dict[str, Any]:
     tail = max(50, min(int(tail), 2000))
-    name = "kwork-worker"
-    docker = _docker_bin() or "docker"
-    proc = _run([docker, "logs", "--tail", str(tail), name], timeout=60)
-    text = (proc.stdout or "") + (proc.stderr or "")
-    lines = text.splitlines()
-    now = datetime.now(timezone.utc).isoformat()
-    items = [
-        {"timestamp": now, "message": line, "level": "INFO", "source": "docker"}
-        for line in lines
-    ]
-    return {
-        "ok": proc.returncode == 0 or bool(lines),
+    name = (container_name or "kwork-worker").strip() or "kwork-worker"
+    base: dict[str, Any] = {
+        "ok": False,
         "container": name,
         "tail": tail,
-        "items": items,
-        "raw": text[-12000:],
+        "items": [],
+        "raw": "",
     }
+    try:
+        if not settings.WORKER_DEPLOY_ENABLED:
+            base["raw"] = "WORKER_DEPLOY_ENABLED=0 — включите в .env"
+            return base
+        docker = _docker_bin()
+        if not docker:
+            base["raw"] = str(docker_cli_status().get("hint") or "docker CLI не найден")
+            return base
+        proc = subprocess.run(
+            [docker, "logs", "--tail", str(tail), name],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        text = (proc.stdout or "") + (proc.stderr or "")
+        if proc.returncode != 0 and not text.strip():
+            text = f"docker logs exit {proc.returncode}: контейнер «{name}» не найден или остановлен"
+        lines = text.splitlines()
+        now = datetime.now(timezone.utc).isoformat()
+        items = [
+            {"timestamp": now, "message": line, "level": "INFO", "source": "docker"}
+            for line in lines
+        ]
+        return {
+            "ok": proc.returncode == 0 or bool(lines),
+            "container": name,
+            "tail": tail,
+            "items": items,
+            "raw": text[-12000:],
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("fetch_logs failed for %s", name)
+        base["raw"] = str(exc)[:500]
+        return base
+
+
+async def fetch_logs_async(*, tail: int = 300) -> dict[str, Any]:
+    import asyncio
+
+    stored = await _redis_get()
+    name = str((stored or {}).get("container_name") or default_config()["container_name"])
+    return await asyncio.to_thread(fetch_logs, tail=tail, container_name=name)

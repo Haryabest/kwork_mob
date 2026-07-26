@@ -115,11 +115,12 @@ export default function TrellisSettingsPage() {
   const loadLogs = useCallback(async () => {
     setLogsLoading(true);
     try {
-      const { data } = await api.get<{ raw?: string; items?: Array<{ message: string }> }>(
+      const { data } = await api.get<{ raw?: string; ok?: boolean; items?: Array<{ message: string }> }>(
         '/admin/trellis/worker-config/logs',
         { params: { tail: 400 } },
       );
-      setLogs(data.raw || (data.items || []).map((i) => i.message).join('\n'));
+      const text = data.raw || (data.items || []).map((i) => i.message).join('\n');
+      setLogs(text || (data.ok === false ? 'Логи пусты или контейнер не запущен' : ''));
     } catch (e) {
       setLogs(getApiError(e));
     } finally {

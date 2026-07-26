@@ -519,6 +519,19 @@ async def model_thumbnail(
         )
         return {"thumbnail_url": url, "source": "final", "expires_in": 3600}
 
+    from app.core.config import settings as cfg
+
+    checkpoints_bucket = getattr(cfg, "MINIO_BUCKET_CHECKPOINTS", "checkpoints")
+    for rel in (
+        f"checkpoints/{model.uuid}/photos_nobg/view_00.png",
+        f"checkpoints/{model.uuid}/photos_nobg/view_00.jpg",
+    ):
+        if minio_service.object_exists(checkpoints_bucket, rel):
+            url = minio_service.generate_presigned_url(
+                checkpoints_bucket, rel, expires=3600, method="get_object"
+            )
+            return {"thumbnail_url": url, "source": "nobg", "expires_in": 3600}
+
     order = await db.get(Order, model.order_id)
     if order and order.task_uuid:
         photo_key = view_key(order.task_uuid, 0)

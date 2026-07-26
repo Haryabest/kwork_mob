@@ -802,6 +802,11 @@ async def list_users(_: dict = Depends(require_admin), db: AsyncSession = Depend
                 "status": u.status,
                 "staff_role": u.staff_role,
                 "balance": u.balance,
+                "promo_blocked_until": u.promo_blocked_until.isoformat() if u.promo_blocked_until else None,
+                "promo_failed_attempts": int(u.promo_failed_attempts or 0),
+                "promo_input_blocked": bool(
+                    u.promo_blocked_until and u.promo_blocked_until > datetime.now(timezone.utc)
+                ),
                 "created_at": u.created_at.isoformat() if u.created_at else None,
                 "avg_rating": round(float(avg_rating), 2) if avg_rating is not None else None,
                 "last_activity": last_activity.isoformat() if last_activity else None,
@@ -851,6 +856,11 @@ async def get_user(user_id: int, _: dict = Depends(require_admin), db: AsyncSess
         "account_type": user.account_type,
         "status": user.status,
         "balance": user.balance,
+        "promo_failed_attempts": int(user.promo_failed_attempts or 0),
+        "promo_blocked_until": user.promo_blocked_until.isoformat() if user.promo_blocked_until else None,
+        "promo_input_blocked": bool(
+            user.promo_blocked_until and user.promo_blocked_until > datetime.now(timezone.utc)
+        ),
         "orders_count": int(orders_count or 0),
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "orders": [
@@ -932,6 +942,26 @@ async def admin_user_audit_export(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="user_{user_id}_audit.csv"'},
     )
+
+
+@router.post("/users/{user_id}/promo-unban")
+async def promo_unban_user(
+    user_id: int,
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services import promocodes as promo_svc
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "Не найден")
+    await promo_svc.reset_promo_attempts(db, user)
+    await db.commit()
+    return {
+        "message": "Ограничение на ввод промокода снято",
+        "promo_failed_attempts": 0,
+        "promo_blocked_until": None,
+    }
 
 
 @router.post("/users/{user_id}/block")
