@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -14,6 +15,8 @@ from app.services import worker_deploy as wd
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+
+logger = logging.getLogger(__name__)
 
 
 def _vpn(request: Request) -> None:

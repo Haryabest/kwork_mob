@@ -26,3 +26,9 @@ def test_mask_env():
     masked = wd._mask_env(env)
     assert masked["WORKER_ID"] == "a"
     assert masked["HF_TOKEN"] == wd.MASK
+
+
+def test_coerce_env_map_ignores_bad_payload():
+    assert wd._coerce_env_map(None) == {}
+    assert wd._coerce_env_map("broken") == {}
+    assert wd._coerce_env_map({"WORKER_ID": 42}) == {"WORKER_ID": "42"}

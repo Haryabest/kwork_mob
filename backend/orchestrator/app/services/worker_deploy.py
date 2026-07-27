@@ -196,6 +196,15 @@ def _encrypt_env(env: dict[str, str]) -> dict[str, str]:
     return out
 
 
+def _coerce_env_map(env: Any) -> dict[str, str]:
+    if not isinstance(env, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in env.items():
+        out[str(k)] = "" if v is None else str(v)
+    return out
+
+
 def _decrypt_env(env: dict[str, str]) -> dict[str, str]:
     out: dict[str, str] = {}
     for k, v in env.items():
@@ -220,9 +229,9 @@ def _mask_env(env: dict[str, str]) -> dict[str, str]:
 def _merge_config(stored: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
     base = default_config()
     merged = {**base, **{k: v for k, v in stored.items() if k != "env"}}
-    merged_env = {**base["env"], **stored.get("env", {})}
+    merged_env = {**base["env"], **_decrypt_env(_coerce_env_map(stored.get("env")))}
     if "env" in incoming:
-        prev_plain = _decrypt_env(stored.get("env") or {})
+        prev_plain = _decrypt_env(_coerce_env_map(stored.get("env")))
         for k, v in incoming["env"].items():
             if v is None:
                 continue
@@ -240,28 +249,40 @@ def _merge_config(stored: dict[str, Any], incoming: dict[str, Any]) -> dict[str,
 
 
 async def get_config(*, masked: bool = True) -> dict[str, Any]:
-    stored = await _redis_get()
-    if not stored:
-        cfg = default_config()
-    else:
-        cfg = stored
-        cfg["env"] = _decrypt_env(cfg.get("env") or {})
-    out = dict(cfg)
-    out["deploy_enabled"] = bool(settings.WORKER_DEPLOY_ENABLED)
-    out["deploy_root"] = str(_repo_root())
-    out["compose_file"] = str(_compose_file())
-    out["env_file"] = str(_env_file())
-    if raw := (settings.WORKER_DEPLOY_ROOT or "").strip():
-        configured = Path(raw).expanduser().resolve()
-        if configured != _repo_root():
-            out["deploy_root_hint"] = (
-                f"WORKER_DEPLOY_ROOT={raw} не содержит compose; используется {_repo_root()}"
-            )
-    out["docker_available"] = docker_cli_available()
-    out["docker_status"] = docker_cli_status()
-    if masked:
-        out["env"] = _mask_env(out.get("env") or {})
-    return out
+    try:
+        stored = await _redis_get()
+        if not stored or not isinstance(stored, dict):
+            cfg = default_config()
+        else:
+            cfg = {**default_config(), **{k: v for k, v in stored.items() if k != "env"}}
+            cfg["env"] = _decrypt_env(_coerce_env_map(stored.get("env")))
+        out = dict(cfg)
+        out["deploy_enabled"] = bool(settings.WORKER_DEPLOY_ENABLED)
+        out["deploy_root"] = str(_repo_root())
+        out["compose_file"] = str(_compose_file())
+        out["env_file"] = str(_env_file())
+        if raw := (settings.WORKER_DEPLOY_ROOT or "").strip():
+            try:
+                configured = Path(raw).expanduser().resolve()
+            except OSError:
+                configured = None
+            if configured is not None and configured != _repo_root():
+                out["deploy_root_hint"] = (
+                    f"WORKER_DEPLOY_ROOT={raw} не содержит compose; используется {_repo_root()}"
+                )
+        try:
+            out["docker_available"] = docker_cli_available()
+            out["docker_status"] = docker_cli_status()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("docker_cli_status failed: %s", exc)
+            out["docker_available"] = False
+            out["docker_status"] = {"available": False, "reason": "docker_check_failed", "hint": str(exc)[:200]}
+        if masked:
+            out["env"] = _mask_env(_coerce_env_map(out.get("env")))
+        return out
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("get_config failed")
+        raise HTTPException(500, f"Не удалось загрузить настройки воркера: {exc}") from exc
 
 
 async def save_config(payload: dict[str, Any], *, user_id: int | None = None) -> dict[str, Any]:
