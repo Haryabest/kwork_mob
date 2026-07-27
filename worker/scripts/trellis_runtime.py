@@ -6,6 +6,7 @@ Env:
   TRELLIS_ROOT=/app/trellis
   TRELLIS_WEIGHTS=microsoft/TRELLIS.2-4B
   TRELLIS2_PIPELINE_TYPE=512           # 512|1024|1024_cascade|1536_cascade
+  TRELLIS2_MAX_NUM_TOKENS=49152        # для 1536 на 16GB можно 32768
   TRELLIS2_LOW_VRAM=1
   TRELLIS2_DECIMATION=300000
   TRELLIS2_TEXTURE_SIZE=2048
@@ -192,10 +193,37 @@ def _texture_size_for_task(task_dir: Path) -> int:
     return int(os.getenv("TRELLIS2_TEXTURE_SIZE", "2048"))
 
 
+def _release_vram_before_export(pipe) -> None:
+    """Как ComfyUI: после inference освободить VRAM перед export GLB."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return
+    low = _resolve_low_vram()
+    if low:
+        try:
+            if hasattr(pipe, "to"):
+                pipe.to("cpu")
+            for name in getattr(pipe, "model_names_to_load", ()) or ():
+                model = getattr(pipe, "models", {}).get(name)
+                if model is not None and hasattr(model, "cpu"):
+                    model.cpu()
+            if getattr(pipe, "image_cond_model", None) is not None and hasattr(pipe.image_cond_model, "cpu"):
+                pipe.image_cond_model.cpu()
+            if getattr(pipe, "rembg_model", None) is not None and hasattr(pipe.rembg_model, "cpu"):
+                pipe.rembg_model.cpu()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("pipeline offload before export: %s", exc)
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize()
+
+
 def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -> None:
     import o_voxel  # type: ignore
 
-    if hasattr(mesh, "simplify"):
+    low_vram = _resolve_low_vram()
+    skip_simplify = os.getenv("TRELLIS2_SKIP_MESH_SIMPLIFY", "").lower() in ("1", "true", "yes") or low_vram
+    if hasattr(mesh, "simplify") and not skip_simplify:
         try:
             mesh.simplify(16_777_216)
         except Exception as exc:  # noqa: BLE001
@@ -205,21 +233,32 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
     texture_size = _texture_size_for_task(task_dir) if task_dir else int(os.getenv("TRELLIS2_TEXTURE_SIZE", "1024"))
     use_webp = os.getenv("TRELLIS2_EXTENSION_WEBP", "0").lower() in ("1", "true", "yes")
 
-    glb = o_voxel.postprocess.to_glb(
-        vertices=mesh.vertices,
-        faces=mesh.faces,
-        attr_volume=mesh.attrs,
-        coords=mesh.coords,
-        attr_layout=mesh.layout,
-        voxel_size=mesh.voxel_size,
-        aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-        decimation_target=decimation,
-        texture_size=texture_size,
-        remesh=True,
-        remesh_band=1,
-        remesh_project=0,
-        verbose=False,
-    )
+    grid_size = getattr(mesh, "voxel_shape", None)
+    if grid_size is not None and hasattr(grid_size, "__iter__"):
+        try:
+            grid_size = int(list(grid_size)[-1])
+        except Exception:  # noqa: BLE001
+            grid_size = None
+
+    glb_kwargs: dict = {
+        "vertices": mesh.vertices,
+        "faces": mesh.faces,
+        "attr_volume": mesh.attrs,
+        "coords": mesh.coords,
+        "attr_layout": mesh.layout,
+        "voxel_size": mesh.voxel_size,
+        "aabb": [[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+        "decimation_target": decimation,
+        "texture_size": texture_size,
+        "remesh": True,
+        "remesh_band": 1,
+        "remesh_project": 0,
+        "verbose": False,
+    }
+    if grid_size:
+        glb_kwargs["grid_size"] = grid_size
+
+    glb = o_voxel.postprocess.to_glb(**glb_kwargs)
     output.parent.mkdir(parents=True, exist_ok=True)
     glb.export(str(output), extension_webp=use_webp)
     logger.info("TRELLIS.2 export extension_webp=%s texture_size=%s", use_webp, texture_size)
@@ -314,6 +353,9 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
             {"steps": 12, "guidance_strength": 7.5, "guidance_rescale": 0.7, "rescale_t": 5.0},
         ),
     }
+    max_tokens = os.getenv("TRELLIS2_MAX_NUM_TOKENS", "").strip()
+    if max_tokens:
+        run_kwargs["max_num_tokens"] = int(max_tokens)
     logger.info(
         "TRELLIS.2 run pipeline_type=%s tex_steps=%s texture_size=%s",
         pipeline_type,
@@ -325,6 +367,7 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
     if not meshes:
         raise RuntimeError("TRELLIS.2 вернул пустой результат")
 
+    _release_vram_before_export(pipe)
     _export_trellis2_mesh(meshes[0], output, task_dir=task_dir)
     if not output.exists() or output.stat().st_size < 1000:
         raise RuntimeError(f"TRELLIS.2 GLB слишком мал: {output}")
