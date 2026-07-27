@@ -36,6 +36,7 @@ type PubLink = {
 type Model = {
   uuid: string;
   order_id: number;
+  display_name?: string | null;
   tier?: string | null;
   category?: string | null;
   glb_url?: string | null;
@@ -250,6 +251,8 @@ export default function ModelDetailPage() {
         category: data.category,
         tier: data.tier,
         company_id: data.company_id,
+        model_display_name:
+          model?.display_name?.trim() || `Модель ${uuid.slice(0, 8)}`,
         promocode: promocode.trim() || undefined,
       });
       closeRegen();
