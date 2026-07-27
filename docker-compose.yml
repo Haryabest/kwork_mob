@@ -72,6 +72,7 @@ services:
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-}
       WORKER_DEPLOY_ENABLED: ${WORKER_DEPLOY_ENABLED:-0}
       WORKER_DEPLOY_ROOT: ${WORKER_DEPLOY_ROOT:-/repo}
+      WORKER_HOST_REPO_ROOT: ${WORKER_HOST_REPO_ROOT:-${PWD}}
     depends_on:
       postgres:
         condition: service_healthy

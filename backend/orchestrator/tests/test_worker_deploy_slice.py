@@ -1,5 +1,7 @@
 """TRELLIS worker deploy config (web-admin)."""
 
+from pathlib import Path
+
 from app.services import worker_deploy as wd
 
 
@@ -37,3 +39,9 @@ def test_coerce_env_map_ignores_bad_payload():
 def test_repo_root_does_not_index_parents():
     root = wd._repo_root()
     assert root.is_absolute()
+
+
+def test_worker_dir_replaces_container_paths(monkeypatch):
+    monkeypatch.setattr(wd.settings, "WORKER_HOST_REPO_ROOT", "/home/dom/kwork_mob")
+    path = wd._worker_dir({"worker_repo_path": "/app/kwork_mob/worker"})
+    assert path == Path("/home/dom/kwork_mob/worker")

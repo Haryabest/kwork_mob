@@ -164,6 +164,7 @@ class Settings(BaseSettings):
     # GPU worker Docker deploy из web-admin (§15.3)
     WORKER_DEPLOY_ENABLED: bool = False
     WORKER_DEPLOY_ROOT: str = ""  # корень репозитория на хосте, напр. /opt/kwork_mob
+    WORKER_HOST_REPO_ROOT: str = ""  # абсолютный путь на хосте для docker bind (через socket)
     WORKER_DEPLOY_COMPOSE_FILE: str = "worker/docker-compose.worker.yml"
     WORKER_DEPLOY_ENV_FILE: str = "worker/.env.worker"
 

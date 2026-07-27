@@ -82,13 +82,58 @@ def _compose_file() -> Path:
     return _repo_root() / _compose_relative()
 
 
+def _host_repo_root() -> Path:
+    """Абсолютный путь к корню репо на хосте (для docker bind через socket)."""
+    raw = (settings.WORKER_HOST_REPO_ROOT or os.getenv("WORKER_HOST_REPO_ROOT") or "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    deploy = (settings.WORKER_DEPLOY_ROOT or "").strip()
+    if deploy and deploy != "/repo":
+        return Path(deploy).expanduser()
+    return _repo_root()
+
+
+def _worker_dir(cfg: dict[str, Any] | None = None) -> Path:
+    host_worker = _host_repo_root() / "worker"
+    if not cfg:
+        return host_worker
+    wrp = str(cfg.get("worker_repo_path") or "").strip()
+    if not wrp:
+        return host_worker
+    path = Path(wrp).expanduser()
+    normalized = str(path).replace("\\", "/")
+    if normalized in ("/repo/worker", "/app/kwork_mob/worker") or normalized.startswith(
+        ("/repo/worker/", "/app/kwork_mob/worker/")
+    ):
+        return host_worker
+    return path
+
+
+def _normalize_deploy_meta(cfg: dict[str, Any]) -> dict[str, Any]:
+    out = dict(cfg)
+    out["worker_repo_path"] = str(_worker_dir(out))
+    return out
+
+
+def _env_values_match(key: str, expected: str, actual: str) -> bool:
+    if expected == actual:
+        return True
+    if key in ("ORCHESTRATOR_WS_URL", "ORCHESTRATOR_HTTP_URL"):
+        return expected.rstrip("/") == actual.rstrip("/")
+    return False
+
+
 def _env_file() -> Path:
     rel = (settings.WORKER_DEPLOY_ENV_FILE or "worker/.env.worker").strip()
     return _repo_root() / rel
 
 
 def _default_orchestrator_ws() -> str:
-    explicit = (os.getenv("ORCHESTRATOR_WS_PUBLIC") or "").strip()
+    explicit = (
+        os.getenv("ORCHESTRATOR_WS_PUBLIC")
+        or os.getenv("ORCHESTRATOR_WS_URL")
+        or ""
+    ).strip()
     if explicit:
         return explicit
     base = settings.API_BASE_URL.rstrip("/")
@@ -100,6 +145,9 @@ def _default_orchestrator_ws() -> str:
 
 
 def _default_orchestrator_http() -> str:
+    explicit = (os.getenv("ORCHESTRATOR_HTTP_URL") or "").strip()
+    if explicit:
+        return explicit
     return settings.API_BASE_URL.rstrip("/") or "http://host.docker.internal:8000"
 
 
@@ -118,8 +166,8 @@ def _default_minio_endpoint() -> str:
 
 
 def default_config() -> dict[str, Any]:
-    root = _repo_root()
-    worker_dir = root / "worker"
+    root = _host_repo_root()
+    worker_dir = _worker_dir()
     return {
         "container_name": "kwork-worker",
         "docker_image": os.getenv("WORKER_DOCKER_IMAGE", "kwork-worker:trellis2-runtime"),
@@ -275,6 +323,8 @@ async def get_config(*, masked: bool = True) -> dict[str, Any]:
             out["docker_status"] = {"available": False, "reason": "docker_check_failed", "hint": str(exc)[:200]}
         if masked:
             out["env"] = _mask_env(_coerce_env_map(out.get("env")))
+        out.update(_normalize_deploy_meta(out))
+        out["host_repo_root"] = str(_host_repo_root())
         return out
     except Exception as exc:  # noqa: BLE001
         logger.exception("get_config failed")
@@ -286,6 +336,7 @@ async def save_config(payload: dict[str, Any], *, user_id: int | None = None) ->
     if stored:
         stored["env"] = _decrypt_env(stored.get("env") or {})
     merged = _merge_config(stored, payload)
+    merged = _normalize_deploy_meta(merged)
     merged["env"] = _encrypt_env(merged["env"])
     merged["updated_at"] = datetime.now(timezone.utc).isoformat()
     await _redis_set(merged)
@@ -382,8 +433,9 @@ def _run(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess[s
 
 
 def _build_env_file_lines(cfg: dict[str, Any]) -> list[str]:
-    env = _decrypt_env(cfg.get("env") or {})
-    worker_dir = Path(str(cfg.get("worker_repo_path") or _repo_root() / "worker")).expanduser()
+    env = _decrypt_env(_coerce_env_map(cfg.get("env")))
+    cfg = _normalize_deploy_meta(cfg)
+    worker_dir = _worker_dir(cfg)
     hf_cache = str(Path(str(cfg.get("hf_cache_host_path") or "~/hf_cache")).expanduser())
     lines = [
         f"WORKER_CONTAINER_NAME={cfg.get('container_name', 'kwork-worker')}",
@@ -425,7 +477,19 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     stored = await _redis_get()
     if not stored:
         stored = default_config()
-    stored["env"] = _decrypt_env(stored.get("env") or {})
+    stored = _normalize_deploy_meta(stored)
+    stored["env"] = _decrypt_env(_coerce_env_map(stored.get("env")))
+    worker_dir = _worker_dir(stored)
+    agent = worker_dir / "worker_agent.py"
+    repo_agent = _repo_root() / "worker" / "worker_agent.py"
+    if not agent.is_file() and not repo_agent.is_file():
+        raise HTTPException(400, f"Не найден worker_agent.py: {agent}")
+    if not agent.is_file() and not (settings.WORKER_HOST_REPO_ROOT or os.getenv("WORKER_HOST_REPO_ROOT")):
+        raise HTTPException(
+            400,
+            "Задайте WORKER_HOST_REPO_ROOT в .env (путь к проекту на хосте, напр. /home/dom/kwork_mob). "
+            "Docker на хосте не видит /repo и /app/kwork_mob.",
+        )
     compose = _compose_file()
     if not compose.is_file():
         tried = [str(Path("/repo") / _compose_relative())]
@@ -455,6 +519,8 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     )
     ok = proc.returncode == 0
     msg = (proc.stdout or "") + (proc.stderr or "")
+    if not ok:
+        logger.error("worker deploy apply failed: %s", msg[-2000:])
     stored_enc = dict(stored)
     stored_enc["env"] = _encrypt_env(stored["env"])
     stored_enc["applied_at"] = datetime.now(timezone.utc).isoformat()
@@ -465,7 +531,7 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     verify = verify_applied_config(stored)
     return {
         "ok": ok,
-        "message": msg[-2000:],
+        "message": msg[-2000:] if not ok else "Контейнер перезапущен",
         "env_file": str(env_path),
         "verify": verify,
     }
@@ -549,7 +615,7 @@ def verify_applied_config(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         if not expected and key in SECRET_ENV_KEYS:
             continue
         got = actual.get(key, "")
-        ok = expected == got
+        ok = _env_values_match(key, expected, got)
         matches[key] = ok
         if not ok:
             mismatches.append(

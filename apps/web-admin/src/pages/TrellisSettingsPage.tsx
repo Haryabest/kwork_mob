@@ -171,7 +171,7 @@ export default function TrellisSettingsPage() {
       setVerify(data.verify || null);
       notifications.show({
         color: data.ok ? 'teal' : 'red',
-        message: data.ok ? 'Контейнер перезапущен' : 'Ошибка apply',
+        message: data.ok ? 'Контейнер перезапущен' : (data.message?.slice(0, 400) || 'Ошибка apply'),
       });
       await load();
       await loadVerify();
