@@ -178,6 +178,9 @@ def get_pipeline():
 
 
 def _texture_size_for_task(task_dir: Path) -> int:
+    cap = int(os.getenv("TRELLIS2_TEXTURE_SIZE", "1024"))
+    if _resolve_low_vram():
+        cap = min(cap, 1024)
     meta_path = task_dir / "task_meta.json"
     if meta_path.exists():
         try:
@@ -187,41 +190,62 @@ def _texture_size_for_task(task_dir: Path) -> int:
             company_id = int(meta.get("company_id") or 0)
             tier = str(meta.get("tier") or "").lower()
             if company_id > 0 or tier == "large":
-                return 2048
+                return min(2048, cap) if not _resolve_low_vram() else cap
         except Exception:  # noqa: BLE001
             pass
-    return int(os.getenv("TRELLIS2_TEXTURE_SIZE", "2048"))
+    return cap
 
 
 def _release_vram_before_export(pipe) -> None:
-    """Как ComfyUI: после inference освободить VRAM перед export GLB."""
+    """После inference освободить VRAM перед export GLB (как ComfyUI extract)."""
+    global _pipeline, _pipeline_kind
+    import gc
+
     import torch
 
     if not torch.cuda.is_available():
         return
-    low = _resolve_low_vram()
-    if low:
-        try:
-            if hasattr(pipe, "to"):
-                pipe.to("cpu")
-            for name in getattr(pipe, "model_names_to_load", ()) or ():
-                model = getattr(pipe, "models", {}).get(name)
-                if model is not None and hasattr(model, "cpu"):
-                    model.cpu()
-            if getattr(pipe, "image_cond_model", None) is not None and hasattr(pipe.image_cond_model, "cpu"):
-                pipe.image_cond_model.cpu()
-            if getattr(pipe, "rembg_model", None) is not None and hasattr(pipe.rembg_model, "cpu"):
-                pipe.rembg_model.cpu()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("pipeline offload before export: %s", exc)
+    try:
+        if hasattr(pipe, "to"):
+            pipe.to("cpu")
+        models = getattr(pipe, "models", None) or {}
+        for model in models.values():
+            if model is not None and hasattr(model, "cpu"):
+                model.cpu()
+        for attr in ("image_cond_model", "rembg_model"):
+            part = getattr(pipe, attr, None)
+            if part is not None and hasattr(part, "cpu"):
+                part.cpu()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("pipeline offload before export: %s", exc)
+    _pipeline = None
+    _pipeline_kind = None
+    del pipe
+    gc.collect()
     torch.cuda.empty_cache()
+    if hasattr(torch.cuda, "ipc_collect"):
+        torch.cuda.ipc_collect()
     torch.cuda.synchronize()
 
 
+def _mesh_tensors_cpu(mesh) -> None:
+    import torch
+
+    for attr in ("vertices", "faces", "attrs", "coords"):
+        val = getattr(mesh, attr, None)
+        if isinstance(val, torch.Tensor):
+            setattr(mesh, attr, val.detach().cpu())
+
+
 def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -> None:
+    import torch
     import o_voxel  # type: ignore
 
     low_vram = _resolve_low_vram()
+    _mesh_tensors_cpu(mesh)
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     skip_simplify = os.getenv("TRELLIS2_SKIP_MESH_SIMPLIFY", "").lower() in ("1", "true", "yes") or low_vram
     if hasattr(mesh, "simplify") and not skip_simplify:
         try:
@@ -229,36 +253,37 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         except Exception as exc:  # noqa: BLE001
             logger.warning("TRELLIS.2 mesh.simplify skipped: %s", exc)
 
-    decimation = int(os.getenv("TRELLIS2_DECIMATION", "300000"))
+    decimation = int(os.getenv("TRELLIS2_DECIMATION", "150000" if low_vram else "300000"))
     texture_size = _texture_size_for_task(task_dir) if task_dir else int(os.getenv("TRELLIS2_TEXTURE_SIZE", "1024"))
     use_webp = os.getenv("TRELLIS2_EXTENSION_WEBP", "0").lower() in ("1", "true", "yes")
 
-    grid_size = getattr(mesh, "voxel_shape", None)
-    if grid_size is not None and hasattr(grid_size, "__iter__"):
-        try:
-            grid_size = int(list(grid_size)[-1])
-        except Exception:  # noqa: BLE001
-            grid_size = None
+    # res из mesh (как app.py grid_size=res), не voxel_shape tensor
+    grid_size = getattr(mesh, "res", None)
+    if grid_size is None:
+        vs = getattr(mesh, "voxel_shape", None)
+        if vs is not None and hasattr(vs, "__iter__"):
+            try:
+                parts = [int(x) for x in vs]
+                grid_size = parts[-1] if parts else None
+            except Exception:  # noqa: BLE001
+                grid_size = None
 
-    glb_kwargs: dict = {
-        "vertices": mesh.vertices,
-        "faces": mesh.faces,
-        "attr_volume": mesh.attrs,
-        "coords": mesh.coords,
-        "attr_layout": mesh.layout,
-        "voxel_size": mesh.voxel_size,
-        "aabb": [[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-        "decimation_target": decimation,
-        "texture_size": texture_size,
-        "remesh": True,
-        "remesh_band": 1,
-        "remesh_project": 0,
-        "verbose": False,
-    }
-    if grid_size:
-        glb_kwargs["grid_size"] = grid_size
-
-    glb = o_voxel.postprocess.to_glb(**glb_kwargs)
+    glb = o_voxel.postprocess.to_glb(
+        vertices=mesh.vertices,
+        faces=mesh.faces,
+        attr_volume=mesh.attrs,
+        coords=mesh.coords,
+        attr_layout=mesh.layout,
+        voxel_size=mesh.voxel_size,
+        aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+        decimation_target=decimation,
+        texture_size=texture_size,
+        remesh=not low_vram,
+        remesh_band=1,
+        remesh_project=0,
+        verbose=False,
+        **({"grid_size": int(grid_size)} if grid_size else {}),
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     glb.export(str(output), extension_webp=use_webp)
     logger.info("TRELLIS.2 export extension_webp=%s texture_size=%s", use_webp, texture_size)
