@@ -48,17 +48,42 @@ CONFIG_ENV_KEYS = (
 )
 
 
+def _compose_relative() -> str:
+    return (settings.WORKER_DEPLOY_COMPOSE_FILE or "worker/docker-compose.worker.yml").strip()
+
+
 def _repo_root() -> Path:
+    """Корень репозитория с worker/docker-compose.worker.yml."""
+    rel = _compose_relative()
+    candidates: list[Path] = []
     raw = (settings.WORKER_DEPLOY_ROOT or "").strip()
     if raw:
+        candidates.append(Path(raw).expanduser())
+    candidates.extend(
+        [
+            Path("/repo"),
+            Path(__file__).resolve().parents[4],
+        ]
+    )
+    seen: set[str] = set()
+    for base in candidates:
+        try:
+            root = base.resolve()
+        except OSError:
+            continue
+        key = str(root)
+        if key in seen:
+            continue
+        seen.add(key)
+        if (root / rel).is_file():
+            return root
+    if raw:
         return Path(raw).expanduser().resolve()
-    # backend/orchestrator → repo root
-    return Path(__file__).resolve().parents[4]
+    return Path("/repo")
 
 
 def _compose_file() -> Path:
-    rel = (settings.WORKER_DEPLOY_COMPOSE_FILE or "worker/docker-compose.worker.yml").strip()
-    return _repo_root() / rel
+    return _repo_root() / _compose_relative()
 
 
 def _env_file() -> Path:
@@ -226,6 +251,12 @@ async def get_config(*, masked: bool = True) -> dict[str, Any]:
     out["deploy_root"] = str(_repo_root())
     out["compose_file"] = str(_compose_file())
     out["env_file"] = str(_env_file())
+    if raw := (settings.WORKER_DEPLOY_ROOT or "").strip():
+        configured = Path(raw).expanduser().resolve()
+        if configured != _repo_root():
+            out["deploy_root_hint"] = (
+                f"WORKER_DEPLOY_ROOT={raw} не содержит compose; используется {_repo_root()}"
+            )
     out["docker_available"] = docker_cli_available()
     out["docker_status"] = docker_cli_status()
     if masked:
@@ -380,7 +411,21 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     stored["env"] = _decrypt_env(stored.get("env") or {})
     compose = _compose_file()
     if not compose.is_file():
-        raise HTTPException(404, f"Compose не найден: {compose}")
+        tried = []
+        raw = (settings.WORKER_DEPLOY_ROOT or "").strip()
+        if raw:
+            tried.append(str(Path(raw).expanduser() / _compose_relative()))
+        tried.extend(
+            [
+                str(Path("/repo") / _compose_relative()),
+                str(Path(__file__).resolve().parents[4] / _compose_relative()),
+            ]
+        )
+        raise HTTPException(
+            404,
+            f"Compose не найден: {compose}. Проверьте WORKER_DEPLOY_ROOT (для docker compose: /repo). "
+            f"Искали: {', '.join(dict.fromkeys(tried))}",
+        )
     env_path = write_env_file(stored)
     compose_cmd = _compose_base_cmd()
     proc = _run(
