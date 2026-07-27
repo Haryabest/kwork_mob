@@ -9,10 +9,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { SellerShell } from '../../../../components/SellerShell';
 import { PageHeader, Surface } from '../../../../components/ui';
 import { api, apiMessage } from '../../../../services/api';
+import { supportStatusLabel } from '../../../../lib/supportStatus';
 
 type Msg = { id: number; body: string; is_staff: boolean; created_at?: string | null };
 
-import { supportStatusLabel } from '../../../../lib/supportStatus';
+export default function SupportTicketPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const [status, setStatus] = useState('');
