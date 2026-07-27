@@ -12,6 +12,13 @@ from app.services.minio import minio_service
 from app.services import photo_encryption as photo_enc
 
 VIEW_COUNT = 12
+ALLOWED_PARTIAL_PHOTO_COUNTS = frozenset({1, 3, 5, 6})
+VIEW_INDICES_BY_COUNT: dict[int, list[int]] = {
+    1: [0],
+    3: [0, 4, 8],
+    5: [0, 2, 4, 6, 8],
+    6: [0, 2, 4, 6, 8, 10],
+}
 VIEW_NAMES = [f"view_{i:02d}.jpg" for i in range(VIEW_COUNT)]
 ANGLE_LABELS = [
     "Фронт",
@@ -39,9 +46,57 @@ def view_key(task_uuid: str, index: int) -> str:
     return f"{photos_prefix(task_uuid)}{VIEW_NAMES[index]}"
 
 
+def validate_photo_count(photo_count: int) -> int:
+    if photo_count not in ALLOWED_PARTIAL_PHOTO_COUNTS and photo_count != VIEW_COUNT:
+        raise HTTPException(
+            400,
+            f"photo_count: 1, 3, 5, 6 или {VIEW_COUNT}, получено {photo_count}",
+        )
+    return photo_count
+
+
+def indices_for_photo_count(photo_count: int) -> list[int]:
+    validate_photo_count(photo_count)
+    if photo_count == VIEW_COUNT:
+        return list(range(VIEW_COUNT))
+    return VIEW_INDICES_BY_COUNT[photo_count]
+
+
+def _circular_distance(a: int, b: int, n: int = VIEW_COUNT) -> int:
+    d = abs(a - b)
+    return min(d, n - d)
+
+
+def expand_views_to_twelve(task_uuid: str) -> int:
+    """Заполнить недостающие ракурсы копией ближайшего загруженного."""
+    bucket = settings.MINIO_BUCKET_PHOTOS
+    uploaded = {
+        i
+        for i in range(VIEW_COUNT)
+        if minio_service.object_exists(bucket, view_key(task_uuid, i))
+    }
+    if not uploaded:
+        raise HTTPException(400, "Нет загруженных фото для расширения")
+    filled = 0
+    for i in range(VIEW_COUNT):
+        if i in uploaded:
+            continue
+        nearest = min(uploaded, key=lambda u: (_circular_distance(i, u), u))
+        src_key = view_key(task_uuid, nearest)
+        dst_key = view_key(task_uuid, i)
+        minio_service.client.copy_object(
+            CopySource={"Bucket": bucket, "Key": src_key},
+            Bucket=bucket,
+            Key=dst_key,
+        )
+        filled += 1
+    return filled
+
+
 def prepare_presigned_uploads(
     task_uuid: str,
     *,
+    photo_count: int = VIEW_COUNT,
     expires: int = 1800,
     encryption_required: bool = False,
 ) -> dict[str, Any]:
@@ -50,9 +105,11 @@ def prepare_presigned_uploads(
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(503, f"MinIO недоступен: {exc}") from exc
 
+    indices = indices_for_photo_count(photo_count)
     bucket = settings.MINIO_BUCKET_PHOTOS
     uploads = []
-    for i, name in enumerate(VIEW_NAMES):
+    for i in indices:
+        name = VIEW_NAMES[i]
         key = f"{photos_prefix(task_uuid)}{name}"
         url = minio_service.generate_presigned_url(bucket, key, expires=expires, method="put_object")
         uploads.append(
@@ -69,6 +126,8 @@ def prepare_presigned_uploads(
         )
     return {
         "task_uuid": task_uuid,
+        "photo_count": photo_count,
+        "required_indices": indices,
         "photos_prefix": photos_prefix(task_uuid),
         "bucket": bucket,
         "expires_in": expires,
@@ -84,10 +143,16 @@ async def prepare_for_user(
     task_uuid: str,
     *,
     company_id: int | None,
+    photo_count: int = VIEW_COUNT,
     expires: int = 1800,
 ) -> dict[str, Any]:
     enc = await photo_enc.encryption_enabled_for_company(db, company_id)
-    return prepare_presigned_uploads(task_uuid, expires=expires, encryption_required=enc)
+    return prepare_presigned_uploads(
+        task_uuid,
+        photo_count=photo_count,
+        expires=expires,
+        encryption_required=enc,
+    )
 
 
 def count_uploaded(task_uuid: str) -> int:
@@ -174,6 +239,54 @@ def delete_task_photos(task_uuid: str) -> dict[str, Any]:
     prefix = photos_prefix(task_uuid)
     n = minio_service.delete_prefix(bucket, prefix)
     return {"task_uuid": task_uuid, "bucket": bucket, "prefix": prefix, "deleted": n}
+
+
+async def upload_files_for_count(
+    task_uuid: str,
+    files: list[UploadFile],
+    *,
+    photo_count: int = VIEW_COUNT,
+) -> dict[str, Any]:
+    validate_photo_count(photo_count)
+    if photo_count == 1:
+        if len(files) != 1:
+            raise HTTPException(400, "Для 1 фото нужен один файл")
+        return await upload_single_replicated(task_uuid, files[0])
+    if photo_count == VIEW_COUNT:
+        return await upload_files_to_prefix(task_uuid, files)
+
+    indices = indices_for_photo_count(photo_count)
+    if len(files) != len(indices):
+        raise HTTPException(
+            400,
+            f"Нужно {len(indices)} файлов для режима {photo_count} фото, получено {len(files)}",
+        )
+    try:
+        minio_service.ensure_buckets()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"MinIO недоступен: {exc}") from exc
+
+    bucket = settings.MINIO_BUCKET_PHOTOS
+    keys: list[str] = []
+    for idx, f in zip(indices, files, strict=True):
+        data = await f.read()
+        if not data:
+            raise HTTPException(400, f"Пустой файл ракурса {ANGLE_LABELS[idx]}")
+        key = view_key(task_uuid, idx)
+        content_type = f.content_type or "image/jpeg"
+        minio_service.upload_bytes(bucket, key, data, content_type=content_type)
+        keys.append(key)
+    expanded = expand_views_to_twelve(task_uuid)
+    return {
+        "task_uuid": task_uuid,
+        "photo_count": photo_count,
+        "uploaded_indices": indices,
+        "expanded": expanded,
+        "photos_prefix": photos_prefix(task_uuid),
+        "bucket": bucket,
+        "keys": keys,
+        "count": len(keys),
+    }
 
 
 async def upload_files_to_prefix(task_uuid: str, files: list[UploadFile]) -> dict[str, Any]:

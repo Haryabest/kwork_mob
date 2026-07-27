@@ -31,6 +31,7 @@ router = APIRouter()
 class PhotosPrepareRequest(BaseModel):
     task_uuid: str | None = None
     company_id: int | None = None
+    photo_count: int = Field(default=12, ge=1, le=12)
 
 
 class PhotoEncryptionKeyBody(BaseModel):
@@ -122,6 +123,7 @@ async def _task_payload(
     user_id: int,
     photos_prefix: str | None = None,
     *,
+    photo_count: int = 12,
     device_model: str | None = None,
     os_version: str | None = None,
 ) -> dict:
@@ -143,6 +145,7 @@ async def _task_payload(
         "device_model": device_model or order.device_model or "unknown",
         "os_version": os_version or order.os_version or "unknown",
         "target_marketplace": getattr(order, "target_marketplace", None) or "ozon",
+        "photo_count": photo_count,
     }
     from app.services import photo_encryption as photo_enc
 
@@ -180,7 +183,10 @@ async def prepare_photos_upload(
 
     task_uuid = body.task_uuid or str(uuid.uuid4())
     prepared = await photos_service.prepare_for_user(
-        db, task_uuid, company_id=body.company_id
+        db,
+        task_uuid,
+        company_id=body.company_id,
+        photo_count=body.photo_count,
     )
     await access_svc.log_access(
         db,
@@ -272,11 +278,16 @@ async def zip_upload_complete(
 async def upload_order_photos(
     files: list[UploadFile] = File(...),
     task_uuid: str = Query(...),
+    photo_count: int = Query(12, ge=1, le=12),
     user: User = Depends(get_current_db_user),
 ):
-    """Multipart: ровно 12 файлов → MinIO."""
+    """Multipart: N файлов по выбранному режиму (1/3/5/6/12) → MinIO."""
     _ = user
-    return await photos_service.upload_files_to_prefix(task_uuid, files)
+    return await photos_service.upload_files_for_count(
+        task_uuid,
+        files,
+        photo_count=photo_count,
+    )
 
 
 @router.post("/photos/upload-single")
@@ -325,6 +336,8 @@ async def create_order(
         db, user, category=body.category.value, birth_date=body.birth_date
     )
 
+    photos_service.validate_photo_count(body.photo_count)
+
     from app.services.device_hint import device_hint_from_ua
 
     device_model = body.device_model
@@ -343,7 +356,7 @@ async def create_order(
     except HTTPException:
         raise HTTPException(
             400,
-            "Загрузите 12 ракурсов в MinIO (POST /orders/photos/prepare + upload) перед созданием заказа",
+            "Загрузите фото в MinIO (POST /orders/photos/prepare + upload) перед созданием заказа",
         ) from None
 
     from app.services.company_owner_2fa import assert_owner_2fa_for_company_order
@@ -484,6 +497,7 @@ async def create_order(
                 order,
                 user.id,
                 photos_prefix,
+                photo_count=body.photo_count,
                 device_model=device_model,
                 os_version=os_version,
             ),

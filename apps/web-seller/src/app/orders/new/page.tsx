@@ -17,6 +17,7 @@ import {
   Text,
   TextInput,
   ThemeIcon,
+  UnstyledButton,
 } from '@mantine/core';
 import { IconCamera, IconCheck, IconUpload } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
@@ -41,6 +42,20 @@ const ANGLES = [
   'Право-фронт 300°',
   'Фронт-право 330°',
 ];
+
+const PHOTO_MODES = [
+  { count: 1, title: '1 фото', hint: 'Быстрое оформление по одному снимку' },
+  { count: 3, title: '3 фото', hint: 'Фронт и два боковых ракурса (120°)' },
+  { count: 5, title: '5 фото', hint: 'Равномерно по кругу каждые 60°' },
+  { count: 6, title: '6 фото', hint: 'Шесть ракурсов каждые 60°' },
+] as const;
+
+const VIEW_INDICES: Record<number, number[]> = {
+  1: [0],
+  3: [0, 4, 8],
+  5: [0, 2, 4, 6, 8],
+  6: [0, 2, 4, 6, 8, 10],
+};
 
 type Prep = {
   task_uuid: string;
@@ -67,7 +82,8 @@ function ageFromIso(iso: string): number | null {
 
 export default function NewOrderPage() {
   const router = useRouter();
-  const [files, setFiles] = useState<(File | null)[]>(Array(12).fill(null));
+  const [photoCount, setPhotoCount] = useState<number | null>(null);
+  const [files, setFiles] = useState<(File | null)[]>([]);
   const [category, setCategory] = useState<string | null>('other');
   const [tier, setTier] = useState<string | null>('small');
   const [modelName, setModelName] = useState('');
@@ -86,8 +102,14 @@ export default function NewOrderPage() {
   const [promoWarnOpen, { open: openPromoWarn, close: closePromoWarn }] = useDisclosure(false);
   const [promoWarnText, setPromoWarnText] = useState('');
 
-  const ready = files.every(Boolean);
+  const uploadSlots = photoCount ? VIEW_INDICES[photoCount] ?? [] : [];
+  const ready = photoCount !== null && files.length === uploadSlots.length && files.every(Boolean);
   const needsAge = category === 'adult' && !ageVerified;
+
+  function selectPhotoMode(count: number) {
+    setPhotoCount(count);
+    setFiles(Array(VIEW_INDICES[count].length).fill(null));
+  }
 
   useEffect(() => {
     api
@@ -134,7 +156,7 @@ export default function NewOrderPage() {
   }
 
   async function submit() {
-    if (!ready || !category || !tier) return;
+    if (!ready || !category || !tier || photoCount === null) return;
     if (!modelName.trim()) {
       notifications.show({ color: 'red', message: 'Укажите название модели' });
       return;
@@ -151,15 +173,21 @@ export default function NewOrderPage() {
     setBusy(true);
     setProgress(0);
     try {
-      const { data: prep } = await api.post<Prep>('/orders/photos/prepare', {});
+      const { data: prep } = await api.post<Prep>('/orders/photos/prepare', {
+        photo_count: photoCount,
+      });
       const form = new FormData();
       files.forEach((f) => form.append('files', f!));
-      await api.post(`/orders/photos/upload?task_uuid=${prep.task_uuid}`, form, {
+      await api.post(
+        `/orders/photos/upload?task_uuid=${prep.task_uuid}&photo_count=${photoCount}`,
+        form,
+        {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (e) => {
           if (e.total) setProgress(Math.round((e.loaded / e.total) * 80));
         },
-      });
+        },
+      );
       const { data: order } = await api.post<{
         id: number;
         status: string;
@@ -167,6 +195,7 @@ export default function NewOrderPage() {
       }>('/orders/create', {
         category,
         tier,
+        photo_count: photoCount,
         model_display_name: modelName.trim(),
         task_uuid: prep.task_uuid,
         photos_prefix: prep.photos_prefix,
@@ -217,7 +246,10 @@ export default function NewOrderPage() {
 
   return (
     <SellerShell>
-      <PageHeader title="Новый заказ" description="12 ракурсов → MinIO → очередь генерации" />
+      <PageHeader
+        title="Новый заказ"
+        description="Выберите режим съёмки, загрузите фото и создайте заказ"
+      />
       <Surface>
         <Stack gap="lg">
           <Group grow preventGrowOverflow={false} style={{ flexWrap: 'wrap' }}>
@@ -335,44 +367,106 @@ export default function NewOrderPage() {
               </Group>
             )}
           </Stack>
-          <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="md">
-            {ANGLES.map((label, index) => (
-              <Card
-                key={label}
-                padding="sm"
-                radius="md"
-                withBorder={false}
-                style={{ background: 'rgba(0,87,184,0.04)' }}
-              >
-                <Stack gap={6} align="center">
-                  <ThemeIcon variant="light" color={files[index] ? 'teal' : 'brand'} size="lg">
-                    {files[index] ? <IconCheck size={16} /> : <IconCamera size={16} />}
-                  </ThemeIcon>
-                  <Text size="xs" ta="center" c="#6d6c77">
-                    {label}
-                  </Text>
-                  <FileButton
-                    accept="image/*"
-                    onChange={(f) => {
-                      setFiles((prev) => {
-                        const next = [...prev];
-                        next[index] = f;
-                        return next;
-                      });
-                    }}
-                  >
-                    {(props) => (
-                      <Button {...props} size="compact-xs" variant="light" leftSection={<IconUpload size={12} />}>
-                        Файл
-                      </Button>
-                    )}
-                  </FileButton>
-                </Stack>
-              </Card>
-            ))}
-          </SimpleGrid>
+          <Stack gap="xs">
+            <Text size="sm" fw={500}>
+              Режим съёмки
+            </Text>
+            <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
+              {PHOTO_MODES.map((mode) => {
+                const selected = photoCount === mode.count;
+                return (
+                  <UnstyledButton key={mode.count} onClick={() => selectPhotoMode(mode.count)}>
+                    <Card
+                      padding="md"
+                      radius="md"
+                      withBorder
+                      style={{
+                        borderColor: selected ? 'var(--mantine-color-brand-5)' : undefined,
+                        background: selected ? 'rgba(0,87,184,0.08)' : 'rgba(0,87,184,0.04)',
+                      }}
+                    >
+                      <Stack gap={4}>
+                        <Group gap="xs">
+                          <Text fw={600}>{mode.title}</Text>
+                          {selected && (
+                            <Badge size="xs" color="brand">
+                              выбрано
+                            </Badge>
+                          )}
+                        </Group>
+                        <Text size="xs" c="#6d6c77">
+                          {mode.hint}
+                        </Text>
+                      </Stack>
+                    </Card>
+                  </UnstyledButton>
+                );
+              })}
+            </SimpleGrid>
+          </Stack>
+          {photoCount !== null && (
+            <>
+              <Alert color="blue" variant="light">
+                Загрузите {photoCount} {photoCount === 1 ? 'фото' : 'фото'} — остальные ракурсы
+                заполнятся автоматически.
+              </Alert>
+              <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="md">
+                {uploadSlots.map((viewIndex, slotIndex) => {
+                  const label = ANGLES[viewIndex];
+                  return (
+                    <Card
+                      key={`${photoCount}-${viewIndex}`}
+                      padding="sm"
+                      radius="md"
+                      withBorder={false}
+                      style={{ background: 'rgba(0,87,184,0.04)' }}
+                    >
+                      <Stack gap={6} align="center">
+                        <ThemeIcon
+                          variant="light"
+                          color={files[slotIndex] ? 'teal' : 'brand'}
+                          size="lg"
+                        >
+                          {files[slotIndex] ? <IconCheck size={16} /> : <IconCamera size={16} />}
+                        </ThemeIcon>
+                        <Text size="xs" ta="center" c="#6d6c77">
+                          {label}
+                        </Text>
+                        <FileButton
+                          accept="image/*"
+                          onChange={(f) => {
+                            setFiles((prev) => {
+                              const next = [...prev];
+                              next[slotIndex] = f;
+                              return next;
+                            });
+                          }}
+                        >
+                          {(props) => (
+                            <Button
+                              {...props}
+                              size="compact-xs"
+                              variant="light"
+                              leftSection={<IconUpload size={12} />}
+                            >
+                              Файл
+                            </Button>
+                          )}
+                        </FileButton>
+                      </Stack>
+                    </Card>
+                  );
+                })}
+              </SimpleGrid>
+            </>
+          )}
           {busy && <Progress value={progress} />}
-          <Button loading={busy} disabled={!ready} onClick={submit} w="fit-content">
+          <Button
+            loading={busy}
+            disabled={!ready}
+            onClick={submit}
+            w="fit-content"
+          >
             Создать заказ
           </Button>
         </Stack>

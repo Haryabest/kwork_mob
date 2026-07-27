@@ -61,4 +61,5 @@ class OrderCreateRequest(BaseModel):
     device_model: str | None = Field(default=None, max_length=64)
     os_version: str | None = Field(default=None, max_length=64)
     model_display_name: str = Field(min_length=1, max_length=120)
+    photo_count: int = Field(default=12, ge=1, le=12)
     target_marketplace: TargetMarketplace = TargetMarketplace.OZON
