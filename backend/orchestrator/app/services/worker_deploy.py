@@ -465,6 +465,25 @@ def write_env_file(cfg: dict[str, Any]) -> Path:
     return path
 
 
+def _stop_and_remove_container(container_name: str) -> None:
+    """Снять контейнер по имени, если он создан вне текущего compose project."""
+    name = (container_name or "").strip()
+    if not name:
+        return
+    docker = _docker_bin() or "docker"
+    proc = subprocess.run(
+        [docker, "rm", "-f", name],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    if proc.returncode == 0:
+        logger.info("removed existing container %s", name)
+    elif "No such container" not in (proc.stderr or ""):
+        logger.debug("docker rm %s: %s", name, (proc.stderr or proc.stdout or "")[:300])
+
+
 async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     if not settings.WORKER_DEPLOY_ENABLED:
         raise HTTPException(503, "WORKER_DEPLOY_ENABLED=0 — управление Docker отключено")
@@ -503,6 +522,20 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         )
     env_path = write_env_file(stored)
     compose_cmd = _compose_base_cmd()
+    container_name = str(stored.get("container_name") or "kwork-worker")
+    _stop_and_remove_container(container_name)
+    _run(
+        [
+            *compose_cmd,
+            "-f",
+            str(compose),
+            "--env-file",
+            str(env_path),
+            "down",
+            "--remove-orphans",
+        ],
+        timeout=180,
+    )
     proc = _run(
         [
             *compose_cmd,
