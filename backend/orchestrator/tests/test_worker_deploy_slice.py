@@ -45,3 +45,8 @@ def test_worker_dir_replaces_container_paths(monkeypatch):
     monkeypatch.setattr(wd.settings, "WORKER_HOST_REPO_ROOT", "/home/dom/kwork_mob")
     path = wd._worker_dir({"worker_repo_path": "/app/kwork_mob/worker"})
     assert path == Path("/home/dom/kwork_mob/worker")
+
+
+def test_worker_redis_url_rewrites_compose_hostname():
+    assert wd._worker_redis_url("redis://redis:6379/0") == "redis://host.docker.internal:6382/0"
+    assert wd._worker_redis_url("redis://192.168.0.177:6382/0") == "redis://192.168.0.177:6382/0"

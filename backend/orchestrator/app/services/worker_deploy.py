@@ -151,11 +151,23 @@ def _default_orchestrator_http() -> str:
     return settings.API_BASE_URL.rstrip("/") or "http://host.docker.internal:8000"
 
 
-def _default_redis_url() -> str:
-    url = settings.REDIS_URL
-    if "redis:" in url and settings.ENVIRONMENT == "development":
+def _worker_redis_url(url: str | None = None) -> str:
+    """Redis для GPU-воркера вне compose-сети orchestrator."""
+    explicit = (os.getenv("WORKER_REDIS_URL") or "").strip()
+    raw = (url or explicit or settings.REDIS_URL or "").strip()
+    if not raw:
         return "redis://host.docker.internal:6382/0"
-    return url
+    if "://redis:" in raw or raw.startswith("redis://redis"):
+        return "redis://host.docker.internal:6382/0"
+    if "localhost" in raw:
+        return raw.replace("localhost", "host.docker.internal")
+    if "127.0.0.1" in raw:
+        return raw.replace("127.0.0.1", "host.docker.internal")
+    return raw
+
+
+def _default_redis_url() -> str:
+    return _worker_redis_url()
 
 
 def _default_minio_endpoint() -> str:
@@ -450,6 +462,8 @@ def _build_env_file_lines(cfg: dict[str, Any]) -> list[str]:
     for key in CONFIG_ENV_KEYS:
         if key in env and env[key] != "":
             val = str(env[key]).replace("\n", "")
+            if key == "REDIS_URL":
+                val = _worker_redis_url(val)
             if " " in val or "#" in val:
                 lines.append(f'{key}="{val}"')
             else:

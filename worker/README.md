@@ -15,6 +15,23 @@ docker compose --profile worker up -d worker-stub
 
 ## TRELLIS.2 — только Intelion Cloud GPU
 
+### Локальный GPU: один раз «запечь» runtime в образ
+
+После первого старта `install_trellis_runtime.sh` (flexgemm, o_voxel) — сохранить контейнер:
+
+```bash
+# воркер уже running, runtime дособрался
+./scripts/worker_docker_bake.sh
+# → kwork-worker:trellis2-runtime
+
+# опционально: файл для переноса
+./scripts/worker_docker_bake.sh kwork-worker kwork-worker:trellis2-runtime ./kwork-worker-runtime.tar
+```
+
+В `.env` / web-admin укажите образ `kwork-worker:trellis2-runtime` — recreate больше не тянет зависимости.
+
+### Облако Intelion
+
 Сборка **не на Windows/WSL**. На VM Intelion через `provision.py`:
 
 ```bash
