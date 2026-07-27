@@ -59,12 +59,8 @@ def _repo_root() -> Path:
     raw = (settings.WORKER_DEPLOY_ROOT or "").strip()
     if raw:
         candidates.append(Path(raw).expanduser())
-    candidates.extend(
-        [
-            Path("/repo"),
-            Path(__file__).resolve().parents[4],
-        ]
-    )
+    candidates.append(Path("/repo"))
+    candidates.extend(Path(__file__).resolve().parents)
     seen: set[str] = set()
     for base in candidates:
         try:
@@ -432,16 +428,10 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     stored["env"] = _decrypt_env(stored.get("env") or {})
     compose = _compose_file()
     if not compose.is_file():
-        tried = []
+        tried = [str(Path("/repo") / _compose_relative())]
         raw = (settings.WORKER_DEPLOY_ROOT or "").strip()
         if raw:
-            tried.append(str(Path(raw).expanduser() / _compose_relative()))
-        tried.extend(
-            [
-                str(Path("/repo") / _compose_relative()),
-                str(Path(__file__).resolve().parents[4] / _compose_relative()),
-            ]
-        )
+            tried.insert(0, str(Path(raw).expanduser() / _compose_relative()))
         raise HTTPException(
             404,
             f"Compose не найден: {compose}. Проверьте WORKER_DEPLOY_ROOT (для docker compose: /repo). "

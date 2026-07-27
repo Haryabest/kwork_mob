@@ -32,3 +32,8 @@ def test_coerce_env_map_ignores_bad_payload():
     assert wd._coerce_env_map(None) == {}
     assert wd._coerce_env_map("broken") == {}
     assert wd._coerce_env_map({"WORKER_ID": 42}) == {"WORKER_ID": "42"}
+
+
+def test_repo_root_does_not_index_parents():
+    root = wd._repo_root()
+    assert root.is_absolute()
