@@ -155,13 +155,13 @@ class ApiClient {
 
   Future<bool> pingHealth() async {
     try {
-      final res = await _dio.get(
-        '/health',
-        options: Options(
+      final root = _baseUrl.replaceAll(RegExp(r'/api/v1/?$'), '');
+      final res = await Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 5),
           receiveTimeout: const Duration(seconds: 5),
-          sendTimeout: const Duration(seconds: 5),
         ),
-      );
+      ).get('$root/health');
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -762,11 +762,13 @@ class ApiClient {
     String? modelDisplayName,
     String? deviceModel,
     String? osVersion,
+    int photoCount = 12,
   }) async {
     final res = await _dio.post('/orders/create', data: {
       'task_uuid': taskUuid,
       'category': category.api,
       'tier': tier.api,
+      'photo_count': photoCount,
       if (companyId != null) 'company_id': companyId,
       if (promocode != null && promocode.isNotEmpty) 'promocode': promocode,
       'forbidden_categories': forbidden.map((e) => e.api).toList(),
