@@ -180,6 +180,21 @@ def _default_redis_url() -> str:
     return _worker_redis_url()
 
 
+def _normalize_worker_env(env: dict[str, str]) -> dict[str, str]:
+    """Привести env воркера к адресам, доступным из GPU-контейнера вне compose-сети."""
+    out = dict(env)
+    ws = (out.get("ORCHESTRATOR_WS_URL") or "").strip()
+    if not ws or "://orchestrator:" in ws:
+        out["ORCHESTRATOR_WS_URL"] = _default_orchestrator_ws()
+    http = (out.get("ORCHESTRATOR_HTTP_URL") or "").strip()
+    if not http or "://orchestrator:" in http:
+        out["ORCHESTRATOR_HTTP_URL"] = _default_orchestrator_http()
+    minio = (out.get("MINIO_ENDPOINT") or "").strip()
+    if not minio or "://minio:" in minio:
+        out["MINIO_ENDPOINT"] = _default_minio_endpoint()
+    return out
+
+
 def _default_minio_endpoint() -> str:
     ep = settings.MINIO_ENDPOINT
     if "minio:" in ep and settings.ENVIRONMENT == "development":
@@ -307,7 +322,7 @@ def _merge_config(stored: dict[str, Any], incoming: dict[str, Any]) -> dict[str,
                     merged_env[k] = prev_plain[k]
                 continue
             merged_env[k] = s
-    merged["env"] = merged_env
+    merged["env"] = _normalize_worker_env(merged_env)
     for k in ("container_name", "docker_image", "worker_repo_path", "hf_cache_host_path", "state_volume", "extra_hosts"):
         if k in incoming and incoming[k] is not None:
             merged[k] = incoming[k]
@@ -319,9 +334,12 @@ async def get_config(*, masked: bool = True) -> dict[str, Any]:
         stored = await _redis_get()
         if not stored or not isinstance(stored, dict):
             cfg = default_config()
+            cfg["env"] = _normalize_worker_env(cfg["env"])
         else:
             cfg = {**default_config(), **{k: v for k, v in stored.items() if k != "env"}}
-            cfg["env"] = _decrypt_env(_coerce_env_map(stored.get("env")))
+            base_env = default_config()["env"]
+            stored_env = _decrypt_env(_coerce_env_map(stored.get("env")))
+            cfg["env"] = _normalize_worker_env({**base_env, **stored_env})
         out = dict(cfg)
         out["deploy_enabled"] = bool(settings.WORKER_DEPLOY_ENABLED)
         out["deploy_root"] = str(_repo_root())
@@ -455,7 +473,7 @@ def _run(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess[s
 
 
 def _build_env_file_lines(cfg: dict[str, Any]) -> list[str]:
-    env = _decrypt_env(_coerce_env_map(cfg.get("env")))
+    env = _normalize_worker_env(_decrypt_env(_coerce_env_map(cfg.get("env"))))
     cfg = _normalize_deploy_meta(cfg)
     worker_dir = _worker_dir(cfg)
     hf_cache = str(Path(str(cfg.get("hf_cache_host_path") or "~/hf_cache")).expanduser())
@@ -470,14 +488,14 @@ def _build_env_file_lines(cfg: dict[str, Any]) -> list[str]:
         f"WORKER_EXTRA_HOSTS={cfg.get('extra_hosts', 'host.docker.internal:host-gateway')}",
     ]
     for key in CONFIG_ENV_KEYS:
-        if key in env and env[key] != "":
-            val = str(env[key]).replace("\n", "")
-            if key == "REDIS_URL":
-                val = _worker_redis_url(val)
-            if " " in val or "#" in val:
-                lines.append(f'{key}="{val}"')
-            else:
-                lines.append(f"{key}={val}")
+        val = str(env.get(key, "")).strip()
+        if not val:
+            continue
+        val = val.replace("\n", "")
+        if " " in val or "#" in val:
+            lines.append(f'{key}="{val}"')
+        else:
+            lines.append(f"{key}={val}")
     for key in WORKER_PASS_THROUGH_ENV:
         val = (os.getenv(key) or "").strip()
         if val:
@@ -525,7 +543,9 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     if not stored:
         stored = default_config()
     stored = _normalize_deploy_meta(stored)
-    stored["env"] = _decrypt_env(_coerce_env_map(stored.get("env")))
+    base_env = default_config()["env"]
+    stored_env = _decrypt_env(_coerce_env_map(stored.get("env")))
+    stored["env"] = _normalize_worker_env({**base_env, **stored_env})
     worker_dir = _worker_dir(stored)
     agent = worker_dir / "worker_agent.py"
     repo_agent = _repo_root() / "worker" / "worker_agent.py"

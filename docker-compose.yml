@@ -73,6 +73,7 @@ services:
       WORKER_DEPLOY_ENABLED: ${WORKER_DEPLOY_ENABLED:-0}
       WORKER_DEPLOY_ROOT: ${WORKER_DEPLOY_ROOT:-/repo}
       WORKER_HOST_REPO_ROOT: ${WORKER_HOST_REPO_ROOT:-${PWD}}
+      WORKER_REDIS_URL: ${WORKER_REDIS_URL:-redis://host.docker.internal:6382/0}
     depends_on:
       postgres:
         condition: service_healthy
