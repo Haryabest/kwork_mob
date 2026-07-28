@@ -228,13 +228,16 @@ def _release_vram_before_export(pipe) -> None:
     torch.cuda.synchronize()
 
 
-def _mesh_tensors_cpu(mesh) -> None:
+def _mesh_to_device(mesh, device: str) -> None:
     import torch
 
     for attr in ("vertices", "faces", "attrs", "coords"):
         val = getattr(mesh, attr, None)
         if isinstance(val, torch.Tensor):
-            setattr(mesh, attr, val.detach().cpu())
+            setattr(mesh, attr, val.detach().to(device))
+    vs = getattr(mesh, "voxel_size", None)
+    if isinstance(vs, torch.Tensor):
+        mesh.voxel_size = vs.to(device)
 
 
 def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -> None:
@@ -242,9 +245,8 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
     import o_voxel  # type: ignore
 
     low_vram = _resolve_low_vram()
-    _mesh_tensors_cpu(mesh)
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    export_device = "cuda" if torch.cuda.is_available() else "cpu"
+    _mesh_to_device(mesh, export_device)
 
     skip_simplify = os.getenv("TRELLIS2_SKIP_MESH_SIMPLIFY", "").lower() in ("1", "true", "yes") or low_vram
     if hasattr(mesh, "simplify") and not skip_simplify:
