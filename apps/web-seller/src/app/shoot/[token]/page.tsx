@@ -20,6 +20,7 @@ import { notifications } from '@mantine/notifications';
 import { use, useEffect, useState } from 'react';
 import axios from 'axios';
 import { API_URL, apiMessage } from '../../../services/api';
+import { normalizeImageFiles } from '../../../lib/normalizeImageFile';
 
 type ShootData = {
   token: string;
@@ -67,10 +68,12 @@ export default function ShootLinkPage({
     setBusy(true);
     setProgress(0);
     try {
+      const normalized = await normalizeImageFiles(files);
       const form = new FormData();
-      files.forEach((f) => form.append('files', f));
+      normalized.forEach((f) => form.append('files', f));
       await axios.post(`${API_URL}/shoot/${token}/upload`, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 180_000,
         onUploadProgress: (e) => {
           if (e.total) setProgress(Math.round((e.loaded / e.total) * 100));
         },

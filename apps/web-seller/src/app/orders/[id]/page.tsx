@@ -51,6 +51,7 @@ export default function OrderDetailPage() {
   const id = params.id;
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState(false);
   const [lastEvent, setLastEvent] = useState<string | null>(null);
@@ -61,9 +62,11 @@ export default function OrderDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get<OrderDetail>(`/orders/${id}`);
+      const { data } = await api.get<OrderDetail>(`/orders/${id}`, { timeout: 20000 });
       setOrder(data);
+      setLoadError(null);
     } catch (e) {
+      setLoadError(apiMessage(e, 'Не удалось загрузить заказ'));
       notifications.show({ color: 'red', message: apiMessage(e) });
     } finally {
       setLoading(false);
@@ -204,12 +207,27 @@ export default function OrderDetailPage() {
 
   const canDownloadDocs = order != null && ['completed', 'paid'].includes(order.status);
 
-  if (loading || !order) {
+  if (loading) {
     return (
       <SellerShell>
         <Center py="xl">
           <Loader color="brand" />
         </Center>
+      </SellerShell>
+    );
+  }
+
+  if (!order) {
+    return (
+      <SellerShell>
+        <Stack gap="md" py="xl">
+          <Alert color="red" title="Заказ недоступен">
+            {loadError || 'Заказ не найден или нет доступа'}
+          </Alert>
+          <Button variant="light" onClick={() => router.push('/orders')}>
+            К списку заказов
+          </Button>
+        </Stack>
       </SellerShell>
     );
   }

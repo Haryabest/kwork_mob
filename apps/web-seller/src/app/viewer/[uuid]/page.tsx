@@ -32,6 +32,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModelViewer3D } from '../../../components/ModelViewer3D';
 import { loadModelPreviewBlobUrl, revokeModelPreviewUrl } from '../../../lib/modelPreview';
 import { api, apiMessage, getPromoErrorMeta } from '../../../services/api';
+import { photoUploadErrorMessage } from '../../../lib/photoUpload';
+import { normalizeImageFile } from '../../../lib/normalizeImageFile';
 import styles from './viewer.module.css';
 
 type ModelMeta = {
@@ -238,11 +240,20 @@ export default function ViewerPage() {
         front_photo_source: frontSource,
       });
       if (data.needs_upload && regenPhoto) {
-        const form = new FormData();
-        form.append('file', regenPhoto);
-        await api.post(`/orders/photos/upload-single?task_uuid=${data.task_uuid}`, form, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        try {
+          const normalized = await normalizeImageFile(regenPhoto);
+          const form = new FormData();
+          form.append('file', normalized);
+          await api.post(`/orders/photos/upload-single?task_uuid=${data.task_uuid}`, form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 120_000,
+          });
+        } catch (uploadErr) {
+          const msg = photoUploadErrorMessage(uploadErr, 'upload');
+          notifications.show({ color: 'red', message: msg, autoClose: 8000 });
+          setRegenPhoto(null);
+          return;
+        }
       }
       const { data: order } = await api.post<{
         id: number;
@@ -559,7 +570,8 @@ export default function ViewerPage() {
               </Radio.Group>
               {singlePhotoSource === 'upload' && (
                 <FileButton
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/*"
+                  capture="environment"
                   onChange={(file) => setRegenPhoto(file)}
                 >
                   {(props) => (

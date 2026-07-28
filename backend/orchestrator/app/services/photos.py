@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.services.minio import minio_service
 from app.services import photo_encryption as photo_enc
+from app.services.photo_image import normalize_photo_bytes
 
 VIEW_COUNT = 12
 ALLOWED_PARTIAL_PHOTO_COUNTS = frozenset({1, 3, 5, 6})
@@ -38,6 +39,16 @@ ANGLE_LABELS = [
 
 def photos_prefix(task_uuid: str) -> str:
     return f"photos/{task_uuid}/"
+
+
+async def _read_normalized_jpeg(f: UploadFile) -> bytes:
+    raw = await f.read()
+    if not raw:
+        raise HTTPException(400, "Пустой файл")
+    try:
+        return normalize_photo_bytes(raw, filename=f.filename, content_type=f.content_type)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 def view_key(task_uuid: str, index: int) -> str:
@@ -207,15 +218,13 @@ def copy_front_photo_to_all_views(src_uuid: str, dst_uuid: str) -> None:
 
 async def upload_single_replicated(task_uuid: str, file: UploadFile) -> dict[str, Any]:
     """Одно фото → view_00 и копия во все ракурсы (single-image pipeline)."""
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "Пустой файл")
+    data = await _read_normalized_jpeg(file)
     try:
         minio_service.ensure_buckets()
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(503, f"MinIO недоступен: {exc}") from exc
     bucket = settings.MINIO_BUCKET_PHOTOS
-    content_type = file.content_type or "image/jpeg"
+    content_type = "image/jpeg"
     first_key = view_key(task_uuid, 0)
     minio_service.upload_bytes(bucket, first_key, data, content_type=content_type)
     for i in range(1, VIEW_COUNT):
@@ -269,12 +278,9 @@ async def upload_files_for_count(
     bucket = settings.MINIO_BUCKET_PHOTOS
     keys: list[str] = []
     for idx, f in zip(indices, files, strict=True):
-        data = await f.read()
-        if not data:
-            raise HTTPException(400, f"Пустой файл ракурса {ANGLE_LABELS[idx]}")
+        data = await _read_normalized_jpeg(f)
         key = view_key(task_uuid, idx)
-        content_type = f.content_type or "image/jpeg"
-        minio_service.upload_bytes(bucket, key, data, content_type=content_type)
+        minio_service.upload_bytes(bucket, key, data, content_type="image/jpeg")
         keys.append(key)
     expanded = expand_views_to_twelve(task_uuid)
     return {
@@ -300,12 +306,9 @@ async def upload_files_to_prefix(task_uuid: str, files: list[UploadFile]) -> dic
     bucket = settings.MINIO_BUCKET_PHOTOS
     keys: list[str] = []
     for i, f in enumerate(files):
-        data = await f.read()
-        if not data:
-            raise HTTPException(400, f"Пустой файл ракурса {i}")
+        data = await _read_normalized_jpeg(f)
         key = view_key(task_uuid, i)
-        content_type = f.content_type or "image/jpeg"
-        minio_service.upload_bytes(bucket, key, data, content_type=content_type)
+        minio_service.upload_bytes(bucket, key, data, content_type="image/jpeg")
         keys.append(key)
     return {
         "task_uuid": task_uuid,

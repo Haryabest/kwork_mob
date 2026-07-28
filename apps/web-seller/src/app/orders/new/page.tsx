@@ -27,6 +27,12 @@ import { useEffect, useState } from 'react';
 import { SellerShell } from '../../../components/SellerShell';
 import { PageHeader, Surface } from '../../../components/ui';
 import { api, apiMessage, getPromoErrorMeta } from '../../../services/api';
+import {
+  photoUploadErrorMessage,
+  shouldResetPhotoFiles,
+  type PhotoUploadPhase,
+} from '../../../lib/photoUpload';
+import { normalizeImageFiles } from '../../../lib/normalizeImageFile';
 
 const ANGLES = [
   'Фронт',
@@ -101,6 +107,7 @@ export default function NewOrderPage() {
   const [progress, setProgress] = useState(0);
   const [promoWarnOpen, { open: openPromoWarn, close: closePromoWarn }] = useDisclosure(false);
   const [promoWarnText, setPromoWarnText] = useState('');
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const uploadSlots = photoCount ? VIEW_INDICES[photoCount] ?? [] : [];
   const ready = photoCount !== null && files.length === uploadSlots.length && files.every(Boolean);
@@ -109,6 +116,7 @@ export default function NewOrderPage() {
   function selectPhotoMode(count: number) {
     setPhotoCount(count);
     setFiles(Array(VIEW_INDICES[count].length).fill(null));
+    setUploadError(null);
   }
 
   useEffect(() => {
@@ -172,22 +180,28 @@ export default function NewOrderPage() {
     }
     setBusy(true);
     setProgress(0);
+    setUploadError(null);
+    let phase: PhotoUploadPhase = 'prepare';
     try {
       const { data: prep } = await api.post<Prep>('/orders/photos/prepare', {
         photo_count: photoCount,
       });
+      phase = 'upload';
+      const normalized = await normalizeImageFiles(files);
       const form = new FormData();
-      files.forEach((f) => form.append('files', f!));
+      normalized.forEach((f) => form.append('files', f));
       await api.post(
         `/orders/photos/upload?task_uuid=${prep.task_uuid}&photo_count=${photoCount}`,
         form,
         {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (e) => {
-          if (e.total) setProgress(Math.round((e.loaded / e.total) * 80));
-        },
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120_000,
+          onUploadProgress: (e) => {
+            if (e.total) setProgress(Math.round((e.loaded / e.total) * 80));
+          },
         },
       );
+      phase = 'create';
       const { data: order } = await api.post<{
         id: number;
         status: string;
@@ -233,6 +247,22 @@ export default function NewOrderPage() {
       notifications.show({ color: 'teal', message: `Заказ #${order.id}: ${order.status}` });
       router.push(`/orders/${order.id}`);
     } catch (e) {
+      if (phase === 'prepare' || phase === 'upload') {
+        const msg = photoUploadErrorMessage(e, phase);
+        setUploadError(msg);
+        notifications.show({ color: 'red', message: msg, autoClose: 8000 });
+        if (shouldResetPhotoFiles(e, phase)) {
+          setFiles(Array(uploadSlots.length).fill(null));
+        }
+        return;
+      }
+      if (phase === 'create' && shouldResetPhotoFiles(e, 'create')) {
+        const msg = photoUploadErrorMessage(e, 'create');
+        setUploadError(msg);
+        notifications.show({ color: 'red', message: msg, autoClose: 8000 });
+        setFiles(Array(uploadSlots.length).fill(null));
+        return;
+      }
       const meta = getPromoErrorMeta(e);
       notifications.show({ color: 'red', message: meta.message });
       if (meta.showWarning && meta.warningMessage) {
@@ -406,6 +436,11 @@ export default function NewOrderPage() {
           </Stack>
           {photoCount !== null && (
             <>
+              {uploadError && (
+                <Alert color="red" title="Загрузка фото" withCloseButton onClose={() => setUploadError(null)}>
+                  {uploadError}
+                </Alert>
+              )}
               <Alert color="blue" variant="light">
                 Загрузите {photoCount} {photoCount === 1 ? 'фото' : 'фото'} — остальные ракурсы
                 заполнятся автоматически.
@@ -434,7 +469,9 @@ export default function NewOrderPage() {
                         </Text>
                         <FileButton
                           accept="image/*"
+                          capture="environment"
                           onChange={(f) => {
+                            setUploadError(null);
                             setFiles((prev) => {
                               const next = [...prev];
                               next[slotIndex] = f;

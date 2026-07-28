@@ -81,7 +81,14 @@ export const authStorage = {
 
 export function getApiError(error: unknown): string {
   if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
     const detail = error.response?.data?.detail;
+    if (status === 429) {
+      if (typeof detail === 'string' && detail.includes('Blocked')) {
+        return `${detail} — слишком много запросов. Подождите 5 мин или задайте RATE_LIMIT_DISABLED=1 в .env (LAN/dev).`;
+      }
+      return typeof detail === 'string' ? detail : 'Слишком много запросов (429). Подождите и обновите страницу.';
+    }
     if (typeof detail === 'string') return detail;
     if (Array.isArray(detail)) {
       return detail.map((d) => (typeof d === 'string' ? d : d.msg)).join(', ');
