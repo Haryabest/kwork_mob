@@ -52,6 +52,7 @@ cd "${TRELLIS_ROOT}"
 export MAX_JOBS="${MAX_JOBS:-2}"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-${MAX_JOBS}}"
 export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-12.0}"
+rm -rf /tmp/extensions
 
 if [ -f setup.sh ]; then
   bash setup.sh --o-voxel --flexgemm --nvdiffrast --nvdiffrec
