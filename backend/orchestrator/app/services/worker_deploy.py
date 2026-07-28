@@ -47,6 +47,16 @@ CONFIG_ENV_KEYS = (
     "MINIO_SECRET_KEY",
 )
 
+# Из корневого .env orchestrator → worker/.env.worker (не в web-admin UI)
+WORKER_PASS_THROUGH_ENV = (
+    "QUALITY_THRESHOLD",
+    "SEGMENTATION_AVG_MIN",
+    "NOBG_CONFIDENCE",
+    "NOBG_HARD_FAIL_MIN",
+    "WATERMARK_HMAC_SECRET",
+    "WORKER_SUBPROCESS_STREAM",
+)
+
 
 def _compose_relative() -> str:
     return (settings.WORKER_DEPLOY_COMPOSE_FILE or "worker/docker-compose.worker.yml").strip()
@@ -468,6 +478,10 @@ def _build_env_file_lines(cfg: dict[str, Any]) -> list[str]:
                 lines.append(f'{key}="{val}"')
             else:
                 lines.append(f"{key}={val}")
+    for key in WORKER_PASS_THROUGH_ENV:
+        val = (os.getenv(key) or "").strip()
+        if val:
+            lines.append(f"{key}={val}")
     return lines
 
 

@@ -8,11 +8,14 @@ import sys
 from pathlib import Path
 
 MAX_BYTES = 15 * 1024 * 1024
-QUALITY_THRESHOLD = float(os.getenv("QUALITY_THRESHOLD", "0.7"))
 SEG_AVG_MIN = float(os.getenv("SEGMENTATION_AVG_MIN", "0.85"))
 # Минимальная геометрия валидной модели (§5.4): пустой/битый GLB отклоняем.
 MIN_FACES = int(os.getenv("VALIDATE_MIN_FACES", "200"))
 MIN_VERTICES = int(os.getenv("VALIDATE_MIN_VERTICES", "100"))
+
+
+def quality_threshold() -> float:
+    return float(os.getenv("QUALITY_THRESHOLD", "0.7"))
 
 
 def _seg_score(root: Path) -> tuple[float, dict]:
@@ -143,10 +146,10 @@ def compute_quality(root: Path, size: int) -> dict:
     # веса: сегментация и геометрия критичны (§5.4/§6.12), размер и PBR — технические
     score = round(0.4 * seg_s + 0.3 * geom_s + 0.15 * size_s + 0.15 * pbr_s, 4)
     # пустая/битая геометрия — жёсткий провал независимо от прочих компонент
-    passed = score >= QUALITY_THRESHOLD and geom_s > 0.0
+    passed = score >= quality_threshold() and geom_s > 0.0
     return {
         "quality_score": score,
-        "threshold": QUALITY_THRESHOLD,
+        "threshold": quality_threshold(),
         "components": {
             "segmentation": seg_s,
             "geometry": geom_s,
@@ -185,11 +188,11 @@ def main(task_dir: str) -> None:
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(
         f"[validate_glb] ok size={size} quality_score={report['quality_score']} "
-        f"threshold={QUALITY_THRESHOLD}"
+        f"threshold={report['threshold']}"
     )
     if not report["passed"]:
         raise SystemExit(
-            f"quality_gate_failed score={report['quality_score']} < {QUALITY_THRESHOLD}"
+            f"quality_gate_failed score={report['quality_score']} < {report['threshold']}"
         )
 
 
