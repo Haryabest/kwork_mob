@@ -460,7 +460,42 @@ def _compose_base_cmd() -> list[str]:
     return [docker, "compose"]
 
 
-def _run(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess[str]:
+def _parse_dotenv_file(path: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not path.is_file():
+        return out
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+            val = val[1:-1]
+        if key:
+            out[key] = val
+    return out
+
+
+def _compose_subprocess_env(env_file: Path) -> dict[str, str]:
+    """Docker Compose подставляет ${VAR} из shell раньше, чем из --env-file."""
+    worker_vars = _parse_dotenv_file(env_file)
+    base = os.environ.copy()
+    for key in worker_vars:
+        base.pop(key, None)
+    for key in (*CONFIG_ENV_KEYS, *WORKER_PASS_THROUGH_ENV):
+        base.pop(key, None)
+    base.update(worker_vars)
+    return base
+
+
+def _run(
+    cmd: list[str],
+    *,
+    timeout: int = 600,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     logger.info("worker deploy: %s", " ".join(cmd))
     return subprocess.run(
         cmd,
@@ -469,6 +504,7 @@ def _run(cmd: list[str], *, timeout: int = 600) -> subprocess.CompletedProcess[s
         timeout=timeout,
         cwd=str(_repo_root()),
         check=False,
+        env=env,
     )
 
 
@@ -569,6 +605,7 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
             f"Искали: {', '.join(dict.fromkeys(tried))}",
         )
     env_path = write_env_file(stored)
+    compose_env = _compose_subprocess_env(env_path)
     compose_cmd = _compose_base_cmd()
     container_name = str(stored.get("container_name") or "kwork-worker")
     _stop_and_remove_container(container_name)
@@ -583,6 +620,7 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
             "--remove-orphans",
         ],
         timeout=180,
+        env=compose_env,
     )
     proc = _run(
         [
@@ -597,6 +635,7 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
             "worker",
         ],
         timeout=900,
+        env=compose_env,
     )
     ok = proc.returncode == 0
     msg = (proc.stdout or "") + (proc.stderr or "")

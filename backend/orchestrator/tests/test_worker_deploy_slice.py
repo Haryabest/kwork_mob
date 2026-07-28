@@ -63,3 +63,11 @@ def test_build_env_file_lines_uses_admin_redis():
     cfg["env"] = {"WORKER_ID": "gpu-1", "REDIS_URL": "redis://192.168.0.177:6382/0"}
     text = "\n".join(wd._build_env_file_lines(cfg))
     assert "REDIS_URL=redis://192.168.0.177:6382/0" in text
+
+
+def test_compose_subprocess_env_prefers_worker_file(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env.worker"
+    env_file.write_text("REDIS_URL=redis://192.168.0.177:6382/0\n", encoding="utf-8")
+    monkeypatch.setenv("REDIS_URL", "redis://redis:6379/0")
+    env = wd._compose_subprocess_env(env_file)
+    assert env["REDIS_URL"] == "redis://192.168.0.177:6382/0"
