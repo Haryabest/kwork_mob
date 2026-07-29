@@ -39,3 +39,15 @@ def assert_production_pipeline() -> None:
 
 def subprocess_stream_enabled() -> bool:
     return os.getenv("WORKER_SUBPROCESS_STREAM", "1").strip().lower() in ("1", "true", "yes")
+
+
+def normalized_quality_threshold() -> float:
+    """Порог quality gate. >0.95 считаем ошибкой конфига (часто 1.0 «на максимум»)."""
+    raw = (os.getenv("QUALITY_THRESHOLD") or "0.35").strip()
+    try:
+        t = float(raw)
+    except ValueError:
+        return 0.35
+    if t > 0.95:
+        return 0.35
+    return max(0.1, min(0.95, t))

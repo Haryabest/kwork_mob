@@ -233,6 +233,14 @@ def _normalize_worker_env(env: dict[str, str]) -> dict[str, str]:
     minio = (out.get("MINIO_ENDPOINT") or "").strip()
     if not minio or "://minio:" in minio:
         out["MINIO_ENDPOINT"] = _default_minio_endpoint()
+    raw = (out.get("QUALITY_THRESHOLD") or "").strip()
+    if raw:
+        try:
+            t = float(raw)
+            if t > 0.95:
+                out["QUALITY_THRESHOLD"] = "0.35"
+        except ValueError:
+            out["QUALITY_THRESHOLD"] = "0.35"
     return out
 
 

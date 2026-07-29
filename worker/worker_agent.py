@@ -154,11 +154,27 @@ class WorkerAgent:
         self._task_coro: asyncio.Task | None = None
         self._ws = None
         self.config = {
-            "quality_threshold": float(os.getenv("QUALITY_THRESHOLD", "0.7")),
+            "quality_threshold": self._quality_threshold(),
             "temp_threshold_high": 85,
             "temp_threshold_low": 75,
             "dwt_watermark_strength": 0.01,
         }
+        os.environ["QUALITY_THRESHOLD"] = str(self.config["quality_threshold"])
+
+    @staticmethod
+    def _quality_threshold() -> float:
+        sys.path.insert(0, str(_resolve_scripts_dir()))
+        try:
+            from pipeline_env import normalized_quality_threshold
+
+            return normalized_quality_threshold()
+        except Exception:  # noqa: BLE001
+            raw = (os.getenv("QUALITY_THRESHOLD") or "0.35").strip()
+            try:
+                t = float(raw)
+            except ValueError:
+                return 0.35
+            return 0.35 if t > 0.95 else max(0.1, min(0.95, t))
 
     def _preflight_redis(self) -> None:
         try:
@@ -428,6 +444,7 @@ class WorkerAgent:
         env = os.environ.copy()
         env["WORKER_PIPELINE_MODE"] = PIPELINE_MODE
         env["WATERMARK_HMAC_SECRET"] = WATERMARK_SECRET
+        env["QUALITY_THRESHOLD"] = str(self._quality_threshold())
         env["PYTHONPATH"] = os.pathsep.join(
             p for p in (str(SCRIPTS_DIR), env.get("PYTHONPATH", "")) if p
         )
@@ -709,7 +726,7 @@ class WorkerAgent:
                     quality_score = float(json.loads(qpath.read_text(encoding="utf-8")).get("quality_score"))
                 except Exception:  # noqa: BLE001
                     quality_score = None
-            threshold = float(self.config.get("quality_threshold", 0.7))
+            threshold = self._quality_threshold()
             if not is_import and quality_score is not None and quality_score < threshold:
                 raise RuntimeError(
                     f"quality_gate_failed score={quality_score} < {threshold}"
@@ -812,6 +829,19 @@ class WorkerAgent:
             self.status = "idle"
         elif msg_type == "config_update":
             self.config.update(data.get("settings") or {})
+            qt = self.config.get("quality_threshold")
+            if qt is not None:
+                try:
+                    t = float(qt)
+                    if t > 0.95:
+                        t = 0.35
+                    self.config["quality_threshold"] = t
+                    os.environ["QUALITY_THRESHOLD"] = str(t)
+                except (TypeError, ValueError):
+                    self.config["quality_threshold"] = 0.35
+                    os.environ["QUALITY_THRESHOLD"] = "0.35"
+            else:
+                os.environ["QUALITY_THRESHOLD"] = str(self._quality_threshold())
         elif msg_type in ("ack", "registered", "pong"):
             pass
         else:

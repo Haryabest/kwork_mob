@@ -15,7 +15,9 @@ MIN_VERTICES = int(os.getenv("VALIDATE_MIN_VERTICES", "100"))
 
 
 def quality_threshold() -> float:
-    return float(os.getenv("QUALITY_THRESHOLD", "0.7"))
+    from pipeline_env import normalized_quality_threshold
+
+    return normalized_quality_threshold()
 
 
 def _seg_score(root: Path) -> tuple[float, dict]:
