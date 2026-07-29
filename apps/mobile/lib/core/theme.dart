@@ -116,11 +116,11 @@ ThemeData buildMaterialTheme(FThemeData forui) {
   return material.copyWith(
     textTheme: material.textTheme.apply(
       fontFamily: AppFonts.family,
-      fontFamilyPackage: AppFonts.package,
+      package: AppFonts.package,
     ),
     primaryTextTheme: material.primaryTextTheme.apply(
       fontFamily: AppFonts.family,
-      fontFamilyPackage: AppFonts.package,
+      package: AppFonts.package,
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: AppColors.wbPrimary,
