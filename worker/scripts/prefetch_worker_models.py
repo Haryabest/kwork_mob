@@ -38,6 +38,9 @@ def _warm_trellis() -> None:
         return
     repo = (os.getenv("TRELLIS_WEIGHTS") or "microsoft/TRELLIS.2-4B").strip()
     _snap(repo)
+    dinov3 = (os.getenv("TRELLIS2_DINOV3_MODEL") or "facebook/dinov3-vitl16-pretrain-lvd1689m").strip()
+    if dinov3:
+        _snap(dinov3)
 
 
 def main() -> int:

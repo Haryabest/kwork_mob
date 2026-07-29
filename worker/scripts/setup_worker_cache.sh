@@ -20,6 +20,10 @@ export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${STATE}/cache}"
 export CUDA_CACHE_PATH="${CUDA_CACHE_PATH:-${STATE}/nv/cuda}"
 export CUDA_CACHE_MAXSIZE="${CUDA_CACHE_MAXSIZE:-2147483647}"
 
+if [ -n "${HF_TOKEN:-}" ]; then
+  export HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN:-${HF_TOKEN}}"
+fi
+
 mkdir -p "${TORCH_HOME}" "${TRITON_CACHE_DIR}" "${XDG_CACHE_HOME}" "${CUDA_CACHE_PATH}"
 
 mkdir -p /root/.nv
