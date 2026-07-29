@@ -19,7 +19,9 @@ from app.core.crypto import decrypt_field, encrypt_field
 logger = logging.getLogger(__name__)
 
 REDIS_KEY = "trellis:worker:deploy:v1"
-SECRET_ENV_KEYS = frozenset({"WORKER_TOKEN", "HF_TOKEN", "MINIO_SECRET_KEY", "MINIO_ACCESS_KEY"})
+SECRET_ENV_KEYS = frozenset(
+    {"WORKER_TOKEN", "HF_TOKEN", "MINIO_SECRET_KEY", "MINIO_ACCESS_KEY", "WATERMARK_HMAC_SECRET"}
+)
 MASK = "••••••••"
 UNCHANGED = "__UNCHANGED__"
 
@@ -28,17 +30,35 @@ CONFIG_ENV_KEYS = (
     "WORKER_TOKEN",
     "WORKER_PIPELINE_MODE",
     "TRELLIS_VERSION",
+    "TRELLIS_ALLOW_STUB_FALLBACK",
     "TRELLIS2_PIPELINE_TYPE",
     "TRELLIS2_TEXTURE_SIZE",
     "TRELLIS2_DECIMATION",
     "TRELLIS2_LOW_VRAM",
+    "TRELLIS2_EXTENSION_WEBP",
+    "TRELLIS2_SS_STEPS",
+    "TRELLIS2_SS_GUIDANCE",
+    "TRELLIS2_SS_GUIDANCE_RESCALE",
+    "TRELLIS2_SS_RESCALE_T",
+    "TRELLIS2_SHAPE_STEPS",
+    "TRELLIS2_SHAPE_GUIDANCE",
+    "TRELLIS2_SHAPE_GUIDANCE_RESCALE",
+    "TRELLIS2_SHAPE_RESCALE_T",
+    "TRELLIS2_TEX_STEPS",
+    "TRELLIS2_TEX_GUIDANCE",
+    "TRELLIS2_TEX_GUIDANCE_RESCALE",
+    "TRELLIS2_TEX_RESCALE_T",
     "WORKER_TRELLIS_INPROCESS",
     "WORKER_WARMUP_TRELLIS",
     "WORKER_STARTUP_WARMUP",
+    "TRELLIS_SKIP_INTERNAL_REMBG",
     "ATTN_BACKEND",
     "PYTORCH_CUDA_ALLOC_CONF",
     "NOBG_ENGINE",
+    "NOBG_MODEL_ID",
     "NOBG_VIEW00_ONLY",
+    "NOBG_CONFIDENCE",
+    "NOBG_HARD_FAIL_MIN",
     "HF_TOKEN",
     "ORCHESTRATOR_WS_URL",
     "ORCHESTRATOR_HTTP_URL",
@@ -46,17 +66,15 @@ CONFIG_ENV_KEYS = (
     "MINIO_ENDPOINT",
     "MINIO_ACCESS_KEY",
     "MINIO_SECRET_KEY",
-)
-
-# Из корневого .env orchestrator → worker/.env.worker (не в web-admin UI)
-WORKER_PASS_THROUGH_ENV = (
     "QUALITY_THRESHOLD",
     "SEGMENTATION_AVG_MIN",
-    "NOBG_CONFIDENCE",
-    "NOBG_HARD_FAIL_MIN",
     "WATERMARK_HMAC_SECRET",
     "WORKER_SUBPROCESS_STREAM",
+    "COMPRESS_ALLOW_OVER_LIMIT",
 )
+
+# Опционально: значение из .env orchestrator перекрывает admin только если задано
+WORKER_PASS_THROUGH_ENV: tuple[str, ...] = ()
 
 
 def _compose_relative() -> str:
@@ -203,8 +221,92 @@ def _default_minio_endpoint() -> str:
     return ep
 
 
+def lan_env_defaults() -> dict[str, str]:
+    """Текущий LAN-профиль (быстрее, порог качества ниже)."""
+    return {
+        "WORKER_ID": "client-gpu-01",
+        "WORKER_TOKEN": settings.WORKER_TOKEN or "worker-dev-token",
+        "WORKER_PIPELINE_MODE": "trellis",
+        "TRELLIS_VERSION": "2",
+        "TRELLIS_ALLOW_STUB_FALLBACK": "0",
+        "TRELLIS2_PIPELINE_TYPE": "1024",
+        "TRELLIS2_TEXTURE_SIZE": "1024",
+        "TRELLIS2_DECIMATION": "150000",
+        "TRELLIS2_LOW_VRAM": "1",
+        "TRELLIS2_EXTENSION_WEBP": "0",
+        "TRELLIS2_SS_STEPS": "12",
+        "TRELLIS2_SS_GUIDANCE": "7.5",
+        "TRELLIS2_SS_GUIDANCE_RESCALE": "0.7",
+        "TRELLIS2_SS_RESCALE_T": "5",
+        "TRELLIS2_SHAPE_STEPS": "12",
+        "TRELLIS2_SHAPE_GUIDANCE": "7.5",
+        "TRELLIS2_SHAPE_GUIDANCE_RESCALE": "0.5",
+        "TRELLIS2_SHAPE_RESCALE_T": "3",
+        "TRELLIS2_TEX_STEPS": "12",
+        "TRELLIS2_TEX_GUIDANCE": "1",
+        "TRELLIS2_TEX_GUIDANCE_RESCALE": "0",
+        "TRELLIS2_TEX_RESCALE_T": "3",
+        "WORKER_TRELLIS_INPROCESS": "1",
+        "WORKER_WARMUP_TRELLIS": "1",
+        "WORKER_STARTUP_WARMUP": "1",
+        "TRELLIS_SKIP_INTERNAL_REMBG": "1",
+        "ATTN_BACKEND": "xformers",
+        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+        "NOBG_ENGINE": "rmbg2",
+        "NOBG_MODEL_ID": "briaai/RMBG-2.0",
+        "NOBG_VIEW00_ONLY": "1",
+        "NOBG_CONFIDENCE": "0.65",
+        "NOBG_HARD_FAIL_MIN": "0.35",
+        "HF_TOKEN": "",
+        "ORCHESTRATOR_WS_URL": _default_orchestrator_ws(),
+        "ORCHESTRATOR_HTTP_URL": _default_orchestrator_http(),
+        "REDIS_URL": _default_redis_url(),
+        "MINIO_ENDPOINT": _default_minio_endpoint(),
+        "MINIO_ACCESS_KEY": settings.MINIO_ACCESS_KEY,
+        "MINIO_SECRET_KEY": settings.MINIO_SECRET_KEY,
+        "QUALITY_THRESHOLD": "0.35",
+        "SEGMENTATION_AVG_MIN": "0.85",
+        "WATERMARK_HMAC_SECRET": settings.WATERMARK_HMAC_SECRET or "change-me-watermark-secret",
+        "WORKER_SUBPROCESS_STREAM": "1",
+        "COMPRESS_ALLOW_OVER_LIMIT": "1",
+    }
+
+
+def quality_env_preset() -> dict[str, str]:
+    """Выше качество: больше текстура/decimation, строже порог."""
+    env = lan_env_defaults()
+    env.update(
+        {
+            "TRELLIS2_TEXTURE_SIZE": "2048",
+            "TRELLIS2_DECIMATION": "300000",
+            "TRELLIS2_SS_STEPS": "16",
+            "TRELLIS2_SHAPE_STEPS": "16",
+            "TRELLIS2_TEX_STEPS": "16",
+            "QUALITY_THRESHOLD": "0.45",
+            "NOBG_CONFIDENCE": "0.75",
+        }
+    )
+    return env
+
+
+def env_presets() -> dict[str, dict[str, Any]]:
+    return {
+        "lan": {
+            "id": "lan",
+            "title": "LAN (по умолчанию)",
+            "description": "1024 pipeline, texture 1024, порог 0.35 — стабильно на 16 GB",
+            "env": lan_env_defaults(),
+        },
+        "quality": {
+            "id": "quality",
+            "title": "Качество выше",
+            "description": "texture 2048, decimation 300k, больше шагов, порог 0.45",
+            "env": quality_env_preset(),
+        },
+    }
+
+
 def default_config() -> dict[str, Any]:
-    root = _host_repo_root()
     worker_dir = _worker_dir()
     return {
         "container_name": "kwork-worker",
@@ -213,31 +315,7 @@ def default_config() -> dict[str, Any]:
         "hf_cache_host_path": str(Path.home() / "hf_cache"),
         "state_volume": "kwork_worker_state",
         "extra_hosts": "host.docker.internal:host-gateway",
-        "env": {
-            "WORKER_ID": "client-gpu-01",
-            "WORKER_TOKEN": settings.WORKER_TOKEN or "worker-dev-token",
-            "WORKER_PIPELINE_MODE": "trellis",
-            "TRELLIS_VERSION": "2",
-            "TRELLIS2_PIPELINE_TYPE": "1024",
-            "TRELLIS2_TEXTURE_SIZE": "1024",
-            "TRELLIS2_DECIMATION": "150000",
-            "TRELLIS2_LOW_VRAM": "1",
-            "WORKER_TRELLIS_INPROCESS": "0",
-            "WORKER_WARMUP_TRELLIS": "0",
-            "WORKER_STARTUP_WARMUP": "1",
-            "TRELLIS_SKIP_INTERNAL_REMBG": "1",
-            "ATTN_BACKEND": "xformers",
-            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
-            "NOBG_ENGINE": "rmbg2",
-            "NOBG_VIEW00_ONLY": "1",
-            "HF_TOKEN": "",
-            "ORCHESTRATOR_WS_URL": _default_orchestrator_ws(),
-            "ORCHESTRATOR_HTTP_URL": _default_orchestrator_http(),
-            "REDIS_URL": _default_redis_url(),
-            "MINIO_ENDPOINT": _default_minio_endpoint(),
-            "MINIO_ACCESS_KEY": settings.MINIO_ACCESS_KEY,
-            "MINIO_SECRET_KEY": settings.MINIO_SECRET_KEY,
-        },
+        "env": lan_env_defaults(),
         "updated_at": None,
         "applied_at": None,
         "last_apply_ok": None,

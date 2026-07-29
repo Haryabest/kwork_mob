@@ -10,7 +10,25 @@ def test_default_config_has_trellis_keys():
     env = cfg["env"]
     assert env["TRELLIS2_PIPELINE_TYPE"] == "1024"
     assert env["WORKER_PIPELINE_MODE"] == "trellis"
+    assert env["QUALITY_THRESHOLD"] == "0.35"
+    assert env["WORKER_TRELLIS_INPROCESS"] == "1"
     assert cfg["container_name"] == "kwork-worker"
+
+
+def test_env_presets():
+    presets = wd.env_presets()
+    assert "lan" in presets and "quality" in presets
+    assert presets["quality"]["env"]["TRELLIS2_TEXTURE_SIZE"] == "2048"
+    assert float(presets["quality"]["env"]["QUALITY_THRESHOLD"]) > float(
+        presets["lan"]["env"]["QUALITY_THRESHOLD"]
+    )
+
+
+def test_build_env_file_includes_quality_threshold():
+    cfg = wd.default_config()
+    text = "\n".join(wd._build_env_file_lines(cfg))
+    assert "QUALITY_THRESHOLD=0.35" in text
+    assert "NOBG_CONFIDENCE=0.65" in text
 
 
 def test_build_env_file_lines():

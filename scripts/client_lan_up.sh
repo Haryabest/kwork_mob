@@ -50,65 +50,71 @@ if docker image inspect "${WORKER_DOCKER_IMAGE}" >/dev/null 2>&1 || docker image
   chmod +x "$ROOT/worker/entrypoint.sh" "$ROOT/worker/scripts/"*.sh 2>/dev/null || true
   docker volume create kwork_worker_state >/dev/null 2>&1 || true
   mkdir -p "${HF_CACHE_DIR:-$HOME/hf_cache}"
-  if docker ps -a --format '{{.Names}}' | grep -qx kwork-worker; then
-    if [[ "${WORKER_FORCE_RECREATE:-0}" == "1" ]]; then
-      docker rm -f kwork-worker 2>/dev/null || true
-    else
-      echo "[client_lan] воркер уже есть — restart (runtime не пересобирается)"
-      docker start kwork-worker 2>/dev/null || docker restart kwork-worker
+  if [[ "${WORKER_MANUAL_RUN:-0}" == "1" ]]; then
+    if docker ps -a --format '{{.Names}}' | grep -qx kwork-worker; then
+      if [[ "${WORKER_FORCE_RECREATE:-0}" == "1" ]]; then
+        docker rm -f kwork-worker 2>/dev/null || true
+      else
+        echo "[client_lan] воркер уже есть — restart (runtime не пересобирается)"
+        docker start kwork-worker 2>/dev/null || docker restart kwork-worker
+      fi
     fi
-  fi
-  if ! docker ps -a --format '{{.Names}}' | grep -qx kwork-worker; then
-  docker run -d --gpus all --name kwork-worker --restart unless-stopped \
-    --add-host=host.docker.internal:host-gateway \
-    -v kwork_worker_state:/var/lib/worker \
-    -v "${HF_CACHE_DIR:-$HOME/hf_cache}:/root/.cache/huggingface" \
-    -v "$ROOT/worker/entrypoint.sh:/usr/local/bin/worker_entrypoint.sh:ro" \
-    -v "$ROOT/worker/scripts:/app/scripts:ro" \
-    -v "$ROOT/worker/worker_agent.py:/app/worker_agent.py:ro" \
-    -e WORKER_ID="${WORKER_ID:-client-gpu-01}" \
-    -e WORKER_TOKEN="${WORKER_TOKEN:-worker-dev-token}" \
-    -e WORKER_PIPELINE_MODE="${WORKER_PIPELINE_MODE:-trellis}" \
-    -e TRELLIS_ALLOW_STUB_FALLBACK="${TRELLIS_ALLOW_STUB_FALLBACK:-0}" \
-    -e TRELLIS_VERSION=2 \
-    -e TRELLIS2_PIPELINE_TYPE="${TRELLIS2_PIPELINE_TYPE:-1024}" \
-    -e TRELLIS2_TEXTURE_SIZE="${TRELLIS2_TEXTURE_SIZE:-2048}" \
-    -e TRELLIS2_DECIMATION="${TRELLIS2_DECIMATION:-300000}" \
-    -e TRELLIS2_EXTENSION_WEBP="${TRELLIS2_EXTENSION_WEBP:-0}" \
-    -e TRELLIS2_SS_STEPS="${TRELLIS2_SS_STEPS:-12}" \
-    -e TRELLIS2_SS_GUIDANCE="${TRELLIS2_SS_GUIDANCE:-7.5}" \
-    -e TRELLIS2_SS_GUIDANCE_RESCALE="${TRELLIS2_SS_GUIDANCE_RESCALE:-0.7}" \
-    -e TRELLIS2_SS_RESCALE_T="${TRELLIS2_SS_RESCALE_T:-5}" \
-    -e TRELLIS2_SHAPE_STEPS="${TRELLIS2_SHAPE_STEPS:-12}" \
-    -e TRELLIS2_SHAPE_GUIDANCE="${TRELLIS2_SHAPE_GUIDANCE:-7.5}" \
-    -e TRELLIS2_SHAPE_GUIDANCE_RESCALE="${TRELLIS2_SHAPE_GUIDANCE_RESCALE:-0.5}" \
-    -e TRELLIS2_SHAPE_RESCALE_T="${TRELLIS2_SHAPE_RESCALE_T:-3}" \
-    -e TRELLIS2_TEX_STEPS="${TRELLIS2_TEX_STEPS:-12}" \
-    -e TRELLIS2_TEX_GUIDANCE="${TRELLIS2_TEX_GUIDANCE:-1}" \
-    -e TRELLIS2_TEX_GUIDANCE_RESCALE="${TRELLIS2_TEX_GUIDANCE_RESCALE:-0}" \
-    -e TRELLIS2_TEX_RESCALE_T="${TRELLIS2_TEX_RESCALE_T:-3}" \
-    -e WORKER_TRELLIS_INPROCESS="${WORKER_TRELLIS_INPROCESS:-0}" \
-    -e WORKER_WARMUP_TRELLIS="${WORKER_WARMUP_TRELLIS:-0}" \
-    -e WORKER_STARTUP_WARMUP="${WORKER_STARTUP_WARMUP:-1}" \
-    -e TRELLIS_SKIP_INTERNAL_REMBG="${TRELLIS_SKIP_INTERNAL_REMBG:-1}" \
-    -e ATTN_BACKEND="${ATTN_BACKEND:-xformers}" \
-    -e PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
-    -e NOBG_ENGINE="${NOBG_ENGINE:-rmbg2}" \
-    -e NOBG_MODEL_ID="${NOBG_MODEL_ID:-briaai/RMBG-2.0}" \
-    -e NOBG_VIEW00_ONLY="${NOBG_VIEW00_ONLY:-1}" \
-    -e ORCHESTRATOR_WS_URL="ws://host.docker.internal:8000/ws/worker" \
-    -e ORCHESTRATOR_HTTP_URL="http://host.docker.internal:8000" \
-    -e REDIS_URL="${WORKER_REDIS_URL}" \
-    -e NOBG_CONFIDENCE="${NOBG_CONFIDENCE}" \
-    -e NOBG_HARD_FAIL_MIN="${NOBG_HARD_FAIL_MIN}" \
-    -e COMPRESS_ALLOW_OVER_LIMIT="${COMPRESS_ALLOW_OVER_LIMIT}" \
-    -e MINIO_ENDPOINT="http://host.docker.internal:9010" \
-    -e MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" \
-    -e MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}" \
-    -e HF_TOKEN="${HF_TOKEN:-}" \
-    -e QUALITY_THRESHOLD="${QUALITY_THRESHOLD:-0.4}" \
-    -e WATERMARK_HMAC_SECRET="${WATERMARK_HMAC_SECRET:-change-me-watermark-secret}" \
-    "${WORKER_DOCKER_IMAGE}"
+    if ! docker ps -a --format '{{.Names}}' | grep -qx kwork-worker; then
+    docker run -d --gpus all --name kwork-worker --restart unless-stopped \
+      --add-host=host.docker.internal:host-gateway \
+      -v kwork_worker_state:/var/lib/worker \
+      -v "${HF_CACHE_DIR:-$HOME/hf_cache}:/root/.cache/huggingface" \
+      -v "$ROOT/worker/entrypoint.sh:/usr/local/bin/worker_entrypoint.sh:ro" \
+      -v "$ROOT/worker/scripts:/app/scripts:ro" \
+      -v "$ROOT/worker/worker_agent.py:/app/worker_agent.py:ro" \
+      -e WORKER_ID="${WORKER_ID:-client-gpu-01}" \
+      -e WORKER_TOKEN="${WORKER_TOKEN:-worker-dev-token}" \
+      -e WORKER_PIPELINE_MODE="${WORKER_PIPELINE_MODE:-trellis}" \
+      -e TRELLIS_ALLOW_STUB_FALLBACK="${TRELLIS_ALLOW_STUB_FALLBACK:-0}" \
+      -e TRELLIS_VERSION=2 \
+      -e TRELLIS2_PIPELINE_TYPE="${TRELLIS2_PIPELINE_TYPE:-1024}" \
+      -e TRELLIS2_TEXTURE_SIZE="${TRELLIS2_TEXTURE_SIZE:-1024}" \
+      -e TRELLIS2_DECIMATION="${TRELLIS2_DECIMATION:-150000}" \
+      -e TRELLIS2_EXTENSION_WEBP="${TRELLIS2_EXTENSION_WEBP:-0}" \
+      -e TRELLIS2_SS_STEPS="${TRELLIS2_SS_STEPS:-12}" \
+      -e TRELLIS2_SS_GUIDANCE="${TRELLIS2_SS_GUIDANCE:-7.5}" \
+      -e TRELLIS2_SS_GUIDANCE_RESCALE="${TRELLIS2_SS_GUIDANCE_RESCALE:-0.7}" \
+      -e TRELLIS2_SS_RESCALE_T="${TRELLIS2_SS_RESCALE_T:-5}" \
+      -e TRELLIS2_SHAPE_STEPS="${TRELLIS2_SHAPE_STEPS:-12}" \
+      -e TRELLIS2_SHAPE_GUIDANCE="${TRELLIS2_SHAPE_GUIDANCE:-7.5}" \
+      -e TRELLIS2_SHAPE_GUIDANCE_RESCALE="${TRELLIS2_SHAPE_GUIDANCE_RESCALE:-0.5}" \
+      -e TRELLIS2_SHAPE_RESCALE_T="${TRELLIS2_SHAPE_RESCALE_T:-3}" \
+      -e TRELLIS2_TEX_STEPS="${TRELLIS2_TEX_STEPS:-12}" \
+      -e TRELLIS2_TEX_GUIDANCE="${TRELLIS2_TEX_GUIDANCE:-1}" \
+      -e TRELLIS2_TEX_GUIDANCE_RESCALE="${TRELLIS2_TEX_GUIDANCE_RESCALE:-0}" \
+      -e TRELLIS2_TEX_RESCALE_T="${TRELLIS2_TEX_RESCALE_T:-3}" \
+      -e WORKER_TRELLIS_INPROCESS="${WORKER_TRELLIS_INPROCESS:-1}" \
+      -e WORKER_WARMUP_TRELLIS="${WORKER_WARMUP_TRELLIS:-1}" \
+      -e WORKER_STARTUP_WARMUP="${WORKER_STARTUP_WARMUP:-1}" \
+      -e TRELLIS_SKIP_INTERNAL_REMBG="${TRELLIS_SKIP_INTERNAL_REMBG:-1}" \
+      -e ATTN_BACKEND="${ATTN_BACKEND:-xformers}" \
+      -e PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
+      -e NOBG_ENGINE="${NOBG_ENGINE:-rmbg2}" \
+      -e NOBG_MODEL_ID="${NOBG_MODEL_ID:-briaai/RMBG-2.0}" \
+      -e NOBG_VIEW00_ONLY="${NOBG_VIEW00_ONLY:-1}" \
+      -e ORCHESTRATOR_WS_URL="ws://host.docker.internal:8000/ws/worker" \
+      -e ORCHESTRATOR_HTTP_URL="http://host.docker.internal:8000" \
+      -e REDIS_URL="${WORKER_REDIS_URL}" \
+      -e NOBG_CONFIDENCE="${NOBG_CONFIDENCE:-0.65}" \
+      -e NOBG_HARD_FAIL_MIN="${NOBG_HARD_FAIL_MIN}" \
+      -e COMPRESS_ALLOW_OVER_LIMIT="${COMPRESS_ALLOW_OVER_LIMIT}" \
+      -e MINIO_ENDPOINT="http://host.docker.internal:9010" \
+      -e MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" \
+      -e MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}" \
+      -e HF_TOKEN="${HF_TOKEN:-}" \
+      -e QUALITY_THRESHOLD="${QUALITY_THRESHOLD:-0.35}" \
+      -e WATERMARK_HMAC_SECRET="${WATERMARK_HMAC_SECRET:-change-me-watermark-secret}" \
+      "${WORKER_DOCKER_IMAGE}"
+    fi
+  else
+    echo "[client_lan] воркер через Admin → http://${HOST}:3001/trellis-settings"
+    echo "  Пресет «LAN» по умолчанию, «Качество выше» — больше texture/decimation."
+    echo "  Сохранить → Применить и перезапустить. Legacy: WORKER_MANUAL_RUN=1 $0"
   fi
 else
   echo "[client_lan] образ ${WORKER_DOCKER_IMAGE:-kwork-worker:trellis2} не найден — воркер пропущен"

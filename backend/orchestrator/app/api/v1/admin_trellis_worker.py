@@ -30,30 +30,6 @@ router = APIRouter(
 )
 
 
-class WorkerEnvBody(BaseModel):
-    WORKER_ID: str | None = None
-    WORKER_TOKEN: str | None = None
-    WORKER_PIPELINE_MODE: str | None = None
-    TRELLIS_VERSION: str | None = None
-    TRELLIS2_PIPELINE_TYPE: str | None = None
-    TRELLIS2_TEXTURE_SIZE: str | None = None
-    TRELLIS2_DECIMATION: str | None = None
-    TRELLIS2_LOW_VRAM: str | None = None
-    WORKER_TRELLIS_INPROCESS: str | None = None
-    WORKER_WARMUP_TRELLIS: str | None = None
-    ATTN_BACKEND: str | None = None
-    PYTORCH_CUDA_ALLOC_CONF: str | None = None
-    NOBG_ENGINE: str | None = None
-    NOBG_VIEW00_ONLY: str | None = None
-    HF_TOKEN: str | None = None
-    ORCHESTRATOR_WS_URL: str | None = None
-    ORCHESTRATOR_HTTP_URL: str | None = None
-    REDIS_URL: str | None = None
-    MINIO_ENDPOINT: str | None = None
-    MINIO_ACCESS_KEY: str | None = None
-    MINIO_SECRET_KEY: str | None = None
-
-
 class TrellisWorkerConfigBody(BaseModel):
     container_name: str | None = Field(default=None, max_length=64)
     docker_image: str | None = Field(default=None, max_length=200)
@@ -61,12 +37,17 @@ class TrellisWorkerConfigBody(BaseModel):
     hf_cache_host_path: str | None = Field(default=None, max_length=500)
     state_volume: str | None = Field(default=None, max_length=120)
     extra_hosts: str | None = Field(default=None, max_length=200)
-    env: WorkerEnvBody | None = None
+    env: dict[str, str] | None = None
 
 
 @router.get("")
 async def get_trellis_worker_config(_: dict = Depends(require_admin)):
     return await wd.get_config(masked=True)
+
+
+@router.get("/presets")
+async def get_trellis_worker_presets(_: dict = Depends(require_admin)):
+    return wd.env_presets()
 
 
 @router.put("")
@@ -76,8 +57,8 @@ async def put_trellis_worker_config(
     db: AsyncSession = Depends(get_db),
 ):
     payload: dict[str, Any] = body.model_dump(exclude_none=True)
-    if body.env:
-        payload["env"] = body.env.model_dump(exclude_none=True)
+    if body.env is not None:
+        payload["env"] = body.env
     user_id = int(admin.get("sub") or 0) or None
     result = await wd.save_config(payload, user_id=user_id)
     db.add(

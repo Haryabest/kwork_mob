@@ -51,21 +51,52 @@ type VerifyResult = {
 
 const MASK = '••••••••';
 
+type EnvPreset = {
+  id: string;
+  title: string;
+  description: string;
+  env: Record<string, string>;
+};
+
 const ENV_FIELDS: { key: string; label: string; secret?: boolean }[] = [
   { key: 'WORKER_ID', label: 'WORKER_ID' },
   { key: 'WORKER_TOKEN', label: 'WORKER_TOKEN', secret: true },
   { key: 'WORKER_PIPELINE_MODE', label: 'WORKER_PIPELINE_MODE' },
   { key: 'TRELLIS_VERSION', label: 'TRELLIS_VERSION' },
+  { key: 'TRELLIS_ALLOW_STUB_FALLBACK', label: 'TRELLIS_ALLOW_STUB_FALLBACK' },
   { key: 'TRELLIS2_PIPELINE_TYPE', label: 'TRELLIS2_PIPELINE_TYPE' },
   { key: 'TRELLIS2_TEXTURE_SIZE', label: 'TRELLIS2_TEXTURE_SIZE' },
   { key: 'TRELLIS2_DECIMATION', label: 'TRELLIS2_DECIMATION' },
   { key: 'TRELLIS2_LOW_VRAM', label: 'TRELLIS2_LOW_VRAM' },
+  { key: 'TRELLIS2_EXTENSION_WEBP', label: 'TRELLIS2_EXTENSION_WEBP' },
+  { key: 'TRELLIS2_SS_STEPS', label: 'TRELLIS2_SS_STEPS' },
+  { key: 'TRELLIS2_SS_GUIDANCE', label: 'TRELLIS2_SS_GUIDANCE' },
+  { key: 'TRELLIS2_SS_GUIDANCE_RESCALE', label: 'TRELLIS2_SS_GUIDANCE_RESCALE' },
+  { key: 'TRELLIS2_SS_RESCALE_T', label: 'TRELLIS2_SS_RESCALE_T' },
+  { key: 'TRELLIS2_SHAPE_STEPS', label: 'TRELLIS2_SHAPE_STEPS' },
+  { key: 'TRELLIS2_SHAPE_GUIDANCE', label: 'TRELLIS2_SHAPE_GUIDANCE' },
+  { key: 'TRELLIS2_SHAPE_GUIDANCE_RESCALE', label: 'TRELLIS2_SHAPE_GUIDANCE_RESCALE' },
+  { key: 'TRELLIS2_SHAPE_RESCALE_T', label: 'TRELLIS2_SHAPE_RESCALE_T' },
+  { key: 'TRELLIS2_TEX_STEPS', label: 'TRELLIS2_TEX_STEPS' },
+  { key: 'TRELLIS2_TEX_GUIDANCE', label: 'TRELLIS2_TEX_GUIDANCE' },
+  { key: 'TRELLIS2_TEX_GUIDANCE_RESCALE', label: 'TRELLIS2_TEX_GUIDANCE_RESCALE' },
+  { key: 'TRELLIS2_TEX_RESCALE_T', label: 'TRELLIS2_TEX_RESCALE_T' },
   { key: 'WORKER_TRELLIS_INPROCESS', label: 'WORKER_TRELLIS_INPROCESS' },
   { key: 'WORKER_WARMUP_TRELLIS', label: 'WORKER_WARMUP_TRELLIS' },
+  { key: 'WORKER_STARTUP_WARMUP', label: 'WORKER_STARTUP_WARMUP' },
+  { key: 'TRELLIS_SKIP_INTERNAL_REMBG', label: 'TRELLIS_SKIP_INTERNAL_REMBG' },
   { key: 'ATTN_BACKEND', label: 'ATTN_BACKEND' },
   { key: 'PYTORCH_CUDA_ALLOC_CONF', label: 'PYTORCH_CUDA_ALLOC_CONF' },
   { key: 'NOBG_ENGINE', label: 'NOBG_ENGINE' },
+  { key: 'NOBG_MODEL_ID', label: 'NOBG_MODEL_ID' },
   { key: 'NOBG_VIEW00_ONLY', label: 'NOBG_VIEW00_ONLY' },
+  { key: 'NOBG_CONFIDENCE', label: 'NOBG_CONFIDENCE' },
+  { key: 'NOBG_HARD_FAIL_MIN', label: 'NOBG_HARD_FAIL_MIN' },
+  { key: 'QUALITY_THRESHOLD', label: 'QUALITY_THRESHOLD' },
+  { key: 'SEGMENTATION_AVG_MIN', label: 'SEGMENTATION_AVG_MIN' },
+  { key: 'COMPRESS_ALLOW_OVER_LIMIT', label: 'COMPRESS_ALLOW_OVER_LIMIT' },
+  { key: 'WORKER_SUBPROCESS_STREAM', label: 'WORKER_SUBPROCESS_STREAM' },
+  { key: 'WATERMARK_HMAC_SECRET', label: 'WATERMARK_HMAC_SECRET', secret: true },
   { key: 'HF_TOKEN', label: 'HF_TOKEN', secret: true },
   { key: 'ORCHESTRATOR_WS_URL', label: 'ORCHESTRATOR_WS_URL' },
   { key: 'ORCHESTRATOR_HTTP_URL', label: 'ORCHESTRATOR_HTTP_URL' },
@@ -92,10 +123,15 @@ export default function TrellisSettingsPage() {
   const [verify, setVerify] = useState<VerifyResult | null>(null);
   const [logs, setLogs] = useState('');
   const [logsLoading, setLogsLoading] = useState(false);
+  const [presets, setPresets] = useState<Record<string, EnvPreset>>({});
 
   const load = useCallback(async () => {
-    const { data } = await api.get<WorkerConfig>('/admin/trellis/worker-config');
+    const [{ data }, { data: presetData }] = await Promise.all([
+      api.get<WorkerConfig>('/admin/trellis/worker-config'),
+      api.get<Record<string, EnvPreset>>('/admin/trellis/worker-config/presets'),
+    ]);
     setCfg(data);
+    setPresets(presetData || {});
     setMeta({
       container_name: data.container_name,
       docker_image: data.docker_image,
@@ -137,6 +173,22 @@ export default function TrellisSettingsPage() {
 
   function setEnvField(key: string, value: string) {
     setEnv((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function applyPreset(id: string) {
+    const preset = presets[id];
+    if (!preset?.env) return;
+    setEnv((prev) => {
+      const next = { ...prev };
+      for (const { key, secret } of ENV_FIELDS) {
+        const val = preset.env[key];
+        if (val === undefined) continue;
+        if (secret && (prev[key] === MASK || !prev[key])) continue;
+        next[key] = val;
+      }
+      return next;
+    });
+    notifications.show({ color: 'blue', message: `Пресет «${preset.title}» подставлен в форму` });
   }
 
   async function save() {
@@ -308,9 +360,23 @@ export default function TrellisSettingsPage() {
       </SimpleGrid>
 
       <Card withBorder mb="md">
-        <Title order={5} mb="sm">
-          Переменные окружения (-e)
-        </Title>
+        <Group justify="space-between" mb="sm">
+          <Title order={5}>Переменные окружения (-e)</Title>
+          <Group gap="xs">
+            {Object.values(presets).map((p) => (
+              <Button key={p.id} size="xs" variant="light" onClick={() => applyPreset(p.id)}>
+                {p.title}
+              </Button>
+            ))}
+          </Group>
+        </Group>
+        {Object.values(presets).length > 0 && (
+          <Text size="xs" c="dimmed" mb="sm">
+            {Object.values(presets)
+              .map((p) => `${p.title}: ${p.description}`)
+              .join(' · ')}
+          </Text>
+        )}
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
           {ENV_FIELDS.map(({ key, label, secret }) => (
             <TextInput
