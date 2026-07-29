@@ -483,6 +483,12 @@ async def mark_failed(db: AsyncSession, task_id: str, error: str) -> Order | Non
         except Exception as exc:  # noqa: BLE001
             logger.warning("user push generation_failed: %s", exc)
     await db.commit()
+    try:
+        removed = await queue_service.remove_from_redis(task_id)
+        if removed:
+            logger.info("Removed %s stale queue entries for failed task %s", removed, task_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("remove_from_redis failed task=%s: %s", task_id, exc)
     if order:
         await publish_order_status(
             user_id=order.user_id,

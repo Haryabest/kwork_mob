@@ -63,7 +63,7 @@ async def _assign_once() -> bool:
     async with async_session() as db:
         row = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))
         order = await db.get(Order, item.get("order_id") or (row.order_id if row else 0))
-        if not row or row.status not in ("queued", "failed"):
+        if not row or row.status != "queued":
             return True
         from app.services import task_idempotency as tidem
 

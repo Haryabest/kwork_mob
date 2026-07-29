@@ -36,8 +36,7 @@ class QueueService:
         """Dual-write: INSERT task_queue + RPUSH Redis."""
         existing = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))
         if existing:
-            if existing.status in ("queued", "failed"):
-                existing.status = "queued"
+            if existing.status == "queued":
                 existing.payload_json = payload
                 existing.priority = priority
                 await db.flush()
