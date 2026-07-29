@@ -46,6 +46,10 @@ if [ -f /app/scripts/prefetch_worker_models.sh ]; then
   bash /app/scripts/prefetch_worker_models.sh || true
 fi
 
+if [ -f /app/scripts/extract_dinov3_from_cache.py ]; then
+  python3 /app/scripts/extract_dinov3_from_cache.py || true
+fi
+
 if [ -f /app/scripts/warmup_gpu_cache.sh ]; then
   bash /app/scripts/warmup_gpu_cache.sh || true
 fi

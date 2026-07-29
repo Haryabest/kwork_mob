@@ -33,6 +33,13 @@ def _cache_roots() -> list[Path]:
     return out
 
 
+def _weight_file_ok(path: Path) -> bool:
+    try:
+        return path.is_file() and path.resolve().stat().st_size > 1_000_000
+    except OSError:
+        return False
+
+
 def _find_snapshot() -> Path | None:
     for root in _cache_roots():
         hub = root / "hub" / CACHE_NAME / "snapshots"
@@ -40,9 +47,34 @@ def _find_snapshot() -> Path | None:
             continue
         snaps = sorted(hub.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
         for snap in snaps:
-            if (snap / "config.json").is_file():
+            if (snap / "config.json").is_file() and (
+                _weight_file_ok(snap / "model.safetensors")
+                or any(_weight_file_ok(p) for p in snap.glob("*.safetensors"))
+            ):
                 return snap
     return None
+
+
+def _copy_resolved(src: Path, dst: Path) -> None:
+    if src.is_symlink():
+        target = src.resolve()
+        if target.is_file():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(target, dst)
+            return
+        if target.is_dir():
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(target, dst)
+            return
+    if src.is_file():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        return
+    if src.is_dir():
+        if dst.exists():
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst, symlinks=False, ignore_dangling_symlinks=True)
 
 
 def main() -> int:
@@ -55,18 +87,20 @@ def main() -> int:
             print(f"  - {root / 'hub' / CACHE_NAME}", file=sys.stderr)
         return 1
 
+    if out.exists():
+        shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
     for item in snap.iterdir():
-        dest = out / item.name
-        if item.is_dir():
-            if dest.exists():
-                shutil.rmtree(dest)
-            shutil.copytree(item, dest)
-        else:
-            shutil.copy2(item, dest)
+        _copy_resolved(item, out / item.name)
 
     if not (out / "config.json").is_file():
         print("[extract_dinov3] config.json нет после копирования", file=sys.stderr)
+        return 1
+    if not (
+        _weight_file_ok(out / "model.safetensors")
+        or any(_weight_file_ok(p) for p in out.glob("*.safetensors"))
+    ):
+        print("[extract_dinov3] safetensors битые или пустые", file=sys.stderr)
         return 1
 
     print(f"[extract_dinov3] OK: {snap} → {out}")
