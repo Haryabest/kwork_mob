@@ -87,6 +87,50 @@ def _require_nobg_dir(task_dir: Path) -> Path:
     return photos_nobg
 
 
+def _resolve_attn_backend() -> str:
+    """Dense attention: sdpa. Sparse Slat (shape/tex): только xformers/flash_attn — sdpa → xformers."""
+    backend = (os.getenv("ATTN_BACKEND") or "xformers").strip().lower()
+    if backend == "sdpa":
+        try:
+            import xformers  # noqa: F401
+
+            _progress("ATTN_BACKEND=sdpa: sparse TRELLIS.2 → xformers (sdpa нет для shape Slat)")
+            backend = "xformers"
+        except ImportError:
+            _progress("ATTN_BACKEND=sdpa, xformers нет — dense=sdpa, sparse может упасть на flash_attn")
+    elif backend == "flash_attn":
+        try:
+            import flash_attn  # noqa: F401
+        except ImportError:
+            backend = "xformers"
+            _progress("flash_attn не установлен → ATTN_BACKEND=xformers")
+    elif backend == "xformers":
+        try:
+            import xformers  # noqa: F401
+        except ImportError:
+            backend = "sdpa"
+            _progress("xformers не установлен → ATTN_BACKEND=sdpa")
+    os.environ["ATTN_BACKEND"] = backend
+    os.environ["SPARSE_ATTN_BACKEND"] = backend
+    return backend
+
+
+def _sync_trellis_attn_modules(backend: str) -> None:
+    """Перезаписать backend после импорта trellis2 (sparse по умолчанию flash_attn)."""
+    sparse_backend = backend
+    if sparse_backend == "sdpa":
+        sparse_backend = "xformers"
+    for mod_path, attr, value in (
+        ("trellis2.modules.sparse.config", "ATTN", sparse_backend),
+        ("trellis2.modules.attention.config", "BACKEND", backend),
+    ):
+        try:
+            mod = __import__(mod_path, fromlist=["_"])
+            setattr(mod, attr, value)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _resolve_low_vram() -> bool:
     auto = True
     try:
@@ -185,6 +229,7 @@ def get_pipeline():
 
     t0 = time.monotonic()
     _ensure_path()
+    attn = _resolve_attn_backend()
     import torch
 
     weights = os.getenv("TRELLIS_WEIGHTS", "microsoft/TRELLIS.2-4B")
@@ -196,6 +241,8 @@ def get_pipeline():
         try:
             _progress("import Trellis2ImageTo3DPipeline…")
             from trellis2.pipelines import Trellis2ImageTo3DPipeline  # type: ignore
+
+            _sync_trellis_attn_modules(attn)
 
             try:
                 from dinov3_local import apply_local_dinov3_patch
@@ -425,10 +472,15 @@ def _pipeline_type_resolved() -> str:
     raw = os.getenv("TRELLIS2_PIPELINE_TYPE", "1024").strip()
     # как в app.py: 1024 → 1024_cascade (лучше качество, как на YouTube)
     if raw == "1024":
+        resolved = "1024_cascade"
+    elif raw == "1536":
+        resolved = "1536_cascade"
+    else:
+        resolved = raw
+    if resolved == "1536_cascade" and _resolve_low_vram():
+        _progress("1536_cascade на GPU <20GB → понижаем до 1024_cascade")
         return "1024_cascade"
-    if raw == "1536":
-        return "1536_cascade"
-    return raw
+    return resolved
 
 
 def run_trellis2(task_dir: Path, output: Path) -> Path:
@@ -437,6 +489,8 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
     from PIL import Image
 
     preflight_cuda()
+    attn = _resolve_attn_backend()
+    _sync_trellis_attn_modules(attn)
     photos_dir = _require_nobg_dir(task_dir)
     front = _pick_front_image(photos_dir)
     image = Image.open(front).convert("RGBA")

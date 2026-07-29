@@ -53,6 +53,7 @@ CONFIG_ENV_KEYS = (
     "WORKER_STARTUP_WARMUP",
     "TRELLIS_SKIP_INTERNAL_REMBG",
     "ATTN_BACKEND",
+    "SPARSE_ATTN_BACKEND",
     "PYTORCH_CUDA_ALLOC_CONF",
     "NOBG_ENGINE",
     "NOBG_MODEL_ID",
@@ -250,7 +251,8 @@ def lan_env_defaults() -> dict[str, str]:
         "WORKER_WARMUP_TRELLIS": "0",
         "WORKER_STARTUP_WARMUP": "1",
         "TRELLIS_SKIP_INTERNAL_REMBG": "1",
-        "ATTN_BACKEND": "sdpa",
+        "ATTN_BACKEND": "xformers",
+        "SPARSE_ATTN_BACKEND": "xformers",
         "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         "NOBG_ENGINE": "rmbg2",
         "NOBG_MODEL_ID": "briaai/RMBG-2.0",
@@ -287,7 +289,8 @@ def quality_env_preset() -> dict[str, str]:
             "TRELLIS2_LOW_VRAM": "1",
             "WORKER_TRELLIS_INPROCESS": "0",
             "WORKER_WARMUP_TRELLIS": "0",
-            "ATTN_BACKEND": "sdpa",
+            "ATTN_BACKEND": "xformers",
+            "SPARSE_ATTN_BACKEND": "xformers",
         }
     )
     return env
