@@ -417,6 +417,8 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
             except Exception:  # noqa: BLE001
                 grid_size = None
 
+    remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "1"))
+    remesh_project = float(os.getenv("TRELLIS2_REMESH_PROJECT", "0"))
     glb = o_voxel.postprocess.to_glb(
         vertices=mesh.vertices,
         faces=mesh.faces,
@@ -427,9 +429,9 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
         decimation_target=decimation,
         texture_size=texture_size,
-        remesh=not low_vram,
-        remesh_band=1,
-        remesh_project=0,
+        remesh=not low_vram and os.getenv("TRELLIS2_REMESH", "1").lower() in ("1", "true", "yes"),
+        remesh_band=remesh_band,
+        remesh_project=remesh_project,
         verbose=False,
         **({"grid_size": int(grid_size)} if grid_size else {}),
     )
@@ -478,6 +480,10 @@ def _sampler_params(prefix: str, defaults: dict) -> dict:
     rt = os.getenv(f"TRELLIS2_{prefix}_RESCALE_T")
     if rt is not None:
         out["rescale_t"] = float(rt)
+    gis = os.getenv(f"TRELLIS2_{prefix}_GUIDANCE_INTERVAL_START")
+    gie = os.getenv(f"TRELLIS2_{prefix}_GUIDANCE_INTERVAL_END")
+    if gis is not None:
+        out["guidance_interval"] = (float(gis), float(gie or "1.0"))
     return out
 
 

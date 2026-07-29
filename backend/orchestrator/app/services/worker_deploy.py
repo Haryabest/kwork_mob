@@ -48,6 +48,27 @@ CONFIG_ENV_KEYS = (
     "TRELLIS2_TEX_GUIDANCE",
     "TRELLIS2_TEX_GUIDANCE_RESCALE",
     "TRELLIS2_TEX_RESCALE_T",
+    "TRELLIS2_SS_GUIDANCE_INTERVAL_START",
+    "TRELLIS2_SS_GUIDANCE_INTERVAL_END",
+    "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_START",
+    "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_END",
+    "TRELLIS2_TEX_GUIDANCE_INTERVAL_START",
+    "TRELLIS2_TEX_GUIDANCE_INTERVAL_END",
+    "TRELLIS2_SHAPE_REFINE_STEPS",
+    "TRELLIS2_SHAPE_REFINE_GUIDANCE",
+    "TRELLIS2_SHAPE_REFINE_GUIDANCE_RESCALE",
+    "TRELLIS2_SHAPE_REFINE_RESCALE_T",
+    "TRELLIS2_SHAPE_REFINE_GUIDANCE_INTERVAL_START",
+    "TRELLIS2_SHAPE_REFINE_GUIDANCE_INTERVAL_END",
+    "TRELLIS2_MAX_NUM_TOKENS",
+    "TRELLIS2_SEED",
+    "TRELLIS_STAGED_PIPELINE",
+    "TRELLIS2_REFINE_SHAPE",
+    "TRELLIS2_REMESH",
+    "TRELLIS2_REMESH_BAND",
+    "TRELLIS2_REMESH_PROJECT",
+    "TRELLIS2_EXPORT_TEXTURE_MAX",
+    "TRELLIS2_EXPORT_CPU",
     "WORKER_TRELLIS_INPROCESS",
     "WORKER_WARMUP_TRELLIS",
     "WORKER_STARTUP_WARMUP",
@@ -297,6 +318,60 @@ def quality_env_preset() -> dict[str, str]:
     return env
 
 
+def comfy_env_preset() -> dict[str, str]:
+    """ComfyUI Trellis2 workflow (адаптировано для RTX 5060 Ti 16GB)."""
+    env = lan_env_defaults()
+    env.update(
+        {
+            "TRELLIS_STAGED_PIPELINE": "1",
+            "TRELLIS2_PIPELINE_TYPE": "1024",
+            "TRELLIS2_LOW_VRAM": "1",
+            "TRELLIS2_MAX_NUM_TOKENS": "32768",
+            "TRELLIS2_REFINE_SHAPE": "1",
+            "TRELLIS2_SS_STEPS": "30",
+            "TRELLIS2_SS_GUIDANCE": "7.5",
+            "TRELLIS2_SS_GUIDANCE_RESCALE": "0.2",
+            "TRELLIS2_SS_RESCALE_T": "1",
+            "TRELLIS2_SS_GUIDANCE_INTERVAL_START": "0.1",
+            "TRELLIS2_SS_GUIDANCE_INTERVAL_END": "1.0",
+            "TRELLIS2_SHAPE_STEPS": "30",
+            "TRELLIS2_SHAPE_GUIDANCE": "7.5",
+            "TRELLIS2_SHAPE_GUIDANCE_RESCALE": "0.1",
+            "TRELLIS2_SHAPE_RESCALE_T": "2",
+            "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_START": "0.0",
+            "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_END": "1.0",
+            "TRELLIS2_SHAPE_REFINE_STEPS": "12",
+            "TRELLIS2_SHAPE_REFINE_GUIDANCE": "6.5",
+            "TRELLIS2_SHAPE_REFINE_GUIDANCE_RESCALE": "0.05",
+            "TRELLIS2_SHAPE_REFINE_RESCALE_T": "4",
+            "TRELLIS2_SHAPE_REFINE_GUIDANCE_INTERVAL_START": "0.1",
+            "TRELLIS2_SHAPE_REFINE_GUIDANCE_INTERVAL_END": "1.0",
+            "TRELLIS2_TEX_STEPS": "12",
+            "TRELLIS2_TEX_GUIDANCE": "1.0",
+            "TRELLIS2_TEX_GUIDANCE_RESCALE": "0.5",
+            "TRELLIS2_TEX_RESCALE_T": "3",
+            "TRELLIS2_TEX_GUIDANCE_INTERVAL_START": "0.6",
+            "TRELLIS2_TEX_GUIDANCE_INTERVAL_END": "0.9",
+            "TRELLIS2_TEXTURE_SIZE": "1024",
+            "TRELLIS2_EXPORT_TEXTURE_MAX": "1024",
+            "TRELLIS2_DECIMATION": "300000",
+            "TRELLIS2_REMESH": "1",
+            "TRELLIS2_REMESH_BAND": "1",
+            "TRELLIS2_REMESH_PROJECT": "0",
+            "TRELLIS2_EXPORT_CPU": "1",
+            "NOBG_ENGINE": "rmbg2",
+            "NOBG_CONFIDENCE": "0.75",
+            "QUALITY_THRESHOLD": "0.32",
+            "SEGMENTATION_AVG_MIN": "0.80",
+            "ATTN_BACKEND": "xformers",
+            "SPARSE_ATTN_BACKEND": "xformers",
+            "WORKER_TRELLIS_INPROCESS": "0",
+            "WORKER_WARMUP_TRELLIS": "0",
+        }
+    )
+    return env
+
+
 def env_presets() -> dict[str, dict[str, Any]]:
     return {
         "lan": {
@@ -310,6 +385,12 @@ def env_presets() -> dict[str, dict[str, Any]]:
             "title": "Качество выше",
             "description": "decimation 300k, больше шагов, texture max 1024 на 16GB",
             "env": quality_env_preset(),
+        },
+        "comfy": {
+            "id": "comfy",
+            "title": "ComfyUI Quality",
+            "description": "staged: shape→refine→texture; 1024/16GB; порог 0.32",
+            "env": comfy_env_preset(),
         },
     }
 

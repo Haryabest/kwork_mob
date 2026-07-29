@@ -24,7 +24,13 @@ def main(task_dir: str) -> None:
             if is_production_trellis():
                 preflight_cuda()
             try:
-                run_trellis(root, output)
+                staged = os.getenv("TRELLIS_STAGED_PIPELINE", "0").lower() in ("1", "true", "yes")
+                if staged:
+                    from trellis_staged import run_comfy_staged
+
+                    run_comfy_staged(root, output)
+                else:
+                    run_trellis(root, output)
                 print(f"[trellis_generate] TRELLIS.2 → {output} ({output.stat().st_size} bytes)")
             finally:
                 release_pipeline()
