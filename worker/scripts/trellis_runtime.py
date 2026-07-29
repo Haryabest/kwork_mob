@@ -176,6 +176,14 @@ def get_pipeline():
             _progress("import Trellis2ImageTo3DPipeline…")
             from trellis2.pipelines import Trellis2ImageTo3DPipeline  # type: ignore
 
+            try:
+                from dinov3_local import apply_local_dinov3_patch
+
+                if apply_local_dinov3_patch():
+                    _progress("DINOv3: локальные веса (без gated HF)")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("dinov3 local patch: %s", exc)
+
             low_vram = _resolve_low_vram()
             _progress(f"from_pretrained({weights})… смотрите nvidia-smi — растёт VRAM")
             pipe = Trellis2ImageTo3DPipeline.from_pretrained(weights)

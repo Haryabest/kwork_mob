@@ -23,8 +23,6 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final opts = DefaultFirebaseOptions.currentPlatform;
     if (opts != null) {
       await Firebase.initializeApp(options: opts);
-    } else {
-      await Firebase.initializeApp();
     }
   } catch (_) {}
   await NotificationInbox.instance.add(
@@ -73,10 +71,12 @@ class PushService {
       final opts = DefaultFirebaseOptions.currentPlatform;
       if (opts != null) {
         await Firebase.initializeApp(options: opts);
+        available = true;
       } else {
-        await Firebase.initializeApp();
+        available = false;
+        await _bindAppLinks();
+        return;
       }
-      available = true;
     } catch (e) {
       debugPrint('FCM: Firebase не сконфигурирован ($e) — push отключён');
       available = false;

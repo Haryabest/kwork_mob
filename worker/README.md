@@ -66,8 +66,38 @@ docker build --build-arg INSTALL_TRELLIS=1 --build-arg DOWNLOAD_WEIGHTS=1 \
 | Веса HF (TRELLIS, RMBG) | volume/host: `~/hf_cache` → `/root/.cache/huggingface` |
 | flexgemm, o_voxel | маркер `kwork_worker_state:/var/lib/worker/trellis_runtime_done` или bake-образ |
 | torch / triton / CUDA JIT | `kwork_worker_state` (`setup_worker_cache.sh`) |
+| DINOv3 (gated) | локально: `/var/lib/worker/dinov3-vitl16` или `TRELLIS2_DINOV3_LOCAL` |
 | Прогрев GPU при старте | `WORKER_STARTUP_WARMUP=1` (по умолчанию), маркер `gpu_warmup_sig` |
 
 Первый старт долгий; второй — веса из кэша, runtime skip, warmup skip. После первого успешного старта: `./scripts/worker_docker_bake.sh` — extensions в образ.
 
 Принудительно: `WORKER_PREFETCH_FORCE=1`, `WORKER_GPU_WARMUP_FORCE=1`.
+
+### DINOv3 gated (403 / rejected)
+
+Модель: `facebook/dinov3-vitl16-pretrain-lvd1689m` (не dinov2).
+
+1. На HF под **delfinchik** — Accept/Request access.
+2. Или положить веса локально (с ПК где есть доступ):
+
+```bash
+# ПК с доступом к HF (новый CLI: hf, не huggingface-cli)
+hf download facebook/dinov3-vitl16-pretrain-lvd1689m \
+  --local-dir dinov3-vitl16 --token hf_...
+```
+
+tar czf dinov3.tgz dinov3-vitl16
+scp dinov3.tgz dom@123:~/
+```
+
+```bash
+# GPU-ПК
+mkdir -p ~/dinov3-vitl16
+tar xzf dinov3.tgz -C ~/
+docker cp ~/dinov3-vitl16/. kwork-worker:/var/lib/worker/dinov3-vitl16/
+docker restart kwork-worker
+```
+
+Или mount: `-v ~/dinov3-vitl16:/var/lib/worker/dinov3-vitl16:ro`
+
+В логах: `[dinov3-local] готово`.

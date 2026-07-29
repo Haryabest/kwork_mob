@@ -5,13 +5,19 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:fontresoft/fontresoft.dart';
 import 'package:forui/forui.dart';
 
 /// SF Pro Text — iOS системный, Android через fontresoft.
 abstract final class AppFonts {
   static String get family {
     if (!kIsWeb && Platform.isIOS) return '.SF Pro Text';
-    return 'SFProText';
+    return FontResoft.sFProText;
+  }
+
+  static String? get package {
+    if (!kIsWeb && Platform.isIOS) return null;
+    return FontResoft.package;
   }
 }
 
@@ -108,8 +114,14 @@ FThemeData buildForuiTheme({bool dark = false}) {
 ThemeData buildMaterialTheme(FThemeData forui) {
   final material = forui.toApproximateMaterialTheme();
   return material.copyWith(
-    textTheme: material.textTheme.apply(fontFamily: AppFonts.family),
-    primaryTextTheme: material.primaryTextTheme.apply(fontFamily: AppFonts.family),
+    textTheme: material.textTheme.apply(
+      fontFamily: AppFonts.family,
+      fontFamilyPackage: AppFonts.package,
+    ),
+    primaryTextTheme: material.primaryTextTheme.apply(
+      fontFamily: AppFonts.family,
+      fontFamilyPackage: AppFonts.package,
+    ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
       backgroundColor: AppColors.wbPrimary,
       foregroundColor: Colors.white,

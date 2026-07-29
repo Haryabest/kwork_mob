@@ -38,6 +38,14 @@ def _warm_trellis() -> None:
         return
     repo = (os.getenv("TRELLIS_WEIGHTS") or "microsoft/TRELLIS.2-4B").strip()
     _snap(repo)
+    try:
+        from dinov3_local import resolve_dinov3_local
+
+        if resolve_dinov3_local() is not None:
+            print("[prefetch] DINOv3 локально — skip HF", flush=True)
+            return
+    except Exception:  # noqa: BLE001
+        pass
     dinov3 = (os.getenv("TRELLIS2_DINOV3_MODEL") or "facebook/dinov3-vitl16-pretrain-lvd1689m").strip()
     if dinov3:
         _snap(dinov3)
