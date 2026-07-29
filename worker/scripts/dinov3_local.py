@@ -7,6 +7,7 @@ from pathlib import Path
 
 DEFAULT_LOCAL = Path("/var/lib/worker/dinov3-vitl16")
 HUB_ID = "facebook/dinov3-vitl16-pretrain-lvd1689m"
+CACHE_NAME = "models--" + HUB_ID.replace("/", "--")
 
 
 def _has_weights(path: Path) -> bool:
@@ -15,6 +16,38 @@ def _has_weights(path: Path) -> bool:
     if (path / "model.safetensors").is_file():
         return True
     return any(path.glob("*.safetensors"))
+
+
+def _cache_roots() -> list[Path]:
+    roots: list[Path] = []
+    for raw in (
+        os.getenv("HF_HOME", ""),
+        os.getenv("HUGGINGFACE_HUB_CACHE", ""),
+        "/root/.cache/huggingface",
+        str(Path.home() / ".cache" / "huggingface"),
+    ):
+        if raw:
+            roots.append(Path(raw).expanduser())
+    seen: set[str] = set()
+    out: list[Path] = []
+    for root in roots:
+        key = str(root)
+        if key not in seen:
+            seen.add(key)
+            out.append(root)
+    return out
+
+
+def _find_hf_snapshot() -> Path | None:
+    for root in _cache_roots():
+        hub = root / "hub" / CACHE_NAME / "snapshots"
+        if not hub.is_dir():
+            continue
+        snaps = sorted(hub.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+        for snap in snaps:
+            if _has_weights(snap):
+                return snap.resolve()
+    return None
 
 
 def resolve_dinov3_local() -> Path | None:
@@ -26,7 +59,7 @@ def resolve_dinov3_local() -> Path | None:
     for path in candidates:
         if _has_weights(path):
             return path.resolve()
-    return None
+    return _find_hf_snapshot()
 
 
 def apply_local_dinov3_patch() -> bool:

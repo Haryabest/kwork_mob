@@ -38,6 +38,11 @@ def _warm_trellis() -> None:
         return
     repo = (os.getenv("TRELLIS_WEIGHTS") or "microsoft/TRELLIS.2-4B").strip()
     _snap(repo)
+    pipeline = (os.getenv("TRELLIS2_PIPELINE_TYPE") or "1024").strip()
+    if pipeline in ("1024", "1536", "1024_cascade", "1536_cascade"):
+        cascade_repo = (os.getenv("TRELLIS2_CASCADE_REPO") or "microsoft/TRELLIS-image-large").strip()
+        if cascade_repo and cascade_repo != repo:
+            _snap(cascade_repo)
     try:
         from dinov3_local import resolve_dinov3_local
 
