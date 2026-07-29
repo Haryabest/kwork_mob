@@ -374,13 +374,24 @@ def _mesh_to_device(mesh, device: str) -> None:
         mesh.voxel_size = vs.to(device)
 
 
+def _mesh_to_cpu(mesh) -> None:
+    _mesh_to_device(mesh, "cpu")
+
+
 def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -> None:
     import torch
     import o_voxel  # type: ignore
 
     low_vram = _resolve_low_vram()
-    export_device = "cuda" if torch.cuda.is_available() else "cpu"
-    _mesh_to_device(mesh, export_device)
+    force_cpu = os.getenv("TRELLIS2_EXPORT_CPU", "").lower() in ("1", "true", "yes") or low_vram
+    if force_cpu:
+        _mesh_to_cpu(mesh)
+        _free_cuda_memory()
+        export_device = "cpu"
+        _progress("export GLB on CPU (low VRAM) — медленнее, но без OOM")
+    else:
+        export_device = "cuda" if torch.cuda.is_available() else "cpu"
+        _mesh_to_device(mesh, export_device)
 
     skip_simplify = os.getenv("TRELLIS2_SKIP_MESH_SIMPLIFY", "").lower() in ("1", "true", "yes") or low_vram
     if hasattr(mesh, "simplify") and not skip_simplify:
@@ -391,6 +402,8 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
 
     decimation = int(os.getenv("TRELLIS2_DECIMATION", "150000" if low_vram else "300000"))
     texture_size = _texture_size_for_task(task_dir) if task_dir else int(os.getenv("TRELLIS2_TEXTURE_SIZE", "1024"))
+    if low_vram:
+        texture_size = min(texture_size, int(os.getenv("TRELLIS2_EXPORT_TEXTURE_MAX", "1024")))
     use_webp = os.getenv("TRELLIS2_EXTENSION_WEBP", "0").lower() in ("1", "true", "yes")
 
     # res из mesh (как app.py grid_size=res), не voxel_shape tensor
@@ -531,12 +544,16 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
         _texture_size_for_task(task_dir),
     )
     meshes = pipe.run(image, **run_kwargs)
-    _progress("inference done, export GLB…")
+    _progress("inference done, offload mesh + free pipeline VRAM…")
     if not meshes:
         raise RuntimeError("TRELLIS.2 вернул пустой результат")
 
+    mesh = meshes[0]
+    _mesh_to_cpu(mesh)
     _release_vram_before_export(pipe)
-    _export_trellis2_mesh(meshes[0], output, task_dir=task_dir)
+    _free_cuda_memory()
+    _progress("export GLB…")
+    _export_trellis2_mesh(mesh, output, task_dir=task_dir)
     if not output.exists() or output.stat().st_size < 1000:
         raise RuntimeError(f"TRELLIS.2 GLB слишком мал: {output}")
     logger.info("TRELLIS.2 → %s (%s bytes)", output, output.stat().st_size)

@@ -279,8 +279,9 @@ def quality_env_preset() -> dict[str, str]:
     env = lan_env_defaults()
     env.update(
         {
-            "TRELLIS2_TEXTURE_SIZE": "2048",
+            "TRELLIS2_TEXTURE_SIZE": "1024",
             "TRELLIS2_DECIMATION": "300000",
+            "TRELLIS2_EXPORT_TEXTURE_MAX": "1024",
             "TRELLIS2_SS_STEPS": "16",
             "TRELLIS2_SHAPE_STEPS": "16",
             "TRELLIS2_TEX_STEPS": "16",
@@ -307,7 +308,7 @@ def env_presets() -> dict[str, dict[str, Any]]:
         "quality": {
             "id": "quality",
             "title": "Качество выше",
-            "description": "texture 2048, decimation 300k, больше шагов, порог 0.45",
+            "description": "decimation 300k, больше шагов, texture max 1024 на 16GB",
             "env": quality_env_preset(),
         },
     }
