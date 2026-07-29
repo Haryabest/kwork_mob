@@ -90,6 +90,14 @@ def _release_rmbg2() -> None:
         _rmbg2_model = None
 
 
+def warmup_nobg() -> None:
+    """Загрузить nobg-модель в GPU и освободить VRAM (кэш весов + ядра)."""
+    if _nobg_engine() == "legacy":
+        return
+    _get_rmbg2()
+    _release_rmbg2()
+
+
 def _get_rmbg2():
     global _rmbg2_model
     if _rmbg2_model is not None:

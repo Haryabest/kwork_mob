@@ -2,6 +2,11 @@
 # Tailscale (опционально) + авто-режим пайплайна + старт агента
 set -eu
 
+if [ -f /app/scripts/setup_worker_cache.sh ]; then
+  # shellcheck disable=SC1091
+  . /app/scripts/setup_worker_cache.sh
+fi
+
 if [ -z "${WORKER_PIPELINE_MODE:-}" ]; then
   if [ -d /app/trellis ] && [ -f /app/trellis/setup.sh ]; then
     export WORKER_PIPELINE_MODE=trellis
@@ -39,6 +44,10 @@ fi
 
 if [ -f /app/scripts/prefetch_worker_models.sh ]; then
   bash /app/scripts/prefetch_worker_models.sh || true
+fi
+
+if [ -f /app/scripts/warmup_gpu_cache.sh ]; then
+  bash /app/scripts/warmup_gpu_cache.sh || true
 fi
 
 exec "$@"

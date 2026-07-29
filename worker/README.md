@@ -58,3 +58,16 @@ docker build --build-arg INSTALL_TRELLIS=1 --build-arg DOWNLOAD_WEIGHTS=1 \
 ## Без фона
 
 `WORKER_TRELLIS_INPROCESS=0` (по умолчанию) — TRELLIS в **отдельном subprocess**, VRAM освобождается после шага. `TRELLIS_SKIP_INTERNAL_REMBG=1` — не держим BiRefNet внутри TRELLIS (фон уже снят `remove_background.py`).
+
+## Кэш (не скачивать и не компилировать повторно)
+
+| Что | Где |
+|-----|-----|
+| Веса HF (TRELLIS, RMBG) | volume/host: `~/hf_cache` → `/root/.cache/huggingface` |
+| flexgemm, o_voxel | маркер `kwork_worker_state:/var/lib/worker/trellis_runtime_done` или bake-образ |
+| torch / triton / CUDA JIT | `kwork_worker_state` (`setup_worker_cache.sh`) |
+| Прогрев GPU при старте | `WORKER_STARTUP_WARMUP=1` (по умолчанию), маркер `gpu_warmup_sig` |
+
+Первый старт долгий; второй — веса из кэша, runtime skip, warmup skip. После первого успешного старта: `./scripts/worker_docker_bake.sh` — extensions в образ.
+
+Принудительно: `WORKER_PREFETCH_FORCE=1`, `WORKER_GPU_WARMUP_FORCE=1`.
