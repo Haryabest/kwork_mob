@@ -362,10 +362,16 @@ class WorkerAgent:
     @staticmethod
     def _cuda_empty_cache() -> None:
         try:
+            import gc
+
             import torch
 
+            gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+                if hasattr(torch.cuda, "ipc_collect"):
+                    torch.cuda.ipc_collect()
+                torch.cuda.synchronize()
         except Exception:  # noqa: BLE001
             pass
 
@@ -373,27 +379,29 @@ class WorkerAgent:
         backup = self._apply_script_env(env)
         try:
             self._cuda_empty_cache()
-            from trellis_runtime import preflight_cuda, run_trellis
+            from trellis_runtime import preflight_cuda, release_pipeline, run_trellis
 
-            if os.getenv("TRELLIS_ALLOW_STUB_FALLBACK", "0").lower() in ("1", "true", "yes"):
-                try:
+            output = task_dir / "raw_mesh.glb"
+            try:
+                if os.getenv("TRELLIS_ALLOW_STUB_FALLBACK", "0").lower() in ("1", "true", "yes"):
+                    try:
+                        preflight_cuda()
+                        run_trellis(task_dir, output)
+                    except Exception as exc:  # noqa: BLE001
+                        from glb_stub import write_minimal_glb
+
+                        logger.warning("[trellis_generate] fallback stub (%s)", exc)
+                        write_minimal_glb(output, task_dir)
+                else:
                     preflight_cuda()
-                    output = task_dir / "raw_mesh.glb"
                     run_trellis(task_dir, output)
-                except Exception as exc:  # noqa: BLE001
-                    from glb_stub import write_minimal_glb
-
-                    output = task_dir / "raw_mesh.glb"
-                    logger.warning("[trellis_generate] fallback stub (%s)", exc)
-                    write_minimal_glb(output, task_dir)
-            else:
-                preflight_cuda()
-                output = task_dir / "raw_mesh.glb"
-                run_trellis(task_dir, output)
+            finally:
+                release_pipeline()
             size = output.stat().st_size if output.exists() else 0
             logger.info("[trellis_generate.py] TRELLIS.2 → %s (%s bytes)", output, size)
         finally:
             self._restore_script_env(backup)
+            self._cuda_empty_cache()
 
     def _run_script_stream(self, name: str, script: Path, task_dir: Path, env: dict) -> None:
         process = subprocess.Popen(
@@ -441,7 +449,7 @@ class WorkerAgent:
         inprocess_trellis = (
             name == "trellis_generate.py"
             and PIPELINE_MODE == "trellis"
-            and os.getenv("WORKER_TRELLIS_INPROCESS", "1").lower() in ("1", "true", "yes")
+            and os.getenv("WORKER_TRELLIS_INPROCESS", "0").lower() in ("1", "true", "yes")
         )
         if inprocess_trellis:
             self._run_trellis_inprocess(task_dir, env)
@@ -462,8 +470,10 @@ class WorkerAgent:
                 if name == "remove_background.py" and result.returncode == 3:
                     raise RuntimeError(f"failed_segmentation: {name} failed ({result.returncode}): {err}")
                 raise RuntimeError(f"{name} failed ({result.returncode}): {err}")
-        if name == "remove_background.py":
+        if name in ("remove_background.py", "trellis_generate.py"):
             self._cuda_empty_cache()
+            if name == "trellis_generate.py":
+                logger.info("GPU memory released after trellis subprocess")
         logger.info("Finished step %s in %.1fs", name, time.monotonic() - t0)
 
     async def _notify_event(self, payload: dict) -> None:
@@ -898,11 +908,11 @@ class WorkerAgent:
         logger.info("TRELLIS warmup: готово")
 
     async def _warmup_trellis_bg(self) -> None:
-        if os.getenv("WORKER_WARMUP_TRELLIS", "1").lower() not in ("1", "true", "yes"):
+        if os.getenv("WORKER_WARMUP_TRELLIS", "0").lower() not in ("1", "true", "yes"):
             return
         if PIPELINE_MODE != "trellis":
             return
-        if os.getenv("WORKER_TRELLIS_INPROCESS", "1").lower() not in ("1", "true", "yes"):
+        if os.getenv("WORKER_TRELLIS_INPROCESS", "0").lower() not in ("1", "true", "yes"):
             return
         try:
             await asyncio.to_thread(self._warmup_trellis_sync)

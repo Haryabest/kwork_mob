@@ -103,6 +103,57 @@ def _resolve_low_vram() -> bool:
     return True
 
 
+def _skip_internal_rembg() -> bool:
+    return os.getenv("TRELLIS_SKIP_INTERNAL_REMBG", "1").lower() in ("1", "true", "yes")
+
+
+def _free_cuda_memory() -> None:
+    import gc
+
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        if hasattr(torch.cuda, "ipc_collect"):
+            torch.cuda.ipc_collect()
+        torch.cuda.synchronize()
+
+
+def _drop_internal_rembg(pipe) -> None:
+    """Внешний remove_background.py уже дал photos_nobg — не держим BiRefNet в VRAM."""
+    if not _skip_internal_rembg():
+        return
+    rembg = getattr(pipe, "rembg_model", None)
+    if rembg is None:
+        return
+    try:
+        if hasattr(rembg, "cpu"):
+            rembg.cpu()
+        if hasattr(pipe, "models") and isinstance(pipe.models, dict):
+            pipe.models.pop("rembg", None)
+        pipe.rembg_model = None
+        _free_cuda_memory()
+        _progress("internal rembg_model dropped (external nobg pipeline)")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("drop internal rembg failed: %s", exc)
+
+
+def release_pipeline() -> None:
+    """Полностью выгрузить TRELLIS из VRAM (конец subprocess trellis_generate)."""
+    global _pipeline, _pipeline_kind
+    if _pipeline is None:
+        _free_cuda_memory()
+        return
+    try:
+        _release_vram_before_export(_pipeline)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("release_pipeline: %s", exc)
+        _pipeline = None
+        _pipeline_kind = None
+        _free_cuda_memory()
+
+
 def get_pipeline():
     global _pipeline, _pipeline_kind
     if _pipeline is not None:
@@ -135,6 +186,7 @@ def get_pipeline():
                 pipe.cuda()
             elif hasattr(pipe, "to"):
                 pipe.to(device)
+            _drop_internal_rembg(pipe)
             _pipeline = pipe
             _pipeline_kind = "trellis2_image_to_3d"
             _progress(f"pipeline ready in {time.monotonic() - t0:.0f}s total")
@@ -399,6 +451,7 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
     if not output.exists() or output.stat().st_size < 1000:
         raise RuntimeError(f"TRELLIS.2 GLB слишком мал: {output}")
     logger.info("TRELLIS.2 → %s (%s bytes)", output, output.stat().st_size)
+    release_pipeline()
     return output
 
 
@@ -444,6 +497,7 @@ def run_trellis_v1(task_dir: Path, output: Path) -> Path:
     _export_result(result, output)
     if not output.exists() or output.stat().st_size < 100:
         raise RuntimeError("TRELLIS v1 вернул пустой GLB")
+    release_pipeline()
     return output
 
 

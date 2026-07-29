@@ -57,4 +57,4 @@ docker build --build-arg INSTALL_TRELLIS=1 --build-arg DOWNLOAD_WEIGHTS=1 \
 
 ## Без фона
 
-`WORKER_REAL_NOBG=1` → **briaai/RMBG-2.0** (`NOBG_ENGINE=rmbg2`, по умолчанию только `view_00` для TRELLIS.2).
+`WORKER_TRELLIS_INPROCESS=0` (по умолчанию) — TRELLIS в **отдельном subprocess**, VRAM освобождается после шага. `TRELLIS_SKIP_INTERNAL_REMBG=1` — не держим BiRefNet внутри TRELLIS (фон уже снят `remove_background.py`).

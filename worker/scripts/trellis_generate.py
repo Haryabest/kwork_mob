@@ -19,14 +19,23 @@ def main(task_dir: str) -> None:
 
     if mode == "trellis":
         try:
-            from trellis_runtime import preflight_cuda, run_trellis
+            from trellis_runtime import preflight_cuda, release_pipeline, run_trellis
 
             if is_production_trellis():
                 preflight_cuda()
-            run_trellis(root, output)
-            print(f"[trellis_generate] TRELLIS.2 → {output} ({output.stat().st_size} bytes)")
+            try:
+                run_trellis(root, output)
+                print(f"[trellis_generate] TRELLIS.2 → {output} ({output.stat().st_size} bytes)")
+            finally:
+                release_pipeline()
             return
         except Exception as exc:
+            try:
+                from trellis_runtime import release_pipeline
+
+                release_pipeline()
+            except Exception:  # noqa: BLE001
+                pass
             if allow_stub_fallback():
                 print(f"[trellis_generate] fallback stub ({exc})")
                 write_minimal_glb(output, root)
