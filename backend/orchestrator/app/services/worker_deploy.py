@@ -647,6 +647,25 @@ def _stop_and_remove_container(container_name: str) -> None:
         logger.debug("docker rm %s: %s", name, (proc.stderr or proc.stdout or "")[:300])
 
 
+def _ensure_worker_bind_executable(worker_dir: Path) -> None:
+    """Bind-mount entrypoint/scripts должны быть +x на хосте."""
+    targets: list[Path] = [worker_dir / "entrypoint.sh"]
+    scripts = worker_dir / "scripts"
+    if scripts.is_dir():
+        targets.extend(scripts.glob("*.sh"))
+    for path in targets:
+        if not path.is_file():
+            continue
+        try:
+            mode = path.stat().st_mode
+            if mode & 0o111:
+                continue
+            path.chmod(mode | 0o755)
+            logger.info("worker deploy: chmod +x %s", path)
+        except OSError as exc:
+            logger.warning("worker deploy: chmod %s: %s", path, exc)
+
+
 async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     if not settings.WORKER_DEPLOY_ENABLED:
         raise HTTPException(503, "WORKER_DEPLOY_ENABLED=0 — управление Docker отключено")
@@ -664,6 +683,7 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     stored_env = _decrypt_env(_coerce_env_map(stored.get("env")))
     stored["env"] = _normalize_worker_env({**base_env, **stored_env})
     worker_dir = _worker_dir(stored)
+    _ensure_worker_bind_executable(worker_dir)
     agent = worker_dir / "worker_agent.py"
     repo_agent = _repo_root() / "worker" / "worker_agent.py"
     if not agent.is_file() and not repo_agent.is_file():
