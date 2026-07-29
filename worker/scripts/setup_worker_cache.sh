@@ -24,6 +24,10 @@ if [ -n "${HF_TOKEN:-}" ]; then
   export HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN:-${HF_TOKEN}}"
 fi
 
+# Прогресс скачивания в docker logs (без TTY)
+unset HF_HUB_DISABLE_PROGRESS_BARS 2>/dev/null || true
+export HF_HUB_VERBOSITY="${HF_HUB_VERBOSITY:-info}"
+
 mkdir -p "${TORCH_HOME}" "${TRITON_CACHE_DIR}" "${XDG_CACHE_HOME}" "${CUDA_CACHE_PATH}"
 
 mkdir -p /root/.nv

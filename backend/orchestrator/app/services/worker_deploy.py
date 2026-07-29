@@ -246,11 +246,11 @@ def lan_env_defaults() -> dict[str, str]:
         "TRELLIS2_TEX_GUIDANCE": "1",
         "TRELLIS2_TEX_GUIDANCE_RESCALE": "0",
         "TRELLIS2_TEX_RESCALE_T": "3",
-        "WORKER_TRELLIS_INPROCESS": "1",
-        "WORKER_WARMUP_TRELLIS": "1",
+        "WORKER_TRELLIS_INPROCESS": "0",
+        "WORKER_WARMUP_TRELLIS": "0",
         "WORKER_STARTUP_WARMUP": "1",
         "TRELLIS_SKIP_INTERNAL_REMBG": "1",
-        "ATTN_BACKEND": "xformers",
+        "ATTN_BACKEND": "sdpa",
         "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         "NOBG_ENGINE": "rmbg2",
         "NOBG_MODEL_ID": "briaai/RMBG-2.0",
@@ -284,6 +284,10 @@ def quality_env_preset() -> dict[str, str]:
             "TRELLIS2_TEX_STEPS": "16",
             "QUALITY_THRESHOLD": "0.45",
             "NOBG_CONFIDENCE": "0.75",
+            "TRELLIS2_LOW_VRAM": "1",
+            "WORKER_TRELLIS_INPROCESS": "0",
+            "WORKER_WARMUP_TRELLIS": "0",
+            "ATTN_BACKEND": "sdpa",
         }
     )
     return env

@@ -11,7 +11,8 @@ def test_default_config_has_trellis_keys():
     assert env["TRELLIS2_PIPELINE_TYPE"] == "1024"
     assert env["WORKER_PIPELINE_MODE"] == "trellis"
     assert env["QUALITY_THRESHOLD"] == "0.35"
-    assert env["WORKER_TRELLIS_INPROCESS"] == "1"
+    assert env["TRELLIS2_LOW_VRAM"] == "1"
+    assert env["WORKER_TRELLIS_INPROCESS"] == "0"
     assert cfg["container_name"] == "kwork-worker"
 
 

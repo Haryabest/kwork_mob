@@ -88,19 +88,27 @@ def _require_nobg_dir(task_dir: Path) -> Path:
 
 
 def _resolve_low_vram() -> bool:
-    raw = os.getenv("TRELLIS2_LOW_VRAM")
-    if raw is not None:
-        return raw.lower() in ("1", "true", "yes")
+    auto = True
     try:
         import torch
 
         if torch.cuda.is_available():
             gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            # RTX 5060 Ti / 5070 16GB — без low_vram часто OOM при inference
-            return gb < 20.0
+            auto = gb < 20.0
     except Exception:  # noqa: BLE001
-        pass
-    return True
+        auto = True
+
+    raw = os.getenv("TRELLIS2_LOW_VRAM")
+    if raw is None:
+        return auto
+    explicit = str(raw).strip().lower() in ("1", "true", "yes")
+    if not explicit and auto:
+        _progress(
+            "TRELLIS2_LOW_VRAM=0, но GPU <20GB — принудительно low_vram=True "
+            "(иначе OOM на pipe.cuda)"
+        )
+        return True
+    return explicit
 
 
 def _skip_internal_rembg() -> bool:
@@ -154,6 +162,19 @@ def release_pipeline() -> None:
         _free_cuda_memory()
 
 
+def _enable_hf_download_logs() -> None:
+    import logging
+
+    for name in ("huggingface_hub", "huggingface_hub.file_download"):
+        logging.getLogger(name).setLevel(logging.INFO)
+    try:
+        from huggingface_hub.utils import enable_progress_bars
+
+        enable_progress_bars()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def get_pipeline():
     global _pipeline, _pipeline_kind
     if _pipeline is not None:
@@ -185,16 +206,22 @@ def get_pipeline():
                 logger.warning("dinov3 local patch: %s", exc)
 
             low_vram = _resolve_low_vram()
+            _enable_hf_download_logs()
+            _progress(
+                "from_pretrained: скачивание недостающих .safetensors (последний часто "
+                "slat_flow_imgshape2tex_1024, ~3–6 ГБ) — смотрите du -sh ~/hf_cache"
+            )
             _progress(f"from_pretrained({weights})… смотрите nvidia-smi — растёт VRAM")
             pipe = Trellis2ImageTo3DPipeline.from_pretrained(weights)
             _progress(f"weights loaded in {time.monotonic() - t0:.0f}s, low_vram={low_vram}")
             pipe.low_vram = low_vram
+            _drop_internal_rembg(pipe)
+            _free_cuda_memory()
             if device == "cuda" and hasattr(pipe, "cuda"):
-                _progress("pipe.cuda()…")
+                _progress(f"pipe.cuda()… low_vram={low_vram}")
                 pipe.cuda()
             elif hasattr(pipe, "to"):
                 pipe.to(device)
-            _drop_internal_rembg(pipe)
             _pipeline = pipe
             _pipeline_kind = "trellis2_image_to_3d"
             _progress(f"pipeline ready in {time.monotonic() - t0:.0f}s total")
