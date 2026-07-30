@@ -72,6 +72,41 @@ def _postprocess_rmbg_mask(mask: np.ndarray) -> np.ndarray:
     return out
 
 
+def _apply_alpha_rgba(img: Image.Image, alpha: np.ndarray) -> Image.Image:
+    rgba = img.convert("RGBA")
+    arr = np.array(rgba)
+    a = np.clip(alpha, 0.0, 1.0)
+    arr[:, :, 3] = (a * 255.0).astype(np.uint8)
+    return Image.fromarray(arr, "RGBA")
+
+
+def _mask_metrics_alpha(alpha: np.ndarray) -> dict:
+    a = np.clip(alpha, 0.0, 1.0)
+    fg = a > 0.05
+    if not np.any(fg):
+        return {
+            "ratio": 0.0,
+            "height_frac": 0.0,
+            "width_frac": 0.0,
+            "coverage_ok": False,
+        }
+    h, w = a.shape[:2]
+    ys, xs = np.where(fg)
+    height_frac = (ys.max() - ys.min() + 1) / max(h, 1)
+    width_frac = (xs.max() - xs.min() + 1) / max(w, 1)
+    ratio = float(fg.mean())
+    min_h = float(os.getenv("NOBG_MIN_HEIGHT_FRAC", "0.45"))
+    min_w = float(os.getenv("NOBG_MIN_WIDTH_FRAC", "0.22"))
+    min_r = float(os.getenv("NOBG_MIN_RATIO", "0.05"))
+    coverage_ok = height_frac >= min_h and width_frac >= min_w and ratio >= min_r
+    return {
+        "ratio": ratio,
+        "height_frac": round(height_frac, 4),
+        "width_frac": round(width_frac, 4),
+        "coverage_ok": coverage_ok,
+    }
+
+
 def _apply_mask_rgba(img: Image.Image, mask: np.ndarray) -> Image.Image:
     rgba = img.convert("RGBA")
     arr = np.array(rgba)
@@ -188,24 +223,38 @@ def _rmbg2_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | 
         with torch.no_grad():
             preds = model(input_tensor)[-1].sigmoid().cpu()
         pred = preds[0].squeeze().numpy()
-        mask_pil = transforms.ToPILImage()(pred).resize(rgb.size, Image.BILINEAR)
-        mask = np.array(mask_pil)
+        sens = float(os.getenv("NOBG_SENSITIVITY", "1.0"))
+        # ComfyUI RMBG-2.0: soft alpha, sensitivity как множитель
+        from PIL import Image as PILImage
+
+        alpha_small = np.clip(pred * sens, 0.0, 1.0)
+        alpha_u8 = (alpha_small * 255.0).astype(np.uint8)
+        alpha = np.array(
+            PILImage.fromarray(alpha_u8).resize(rgb.size, PILImage.BILINEAR)
+        ) / 255.0
+        alpha = np.clip(alpha, 0.0, 1.0)
         if os.getenv("NOBG_REFINE_FOREGROUND", "0").lower() in ("1", "true", "yes"):
             try:
                 from rembg import remove
 
                 refined = remove(rgb, only_mask=True)
                 if isinstance(refined, Image.Image):
-                    mask = np.array(refined.convert("L"))
+                    alpha = np.clip(np.array(refined.convert("L")) / 255.0, 0.0, 1.0)
             except Exception as exc:  # noqa: BLE001
                 print(f"[remove_background] refine foreground skipped: {exc}")
-        mask = _postprocess_rmbg_mask(mask)
-        fg = (mask > _rmbg_mask_threshold()).astype(np.uint8)
-        out = _apply_mask_rgba(rgb, fg)
-        metrics = _mask_metrics(fg)
+        thr = _rmbg_mask_threshold() / 255.0
+        if thr > 0:
+            alpha = np.where(alpha > thr, alpha, 0.0)
+        out = _apply_alpha_rgba(rgb, alpha)
+        metrics = _mask_metrics_alpha(alpha)
         ratio = metrics["ratio"]
-        conf = float(np.mean(mask[fg.astype(bool)]) / 255.0) if fg.any() else 0.0
-        conf = min(0.99, max(0.5, conf))
+        fg = alpha > 0.05
+        conf = float(np.mean(alpha[fg])) if fg.any() else 0.0
+        conf = min(0.99, max(0.35, conf))
+        print(
+            f"[remove_background] RMBG-2.0 ok ratio={ratio:.3f} conf={conf:.3f} "
+            f"coverage={metrics.get('coverage_ok')}"
+        )
         return out, ratio, conf, metrics
     except Exception as exc:  # noqa: BLE001
         print(f"[remove_background] RMBG-2.0 failed: {exc}")
@@ -466,36 +515,41 @@ def process_one(
     dst: Path,
     *,
     conf_thr: float = 0.85,
-    min_ratio: float = 0.10,
+    min_ratio: float = 0.05,
     max_ratio: float = 0.95,
 ) -> dict:
     img = Image.open(src)
     engine = _nobg_engine()
+    fallback = os.getenv("NOBG_FALLBACK_LEGACY", "0").strip().lower() in ("1", "true", "yes")
     methods: list[tuple[str, Image.Image, float, float, dict]] = []
 
-    if engine != "legacy":
+    if engine == "rmbg2":
+        for attempt in range(2):
+            rmbg = _rmbg2_remove(img)
+            if rmbg:
+                methods.append(("rmbg2", rmbg[0], rmbg[1], rmbg[2], rmbg[3]))
+                break
+            if attempt == 0:
+                try:
+                    import torch
+
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except Exception:  # noqa: BLE001
+                    pass
+        if not methods and fallback:
+            print("[remove_background] RMBG-2.0 failed → legacy fallback")
+            methods.extend(_legacy_methods(img))
+        elif not methods:
+            print("[remove_background] RMBG-2.0 failed, NOBG_FALLBACK_LEGACY=0")
+    elif engine != "legacy":
         rmbg = _rmbg2_remove(img)
         if rmbg:
             methods.append(("rmbg2", rmbg[0], rmbg[1], rmbg[2], rmbg[3]))
-        elif engine == "rmbg2":
-            try:
-                import torch
-
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                rmbg = _rmbg2_remove(img)
-                if rmbg:
-                    methods.append(("rmbg2", rmbg[0], rmbg[1], rmbg[2], rmbg[3]))
-            except Exception:  # noqa: BLE001
-                pass
-
-    if (
-        not methods
-        or os.getenv("NOBG_FALLBACK_LEGACY", "0").lower() in ("1", "true", "yes")
-        or engine == "legacy"
-    ):
-        if engine != "rmbg2" or os.getenv("NOBG_FALLBACK_LEGACY", "0").lower() in ("1", "true", "yes"):
+        if not methods or fallback:
             methods.extend(_legacy_methods(img))
+    else:
+        methods.extend(_legacy_methods(img))
 
     if not methods:
         img.convert("RGBA").save(dst)
@@ -590,9 +644,9 @@ def main(task_dir: str) -> None:
         meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         return
 
-    quality_target = float(os.getenv("NOBG_CONFIDENCE", "0.85"))
+    quality_target = float(os.getenv("NOBG_CONFIDENCE", "0.80"))
     hard_min = float(os.getenv("NOBG_HARD_FAIL_MIN", "0.35"))
-    min_r = float(os.getenv("NOBG_MIN_RATIO", "0.10"))
+    min_r = float(os.getenv("NOBG_MIN_RATIO", "0.05"))
     max_r = float(os.getenv("NOBG_MAX_RATIO", "0.95"))
     stats = []
     weak = 0
@@ -633,7 +687,7 @@ def main(task_dir: str) -> None:
     meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
 
     if fail_reason:
-        strict = os.getenv("NOBG_STRICT_SEGMENTATION", "1").strip().lower() in ("1", "true", "yes")
+        strict = os.getenv("NOBG_STRICT_SEGMENTATION", "0").strip().lower() in ("1", "true", "yes")
         soft_ok = avg_conf >= hard_min and any(
             (out / (f.stem + ".png")).exists() for f in files
         )
