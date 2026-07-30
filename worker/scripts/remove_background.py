@@ -34,6 +34,44 @@ def _mask_ratio(mask: np.ndarray) -> float:
     return float(m.mean())
 
 
+def _rmbg_mask_threshold() -> int:
+    raw_sens = (os.getenv("NOBG_SENSITIVITY") or "").strip()
+    if raw_sens:
+        try:
+            sens = float(raw_sens)
+            return max(0, min(255, int(round(255 * (1.0 - sens))))
+        except ValueError:
+            pass
+    return int(os.getenv("NOBG_MASK_THRESHOLD", "128"))
+
+
+def _postprocess_rmbg_mask(mask: np.ndarray) -> np.ndarray:
+    """ComfyUI RMBG-2.0: blur, offset, invert."""
+    blur = int(os.getenv("NOBG_MASK_BLUR", "0"))
+    offset = int(os.getenv("NOBG_MASK_OFFSET", "0"))
+    invert = os.getenv("NOBG_INVERT_OUTPUT", "0").lower() in ("1", "true", "yes")
+    out = mask.astype(np.uint8)
+    if blur > 0:
+        from PIL import ImageFilter
+
+        out = np.array(Image.fromarray(out).filter(ImageFilter.GaussianBlur(radius=blur)))
+    if offset != 0:
+        try:
+            import cv2  # type: ignore
+
+            k = cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE,
+                (abs(offset) * 2 + 1, abs(offset) * 2 + 1),
+            )
+            op = cv2.MORPH_DILATE if offset > 0 else cv2.MORPH_ERODE
+            out = cv2.morphologyEx(out, op, k)
+        except Exception:  # noqa: BLE001
+            pass
+    if invert:
+        out = 255 - out
+    return out
+
+
 def _apply_mask_rgba(img: Image.Image, mask: np.ndarray) -> Image.Image:
     rgba = img.convert("RGBA")
     arr = np.array(rgba)
@@ -128,23 +166,6 @@ def _get_rmbg2():
         return None
 
 
-def _maybe_invert_fg(mask: np.ndarray, fg: np.ndarray, threshold: int) -> tuple[np.ndarray, dict]:
-    """Тёмный объект на белом: RMBG иногда даёт inverted mask (ratio < 10%)."""
-    metrics = _mask_metrics(fg)
-    min_ratio = float(os.getenv("NOBG_INVERT_MIN_RATIO", "0.12"))
-    if metrics["ratio"] >= min_ratio:
-        return fg, metrics
-    fg_inv = (mask <= threshold).astype(np.uint8)
-    metrics_inv = _mask_metrics(fg_inv)
-    if metrics_inv["ratio"] > metrics["ratio"]:
-        print(
-            f"[remove_background] invert mask ratio {metrics['ratio']:.3f} → {metrics_inv['ratio']:.3f}",
-            flush=True,
-        )
-        return fg_inv, metrics_inv
-    return fg, metrics
-
-
 def _rmbg2_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | None:
     loaded = _get_rmbg2()
     if loaded is None:
@@ -169,9 +190,19 @@ def _rmbg2_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | 
         pred = preds[0].squeeze().numpy()
         mask_pil = transforms.ToPILImage()(pred).resize(rgb.size, Image.BILINEAR)
         mask = np.array(mask_pil)
-        thr = int(os.getenv("NOBG_MASK_THRESHOLD", "128"))
-        fg, metrics = _maybe_invert_fg(mask, (mask > thr).astype(np.uint8), thr)
+        if os.getenv("NOBG_REFINE_FOREGROUND", "0").lower() in ("1", "true", "yes"):
+            try:
+                from rembg import remove
+
+                refined = remove(rgb, only_mask=True)
+                if isinstance(refined, Image.Image):
+                    mask = np.array(refined.convert("L"))
+            except Exception as exc:  # noqa: BLE001
+                print(f"[remove_background] refine foreground skipped: {exc}")
+        mask = _postprocess_rmbg_mask(mask)
+        fg = (mask > _rmbg_mask_threshold()).astype(np.uint8)
         out = _apply_mask_rgba(rgb, fg)
+        metrics = _mask_metrics(fg)
         ratio = metrics["ratio"]
         conf = float(np.mean(mask[fg.astype(bool)]) / 255.0) if fg.any() else 0.0
         conf = min(0.99, max(0.5, conf))

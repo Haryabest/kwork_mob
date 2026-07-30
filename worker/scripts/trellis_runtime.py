@@ -365,39 +365,13 @@ def _release_vram_before_export(pipe) -> None:
 def _mesh_to_device(mesh, device: str) -> None:
     import torch
 
-    def _move(t):
-        if isinstance(t, torch.Tensor):
-            return t.detach().to(device)
-        return t
-
-    for attr in ("vertices", "faces", "attrs", "coords", "voxel_size"):
+    for attr in ("vertices", "faces", "attrs", "coords"):
         val = getattr(mesh, attr, None)
         if isinstance(val, torch.Tensor):
-            setattr(mesh, attr, _move(val))
-
-    attrs = getattr(mesh, "attrs", None)
-    if attrs is not None and not isinstance(attrs, torch.Tensor):
-        for sparse_attr in ("feats", "coords", "data"):
-            val = getattr(attrs, sparse_attr, None)
-            if isinstance(val, torch.Tensor):
-                setattr(attrs, sparse_attr, _move(val))
-        if hasattr(attrs, "to"):
-            try:
-                moved = attrs.to(device)
-                if moved is not None:
-                    mesh.attrs = moved
-            except Exception:  # noqa: BLE001
-                pass
-
-    layout = getattr(mesh, "layout", None)
-    if isinstance(layout, dict):
-        mesh.layout = {
-            k: _move(v) if isinstance(v, torch.Tensor) else v for k, v in layout.items()
-        }
-
-    for name, val in list(getattr(mesh, "__dict__", {}).items()):
-        if isinstance(val, torch.Tensor):
-            setattr(mesh, name, _move(val))
+            setattr(mesh, attr, val.detach().to(device))
+    vs = getattr(mesh, "voxel_size", None)
+    if isinstance(vs, torch.Tensor):
+        mesh.voxel_size = vs.to(device)
 
 
 def _mesh_to_cpu(mesh) -> None:
@@ -409,13 +383,7 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
     import o_voxel  # type: ignore
 
     low_vram = _resolve_low_vram()
-    export_cpu_raw = os.getenv("TRELLIS2_EXPORT_CPU", "").strip().lower()
-    if export_cpu_raw in ("1", "true", "yes"):
-        force_cpu = True
-    elif export_cpu_raw in ("0", "false", "no"):
-        force_cpu = False
-    else:
-        force_cpu = low_vram
+    force_cpu = os.getenv("TRELLIS2_EXPORT_CPU", "").lower() in ("1", "true", "yes") or low_vram
     if force_cpu:
         _mesh_to_cpu(mesh)
         _free_cuda_memory()
@@ -451,26 +419,14 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
 
     remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "1"))
     remesh_project = float(os.getenv("TRELLIS2_REMESH_PROJECT", "0"))
-
-    _mesh_to_device(mesh, export_device)
-    dtype = mesh.vertices.dtype if isinstance(mesh.vertices, torch.Tensor) else torch.float32
-    voxel_size = mesh.voxel_size
-    if isinstance(voxel_size, torch.Tensor):
-        voxel_size = voxel_size.detach().to(device=export_device, dtype=dtype)
-    aabb = torch.tensor(
-        [[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-        device=export_device,
-        dtype=dtype,
-    )
-
     glb = o_voxel.postprocess.to_glb(
         vertices=mesh.vertices,
         faces=mesh.faces,
         attr_volume=mesh.attrs,
         coords=mesh.coords,
         attr_layout=mesh.layout,
-        voxel_size=voxel_size,
-        aabb=aabb,
+        voxel_size=mesh.voxel_size,
+        aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
         decimation_target=decimation,
         texture_size=texture_size,
         remesh=not low_vram and os.getenv("TRELLIS2_REMESH", "1").lower() in ("1", "true", "yes"),
@@ -528,6 +484,9 @@ def _sampler_params(prefix: str, defaults: dict) -> dict:
     gie = os.getenv(f"TRELLIS2_{prefix}_GUIDANCE_INTERVAL_END")
     if gis is not None:
         out["guidance_interval"] = (float(gis), float(gie or "1.0"))
+    sampler = (os.getenv("TRELLIS2_SAMPLER") or "").strip()
+    if sampler:
+        out["sampler"] = sampler
     return out
 
 

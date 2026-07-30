@@ -24,7 +24,30 @@ from trellis_runtime import (
 
 
 def _ss_resolution(pipeline_type: str) -> int:
+    override = (os.getenv("TRELLIS2_SS_RESOLUTION") or "").strip()
+    if override:
+        try:
+            return int(override)
+        except ValueError:
+            pass
     return {"512": 32, "1024": 64, "1024_cascade": 32, "1536_cascade": 32}.get(pipeline_type, 32)
+
+
+def _fill_mesh_holes(mesh) -> None:
+    if os.getenv("TRELLIS2_FILL_HOLES", "1").lower() not in ("1", "true", "yes"):
+        return
+    if not hasattr(mesh, "fill_holes"):
+        return
+    iters = max(1, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "1")))
+    algo = (os.getenv("TRELLIS2_HOLE_FILL_ALGORITHM") or "flood_fill").strip().lower()
+    for _ in range(iters):
+        try:
+            if algo != "flood_fill" and hasattr(mesh, "fill_holes"):
+                mesh.fill_holes()
+            else:
+                mesh.fill_holes()
+        except Exception:  # noqa: BLE001
+            break
 
 
 def _sample_shape_cascade(pipe, pipeline_type: str, cond_512, cond_1024, coords, shape_params, max_tokens):
@@ -81,7 +104,7 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
     ss_defaults = {"steps": 30, "guidance_strength": 7.5, "guidance_rescale": 0.2, "rescale_t": 1.0}
     shape_defaults = {"steps": 30, "guidance_strength": 7.5, "guidance_rescale": 0.1, "rescale_t": 2.0}
     shape_refine_defaults = {"steps": 12, "guidance_strength": 6.5, "guidance_rescale": 0.05, "rescale_t": 4.0}
-    tex_defaults = {"steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.5, "rescale_t": 3.0}
+    tex_defaults = {"steps": 20, "guidance_strength": 5.0, "guidance_rescale": 0.2, "rescale_t": 4.0}
 
     ss_params = _sampler_params("SS", ss_defaults)
     shape_params = _sampler_params("SHAPE", shape_defaults)
@@ -89,7 +112,8 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
     tex_params = _sampler_params("TEX", tex_defaults)
 
     pipeline_type = _pipeline_type_resolved()
-    max_tokens = int(os.getenv("TRELLIS2_MAX_NUM_TOKENS", "32768"))
+    max_tokens = int(os.getenv("TRELLIS2_MAX_NUM_TOKENS", "9999"))
+    max_views = int(os.getenv("TRELLIS2_MAX_VIEWS", "4"))
     seed = int(os.getenv("TRELLIS2_SEED", "42"))
 
     pipe = get_pipeline()
@@ -104,7 +128,7 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
         cond_1024 = pipe.get_cond([image], 1024) if pipeline_type != "512" else None
 
         coords = pipe.sample_sparse_structure(
-            cond_512, _ss_resolution(pipeline_type), 1, ss_params
+            cond_512, _ss_resolution(pipeline_type), max_views, ss_params
         )
         shape_slat, res = _sample_shape_cascade(
             pipe, pipeline_type, cond_512, cond_1024, coords, shape_params, max_tokens
@@ -112,8 +136,8 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
 
         _progress("stage3 mesh: decode shape + fill holes")
         meshes, subs = pipe.decode_shape_slat(shape_slat, res)
-        if meshes and hasattr(meshes[0], "fill_holes"):
-            meshes[0].fill_holes()
+        if meshes:
+            _fill_mesh_holes(meshes[0])
 
         _free_cuda_memory()
 
@@ -123,8 +147,8 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
                 pipe, pipeline_type, cond_512, cond_1024, coords, shape_refine_params, max_tokens
             )
             meshes, subs = pipe.decode_shape_slat(shape_slat, res)
-            if meshes and hasattr(meshes[0], "fill_holes"):
-                meshes[0].fill_holes()
+            if meshes:
+                _fill_mesh_holes(meshes[0])
             _free_cuda_memory()
 
         _progress("stage6 texturing: texture slat")

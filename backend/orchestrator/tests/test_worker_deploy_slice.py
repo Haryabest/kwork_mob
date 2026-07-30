@@ -8,28 +8,32 @@ from app.services import worker_deploy as wd
 def test_default_config_has_trellis_keys():
     cfg = wd.default_config()
     env = cfg["env"]
-    assert env["TRELLIS2_PIPELINE_TYPE"] == "1024"
+    assert env["TRELLIS2_PIPELINE_TYPE"] == "1536"
     assert env["WORKER_PIPELINE_MODE"] == "trellis"
     assert env["QUALITY_THRESHOLD"] == "0.35"
     assert env["TRELLIS2_LOW_VRAM"] == "1"
     assert env["WORKER_TRELLIS_INPROCESS"] == "0"
+    assert env["NOBG_SENSITIVITY"] == "1.0"
+    assert env["NOBG_INPUT_SIZE"] == "1024"
+    assert env["TRELLIS2_TEX_STEPS"] == "20"
+    assert env["TRELLIS2_MAX_NUM_TOKENS"] == "9999"
     assert cfg["container_name"] == "kwork-worker"
 
 
 def test_env_presets():
     presets = wd.env_presets()
     assert "lan" in presets and "quality" in presets
-    assert presets["quality"]["env"]["TRELLIS2_TEXTURE_SIZE"] == "2048"
     assert float(presets["quality"]["env"]["QUALITY_THRESHOLD"]) > float(
         presets["lan"]["env"]["QUALITY_THRESHOLD"]
     )
+    assert presets["comfy"]["env"]["TRELLIS2_SS_STEPS"] == presets["lan"]["env"]["TRELLIS2_SS_STEPS"]
 
 
 def test_build_env_file_includes_quality_threshold():
     cfg = wd.default_config()
     text = "\n".join(wd._build_env_file_lines(cfg))
     assert "QUALITY_THRESHOLD=0.35" in text
-    assert "NOBG_CONFIDENCE=0.65" in text
+    assert "NOBG_SENSITIVITY=1.0" in text
 
 
 def test_build_env_file_lines():

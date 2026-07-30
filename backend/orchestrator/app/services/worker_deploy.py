@@ -81,6 +81,25 @@ CONFIG_ENV_KEYS = (
     "NOBG_VIEW00_ONLY",
     "NOBG_CONFIDENCE",
     "NOBG_HARD_FAIL_MIN",
+    "NOBG_INPUT_SIZE",
+    "NOBG_SENSITIVITY",
+    "NOBG_MASK_BLUR",
+    "NOBG_MASK_OFFSET",
+    "NOBG_INVERT_OUTPUT",
+    "NOBG_REFINE_FOREGROUND",
+    "TRELLIS2_SS_RESOLUTION",
+    "TRELLIS2_MAX_VIEWS",
+    "TRELLIS2_USE_TILED_DECODER",
+    "TRELLIS2_SAMPLER",
+    "TRELLIS2_FILL_HOLES",
+    "TRELLIS2_HOLE_ITERATIONS",
+    "TRELLIS2_HOLE_FILL_ALGORITHM",
+    "TRELLIS2_KEEP_ONLY_SHELL",
+    "TRELLIS2_DINO_LOCK",
+    "TRELLIS2_DINO_SUBSTEPS",
+    "TRELLIS2_DINO_FOUNDATION_CAP",
+    "TRELLIS2_GENERATE_TEXTURE_SLAT",
+    "TRELLIS2_VERBOSE",
     "HF_TOKEN",
     "ORCHESTRATOR_WS_URL",
     "ORCHESTRATOR_HTTP_URL",
@@ -251,31 +270,81 @@ def _default_minio_endpoint() -> str:
     return ep
 
 
+def _comfyui_rmbg_env() -> dict[str, str]:
+    """ComfyUI RMBG-2.0 node defaults."""
+    return {
+        "NOBG_ENGINE": "rmbg2",
+        "NOBG_MODEL_ID": "briaai/RMBG-2.0",
+        "NOBG_VIEW00_ONLY": "1",
+        "NOBG_INPUT_SIZE": "1024",
+        "NOBG_SENSITIVITY": "1.0",
+        "NOBG_MASK_BLUR": "0",
+        "NOBG_MASK_OFFSET": "0",
+        "NOBG_INVERT_OUTPUT": "0",
+        "NOBG_REFINE_FOREGROUND": "0",
+        "NOBG_CONFIDENCE": "0.80",
+        "NOBG_HARD_FAIL_MIN": "0.35",
+    }
+
+
+def _comfyui_trellis_voxel_env() -> dict[str, str]:
+    """ComfyUI Trellis2 Mesh With Voxel Advanced Generator defaults."""
+    return {
+        "TRELLIS_STAGED_PIPELINE": "1",
+        "TRELLIS2_PIPELINE_TYPE": "1536",
+        "TRELLIS2_REFINE_SHAPE": "1",
+        "TRELLIS2_SS_STEPS": "30",
+        "TRELLIS2_SS_GUIDANCE": "7.5",
+        "TRELLIS2_SS_GUIDANCE_RESCALE": "0.2",
+        "TRELLIS2_SS_RESCALE_T": "1",
+        "TRELLIS2_SS_GUIDANCE_INTERVAL_START": "0.1",
+        "TRELLIS2_SS_GUIDANCE_INTERVAL_END": "1.0",
+        "TRELLIS2_SHAPE_STEPS": "30",
+        "TRELLIS2_SHAPE_GUIDANCE": "7.5",
+        "TRELLIS2_SHAPE_GUIDANCE_RESCALE": "0.1",
+        "TRELLIS2_SHAPE_RESCALE_T": "2",
+        "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_START": "0.0",
+        "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_END": "1.0",
+        "TRELLIS2_TEX_STEPS": "20",
+        "TRELLIS2_TEX_GUIDANCE": "5",
+        "TRELLIS2_TEX_GUIDANCE_RESCALE": "0.2",
+        "TRELLIS2_TEX_RESCALE_T": "4",
+        "TRELLIS2_TEX_GUIDANCE_INTERVAL_START": "0.0",
+        "TRELLIS2_TEX_GUIDANCE_INTERVAL_END": "0.9",
+        "TRELLIS2_MAX_NUM_TOKENS": "9999",
+        "TRELLIS2_MAX_VIEWS": "4",
+        "TRELLIS2_SS_RESOLUTION": "32",
+        "TRELLIS2_GENERATE_TEXTURE_SLAT": "0",
+        "TRELLIS2_USE_TILED_DECODER": "1",
+        "TRELLIS2_SAMPLER": "euler",
+        "TRELLIS2_FILL_HOLES": "1",
+        "TRELLIS2_HOLE_ITERATIONS": "1",
+        "TRELLIS2_HOLE_FILL_ALGORITHM": "flood_fill",
+        "TRELLIS2_KEEP_ONLY_SHELL": "1",
+        "TRELLIS2_DINO_LOCK": "0",
+        "TRELLIS2_DINO_SUBSTEPS": "4",
+        "TRELLIS2_DINO_FOUNDATION_CAP": "1",
+        "TRELLIS2_VERBOSE": "0",
+        "TRELLIS2_TEXTURE_SIZE": "1024",
+        "TRELLIS2_EXPORT_TEXTURE_MAX": "1024",
+        "TRELLIS2_DECIMATION": "300000",
+        "TRELLIS2_REMESH": "1",
+        "TRELLIS2_REMESH_BAND": "1",
+        "TRELLIS2_REMESH_PROJECT": "0",
+        "TRELLIS2_EXPORT_CPU": "1",
+        "TRELLIS2_LOW_VRAM": "1",
+    }
+
+
 def lan_env_defaults() -> dict[str, str]:
-    """Текущий LAN-профиль (быстрее, порог качества ниже)."""
+    """LAN по умолчанию: ComfyUI RMBG-2.0 + Voxel Generator (адаптировано для 16 GB)."""
     return {
         "WORKER_ID": "client-gpu-01",
         "WORKER_TOKEN": settings.WORKER_TOKEN or "worker-dev-token",
         "WORKER_PIPELINE_MODE": "trellis",
         "TRELLIS_VERSION": "2",
         "TRELLIS_ALLOW_STUB_FALLBACK": "0",
-        "TRELLIS2_PIPELINE_TYPE": "1024",
-        "TRELLIS2_TEXTURE_SIZE": "1024",
-        "TRELLIS2_DECIMATION": "150000",
-        "TRELLIS2_LOW_VRAM": "1",
         "TRELLIS2_EXTENSION_WEBP": "0",
-        "TRELLIS2_SS_STEPS": "12",
-        "TRELLIS2_SS_GUIDANCE": "7.5",
-        "TRELLIS2_SS_GUIDANCE_RESCALE": "0.7",
-        "TRELLIS2_SS_RESCALE_T": "5",
-        "TRELLIS2_SHAPE_STEPS": "12",
-        "TRELLIS2_SHAPE_GUIDANCE": "7.5",
-        "TRELLIS2_SHAPE_GUIDANCE_RESCALE": "0.5",
-        "TRELLIS2_SHAPE_RESCALE_T": "3",
-        "TRELLIS2_TEX_STEPS": "12",
-        "TRELLIS2_TEX_GUIDANCE": "1",
-        "TRELLIS2_TEX_GUIDANCE_RESCALE": "0",
-        "TRELLIS2_TEX_RESCALE_T": "3",
         "WORKER_TRELLIS_INPROCESS": "0",
         "WORKER_WARMUP_TRELLIS": "0",
         "WORKER_STARTUP_WARMUP": "1",
@@ -283,11 +352,6 @@ def lan_env_defaults() -> dict[str, str]:
         "ATTN_BACKEND": "xformers",
         "SPARSE_ATTN_BACKEND": "xformers",
         "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
-        "NOBG_ENGINE": "rmbg2",
-        "NOBG_MODEL_ID": "briaai/RMBG-2.0",
-        "NOBG_VIEW00_ONLY": "1",
-        "NOBG_CONFIDENCE": "0.65",
-        "NOBG_HARD_FAIL_MIN": "0.35",
         "HF_TOKEN": "",
         "ORCHESTRATOR_WS_URL": _default_orchestrator_ws(),
         "ORCHESTRATOR_HTTP_URL": _default_orchestrator_http(),
@@ -300,6 +364,8 @@ def lan_env_defaults() -> dict[str, str]:
         "WATERMARK_HMAC_SECRET": settings.WATERMARK_HMAC_SECRET or "change-me-watermark-secret",
         "WORKER_SUBPROCESS_STREAM": "1",
         "COMPRESS_ALLOW_OVER_LIMIT": "1",
+        **_comfyui_rmbg_env(),
+        **_comfyui_trellis_voxel_env(),
     }
 
 
@@ -327,57 +393,8 @@ def quality_env_preset() -> dict[str, str]:
 
 
 def comfy_env_preset() -> dict[str, str]:
-    """ComfyUI Trellis2 workflow (адаптировано для RTX 5060 Ti 16GB)."""
-    env = lan_env_defaults()
-    env.update(
-        {
-            "TRELLIS_STAGED_PIPELINE": "1",
-            "TRELLIS2_PIPELINE_TYPE": "1024",
-            "TRELLIS2_LOW_VRAM": "1",
-            "TRELLIS2_MAX_NUM_TOKENS": "32768",
-            "TRELLIS2_REFINE_SHAPE": "1",
-            "TRELLIS2_SS_STEPS": "30",
-            "TRELLIS2_SS_GUIDANCE": "7.5",
-            "TRELLIS2_SS_GUIDANCE_RESCALE": "0.2",
-            "TRELLIS2_SS_RESCALE_T": "1",
-            "TRELLIS2_SS_GUIDANCE_INTERVAL_START": "0.1",
-            "TRELLIS2_SS_GUIDANCE_INTERVAL_END": "1.0",
-            "TRELLIS2_SHAPE_STEPS": "30",
-            "TRELLIS2_SHAPE_GUIDANCE": "7.5",
-            "TRELLIS2_SHAPE_GUIDANCE_RESCALE": "0.1",
-            "TRELLIS2_SHAPE_RESCALE_T": "2",
-            "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_START": "0.0",
-            "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_END": "1.0",
-            "TRELLIS2_SHAPE_REFINE_STEPS": "12",
-            "TRELLIS2_SHAPE_REFINE_GUIDANCE": "6.5",
-            "TRELLIS2_SHAPE_REFINE_GUIDANCE_RESCALE": "0.05",
-            "TRELLIS2_SHAPE_REFINE_RESCALE_T": "4",
-            "TRELLIS2_SHAPE_REFINE_GUIDANCE_INTERVAL_START": "0.1",
-            "TRELLIS2_SHAPE_REFINE_GUIDANCE_INTERVAL_END": "1.0",
-            "TRELLIS2_TEX_STEPS": "12",
-            "TRELLIS2_TEX_GUIDANCE": "1.0",
-            "TRELLIS2_TEX_GUIDANCE_RESCALE": "0.5",
-            "TRELLIS2_TEX_RESCALE_T": "3",
-            "TRELLIS2_TEX_GUIDANCE_INTERVAL_START": "0.6",
-            "TRELLIS2_TEX_GUIDANCE_INTERVAL_END": "0.9",
-            "TRELLIS2_TEXTURE_SIZE": "1024",
-            "TRELLIS2_EXPORT_TEXTURE_MAX": "1024",
-            "TRELLIS2_DECIMATION": "300000",
-            "TRELLIS2_REMESH": "1",
-            "TRELLIS2_REMESH_BAND": "1",
-            "TRELLIS2_REMESH_PROJECT": "0",
-            "TRELLIS2_EXPORT_CPU": "1",
-            "NOBG_ENGINE": "rmbg2",
-            "NOBG_CONFIDENCE": "0.75",
-            "QUALITY_THRESHOLD": "0.32",
-            "SEGMENTATION_AVG_MIN": "0.80",
-            "ATTN_BACKEND": "xformers",
-            "SPARSE_ATTN_BACKEND": "xformers",
-            "WORKER_TRELLIS_INPROCESS": "0",
-            "WORKER_WARMUP_TRELLIS": "0",
-        }
-    )
-    return env
+    """ComfyUI workflow — совпадает с LAN default."""
+    return lan_env_defaults()
 
 
 def env_presets() -> dict[str, dict[str, Any]]:
@@ -385,7 +402,7 @@ def env_presets() -> dict[str, dict[str, Any]]:
         "lan": {
             "id": "lan",
             "title": "LAN (по умолчанию)",
-            "description": "1024 pipeline, texture 1024, порог 0.35 — стабильно на 16 GB",
+            "description": "ComfyUI RMBG-2.0 + Voxel Generator; staged; 16 GB safe",
             "env": lan_env_defaults(),
         },
         "quality": {
@@ -396,8 +413,8 @@ def env_presets() -> dict[str, dict[str, Any]]:
         },
         "comfy": {
             "id": "comfy",
-            "title": "ComfyUI Quality",
-            "description": "staged: shape→refine→texture; 1024/16GB; порог 0.32",
+            "title": "ComfyUI (как в workflow)",
+            "description": "идентичен LAN default — RMBG-2.0 + Voxel Generator",
             "env": comfy_env_preset(),
         },
     }
