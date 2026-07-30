@@ -21,6 +21,8 @@ services:
       - ${WORKER_BIND_ENTRYPOINT:-./entrypoint.sh}:/usr/local/bin/worker_entrypoint.sh:ro
       - ${WORKER_BIND_SCRIPTS:-./scripts}:/app/scripts:ro
       - ${WORKER_BIND_AGENT:-./worker_agent.py}:/app/worker_agent.py:ro
+    env_file:
+      - .env.worker
     environment:
       WORKER_ID: ${WORKER_ID:-worker-1}
       WORKER_TOKEN: ${WORKER_TOKEN}
@@ -57,8 +59,18 @@ services:
       NOBG_ENGINE: ${NOBG_ENGINE:-rmbg2}
       NOBG_MODEL_ID: ${NOBG_MODEL_ID:-briaai/RMBG-2.0}
       NOBG_VIEW00_ONLY: ${NOBG_VIEW00_ONLY:-1}
-      NOBG_CONFIDENCE: ${NOBG_CONFIDENCE:-0.65}
+      NOBG_INPUT_SIZE: ${NOBG_INPUT_SIZE:-1024}
+      NOBG_SENSITIVITY: ${NOBG_SENSITIVITY:-1.0}
+      NOBG_MASK_BLUR: ${NOBG_MASK_BLUR:-0}
+      NOBG_MASK_OFFSET: ${NOBG_MASK_OFFSET:-0}
+      NOBG_INVERT_OUTPUT: ${NOBG_INVERT_OUTPUT:-0}
+      NOBG_REFINE_FOREGROUND: ${NOBG_REFINE_FOREGROUND:-0}
+      NOBG_CONFIDENCE: ${NOBG_CONFIDENCE:-0.80}
       NOBG_HARD_FAIL_MIN: ${NOBG_HARD_FAIL_MIN:-0.35}
+      NOBG_MIN_RATIO: ${NOBG_MIN_RATIO:-0.05}
+      NOBG_MAX_RATIO: ${NOBG_MAX_RATIO:-0.95}
+      NOBG_FALLBACK_LEGACY: ${NOBG_FALLBACK_LEGACY:-0}
+      NOBG_STRICT_SEGMENTATION: ${NOBG_STRICT_SEGMENTATION:-0}
       HF_TOKEN: ${HF_TOKEN:-}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}

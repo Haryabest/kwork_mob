@@ -842,7 +842,17 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
     stored = _normalize_deploy_meta(stored)
     base_env = default_config()["env"]
     stored_env = _decrypt_env(_coerce_env_map(stored.get("env")))
-    stored["env"] = _normalize_worker_env({**base_env, **stored_env})
+    merged_env = {**base_env, **stored_env}
+    for key in (
+        "NOBG_FALLBACK_LEGACY",
+        "NOBG_MIN_RATIO",
+        "NOBG_STRICT_SEGMENTATION",
+        "NOBG_SENSITIVITY",
+        "NOBG_CONFIDENCE",
+    ):
+        if str(base_env.get(key) or "").strip():
+            merged_env[key] = base_env[key]
+    stored["env"] = _normalize_worker_env(merged_env)
     worker_dir = _worker_dir(stored)
     _ensure_worker_bind_executable(worker_dir)
     agent = worker_dir / "worker_agent.py"
