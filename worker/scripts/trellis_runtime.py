@@ -365,13 +365,39 @@ def _release_vram_before_export(pipe) -> None:
 def _mesh_to_device(mesh, device: str) -> None:
     import torch
 
-    for attr in ("vertices", "faces", "attrs", "coords"):
+    def _move(t):
+        if isinstance(t, torch.Tensor):
+            return t.detach().to(device)
+        return t
+
+    for attr in ("vertices", "faces", "attrs", "coords", "voxel_size"):
         val = getattr(mesh, attr, None)
         if isinstance(val, torch.Tensor):
-            setattr(mesh, attr, val.detach().to(device))
-    vs = getattr(mesh, "voxel_size", None)
-    if isinstance(vs, torch.Tensor):
-        mesh.voxel_size = vs.to(device)
+            setattr(mesh, attr, _move(val))
+
+    attrs = getattr(mesh, "attrs", None)
+    if attrs is not None and not isinstance(attrs, torch.Tensor):
+        for sparse_attr in ("feats", "coords", "data"):
+            val = getattr(attrs, sparse_attr, None)
+            if isinstance(val, torch.Tensor):
+                setattr(attrs, sparse_attr, _move(val))
+        if hasattr(attrs, "to"):
+            try:
+                moved = attrs.to(device)
+                if moved is not None:
+                    mesh.attrs = moved
+            except Exception:  # noqa: BLE001
+                pass
+
+    layout = getattr(mesh, "layout", None)
+    if isinstance(layout, dict):
+        mesh.layout = {
+            k: _move(v) if isinstance(v, torch.Tensor) else v for k, v in layout.items()
+        }
+
+    for name, val in list(getattr(mesh, "__dict__", {}).items()):
+        if isinstance(val, torch.Tensor):
+            setattr(mesh, name, _move(val))
 
 
 def _mesh_to_cpu(mesh) -> None:
@@ -383,7 +409,13 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
     import o_voxel  # type: ignore
 
     low_vram = _resolve_low_vram()
-    force_cpu = os.getenv("TRELLIS2_EXPORT_CPU", "").lower() in ("1", "true", "yes") or low_vram
+    export_cpu_raw = os.getenv("TRELLIS2_EXPORT_CPU", "").strip().lower()
+    if export_cpu_raw in ("1", "true", "yes"):
+        force_cpu = True
+    elif export_cpu_raw in ("0", "false", "no"):
+        force_cpu = False
+    else:
+        force_cpu = low_vram
     if force_cpu:
         _mesh_to_cpu(mesh)
         _free_cuda_memory()
