@@ -365,17 +365,34 @@ def _release_vram_before_export(pipe) -> None:
 def _mesh_to_device(mesh, device: str) -> None:
     import torch
 
-    for attr in ("vertices", "faces", "attrs", "coords"):
+    for attr in ("vertices", "faces", "attrs", "coords", "voxel_size"):
         val = getattr(mesh, attr, None)
         if isinstance(val, torch.Tensor):
             setattr(mesh, attr, val.detach().to(device))
-    vs = getattr(mesh, "voxel_size", None)
-    if isinstance(vs, torch.Tensor):
-        mesh.voxel_size = vs.to(device)
+    layout = getattr(mesh, "layout", None)
+    if isinstance(layout, dict):
+        for key, val in layout.items():
+            if isinstance(val, torch.Tensor):
+                layout[key] = val.detach().to(device)
 
 
 def _mesh_to_cpu(mesh) -> None:
     _mesh_to_device(mesh, "cpu")
+
+
+def _call_to_glb(o_voxel, to_glb_kw: dict):
+    try:
+        return o_voxel.postprocess.to_glb(**to_glb_kw)
+    except TypeError as exc:
+        if "unexpected keyword" not in str(exc):
+            raise
+        clean = {
+            k: v
+            for k, v in to_glb_kw.items()
+            if k not in ("remove_floaters", "remove_inner_faces", "dual_contouring_resolution")
+        }
+        logger.warning("TRELLIS.2 to_glb fallback: %s", exc)
+        return o_voxel.postprocess.to_glb(**clean)
 
 
 def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -> None:
@@ -383,15 +400,18 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
     import o_voxel  # type: ignore
 
     low_vram = _resolve_low_vram()
-    force_cpu = os.getenv("TRELLIS2_EXPORT_CPU", "").lower() in ("1", "true", "yes") or low_vram
-    if force_cpu:
+    prefer_cpu = os.getenv("TRELLIS2_EXPORT_CPU", "0").lower() in ("1", "true", "yes")
+    # После offload пайплайна remesh/to_glb обычно нужен CUDA; CPU-only ломает remesh (mixed devices).
+    if torch.cuda.is_available() and not prefer_cpu:
+        export_device = "cuda"
+        _mesh_to_device(mesh, "cuda")
+        _free_cuda_memory()
+        _progress("export GLB on CUDA (pipeline VRAM freed)")
+    else:
+        export_device = "cpu"
         _mesh_to_cpu(mesh)
         _free_cuda_memory()
-        export_device = "cpu"
-        _progress("export GLB on CPU (low VRAM) — медленнее, но без OOM")
-    else:
-        export_device = "cuda" if torch.cuda.is_available() else "cpu"
-        _mesh_to_device(mesh, export_device)
+        _progress("export GLB on CPU — remesh может быть отключён")
 
     skip_simplify = os.getenv("TRELLIS2_SKIP_MESH_SIMPLIFY", "").lower() in ("1", "true", "yes")
     simplify_method = (os.getenv("TRELLIS2_SIMPLIFY_METHOD") or "cumesh").strip().lower()
@@ -434,6 +454,9 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
     remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "1"))
     remesh_project = float(os.getenv("TRELLIS2_REMESH_PROJECT", "0"))
     remesh_enabled = os.getenv("TRELLIS2_REMESH", "1").lower() in ("1", "true", "yes")
+    if export_device == "cpu" and remesh_enabled:
+        remesh_enabled = False
+        logger.info("TRELLIS.2 CPU export: remesh disabled (o_voxel needs CUDA)")
     to_glb_kw: dict = {
         "vertices": mesh.vertices,
         "faces": mesh.faces,
@@ -451,23 +474,27 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
     }
     if grid_size:
         to_glb_kw["grid_size"] = int(grid_size)
-    dual = (os.getenv("TRELLIS2_DUAL_CONTURING_RESOLUTION") or "").strip().lower()
-    if dual and dual != "auto":
-        try:
-            to_glb_kw["dual_contouring_resolution"] = int(dual)
-        except ValueError:
-            pass
-    if os.getenv("TRELLIS2_REMOVE_FLOATERS", "1").lower() in ("1", "true", "yes"):
-        to_glb_kw["remove_floaters"] = True
-    if os.getenv("TRELLIS2_REMOVE_INNER_FACES", "1").lower() in ("1", "true", "yes"):
-        to_glb_kw["remove_inner_faces"] = True
+    if os.getenv("TRELLIS2_O_VOXEL_EXTENDED", "0").lower() in ("1", "true", "yes"):
+        dual = (os.getenv("TRELLIS2_DUAL_CONTURING_RESOLUTION") or "").strip().lower()
+        if dual and dual != "auto":
+            try:
+                to_glb_kw["dual_contouring_resolution"] = int(dual)
+            except ValueError:
+                pass
+        if os.getenv("TRELLIS2_REMOVE_FLOATERS", "1").lower() in ("1", "true", "yes"):
+            to_glb_kw["remove_floaters"] = True
+        if os.getenv("TRELLIS2_REMOVE_INNER_FACES", "1").lower() in ("1", "true", "yes"):
+            to_glb_kw["remove_inner_faces"] = True
     try:
-        glb = o_voxel.postprocess.to_glb(**to_glb_kw)
-    except TypeError as exc:
-        for key in ("remove_floaters", "remove_inner_faces", "dual_contouring_resolution"):
-            to_glb_kw.pop(key, None)
-        logger.warning("TRELLIS.2 to_glb fallback without optional kwargs: %s", exc)
-        glb = o_voxel.postprocess.to_glb(**to_glb_kw)
+        glb = _call_to_glb(o_voxel, to_glb_kw)
+    except RuntimeError as exc:
+        if export_device == "cpu" and torch.cuda.is_available() and "device" in str(exc).lower():
+            logger.warning("TRELLIS.2 CPU export device error, retry CUDA: %s", exc)
+            _mesh_to_device(mesh, "cuda")
+            to_glb_kw["remesh"] = os.getenv("TRELLIS2_REMESH", "1").lower() in ("1", "true", "yes")
+            glb = _call_to_glb(o_voxel, to_glb_kw)
+        else:
+            raise
     output.parent.mkdir(parents=True, exist_ok=True)
     glb.export(str(output), extension_webp=use_webp)
     logger.info("TRELLIS.2 export extension_webp=%s texture_size=%s", use_webp, texture_size)

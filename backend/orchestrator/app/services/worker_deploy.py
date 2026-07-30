@@ -376,7 +376,7 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_VERBOSE": "0",
         "TRELLIS2_TEXTURE_SIZE": "1024",
         "TRELLIS2_EXPORT_TEXTURE_MAX": "1024",
-        "TRELLIS2_EXPORT_CPU": "1",
+        "TRELLIS2_EXPORT_CPU": "0",
         "TRELLIS2_LOW_VRAM": "1",
     }
 
