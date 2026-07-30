@@ -54,4 +54,16 @@ if [ -f /app/scripts/warmup_gpu_cache.sh ]; then
   bash /app/scripts/warmup_gpu_cache.sh || true
 fi
 
+# ComfyUI RMBG: сброс устаревших -e из ручного docker run
+if [ "${NOBG_RESET_COMFY_DEFAULTS:-1}" != "0" ]; then
+  export NOBG_ENGINE="${NOBG_ENGINE:-rmbg2}"
+  export NOBG_FALLBACK_LEGACY=0
+  export NOBG_SENSITIVITY="${NOBG_SENSITIVITY:-1.0}"
+  export NOBG_INPUT_SIZE="${NOBG_INPUT_SIZE:-1024}"
+  export NOBG_MIN_RATIO="${NOBG_MIN_RATIO:-0.05}"
+  export NOBG_STRICT_SEGMENTATION="${NOBG_STRICT_SEGMENTATION:-0}"
+  export NOBG_CONFIDENCE="${NOBG_CONFIDENCE:-0.80}"
+  unset NOBG_MASK_THRESHOLD
+fi
+
 exec "$@"
