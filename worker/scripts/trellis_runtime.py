@@ -451,14 +451,26 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
 
     remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "1"))
     remesh_project = float(os.getenv("TRELLIS2_REMESH_PROJECT", "0"))
+
+    _mesh_to_device(mesh, export_device)
+    dtype = mesh.vertices.dtype if isinstance(mesh.vertices, torch.Tensor) else torch.float32
+    voxel_size = mesh.voxel_size
+    if isinstance(voxel_size, torch.Tensor):
+        voxel_size = voxel_size.detach().to(device=export_device, dtype=dtype)
+    aabb = torch.tensor(
+        [[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+        device=export_device,
+        dtype=dtype,
+    )
+
     glb = o_voxel.postprocess.to_glb(
         vertices=mesh.vertices,
         faces=mesh.faces,
         attr_volume=mesh.attrs,
         coords=mesh.coords,
         attr_layout=mesh.layout,
-        voxel_size=mesh.voxel_size,
-        aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+        voxel_size=voxel_size,
+        aabb=aabb,
         decimation_target=decimation,
         texture_size=texture_size,
         remesh=not low_vram and os.getenv("TRELLIS2_REMESH", "1").lower() in ("1", "true", "yes"),
