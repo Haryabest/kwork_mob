@@ -128,6 +128,23 @@ def _get_rmbg2():
         return None
 
 
+def _maybe_invert_fg(mask: np.ndarray, fg: np.ndarray, threshold: int) -> tuple[np.ndarray, dict]:
+    """Тёмный объект на белом: RMBG иногда даёт inverted mask (ratio < 10%)."""
+    metrics = _mask_metrics(fg)
+    min_ratio = float(os.getenv("NOBG_INVERT_MIN_RATIO", "0.12"))
+    if metrics["ratio"] >= min_ratio:
+        return fg, metrics
+    fg_inv = (mask <= threshold).astype(np.uint8)
+    metrics_inv = _mask_metrics(fg_inv)
+    if metrics_inv["ratio"] > metrics["ratio"]:
+        print(
+            f"[remove_background] invert mask ratio {metrics['ratio']:.3f} → {metrics_inv['ratio']:.3f}",
+            flush=True,
+        )
+        return fg_inv, metrics_inv
+    return fg, metrics
+
+
 def _rmbg2_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | None:
     loaded = _get_rmbg2()
     if loaded is None:
@@ -152,9 +169,9 @@ def _rmbg2_remove(img: Image.Image) -> tuple[Image.Image, float, float, dict] | 
         pred = preds[0].squeeze().numpy()
         mask_pil = transforms.ToPILImage()(pred).resize(rgb.size, Image.BILINEAR)
         mask = np.array(mask_pil)
-        fg = (mask > int(os.getenv("NOBG_MASK_THRESHOLD", "128"))).astype(np.uint8)
+        thr = int(os.getenv("NOBG_MASK_THRESHOLD", "128"))
+        fg, metrics = _maybe_invert_fg(mask, (mask > thr).astype(np.uint8), thr)
         out = _apply_mask_rgba(rgb, fg)
-        metrics = _mask_metrics(fg)
         ratio = metrics["ratio"]
         conf = float(np.mean(mask[fg.astype(bool)]) / 255.0) if fg.any() else 0.0
         conf = min(0.99, max(0.5, conf))
