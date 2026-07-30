@@ -39,7 +39,7 @@ def _rmbg_mask_threshold() -> int:
     if raw_sens:
         try:
             sens = float(raw_sens)
-            return max(0, min(255, int(round(255 * (1.0 - sens))))
+            return max(0, min(255, int(round(255 * (1.0 - sens)))))
         except ValueError:
             pass
     return int(os.getenv("NOBG_MASK_THRESHOLD", "128"))

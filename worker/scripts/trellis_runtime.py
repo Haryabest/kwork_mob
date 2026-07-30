@@ -393,15 +393,29 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         export_device = "cuda" if torch.cuda.is_available() else "cpu"
         _mesh_to_device(mesh, export_device)
 
-    skip_simplify = os.getenv("TRELLIS2_SKIP_MESH_SIMPLIFY", "").lower() in ("1", "true", "yes") or low_vram
-    if hasattr(mesh, "simplify") and not skip_simplify:
+    skip_simplify = os.getenv("TRELLIS2_SKIP_MESH_SIMPLIFY", "").lower() in ("1", "true", "yes")
+    simplify_method = (os.getenv("TRELLIS2_SIMPLIFY_METHOD") or "cumesh").strip().lower()
+    if hasattr(mesh, "simplify") and not skip_simplify and simplify_method != "cumesh":
         try:
             mesh.simplify(16_777_216)
         except Exception as exc:  # noqa: BLE001
             logger.warning("TRELLIS.2 mesh.simplify skipped: %s", exc)
 
-    decimation = int(os.getenv("TRELLIS2_DECIMATION", "150000" if low_vram else "300000"))
-    texture_size = _texture_size_for_task(task_dir) if task_dir else int(os.getenv("TRELLIS2_TEXTURE_SIZE", "1024"))
+    decimation_raw = (
+        os.getenv("TRELLIS2_SIMPLIFY_TARGET_FACES")
+        or os.getenv("TRELLIS2_DECIMATION")
+        or ("150000" if low_vram else "1000000")
+    )
+    decimation = int(decimation_raw)
+    reconstruct_res = (os.getenv("TRELLIS2_RECONSTRUCT_RESOLUTION") or "").strip()
+    texture_size = _texture_size_for_task(task_dir) if task_dir else int(
+        os.getenv("TRELLIS2_TEXTURE_SIZE", reconstruct_res or "1024")
+    )
+    if reconstruct_res:
+        try:
+            texture_size = int(reconstruct_res)
+        except ValueError:
+            pass
     if low_vram:
         texture_size = min(texture_size, int(os.getenv("TRELLIS2_EXPORT_TEXTURE_MAX", "1024")))
     use_webp = os.getenv("TRELLIS2_EXTENSION_WEBP", "0").lower() in ("1", "true", "yes")
@@ -419,22 +433,41 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
 
     remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "1"))
     remesh_project = float(os.getenv("TRELLIS2_REMESH_PROJECT", "0"))
-    glb = o_voxel.postprocess.to_glb(
-        vertices=mesh.vertices,
-        faces=mesh.faces,
-        attr_volume=mesh.attrs,
-        coords=mesh.coords,
-        attr_layout=mesh.layout,
-        voxel_size=mesh.voxel_size,
-        aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-        decimation_target=decimation,
-        texture_size=texture_size,
-        remesh=not low_vram and os.getenv("TRELLIS2_REMESH", "1").lower() in ("1", "true", "yes"),
-        remesh_band=remesh_band,
-        remesh_project=remesh_project,
-        verbose=False,
-        **({"grid_size": int(grid_size)} if grid_size else {}),
-    )
+    remesh_enabled = os.getenv("TRELLIS2_REMESH", "1").lower() in ("1", "true", "yes")
+    to_glb_kw: dict = {
+        "vertices": mesh.vertices,
+        "faces": mesh.faces,
+        "attr_volume": mesh.attrs,
+        "coords": mesh.coords,
+        "attr_layout": mesh.layout,
+        "voxel_size": mesh.voxel_size,
+        "aabb": [[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+        "decimation_target": decimation,
+        "texture_size": texture_size,
+        "remesh": remesh_enabled,
+        "remesh_band": remesh_band,
+        "remesh_project": remesh_project,
+        "verbose": os.getenv("TRELLIS2_VERBOSE", "0").lower() in ("1", "true", "yes"),
+    }
+    if grid_size:
+        to_glb_kw["grid_size"] = int(grid_size)
+    dual = (os.getenv("TRELLIS2_DUAL_CONTURING_RESOLUTION") or "").strip().lower()
+    if dual and dual != "auto":
+        try:
+            to_glb_kw["dual_contouring_resolution"] = int(dual)
+        except ValueError:
+            pass
+    if os.getenv("TRELLIS2_REMOVE_FLOATERS", "1").lower() in ("1", "true", "yes"):
+        to_glb_kw["remove_floaters"] = True
+    if os.getenv("TRELLIS2_REMOVE_INNER_FACES", "1").lower() in ("1", "true", "yes"):
+        to_glb_kw["remove_inner_faces"] = True
+    try:
+        glb = o_voxel.postprocess.to_glb(**to_glb_kw)
+    except TypeError as exc:
+        for key in ("remove_floaters", "remove_inner_faces", "dual_contouring_resolution"):
+            to_glb_kw.pop(key, None)
+        logger.warning("TRELLIS.2 to_glb fallback without optional kwargs: %s", exc)
+        glb = o_voxel.postprocess.to_glb(**to_glb_kw)
     output.parent.mkdir(parents=True, exist_ok=True)
     glb.export(str(output), extension_webp=use_webp)
     logger.info("TRELLIS.2 export extension_webp=%s texture_size=%s", use_webp, texture_size)

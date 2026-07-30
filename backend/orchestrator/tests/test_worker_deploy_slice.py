@@ -15,8 +15,12 @@ def test_default_config_has_trellis_keys():
     assert env["WORKER_TRELLIS_INPROCESS"] == "0"
     assert env["NOBG_SENSITIVITY"] == "1.0"
     assert env["NOBG_INPUT_SIZE"] == "1024"
-    assert env["TRELLIS2_TEX_STEPS"] == "20"
-    assert env["TRELLIS2_MAX_NUM_TOKENS"] == "9999"
+    assert env["TRELLIS2_TEX_STEPS"] == "12"
+    assert env["TRELLIS2_TEX_GUIDANCE"] == "3"
+    assert env["TRELLIS2_MAX_NUM_TOKENS"] == "999999"
+    assert env["TRELLIS2_DECIMATION"] == "1000000"
+    assert env["TRELLIS2_REORIENT_VERTICES"] == "90"
+    assert env["TRELLIS2_SHAPE_REFINE_GUIDANCE"] == "6.5"
     assert cfg["container_name"] == "kwork-worker"
 
 

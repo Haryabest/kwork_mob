@@ -69,6 +69,15 @@ CONFIG_ENV_KEYS = (
     "TRELLIS2_REMESH_PROJECT",
     "TRELLIS2_EXPORT_TEXTURE_MAX",
     "TRELLIS2_EXPORT_CPU",
+    "TRELLIS2_REORIENT_VERTICES",
+    "TRELLIS2_SIMPLIFY_METHOD",
+    "TRELLIS2_SIMPLIFY_TARGET_FACES",
+    "TRELLIS2_REMOVE_FLOATERS",
+    "TRELLIS2_REMOVE_INNER_FACES",
+    "TRELLIS2_DUAL_CONTOURING_RESOLUTION",
+    "TRELLIS2_RECONSTRUCT_RESOLUTION",
+    "TRELLIS2_SMOOTH_NORMALS",
+    "TRELLIS2_DOWNSAMPLING",
     "WORKER_TRELLIS_INPROCESS",
     "WORKER_WARMUP_TRELLIS",
     "WORKER_STARTUP_WARMUP",
@@ -287,6 +296,48 @@ def _comfyui_rmbg_env() -> dict[str, str]:
     }
 
 
+def _comfyui_mesh_refine_env() -> dict[str, str]:
+    """ComfyUI Mesh Refiner + Reconstruct Mesh."""
+    return {
+        "TRELLIS2_SHAPE_REFINE_STEPS": "12",
+        "TRELLIS2_SHAPE_REFINE_GUIDANCE": "6.5",
+        "TRELLIS2_SHAPE_REFINE_GUIDANCE_RESCALE": "0.05",
+        "TRELLIS2_SHAPE_REFINE_RESCALE_T": "4",
+        "TRELLIS2_SHAPE_REFINE_GUIDANCE_INTERVAL_START": "0.1",
+        "TRELLIS2_SHAPE_REFINE_GUIDANCE_INTERVAL_END": "1.0",
+        "TRELLIS2_TEX_STEPS": "12",
+        "TRELLIS2_TEX_GUIDANCE": "3",
+        "TRELLIS2_TEX_GUIDANCE_RESCALE": "0.2",
+        "TRELLIS2_TEX_RESCALE_T": "3",
+        "TRELLIS2_TEX_GUIDANCE_INTERVAL_START": "0.0",
+        "TRELLIS2_TEX_GUIDANCE_INTERVAL_END": "0.9",
+        "TRELLIS2_MAX_NUM_TOKENS": "999999",
+        "TRELLIS2_GENERATE_TEXTURE_SLAT": "1",
+        "TRELLIS2_DOWNSAMPLING": "16",
+        "TRELLIS2_RECONSTRUCT_RESOLUTION": "1024",
+    }
+
+
+def _comfyui_mesh_ops_env() -> dict[str, str]:
+    """ComfyUI: Remesh / Simplify / Voxel→Trimesh / Fill Holes ×2 / Smooth."""
+    return {
+        "TRELLIS2_REMESH": "1",
+        "TRELLIS2_REMESH_BAND": "1",
+        "TRELLIS2_REMESH_PROJECT": "0",
+        "TRELLIS2_DUAL_CONTOURING_RESOLUTION": "auto",
+        "TRELLIS2_REMOVE_FLOATERS": "1",
+        "TRELLIS2_REMOVE_INNER_FACES": "1",
+        "TRELLIS2_SIMPLIFY_TARGET_FACES": "1000000",
+        "TRELLIS2_DECIMATION": "1000000",
+        "TRELLIS2_SIMPLIFY_METHOD": "cumesh",
+        "TRELLIS2_REORIENT_VERTICES": "90",
+        "TRELLIS2_FILL_HOLES": "1",
+        "TRELLIS2_HOLE_ITERATIONS": "1",
+        "TRELLIS2_HOLE_FILL_ALGORITHM": "flood_fill",
+        "TRELLIS2_SMOOTH_NORMALS": "1",
+    }
+
+
 def _comfyui_trellis_voxel_env() -> dict[str, str]:
     """ComfyUI Trellis2 Mesh With Voxel Advanced Generator defaults."""
     return {
@@ -305,21 +356,12 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_SHAPE_RESCALE_T": "2",
         "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_START": "0.0",
         "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_END": "1.0",
-        "TRELLIS2_TEX_STEPS": "20",
-        "TRELLIS2_TEX_GUIDANCE": "5",
-        "TRELLIS2_TEX_GUIDANCE_RESCALE": "0.2",
-        "TRELLIS2_TEX_RESCALE_T": "4",
-        "TRELLIS2_TEX_GUIDANCE_INTERVAL_START": "0.0",
-        "TRELLIS2_TEX_GUIDANCE_INTERVAL_END": "0.9",
         "TRELLIS2_MAX_NUM_TOKENS": "9999",
         "TRELLIS2_MAX_VIEWS": "4",
         "TRELLIS2_SS_RESOLUTION": "32",
         "TRELLIS2_GENERATE_TEXTURE_SLAT": "0",
         "TRELLIS2_USE_TILED_DECODER": "1",
         "TRELLIS2_SAMPLER": "euler",
-        "TRELLIS2_FILL_HOLES": "1",
-        "TRELLIS2_HOLE_ITERATIONS": "1",
-        "TRELLIS2_HOLE_FILL_ALGORITHM": "flood_fill",
         "TRELLIS2_KEEP_ONLY_SHELL": "1",
         "TRELLIS2_DINO_LOCK": "0",
         "TRELLIS2_DINO_SUBSTEPS": "4",
@@ -327,10 +369,6 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_VERBOSE": "0",
         "TRELLIS2_TEXTURE_SIZE": "1024",
         "TRELLIS2_EXPORT_TEXTURE_MAX": "1024",
-        "TRELLIS2_DECIMATION": "300000",
-        "TRELLIS2_REMESH": "1",
-        "TRELLIS2_REMESH_BAND": "1",
-        "TRELLIS2_REMESH_PROJECT": "0",
         "TRELLIS2_EXPORT_CPU": "1",
         "TRELLIS2_LOW_VRAM": "1",
     }
@@ -366,6 +404,8 @@ def lan_env_defaults() -> dict[str, str]:
         "COMPRESS_ALLOW_OVER_LIMIT": "1",
         **_comfyui_rmbg_env(),
         **_comfyui_trellis_voxel_env(),
+        **_comfyui_mesh_refine_env(),
+        **_comfyui_mesh_ops_env(),
     }
 
 

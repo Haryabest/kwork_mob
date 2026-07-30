@@ -1,10 +1,11 @@
-"""ComfyUI-стиль: shape → mesh optimize → texture (отдельные этапы, меньше OOM)."""
+"""ComfyUI-стиль: shape → refine → texture → export."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
+from trellis_mesh_ops import apply_pre_export_ops, fill_mesh_holes
 from trellis_runtime import (
     _export_trellis2_mesh,
     _free_cuda_memory,
@@ -33,21 +34,15 @@ def _ss_resolution(pipeline_type: str) -> int:
     return {"512": 32, "1024": 64, "1024_cascade": 32, "1536_cascade": 32}.get(pipeline_type, 32)
 
 
-def _fill_mesh_holes(mesh) -> None:
-    if os.getenv("TRELLIS2_FILL_HOLES", "1").lower() not in ("1", "true", "yes"):
-        return
-    if not hasattr(mesh, "fill_holes"):
-        return
-    iters = max(1, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "1")))
-    algo = (os.getenv("TRELLIS2_HOLE_FILL_ALGORITHM") or "flood_fill").strip().lower()
-    for _ in range(iters):
+def _tex_params_with_downsampling(tex_defaults: dict) -> dict:
+    params = _sampler_params("TEX", tex_defaults)
+    raw = (os.getenv("TRELLIS2_DOWNSAMPLING") or "").strip()
+    if raw:
         try:
-            if algo != "flood_fill" and hasattr(mesh, "fill_holes"):
-                mesh.fill_holes()
-            else:
-                mesh.fill_holes()
-        except Exception:  # noqa: BLE001
-            break
+            params["downsampling"] = int(raw)
+        except ValueError:
+            pass
+    return params
 
 
 def _sample_shape_cascade(pipe, pipeline_type: str, cond_512, cond_1024, coords, shape_params, max_tokens):
@@ -89,7 +84,7 @@ def _sample_shape_cascade(pipe, pipeline_type: str, cond_512, cond_1024, coords,
 
 
 def run_comfy_staged(task_dir: Path, output: Path) -> Path:
-    """rmbg снаружи → voxel/shape → holes → refiner shape → texture → export GLB."""
+    """ComfyUI: voxel gen → fill holes → refiner → fill holes → texture → mesh ops → export."""
     import torch
     from PIL import Image
 
@@ -101,20 +96,23 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
     front = _pick_front_image(photos_dir)
     image = Image.open(front).convert("RGBA")
 
+    # Voxel generator defaults (ComfyUI Mesh With Voxel Advanced Generator)
     ss_defaults = {"steps": 30, "guidance_strength": 7.5, "guidance_rescale": 0.2, "rescale_t": 1.0}
     shape_defaults = {"steps": 30, "guidance_strength": 7.5, "guidance_rescale": 0.1, "rescale_t": 2.0}
+    # Mesh refiner defaults (ComfyUI Mesh Refiner node)
     shape_refine_defaults = {"steps": 12, "guidance_strength": 6.5, "guidance_rescale": 0.05, "rescale_t": 4.0}
-    tex_defaults = {"steps": 20, "guidance_strength": 5.0, "guidance_rescale": 0.2, "rescale_t": 4.0}
+    tex_defaults = {"steps": 12, "guidance_strength": 3.0, "guidance_rescale": 0.2, "rescale_t": 3.0}
 
     ss_params = _sampler_params("SS", ss_defaults)
     shape_params = _sampler_params("SHAPE", shape_defaults)
     shape_refine_params = _sampler_params("SHAPE_REFINE", shape_refine_defaults)
-    tex_params = _sampler_params("TEX", tex_defaults)
+    tex_params = _tex_params_with_downsampling(tex_defaults)
 
     pipeline_type = _pipeline_type_resolved()
-    max_tokens = int(os.getenv("TRELLIS2_MAX_NUM_TOKENS", "9999"))
+    max_tokens = int(os.getenv("TRELLIS2_MAX_NUM_TOKENS", "999999"))
     max_views = int(os.getenv("TRELLIS2_MAX_VIEWS", "4"))
     seed = int(os.getenv("TRELLIS2_SEED", "42"))
+    gen_tex_slat = os.getenv("TRELLIS2_GENERATE_TEXTURE_SLAT", "1").lower() in ("1", "true", "yes")
 
     pipe = get_pipeline()
     if torch.cuda.is_available():
@@ -134,39 +132,50 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
             pipe, pipeline_type, cond_512, cond_1024, coords, shape_params, max_tokens
         )
 
-        _progress("stage3 mesh: decode shape + fill holes")
+        _progress("stage3 mesh: decode shape + fill holes (Comfy node 1)")
         meshes, subs = pipe.decode_shape_slat(shape_slat, res)
         if meshes:
-            _fill_mesh_holes(meshes[0])
+            fill_mesh_holes(meshes[0])
 
         _free_cuda_memory()
 
         if os.getenv("TRELLIS2_REFINE_SHAPE", "1").lower() in ("1", "true", "yes"):
-            _progress("stage5 mesh refiner: shape slat (refine params)")
+            _progress("stage5 mesh refiner: shape slat")
             shape_slat, res = _sample_shape_cascade(
                 pipe, pipeline_type, cond_512, cond_1024, coords, shape_refine_params, max_tokens
             )
             meshes, subs = pipe.decode_shape_slat(shape_slat, res)
             if meshes:
-                _fill_mesh_holes(meshes[0])
+                _progress("fill holes after refiner (Comfy node 2)")
+                fill_mesh_holes(meshes[0])
             _free_cuda_memory()
 
-        _progress("stage6 texturing: texture slat")
-        cond_tex = cond_1024 if cond_1024 is not None else cond_512
-        tex_key = "tex_slat_flow_model_1024" if pipeline_type != "512" else "tex_slat_flow_model_512"
-        tex_slat = pipe.sample_tex_slat(cond_tex, pipe.models[tex_key], shape_slat, tex_params)
+        tex_slat = None
+        if gen_tex_slat:
+            _progress("stage6 texturing: texture slat (Mesh Refiner tex)")
+            cond_tex = cond_1024 if cond_1024 is not None else cond_512
+            tex_key = "tex_slat_flow_model_1024" if pipeline_type != "512" else "tex_slat_flow_model_512"
+            tex_slat = pipe.sample_tex_slat(cond_tex, pipe.models[tex_key], shape_slat, tex_params)
 
         _progress("decode latent → MeshWithVoxel")
-        out_meshes = pipe.decode_latent(shape_slat, tex_slat, res)
+        if tex_slat is not None:
+            out_meshes = pipe.decode_latent(shape_slat, tex_slat, res)
+        else:
+            out_meshes = meshes
 
     if not out_meshes:
         raise RuntimeError("staged pipeline: пустой результат")
 
     mesh = out_meshes[0]
+    ops_meta = apply_pre_export_ops(mesh)
+    _progress(
+        f"mesh ops reorient={ops_meta.get('reorient_deg')} "
+        f"holes={ops_meta.get('holes_filled_passes')} smooth={ops_meta.get('smooth_normals')}"
+    )
     _mesh_to_cpu(mesh)
     _release_vram_before_export(pipe)
     _free_cuda_memory()
-    _progress("export GLB (remesh/simplify/decimation из env)")
+    _progress("export GLB (remesh/simplify cumesh из env)")
     _export_trellis2_mesh(mesh, output, task_dir=task_dir)
     release_pipeline()
     return output
