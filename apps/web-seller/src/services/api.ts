@@ -3,13 +3,16 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { auth } from '../lib/auth';
 
-/** LAN/dev: через Next proxy (/api/v1), иначе прямой URL из env. */
+/** LAN/dev: прямой API :8000 (без Next proxy) — стабильнее для multipart с телефона. */
 export function getApiUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (envUrl?.startsWith('/')) return envUrl;
   if (typeof window !== 'undefined') {
     const h = window.location.hostname;
-    if (h !== 'localhost' && h !== '127.0.0.1') return '/api/v1';
+    if (h !== 'localhost' && h !== '127.0.0.1') {
+      const proto = window.location.protocol;
+      return `${proto}//${h}:8000/api/v1`;
+    }
   }
   return envUrl || 'http://localhost:8000/api/v1';
 }

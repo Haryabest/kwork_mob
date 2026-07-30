@@ -1,11 +1,18 @@
-const MAX_EDGE = 4096;
+const MAX_EDGE = 2048;
+const MAX_EDGE_MOBILE = 1600;
+
+function isMobileUa(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /android|iphone|ipad|mobile/i.test(navigator.userAgent);
+}
 
 /** С телефона (HEIC/WebP/большие JPEG) → JPEG для стабильной загрузки в MinIO. */
 export async function normalizeImageFile(file: File): Promise<File> {
   if (!file.type.startsWith('image/') && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) {
     return file;
   }
-  if (file.type === 'image/jpeg' && file.size < 8 * 1024 * 1024) {
+  const maxEdge = isMobileUa() ? MAX_EDGE_MOBILE : MAX_EDGE;
+  if (file.type === 'image/jpeg' && file.size < 4 * 1024 * 1024) {
     return file;
   }
   try {
@@ -13,8 +20,8 @@ export async function normalizeImageFile(file: File): Promise<File> {
     let width = bitmap.width;
     let height = bitmap.height;
     const maxSide = Math.max(width, height);
-    if (maxSide > MAX_EDGE) {
-      const scale = MAX_EDGE / maxSide;
+    if (maxSide > maxEdge) {
+      const scale = maxEdge / maxSide;
       width = Math.round(width * scale);
       height = Math.round(height * scale);
     }
@@ -29,7 +36,7 @@ export async function normalizeImageFile(file: File): Promise<File> {
     ctx.drawImage(bitmap, 0, 0, width, height);
     bitmap.close?.();
     const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, 'image/jpeg', 0.9);
+      canvas.toBlob(resolve, 'image/jpeg', isMobileUa() ? 0.82 : 0.9);
     });
     if (!blob) return file;
     const base = file.name.replace(/\.[^.]+$/, '') || 'photo';

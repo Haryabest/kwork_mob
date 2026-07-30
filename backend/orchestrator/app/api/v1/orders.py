@@ -290,6 +290,29 @@ async def upload_order_photos(
     )
 
 
+@router.post("/photos/upload-slot")
+async def upload_order_photo_slot(
+    file: UploadFile = File(...),
+    task_uuid: str = Query(...),
+    view_index: int = Query(..., ge=0, le=11),
+    user: User = Depends(get_current_db_user),
+):
+    """Один ракурс — стабильнее на мобильном (малый multipart, retry)."""
+    _ = user
+    return await photos_service.upload_at_index(task_uuid, view_index, file)
+
+
+@router.post("/photos/expand")
+async def expand_order_photos(
+    task_uuid: str = Query(...),
+    user: User = Depends(get_current_db_user),
+):
+    """После частичной загрузки (3/5/6 фото) — заполнить остальные ракурсы."""
+    _ = user
+    filled = photos_service.expand_views_to_twelve(task_uuid)
+    return {"task_uuid": task_uuid, "expanded": filled}
+
+
 @router.post("/photos/upload-single")
 async def upload_single_order_photo(
     file: UploadFile = File(...),

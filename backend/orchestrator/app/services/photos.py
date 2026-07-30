@@ -250,6 +250,25 @@ def delete_task_photos(task_uuid: str) -> dict[str, Any]:
     return {"task_uuid": task_uuid, "bucket": bucket, "prefix": prefix, "deleted": n}
 
 
+async def upload_at_index(task_uuid: str, view_index: int, file: UploadFile) -> dict[str, Any]:
+    if view_index < 0 or view_index >= VIEW_COUNT:
+        raise HTTPException(400, f"Индекс ракурса 0…{VIEW_COUNT - 1}")
+    data = await _read_normalized_jpeg(file)
+    try:
+        minio_service.ensure_buckets()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(503, f"MinIO недоступен: {exc}") from exc
+    bucket = settings.MINIO_BUCKET_PHOTOS
+    key = view_key(task_uuid, view_index)
+    minio_service.upload_bytes(bucket, key, data, content_type="image/jpeg")
+    return {
+        "task_uuid": task_uuid,
+        "index": view_index,
+        "key": key,
+        "bucket": bucket,
+    }
+
+
 async def upload_files_for_count(
     task_uuid: str,
     files: list[UploadFile],

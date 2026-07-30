@@ -32,6 +32,7 @@ import {
   shouldResetPhotoFiles,
   type PhotoUploadPhase,
 } from '../../../lib/photoUpload';
+import { uploadOrderPhotosSequential } from '../../../lib/uploadOrderPhotos';
 import { normalizeImageFiles } from '../../../lib/normalizeImageFile';
 
 const ANGLES = [
@@ -65,6 +66,7 @@ const VIEW_INDICES: Record<number, number[]> = {
 
 type Prep = {
   task_uuid: string;
+  photo_count: number;
   photos_prefix: string;
   uploads: { index: number; upload_url: string; key: string; content_type: string }[];
 };
@@ -188,19 +190,7 @@ export default function NewOrderPage() {
       });
       phase = 'upload';
       const normalized = await normalizeImageFiles(files);
-      const form = new FormData();
-      normalized.forEach((f) => form.append('files', f));
-      await api.post(
-        `/orders/photos/upload?task_uuid=${prep.task_uuid}&photo_count=${photoCount}`,
-        form,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 120_000,
-          onUploadProgress: (e) => {
-            if (e.total) setProgress(Math.round((e.loaded / e.total) * 80));
-          },
-        },
-      );
+      await uploadOrderPhotosSequential(prep, normalized, (p) => setProgress(p));
       phase = 'create';
       const { data: order } = await api.post<{
         id: number;
