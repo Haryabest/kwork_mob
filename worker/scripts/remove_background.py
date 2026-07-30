@@ -477,9 +477,25 @@ def process_one(
         rmbg = _rmbg2_remove(img)
         if rmbg:
             methods.append(("rmbg2", rmbg[0], rmbg[1], rmbg[2], rmbg[3]))
+        elif engine == "rmbg2":
+            try:
+                import torch
 
-    if not methods or os.getenv("NOBG_FALLBACK_LEGACY", "0").lower() in ("1", "true", "yes"):
-        methods.extend(_legacy_methods(img))
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                rmbg = _rmbg2_remove(img)
+                if rmbg:
+                    methods.append(("rmbg2", rmbg[0], rmbg[1], rmbg[2], rmbg[3]))
+            except Exception:  # noqa: BLE001
+                pass
+
+    if (
+        not methods
+        or os.getenv("NOBG_FALLBACK_LEGACY", "0").lower() in ("1", "true", "yes")
+        or engine == "legacy"
+    ):
+        if engine != "rmbg2" or os.getenv("NOBG_FALLBACK_LEGACY", "0").lower() in ("1", "true", "yes"):
+            methods.extend(_legacy_methods(img))
 
     if not methods:
         img.convert("RGBA").save(dst)
@@ -617,8 +633,21 @@ def main(task_dir: str) -> None:
     meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
 
     if fail_reason:
-        print(f"[remove_background] failed_segmentation {fail_reason}")
-        raise SystemExit(3)
+        strict = os.getenv("NOBG_STRICT_SEGMENTATION", "1").strip().lower() in ("1", "true", "yes")
+        soft_ok = avg_conf >= hard_min and any(
+            (out / (f.stem + ".png")).exists() for f in files
+        )
+        if not strict and soft_ok:
+            print(
+                f"[remove_background] warning {fail_reason} — "
+                "продолжаем (NOBG_STRICT_SEGMENTATION=0)"
+            )
+            meta["segmentation"]["quality_warning"] = True
+            meta["segmentation"]["segmentation_warning"] = fail_reason
+            meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        else:
+            print(f"[remove_background] failed_segmentation {fail_reason}")
+            raise SystemExit(3)
     print(
         f"[remove_background] done {len(files)} avg_conf={avg_conf:.3f} "
         f"weak={weak} low_quality={low_quality} warn={quality_warning}"
