@@ -370,6 +370,38 @@ def _release_vram_before_export(pipe) -> None:
     torch.cuda.synchronize()
 
 
+def _trim_vram_before_decode(pipe) -> None:
+    """После texture slat: выгрузить flow-модели, оставить decode_latent."""
+    import gc
+
+    import torch
+
+    for attr in ("image_cond_model", "rembg_model"):
+        part = getattr(pipe, attr, None)
+        if part is not None and hasattr(part, "cpu"):
+            try:
+                part.cpu()
+            except Exception:  # noqa: BLE001
+                pass
+        setattr(pipe, attr, None)
+    models = getattr(pipe, "models", None)
+    if isinstance(models, dict):
+        for key in list(models.keys()):
+            if "flow_model" in key or key.endswith("_encoder"):
+                model = models.pop(key, None)
+                if model is not None and hasattr(model, "cpu"):
+                    try:
+                        model.cpu()
+                    except Exception:  # noqa: BLE001
+                        pass
+                del model
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        if hasattr(torch.cuda, "ipc_collect"):
+            torch.cuda.ipc_collect()
+
+
 def _mesh_to_device(mesh, device: str) -> None:
     import torch
 

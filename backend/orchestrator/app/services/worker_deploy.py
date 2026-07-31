@@ -351,7 +351,7 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
     """ComfyUI Trellis2 Mesh With Voxel Advanced Generator defaults."""
     return {
         "TRELLIS_STAGED_PIPELINE": "1",
-        "TRELLIS2_PIPELINE_TYPE": "1536",
+        "TRELLIS2_PIPELINE_TYPE": "1024_cascade",
         "TRELLIS2_REFINE_SHAPE": "1",
         "TRELLIS2_SS_STEPS": "30",
         "TRELLIS2_SS_GUIDANCE": "7.5",
@@ -862,6 +862,7 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         "TRELLIS2_EXPORT_TEXTURE_MAX",
         "TRELLIS2_RECONSTRUCT_RESOLUTION",
         "TRELLIS2_REMESH",
+        "TRELLIS2_PIPELINE_TYPE",
     ):
         if str(base_env.get(key) or "").strip():
             merged_env[key] = base_env[key]

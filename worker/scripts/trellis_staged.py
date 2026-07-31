@@ -18,6 +18,7 @@ from trellis_runtime import (
     _resolve_attn_backend,
     _sampler_params,
     _sync_trellis_attn_modules,
+    _trim_vram_before_decode,
     get_pipeline,
     preflight_cuda,
     release_pipeline,
@@ -158,7 +159,8 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
             tex_slat = pipe.sample_tex_slat(cond_tex, pipe.models[tex_key], shape_slat, tex_params)
             _free_cuda_memory()
 
-        _progress("decode latent → MeshWithVoxel")
+        _trim_vram_before_decode(pipe)
+        _progress("decode latent → MeshWithVoxel (VRAM trimmed)")
         if tex_slat is not None:
             out_meshes = pipe.decode_latent(shape_slat, tex_slat, res)
         else:
