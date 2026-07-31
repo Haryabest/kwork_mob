@@ -137,7 +137,7 @@ const ENV_FIELDS: { key: string; label: string; secret?: boolean }[] = [
   { key: 'TRELLIS2_EXPORT_TEXTURE_MAX', label: 'TRELLIS2_EXPORT_TEXTURE_MAX' },
   { key: 'SEGMENTATION_AVG_MIN', label: 'SEGMENTATION_AVG_MIN' },
   { key: 'COMPRESS_ALLOW_OVER_LIMIT', label: 'COMPRESS_ALLOW_OVER_LIMIT' },
-  { key: 'WORKER_MAX_QUALITY', label: 'WORKER_MAX_QUALITY (1=без сжатия GLB)' },
+  { key: 'WORKER_MAX_QUALITY', label: 'WORKER_MAX_QUALITY (1=макс, без сжатия GLB)' },
   { key: 'COMPRESS_SKIP', label: 'COMPRESS_SKIP (1=копия as-is)' },
   { key: 'WORKER_SUBPROCESS_STREAM', label: 'WORKER_SUBPROCESS_STREAM' },
   { key: 'WATERMARK_HMAC_SECRET', label: 'WATERMARK_HMAC_SECRET', secret: true },

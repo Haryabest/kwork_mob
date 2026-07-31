@@ -323,7 +323,7 @@ def _comfyui_mesh_refine_env() -> dict[str, str]:
         "TRELLIS2_MAX_NUM_TOKENS": "999999",
         "TRELLIS2_GENERATE_TEXTURE_SLAT": "1",
         "TRELLIS2_DOWNSAMPLING": "16",
-        "TRELLIS2_RECONSTRUCT_RESOLUTION": "1024",
+        "TRELLIS2_RECONSTRUCT_RESOLUTION": "1536",
     }
 
 
@@ -376,8 +376,8 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_DINO_SUBSTEPS": "4",
         "TRELLIS2_DINO_FOUNDATION_CAP": "1",
         "TRELLIS2_VERBOSE": "0",
-        "TRELLIS2_TEXTURE_SIZE": "1024",
-        "TRELLIS2_EXPORT_TEXTURE_MAX": "1024",
+        "TRELLIS2_TEXTURE_SIZE": "2048",
+        "TRELLIS2_EXPORT_TEXTURE_MAX": "2048",
         "TRELLIS2_EXPORT_CPU": "0",
         "TRELLIS2_LOW_VRAM": "1",
     }
@@ -410,8 +410,8 @@ def lan_env_defaults() -> dict[str, str]:
         "SEGMENTATION_AVG_MIN": "0.85",
         "WATERMARK_HMAC_SECRET": settings.WATERMARK_HMAC_SECRET or "change-me-watermark-secret",
         "WORKER_SUBPROCESS_STREAM": "1",
-        "WORKER_MAX_QUALITY": "0",
-        "COMPRESS_SKIP": "0",
+        "WORKER_MAX_QUALITY": "1",
+        "COMPRESS_SKIP": "1",
         "COMPRESS_ALLOW_OVER_LIMIT": "1",
         **_comfyui_rmbg_env(),
         **_comfyui_trellis_voxel_env(),

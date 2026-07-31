@@ -54,7 +54,7 @@ def normalized_quality_threshold() -> float:
 
 
 def max_quality_mode() -> bool:
-    return os.getenv("WORKER_MAX_QUALITY", "0").strip().lower() in ("1", "true", "yes")
+    return os.getenv("WORKER_MAX_QUALITY", "1").strip().lower() in ("1", "true", "yes")
 
 
 def compress_skip_enabled() -> bool:
