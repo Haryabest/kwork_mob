@@ -19,4 +19,6 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   key="${key#"${key%%[![:space:]]*}"}"
   [[ -n "$key" ]] && unset "$key" 2>/dev/null || true
 done < "$ENV_FILE"
-exec docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --force-recreate worker
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --force-recreate worker
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T worker \
+  bash /app/scripts/install_gltf_transform.sh || true

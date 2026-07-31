@@ -1,18 +1,91 @@
 #!/bin/sh
-# @gltf-transform/cli требует Node.js >= 18 (Ubuntu apt nodejs = v12 → ERR_MODULE_NOT_FOUND).
-set -eu
+# @gltf-transform/cli требует Node.js >= 18 + sharp linux-x64 (@img/sharp-linux-x64).
+set -u
 
 MIN_NODE=18
-NEED=0
+CLI_DIR=""
 
-_sharp_ok() {
-  CLI_DIR="$(npm root -g 2>/dev/null)/@gltf-transform/cli"
-  if [ ! -d "${CLI_DIR}/node_modules/sharp" ]; then
-    return 1
+_cli_dir() {
+  if [ -z "${CLI_DIR}" ]; then
+    CLI_DIR="$(npm root -g 2>/dev/null)/@gltf-transform/cli"
   fi
-  node -e "require('${CLI_DIR}/node_modules/sharp')" >/dev/null 2>&1
+  printf '%s' "${CLI_DIR}"
 }
 
+_sharp_ok() {
+  local cli
+  cli="$(_cli_dir)"
+  if [ ! -d "${cli}/node_modules/sharp" ]; then
+    return 1
+  fi
+  node -e "require('${cli}/node_modules/sharp')" >/dev/null 2>&1
+}
+
+_gltf_transform_ok() {
+  command -v gltf-transform >/dev/null 2>&1 && gltf-transform --version >/dev/null 2>&1
+}
+
+_install_vips() {
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y -qq \
+    libvips42 libglib2.0-0 libjpeg-turbo8 libpng16-16 libwebp7 libtiff5 libexif12 \
+    2>/dev/null || apt-get install -y -qq libvips42 libglib2.0-0 2>/dev/null || true
+}
+
+_repair_sharp() {
+  local cli sharp_ver
+  cli="$(_cli_dir)"
+  if [ ! -d "${cli}" ]; then
+    echo "[gltf-transform] skip sharp repair — нет ${cli}"
+    return 1
+  fi
+  echo "[gltf-transform] repair sharp in ${cli}"
+  _install_vips
+  (
+    cd "${cli}"
+    rm -rf node_modules/sharp node_modules/@img
+    npm install sharp --no-save --include=optional --os=linux --cpu=x64 --force
+    sharp_ver="$(node -e "try{console.log(require('./node_modules/sharp/package.json').version)}catch(e){console.log('')}" 2>/dev/null || true)"
+    if [ -n "${sharp_ver}" ]; then
+      npm install \
+        "@img/sharp-linux-x64@${sharp_ver}" \
+        "@img/sharp-libvips-linux-x64@${sharp_ver}" \
+        --no-save --include=optional --force 2>/dev/null || true
+    else
+      npm install @img/sharp-linux-x64 @img/sharp-libvips-linux-x64 \
+        --no-save --include=optional --force 2>/dev/null || true
+    fi
+    npm rebuild sharp --force 2>/dev/null || true
+  )
+  if _sharp_ok; then
+    echo "[gltf-transform] sharp OK"
+    return 0
+  fi
+  echo "[gltf-transform] sharp still broken after repair"
+  return 1
+}
+
+_install_node_cli() {
+  echo "[gltf-transform] установка Node.js 20 + @gltf-transform/cli"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get remove -y -qq nodejs libnode-dev libnode72 2>/dev/null || true
+  apt-get autoremove -y -qq 2>/dev/null || true
+  apt-get install -y -qq ca-certificates curl gnupg
+  _install_vips
+  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  apt-get install -y -qq nodejs
+  export npm_config_platform=linux
+  export npm_config_arch=x64
+  export npm_config_include_optional=true
+  npm uninstall -g @gltf-transform/cli 2>/dev/null || true
+  npm install -g @gltf-transform/cli
+  CLI_DIR=""
+  _repair_sharp || true
+}
+
+NEED=0
 if ! command -v node >/dev/null 2>&1; then
   NEED=1
 else
@@ -22,32 +95,16 @@ else
   fi
 fi
 
-if [ "${NEED}" = "0" ] && command -v gltf-transform >/dev/null 2>&1; then
-  if gltf-transform --help >/dev/null 2>&1 && _sharp_ok; then
-    echo "[gltf-transform] OK node=$(node -v) cli=$(gltf-transform --version 2>/dev/null | head -1)"
-    NEED=0
-  else
-    NEED=1
-  fi
+if [ "${NEED}" = "0" ] && ! command -v gltf-transform >/dev/null 2>&1; then
+  NEED=1
 fi
 
 if [ "${NEED}" = "1" ]; then
-  echo "[gltf-transform] установка Node.js 20 + @gltf-transform/cli + sharp"
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -qq
-  apt-get remove -y -qq nodejs libnode-dev libnode72 2>/dev/null || true
-  apt-get autoremove -y -qq 2>/dev/null || true
-  apt-get install -y -qq ca-certificates curl gnupg libvips42 libvips-dev 2>/dev/null || \
-    apt-get install -y -qq ca-certificates curl gnupg
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-  apt-get install -y -qq nodejs
-  npm uninstall -g @gltf-transform/cli 2>/dev/null || true
-  npm install -g @gltf-transform/cli
-  CLI_DIR="$(npm root -g)/@gltf-transform/cli"
-  (cd "${CLI_DIR}" && npm install sharp --include=optional && npm rebuild sharp)
-  node -e "require('${CLI_DIR}/node_modules/sharp')" >/dev/null
-  gltf-transform --help >/dev/null
-  echo "[gltf-transform] OK node=$(node -v)"
+  _install_node_cli
+else
+  if ! _sharp_ok || ! _gltf_transform_ok; then
+    _repair_sharp || _install_node_cli
+  fi
 fi
 
 if ! command -v gltfpack >/dev/null 2>&1; then
@@ -57,6 +114,12 @@ if ! command -v gltfpack >/dev/null 2>&1; then
     "https://github.com/zeux/meshoptimizer/releases/download/v${GLTFPACK_VER}/gltfpack" \
     -o /usr/local/bin/gltfpack
   chmod +x /usr/local/bin/gltfpack
+fi
+
+if _gltf_transform_ok; then
+  echo "[gltf-transform] OK node=$(node -v) $(gltf-transform --version 2>/dev/null | head -1)"
+else
+  echo "[gltf-transform] WARN gltf-transform/sharp не работает — compress_draco использует gltfpack/pygltf"
 fi
 gltfpack --version 2>/dev/null | head -1 || true
 pip3 install --no-cache-dir fast-simplification 2>/dev/null || true

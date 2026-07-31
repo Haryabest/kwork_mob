@@ -30,6 +30,9 @@ RUN apt-get update && apt-get install -y \
     rm -rf /var/lib/apt/lists/*
 
 COPY scripts/install_gltf_transform.sh /tmp/install_gltf_transform.sh
+ENV npm_config_platform=linux \
+    npm_config_arch=x64 \
+    npm_config_include_optional=true
 RUN chmod +x /tmp/install_gltf_transform.sh && bash /tmp/install_gltf_transform.sh && rm -f /tmp/install_gltf_transform.sh
 
 # Blender LTS headless (§6.4 PBR bake, §6 video_360 / USDZ)
