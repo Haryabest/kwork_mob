@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 MAX_BYTES = 15 * 1024 * 1024
+MAX_BYTES_SANITY = 500 * 1024 * 1024
 SEG_AVG_MIN = float(os.getenv("SEGMENTATION_AVG_MIN", "0.85"))
 # Минимальная геометрия валидной модели (§5.4): пустой/битый GLB отклоняем.
 MIN_FACES = int(os.getenv("VALIDATE_MIN_FACES", "200"))
@@ -38,6 +39,10 @@ def _seg_score(root: Path) -> tuple[float, dict]:
 
 
 def _size_score(size: int) -> float:
+    from pipeline_env import max_quality_mode
+
+    if max_quality_mode():
+        return 0.0 if size <= 12 else 1.0
     if size <= 12 or size > MAX_BYTES:
         return 0.0
     # предпочтительно 1–12 MB
@@ -173,8 +178,11 @@ def main(task_dir: str) -> None:
     size = model.stat().st_size
     if size <= 12:
         raise SystemExit(f"model.glb too small: {size}")
-    if size > MAX_BYTES:
-        raise SystemExit(f"model.glb too large: {size} > {MAX_BYTES}")
+    from pipeline_env import max_quality_mode
+
+    max_allowed = MAX_BYTES_SANITY if max_quality_mode() else MAX_BYTES
+    if size > max_allowed:
+        raise SystemExit(f"model.glb too large: {size} > {max_allowed}")
     magic = model.read_bytes()[:4]
     if magic != b"glTF":
         raise SystemExit(f"invalid GLB magic: {magic!r}")

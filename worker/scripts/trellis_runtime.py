@@ -312,6 +312,14 @@ def get_pipeline():
 
 
 def _texture_size_for_task(task_dir: Path) -> int:
+    from pipeline_env import max_quality_mode
+
+    if max_quality_mode():
+        raw = (os.getenv("TRELLIS2_TEXTURE_SIZE") or os.getenv("TRELLIS2_RECONSTRUCT_RESOLUTION") or "2048").strip()
+        try:
+            return int(raw)
+        except ValueError:
+            return 2048
     cap = int(os.getenv("TRELLIS2_TEXTURE_SIZE", "1024"))
     if _resolve_low_vram():
         cap = min(cap, 1024)
@@ -427,6 +435,8 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         or ("150000" if low_vram else "1000000")
     )
     decimation = int(decimation_raw)
+    from pipeline_env import max_quality_mode
+
     reconstruct_res = (os.getenv("TRELLIS2_RECONSTRUCT_RESOLUTION") or "").strip()
     texture_size = _texture_size_for_task(task_dir) if task_dir else int(
         os.getenv("TRELLIS2_TEXTURE_SIZE", reconstruct_res or "1024")
@@ -436,9 +446,12 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
             texture_size = int(reconstruct_res)
         except ValueError:
             pass
-    if low_vram:
+    if low_vram and not max_quality_mode():
         texture_size = min(texture_size, int(os.getenv("TRELLIS2_EXPORT_TEXTURE_MAX", "1024")))
-    use_webp = os.getenv("TRELLIS2_EXTENSION_WEBP", "0").lower() in ("1", "true", "yes")
+    use_webp = (
+        not max_quality_mode()
+        and os.getenv("TRELLIS2_EXTENSION_WEBP", "0").lower() in ("1", "true", "yes")
+    )
 
     # res из mesh (как app.py grid_size=res), не voxel_shape tensor
     grid_size = getattr(mesh, "res", None)

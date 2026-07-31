@@ -247,6 +247,15 @@ def main(task_dir: str) -> None:
         _write_result(root, dst, marketplace)
         return
 
+    from pipeline_env import compress_skip_enabled
+
+    if compress_skip_enabled():
+        shutil.copy2(src, dst)
+        size = dst.stat().st_size
+        print(f"[compress_draco] max quality — без сжатия → {dst} ({size} bytes)")
+        _write_result(root, dst, marketplace)
+        return
+
     src_size = src.stat().st_size
     if src_size <= max_limit and os.getenv("COMPRESS_DRACO_FORCE", "0") not in ("1", "true", "yes"):
         shutil.copy2(src, dst)

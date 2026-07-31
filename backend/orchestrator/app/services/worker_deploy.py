@@ -125,6 +125,8 @@ CONFIG_ENV_KEYS = (
     "WATERMARK_HMAC_SECRET",
     "WORKER_SUBPROCESS_STREAM",
     "COMPRESS_ALLOW_OVER_LIMIT",
+    "WORKER_MAX_QUALITY",
+    "COMPRESS_SKIP",
 )
 
 # Опционально: значение из .env orchestrator перекрывает admin только если задано
@@ -408,6 +410,8 @@ def lan_env_defaults() -> dict[str, str]:
         "SEGMENTATION_AVG_MIN": "0.85",
         "WATERMARK_HMAC_SECRET": settings.WATERMARK_HMAC_SECRET or "change-me-watermark-secret",
         "WORKER_SUBPROCESS_STREAM": "1",
+        "WORKER_MAX_QUALITY": "1",
+        "COMPRESS_SKIP": "1",
         "COMPRESS_ALLOW_OVER_LIMIT": "1",
         **_comfyui_rmbg_env(),
         **_comfyui_trellis_voxel_env(),

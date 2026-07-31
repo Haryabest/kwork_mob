@@ -51,3 +51,13 @@ def normalized_quality_threshold() -> float:
     if t > 0.95:
         return 0.35
     return max(0.1, min(0.95, t))
+
+
+def max_quality_mode() -> bool:
+    return os.getenv("WORKER_MAX_QUALITY", "1").strip().lower() in ("1", "true", "yes")
+
+
+def compress_skip_enabled() -> bool:
+    if max_quality_mode():
+        return True
+    return os.getenv("COMPRESS_SKIP", "0").strip().lower() in ("1", "true", "yes")
