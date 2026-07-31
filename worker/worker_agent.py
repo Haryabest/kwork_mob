@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Callable
 
 import boto3
 import psutil
@@ -153,6 +154,9 @@ class WorkerAgent:
         self._overheated = False
         self._task_coro: asyncio.Task | None = None
         self._ws = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._trellis_progress_base = 0.0
+        self._trellis_progress_span = 0.0
         self.config = {
             "quality_threshold": self._quality_threshold(),
             "temp_threshold_high": 85,
@@ -419,7 +423,59 @@ class WorkerAgent:
             self._restore_script_env(backup)
             self._cuda_empty_cache()
 
-    def _run_script_stream(self, name: str, script: Path, task_dir: Path, env: dict) -> None:
+    def _schedule_progress(self, task_id: str, progress: float, step: str) -> None:
+        loop = self._loop
+        if not loop:
+            return
+        asyncio.run_coroutine_threadsafe(
+            self._notify_event(
+                {
+                    "type": "task_progress",
+                    "task_id": task_id,
+                    "progress": round(progress, 1),
+                    "step": step,
+                }
+            ),
+            loop,
+        )
+
+    def _maybe_trellis_progress(self, line: str, task_id: str) -> None:
+        if "[trellis_runtime]" not in line:
+            return
+        internal = None
+        step = None
+        if "weights loaded" in line:
+            internal, step = 0.05, "trellis:load"
+        elif "inference start" in line:
+            internal, step = 0.15, "trellis:inference"
+        elif "Sampling sparse" in line:
+            internal, step = 0.25, "trellis:sparse_structure"
+        elif "Sampling shape" in line:
+            internal, step = 0.45, "trellis:shape"
+        elif "Sampling texture" in line:
+            internal, step = 0.6, "trellis:texture"
+        elif "inference done" in line:
+            internal, step = 0.7, "trellis:postprocess"
+        elif "to_glb start" in line or "export GLB" in line:
+            internal, step = 0.75, "trellis:export"
+        elif "to_glb still" in line:
+            internal, step = 0.82, "trellis:export"
+        elif "to_glb done" in line:
+            internal, step = 0.92, "trellis:export_done"
+        if internal is None:
+            return
+        progress = self._trellis_progress_base + self._trellis_progress_span * internal
+        self._schedule_progress(task_id, progress, step)
+
+    def _run_script_stream(
+        self,
+        name: str,
+        script: Path,
+        task_dir: Path,
+        env: dict,
+        *,
+        on_line: Callable[[str], None] | None = None,
+    ) -> None:
         process = subprocess.Popen(
             [PYTHON, str(script), str(task_dir)],
             stdout=subprocess.PIPE,
@@ -433,6 +489,8 @@ class WorkerAgent:
             line = line.rstrip("\n\r")
             if line:
                 logger.info("[%s] %s", name, line)
+                if on_line:
+                    on_line(line)
         rc = process.wait()
         if rc != 0:
             if name == "remove_background.py" and rc == 3:
@@ -471,7 +529,11 @@ class WorkerAgent:
         if inprocess_trellis:
             self._run_trellis_inprocess(task_dir, env)
         elif SUBPROCESS_STREAM:
-            self._run_script_stream(name, script, task_dir, env)
+            on_line = None
+            if name == "trellis_generate.py" and self.current_task:
+                tid = self.current_task
+                on_line = lambda line, t=tid: self._maybe_trellis_progress(line, t)
+            self._run_script_stream(name, script, task_dir, env, on_line=on_line)
         else:
             result = subprocess.run(
                 [PYTHON, str(script), str(task_dir)],
@@ -649,6 +711,9 @@ class WorkerAgent:
                 if step in completed:
                     continue
                 self.renew_lock(task_id)
+                if step == "trellis_generate.py":
+                    self._trellis_progress_base = 100.0 * len(completed) / max(len(pipeline), 1)
+                    self._trellis_progress_span = 100.0 / max(len(pipeline), 1)
                 await asyncio.to_thread(self.run_script, step, task_dir)
                 completed.append(step)
                 await asyncio.to_thread(self.save_checkpoint, task_dir, task_id, completed)
@@ -1004,6 +1069,7 @@ class WorkerAgent:
                     logger.info("Connecting to %s as %s (Tailscale/primary or WSS fallback)", url, self.worker_id)
                     async with self._ws_connect_cm(url, headers) as ws:
                         self._ws = ws
+                        self._loop = asyncio.get_running_loop()
                         await ws.send(json.dumps(self._ready_payload()))
                         asyncio.create_task(self._warmup_trellis_bg())
                         backoff = 1

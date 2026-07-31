@@ -486,7 +486,29 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         if os.getenv("TRELLIS2_REMOVE_INNER_FACES", "1").lower() in ("1", "true", "yes"):
             to_glb_kw["remove_inner_faces"] = True
     try:
-        glb = _call_to_glb(o_voxel, to_glb_kw)
+        _progress(
+            f"to_glb start remesh={remesh_enabled} decimation={decimation} "
+            f"texture={texture_size} grid={grid_size or 'auto'}"
+        )
+        import threading
+        import time as _time
+
+        t0 = _time.monotonic()
+        done = False
+
+        def _export_heartbeat() -> None:
+            while not done:
+                _time.sleep(30)
+                if not done:
+                    _progress(f"to_glb still running ({int(_time.monotonic() - t0)}s)…")
+
+        hb = threading.Thread(target=_export_heartbeat, daemon=True)
+        hb.start()
+        try:
+            glb = _call_to_glb(o_voxel, to_glb_kw)
+        finally:
+            done = True
+        _progress(f"to_glb done in {int(_time.monotonic() - t0)}s")
     except RuntimeError as exc:
         if export_device == "cpu" and torch.cuda.is_available() and "device" in str(exc).lower():
             logger.warning("TRELLIS.2 CPU export device error, retry CUDA: %s", exc)
