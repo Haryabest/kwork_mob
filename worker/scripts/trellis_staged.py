@@ -156,6 +156,7 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
             cond_tex = cond_1024 if cond_1024 is not None else cond_512
             tex_key = "tex_slat_flow_model_1024" if pipeline_type != "512" else "tex_slat_flow_model_512"
             tex_slat = pipe.sample_tex_slat(cond_tex, pipe.models[tex_key], shape_slat, tex_params)
+            _free_cuda_memory()
 
         _progress("decode latent → MeshWithVoxel")
         if tex_slat is not None:
@@ -167,15 +168,16 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
         raise RuntimeError("staged pipeline: пустой результат")
 
     mesh = out_meshes[0]
+    _release_vram_before_export(pipe)
+    _free_cuda_memory()
+    _mesh_to_cpu(mesh)
     ops_meta = apply_pre_export_ops(mesh)
     _progress(
         f"mesh ops reorient={ops_meta.get('reorient_deg')} "
         f"holes={ops_meta.get('holes_filled_passes')} smooth={ops_meta.get('smooth_normals')}"
     )
-    _mesh_to_cpu(mesh)
-    _release_vram_before_export(pipe)
     _free_cuda_memory()
-    _progress("export GLB (remesh/simplify cumesh из env)")
+    _progress("export GLB (cumesh to_glb из env)")
     _export_trellis2_mesh(mesh, output, task_dir=task_dir)
     release_pipeline()
     return output

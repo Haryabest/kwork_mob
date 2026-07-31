@@ -315,7 +315,7 @@ def _texture_size_for_task(task_dir: Path) -> int:
     from pipeline_env import max_quality_mode
 
     if max_quality_mode():
-        raw = (os.getenv("TRELLIS2_TEXTURE_SIZE") or os.getenv("TRELLIS2_RECONSTRUCT_RESOLUTION") or "2048").strip()
+        raw = os.getenv("TRELLIS2_TEXTURE_SIZE", "2048").strip()
         try:
             return int(raw)
         except ValueError:
@@ -415,6 +415,10 @@ def _cuda_vram_gb() -> float | None:
 
 
 def _cap_decimation(decimation: int, low_vram: bool, grid_size: int | None) -> int:
+    from pipeline_env import max_quality_mode
+
+    if max_quality_mode():
+        return decimation
     cap = decimation
     vram = _cuda_vram_gb()
     if low_vram or (vram is not None and vram <= 18):
@@ -427,7 +431,18 @@ def _cap_decimation(decimation: int, low_vram: bool, grid_size: int | None) -> i
     return cap
 
 
-def _is_cuda_oom(exc: BaseException) -> bool:
+def _resolve_remesh_enabled(export_device: str) -> bool:
+    raw = os.getenv("TRELLIS2_REMESH")
+    if raw is not None:
+        enabled = str(raw).strip().lower() in ("1", "true", "yes")
+    else:
+        vram = _cuda_vram_gb()
+        enabled = vram is not None and vram > 20
+    if export_device == "cpu" and enabled:
+        return False
+    return enabled
+
+
     err = str(exc).lower()
     return "out of memory" in err or ("cuda" in err and "error" in err)
 
@@ -474,14 +489,20 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
                 grid_size = parts[-1] if parts else None
             except Exception:  # noqa: BLE001
                 grid_size = None
-    decimation = _cap_decimation(decimation, low_vram, int(grid_size) if grid_size else None)
+
     from pipeline_env import max_quality_mode
 
+    if not max_quality_mode():
+        decimation = _cap_decimation(decimation, low_vram, int(grid_size) if grid_size else None)
+
     reconstruct_res = (os.getenv("TRELLIS2_RECONSTRUCT_RESOLUTION") or "").strip()
-    texture_size = _texture_size_for_task(task_dir) if task_dir else int(
-        os.getenv("TRELLIS2_TEXTURE_SIZE", reconstruct_res or "1024")
-    )
-    if reconstruct_res:
+    if max_quality_mode():
+        texture_size = int(os.getenv("TRELLIS2_TEXTURE_SIZE", "2048"))
+    elif task_dir:
+        texture_size = _texture_size_for_task(task_dir)
+    else:
+        texture_size = int(os.getenv("TRELLIS2_TEXTURE_SIZE", reconstruct_res or "1024"))
+    if reconstruct_res and not max_quality_mode():
         try:
             texture_size = int(reconstruct_res)
         except ValueError:
@@ -495,7 +516,7 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
 
     remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "1"))
     remesh_project = float(os.getenv("TRELLIS2_REMESH_PROJECT", "0"))
-    remesh_enabled = os.getenv("TRELLIS2_REMESH", "1").lower() in ("1", "true", "yes")
+    remesh_enabled = _resolve_remesh_enabled(export_device)
     if export_device == "cpu" and remesh_enabled:
         remesh_enabled = False
         logger.info("TRELLIS.2 CPU export: remesh disabled (o_voxel needs CUDA)")
@@ -527,6 +548,11 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
             to_glb_kw["remove_floaters"] = True
         if os.getenv("TRELLIS2_REMOVE_INNER_FACES", "1").lower() in ("1", "true", "yes"):
             to_glb_kw["remove_inner_faces"] = True
+
+    _progress(
+        f"export config max_quality={max_quality_mode()} "
+        f"decimation={decimation} texture={texture_size} remesh={remesh_enabled}"
+    )
 
     def _run_to_glb(kw: dict):
         import threading
@@ -560,14 +586,23 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
     except RuntimeError as exc:
         if _is_cuda_oom(exc):
             _free_cuda_memory()
-            fallbacks = [
-                {**to_glb_kw, "remesh": False, "decimation_target": min(decimation, 300000)},
-                {**to_glb_kw, "remesh": False, "decimation_target": 150000},
-            ]
+            if max_quality_mode():
+                fallbacks = [{**to_glb_kw, "remesh": False}]
+            else:
+                fallbacks = [
+                    {**to_glb_kw, "remesh": False, "decimation_target": min(decimation, 300000)},
+                    {**to_glb_kw, "remesh": False, "decimation_target": 150000},
+                ]
             for fb in fallbacks:
                 try:
-                    logger.warning("TRELLIS.2 OOM retry: remesh=%s decimation=%s", fb["remesh"], fb["decimation_target"])
-                    _progress(f"OOM retry remesh={fb['remesh']} decimation={fb['decimation_target']}")
+                    logger.warning(
+                        "TRELLIS.2 OOM retry: remesh=%s decimation=%s",
+                        fb["remesh"],
+                        fb["decimation_target"],
+                    )
+                    _progress(
+                        f"OOM retry remesh={fb['remesh']} decimation={fb['decimation_target']}"
+                    )
                     glb = _run_to_glb(fb)
                     break
                 except RuntimeError as retry_exc:
@@ -575,7 +610,12 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
                         raise
                     _free_cuda_memory()
             if glb is None:
-                raise RuntimeError(f"TRELLIS.2 export OOM after retries: {exc}") from exc
+                hint = (
+                    "16GB VRAM: уменьшите TRELLIS2_DECIMATION (300000) или TRELLIS2_REMESH=0"
+                    if max_quality_mode()
+                    else ""
+                )
+                raise RuntimeError(f"TRELLIS.2 export OOM after retries: {exc}. {hint}") from exc
         elif export_device == "cpu" and torch.cuda.is_available() and "device" in str(exc).lower():
             logger.warning("TRELLIS.2 CPU export device error, retry CUDA: %s", exc)
             _mesh_to_device(mesh, "cuda")

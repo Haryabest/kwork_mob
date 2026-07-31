@@ -65,6 +65,10 @@ def fill_mesh_holes(mesh, *, iterations: int | None = None) -> int:
         try:
             mesh.fill_holes()
             filled += 1
+        except RuntimeError as exc:
+            if "out of memory" in str(exc).lower() or "cuda error" in str(exc).lower():
+                break
+            break
         except Exception:  # noqa: BLE001
             break
     return filled

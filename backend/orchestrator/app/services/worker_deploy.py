@@ -330,7 +330,7 @@ def _comfyui_mesh_refine_env() -> dict[str, str]:
 def _comfyui_mesh_ops_env() -> dict[str, str]:
     """ComfyUI: Remesh / Simplify / Voxel→Trimesh / Fill Holes ×2 / Smooth."""
     return {
-        "TRELLIS2_REMESH": "1",
+        "TRELLIS2_REMESH": "0",
         "TRELLIS2_REMESH_BAND": "1",
         "TRELLIS2_REMESH_PROJECT": "0",
         "TRELLIS2_DUAL_CONTOURING_RESOLUTION": "auto",
@@ -861,6 +861,7 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         "TRELLIS2_EXTENSION_WEBP",
         "TRELLIS2_EXPORT_TEXTURE_MAX",
         "TRELLIS2_RECONSTRUCT_RESOLUTION",
+        "TRELLIS2_REMESH",
     ):
         if str(base_env.get(key) or "").strip():
             merged_env[key] = base_env[key]
