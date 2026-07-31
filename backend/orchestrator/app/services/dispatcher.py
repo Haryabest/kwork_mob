@@ -44,6 +44,7 @@ async def _assign_once() -> bool:
 
     worker = await worker_hub.pick_idle(required_trellis_version=required_version)
     if not worker:
+        logger.warning("No idle worker for task %s — requeue", task_id)
         # вернуть задачу в очередь
         async with async_session() as db:
             row = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == task_id))

@@ -90,8 +90,8 @@ class WorkerHub:
             idle = [
                 w
                 for w in self._workers.values()
-                if w.status == "idle"
-                and w.current_task_id is None
+                if w.current_task_id is None
+                and w.status not in ("overheated", "busy", "processing")
                 and not (w.meta or {}).get("maintenance")
             ]
             if required_trellis_version:

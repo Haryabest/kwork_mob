@@ -302,7 +302,10 @@ async def worker_ws(websocket: WebSocket):
 
             if msg_type == "heartbeat":
                 st = str(data.get("status") or conn.status)
-                await worker_hub.touch(worker_id, status=st if st != "busy" else "busy")
+                if st == "idle" and conn.current_task_id:
+                    await worker_hub.set_idle(worker_id)
+                else:
+                    await worker_hub.touch(worker_id, status=st if st != "busy" else "busy")
                 async with async_session() as db:
                     await upsert_worker_heartbeat(db, worker_id, status=st)
                 await websocket.send_json({"type": "ack", "of": "heartbeat"})

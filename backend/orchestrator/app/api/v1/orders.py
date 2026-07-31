@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_db_user, get_current_db_user_optional
-from app.models import Company, Model3D, Order, Transaction, User
+from app.models import Company, Model3D, Order, TaskQueue, Transaction, User
 from app.schemas.orders import OrderCreateRequest
 from app.services import photos as photos_service
 from app.services.age_gate import ensure_age_gate
@@ -768,6 +768,9 @@ async def cancel_order(
     elif order.status in ("pending", "queued", "paid", "awaiting_payment"):
         prev = order.status
         order.status = "cancelled"
+        row = await db.scalar(select(TaskQueue).where(TaskQueue.task_id == order.task_uuid))
+        if row and row.status == "queued":
+            row.status = "cancelled"
         await queue_service.remove_from_redis(order.task_uuid)
     else:
         raise HTTPException(400, "Заказ нельзя отменить")

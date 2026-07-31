@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis
-from app.models import TaskQueue
+from app.models import Order, TaskQueue
 
 logger = logging.getLogger(__name__)
 
@@ -124,17 +124,26 @@ class QueueService:
         return None
 
     async def dequeue_with_fallback(self, db: AsyncSession) -> dict[str, Any] | None:
-        """Redis LPOP; PG SKIP LOCKED только при ошибке Redis (не при пустой очереди)."""
+        """Redis LPOP; при пустом Redis — sync PG→Redis, затем PG SKIP LOCKED."""
         try:
             item = await self.dequeue()
             if item is not None:
                 return item
-            return None
+            restored = await self.sync_from_postgres(db)
+            if restored:
+                await db.flush()
+                item = await self.dequeue()
+                if item is not None:
+                    return item
+            item = await self.dequeue_from_postgres(db)
+            if item:
+                await db.flush()
+            return item
         except Exception as exc:  # noqa: BLE001
             logger.warning("Redis dequeue failed (%s), fallback to PostgreSQL", exc)
             item = await self.dequeue_from_postgres(db)
             if item:
-                await db.commit()
+                await db.flush()
             return item
 
     async def heal_redis_from_postgres(self, db: AsyncSession) -> int:
@@ -176,9 +185,12 @@ class QueueService:
 
             rows = (
                 await db.scalars(
-                    select(TaskQueue).where(
+                    select(TaskQueue)
+                    .join(Order, TaskQueue.order_id == Order.id)
+                    .where(
                         TaskQueue.status == "queued",
                         TaskQueue.priority == priority,
+                        Order.status.in_(("queued", "paid", "processing")),
                     )
                 )
             ).all()
