@@ -21,8 +21,38 @@ _sharp_ok() {
   node -e "require('${cli}/node_modules/sharp')" >/dev/null 2>&1
 }
 
+_sharp_sync_packages() {
+  local cli root sharp_path pkg
+  cli="$(_cli_dir)"
+  root="$(npm root -g 2>/dev/null)/@gltf-transform"
+  sharp_path="${cli}/node_modules/sharp"
+  if [ ! -d "${sharp_path}" ] || [ ! -d "${root}" ]; then
+    return 1
+  fi
+  for pkg in "${root}"/*; do
+    if [ ! -d "${pkg}" ]; then
+      continue
+    fi
+    mkdir -p "${pkg}/node_modules"
+    rm -rf "${pkg}/node_modules/sharp" "${pkg}/node_modules/@img"
+    ln -sf "${sharp_path}" "${pkg}/node_modules/sharp"
+    if [ -d "${cli}/node_modules/@img" ]; then
+      ln -sf "${cli}/node_modules/@img" "${pkg}/node_modules/@img"
+    fi
+  done
+}
+
 _gltf_transform_ok() {
   command -v gltf-transform >/dev/null 2>&1 && gltf-transform --version >/dev/null 2>&1
+}
+
+_gltfpack_ok() {
+  command -v gltfpack >/dev/null 2>&1 && \
+    { gltfpack -v >/dev/null 2>&1 || gltfpack --version >/dev/null 2>&1; }
+}
+
+_compress_ready() {
+  _gltfpack_ok || _gltf_transform_ok
 }
 
 _install_vips() {
@@ -59,6 +89,7 @@ _repair_sharp() {
     npm rebuild sharp --force 2>/dev/null || true
   )
   if _sharp_ok; then
+    _sharp_sync_packages || true
     echo "[gltf-transform] sharp OK"
     return 0
   fi
@@ -71,6 +102,7 @@ _repair_sharp() {
       npm install sharp --no-save --include=optional --os=linux --cpu=x64 --force
   )
   if _sharp_ok; then
+    _sharp_sync_packages || true
     echo "[gltf-transform] sharp OK (build-from-source)"
     return 0
   fi
@@ -153,11 +185,29 @@ else
 fi
 
 _install_gltfpack || true
+_sharp_sync_packages || true
 
+echo "[compress_draco] tools:"
+if _gltfpack_ok; then
+  echo "[gltfpack] OK $(gltfpack -v 2>/dev/null | head -1 || gltfpack --version 2>/dev/null | head -1)"
+else
+  echo "[gltfpack] FAIL — перезапустите install_gltf_transform.sh"
+fi
+if _sharp_ok; then
+  echo "[sharp] OK"
+else
+  echo "[sharp] FAIL"
+fi
 if _gltf_transform_ok; then
   echo "[gltf-transform] OK node=$(node -v) $(gltf-transform --version 2>/dev/null | head -1)"
+elif command -v gltf-transform >/dev/null 2>&1; then
+  echo "[gltf-transform] WARN CLI: $(gltf-transform --version 2>&1 | tail -1)"
 else
-  echo "[gltf-transform] WARN gltf-transform/sharp не работает — compress_draco использует gltfpack/pygltf"
+  echo "[gltf-transform] FAIL — бинарник не найден"
 fi
-gltfpack --version 2>/dev/null | head -1 || true
+if _compress_ready; then
+  echo "[compress_draco] ready — текстуры сохраняются при сжатии"
+else
+  echo "[compress_draco] FAIL — нужен gltfpack или gltf-transform"
+fi
 pip3 install --no-cache-dir fast-simplification 2>/dev/null || true
