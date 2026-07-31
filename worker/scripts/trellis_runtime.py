@@ -525,6 +525,18 @@ def _export_result(result, output: Path) -> None:
     raise RuntimeError(f"Не удалось сохранить результат TRELLIS: {type(result)}")
 
 
+_SAMPLER_PARAM_KEYS = frozenset(
+    {
+        "steps",
+        "guidance_strength",
+        "guidance_rescale",
+        "rescale_t",
+        "guidance_interval",
+        "downsampling",
+    }
+)
+
+
 def _sampler_params(prefix: str, defaults: dict) -> dict:
     """Параметры sampler из env (как в ComfyUI / app.py TRELLIS.2)."""
     out = dict(defaults)
@@ -544,25 +556,17 @@ def _sampler_params(prefix: str, defaults: dict) -> dict:
     gie = os.getenv(f"TRELLIS2_{prefix}_GUIDANCE_INTERVAL_END")
     if gis is not None:
         out["guidance_interval"] = (float(gis), float(gie or "1.0"))
-    sampler = (os.getenv("TRELLIS2_SAMPLER") or "").strip()
-    if sampler:
-        out["sampler"] = sampler
-    return out
+    return {k: v for k, v in out.items() if k in _SAMPLER_PARAM_KEYS}
 
 
 def _pipeline_type_resolved() -> str:
     raw = os.getenv("TRELLIS2_PIPELINE_TYPE", "1024").strip()
     # как в app.py: 1024 → 1024_cascade (лучше качество, как на YouTube)
     if raw == "1024":
-        resolved = "1024_cascade"
-    elif raw == "1536":
-        resolved = "1536_cascade"
-    else:
-        resolved = raw
-    if resolved == "1536_cascade" and _resolve_low_vram():
-        _progress("1536_cascade на GPU <20GB → понижаем до 1024_cascade")
         return "1024_cascade"
-    return resolved
+    if raw == "1536":
+        return "1536_cascade"
+    return raw
 
 
 def run_trellis2(task_dir: Path, output: Path) -> Path:
