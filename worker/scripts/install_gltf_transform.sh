@@ -62,6 +62,18 @@ _repair_sharp() {
     echo "[gltf-transform] sharp OK"
     return 0
   fi
+  echo "[gltf-transform] sharp repair: build-from-source"
+  apt-get install -y -qq libvips-dev g++ make python3 2>/dev/null || true
+  (
+    cd "${cli}"
+    rm -rf node_modules/sharp node_modules/@img
+    npm install sharp --no-save --build-from-source --include=optional 2>/dev/null || \
+      npm install sharp --no-save --include=optional --os=linux --cpu=x64 --force
+  )
+  if _sharp_ok; then
+    echo "[gltf-transform] sharp OK (build-from-source)"
+    return 0
+  fi
   echo "[gltf-transform] sharp still broken after repair"
   return 1
 }
@@ -83,6 +95,39 @@ _install_node_cli() {
   npm install -g @gltf-transform/cli
   CLI_DIR=""
   _repair_sharp || true
+}
+
+_install_gltfpack() {
+  if command -v gltfpack >/dev/null 2>&1; then
+    if gltfpack -v >/dev/null 2>&1 || gltfpack --version >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+  echo "[gltfpack] установка meshoptimizer gltfpack (ubuntu zip)"
+  GLTFPACK_VER="${GLTFPACK_VERSION:-1.2}"
+  TMPDIR="$(mktemp -d)"
+  ZIP_URL="https://github.com/zeux/meshoptimizer/releases/download/v${GLTFPACK_VER}/gltfpack-ubuntu.zip"
+  if ! curl -fsSL "${ZIP_URL}" -o "${TMPDIR}/gltfpack.zip"; then
+    echo "[gltfpack] FAIL download ${ZIP_URL}"
+    rm -rf "${TMPDIR}"
+    return 1
+  fi
+  apt-get install -y -qq unzip 2>/dev/null || true
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -q -o "${TMPDIR}/gltfpack.zip" -d "${TMPDIR}/extract"
+  else
+    python3 -c "import zipfile; zipfile.ZipFile('${TMPDIR}/gltfpack.zip').extractall('${TMPDIR}/extract')"
+  fi
+  GLTF_BIN="$(find "${TMPDIR}/extract" -type f -name gltfpack 2>/dev/null | head -1)"
+  if [ -z "${GLTF_BIN}" ] || [ ! -f "${GLTF_BIN}" ]; then
+    echo "[gltfpack] FAIL binary not found in zip"
+    rm -rf "${TMPDIR}"
+    return 1
+  fi
+  install -m 0755 "${GLTF_BIN}" /usr/local/bin/gltfpack
+  rm -rf "${TMPDIR}"
+  gltfpack -v 2>/dev/null | head -1 || gltfpack --version 2>/dev/null | head -1 || true
+  return 0
 }
 
 NEED=0
@@ -107,14 +152,7 @@ else
   fi
 fi
 
-if ! command -v gltfpack >/dev/null 2>&1; then
-  echo "[gltfpack] установка meshoptimizer gltfpack"
-  GLTFPACK_VER="${GLTFPACK_VERSION:-0.22}"
-  curl -fsSL \
-    "https://github.com/zeux/meshoptimizer/releases/download/v${GLTFPACK_VER}/gltfpack" \
-    -o /usr/local/bin/gltfpack
-  chmod +x /usr/local/bin/gltfpack
-fi
+_install_gltfpack || true
 
 if _gltf_transform_ok; then
   echo "[gltf-transform] OK node=$(node -v) $(gltf-transform --version 2>/dev/null | head -1)"
