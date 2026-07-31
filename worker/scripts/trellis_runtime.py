@@ -403,6 +403,35 @@ def _call_to_glb(o_voxel, to_glb_kw: dict):
         return o_voxel.postprocess.to_glb(**clean)
 
 
+def _cuda_vram_gb() -> float | None:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _cap_decimation(decimation: int, low_vram: bool, grid_size: int | None) -> int:
+    cap = decimation
+    vram = _cuda_vram_gb()
+    if low_vram or (vram is not None and vram <= 18):
+        cap = min(cap, int(os.getenv("TRELLIS2_DECIMATION_VRAM_CAP", "300000")))
+    if grid_size and int(grid_size) > 1024:
+        cap = min(cap, int(os.getenv("TRELLIS2_DECIMATION_LARGE_GRID_CAP", "300000")))
+    if cap < decimation:
+        logger.info("TRELLIS.2 decimation capped %s → %s (16GB VRAM / grid)", decimation, cap)
+        _progress(f"decimation capped {decimation} → {cap} (VRAM)")
+    return cap
+
+
+def _is_cuda_oom(exc: BaseException) -> bool:
+    err = str(exc).lower()
+    return "out of memory" in err or ("cuda" in err and "error" in err)
+
+
 def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -> None:
     import torch
     import o_voxel  # type: ignore
@@ -435,6 +464,17 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         or ("150000" if low_vram else "1000000")
     )
     decimation = int(decimation_raw)
+
+    grid_size = getattr(mesh, "res", None)
+    if grid_size is None:
+        vs = getattr(mesh, "voxel_shape", None)
+        if vs is not None and hasattr(vs, "__iter__"):
+            try:
+                parts = [int(x) for x in vs]
+                grid_size = parts[-1] if parts else None
+            except Exception:  # noqa: BLE001
+                grid_size = None
+    decimation = _cap_decimation(decimation, low_vram, int(grid_size) if grid_size else None)
     from pipeline_env import max_quality_mode
 
     reconstruct_res = (os.getenv("TRELLIS2_RECONSTRUCT_RESOLUTION") or "").strip()
@@ -452,17 +492,6 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         not max_quality_mode()
         and os.getenv("TRELLIS2_EXTENSION_WEBP", "0").lower() in ("1", "true", "yes")
     )
-
-    # res из mesh (как app.py grid_size=res), не voxel_shape tensor
-    grid_size = getattr(mesh, "res", None)
-    if grid_size is None:
-        vs = getattr(mesh, "voxel_shape", None)
-        if vs is not None and hasattr(vs, "__iter__"):
-            try:
-                parts = [int(x) for x in vs]
-                grid_size = parts[-1] if parts else None
-            except Exception:  # noqa: BLE001
-                grid_size = None
 
     remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "1"))
     remesh_project = float(os.getenv("TRELLIS2_REMESH_PROJECT", "0"))
@@ -498,14 +527,15 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
             to_glb_kw["remove_floaters"] = True
         if os.getenv("TRELLIS2_REMOVE_INNER_FACES", "1").lower() in ("1", "true", "yes"):
             to_glb_kw["remove_inner_faces"] = True
-    try:
-        _progress(
-            f"to_glb start remesh={remesh_enabled} decimation={decimation} "
-            f"texture={texture_size} grid={grid_size or 'auto'}"
-        )
+
+    def _run_to_glb(kw: dict):
         import threading
         import time as _time
 
+        _progress(
+            f"to_glb start remesh={kw.get('remesh')} decimation={kw.get('decimation_target')} "
+            f"texture={kw.get('texture_size')} grid={kw.get('grid_size') or grid_size or 'auto'}"
+        )
         t0 = _time.monotonic()
         done = False
 
@@ -518,16 +548,39 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         hb = threading.Thread(target=_export_heartbeat, daemon=True)
         hb.start()
         try:
-            glb = _call_to_glb(o_voxel, to_glb_kw)
+            result = _call_to_glb(o_voxel, kw)
         finally:
             done = True
         _progress(f"to_glb done in {int(_time.monotonic() - t0)}s")
+        return result
+
+    glb = None
+    try:
+        glb = _run_to_glb(to_glb_kw)
     except RuntimeError as exc:
-        if export_device == "cpu" and torch.cuda.is_available() and "device" in str(exc).lower():
+        if _is_cuda_oom(exc):
+            _free_cuda_memory()
+            fallbacks = [
+                {**to_glb_kw, "remesh": False, "decimation_target": min(decimation, 300000)},
+                {**to_glb_kw, "remesh": False, "decimation_target": 150000},
+            ]
+            for fb in fallbacks:
+                try:
+                    logger.warning("TRELLIS.2 OOM retry: remesh=%s decimation=%s", fb["remesh"], fb["decimation_target"])
+                    _progress(f"OOM retry remesh={fb['remesh']} decimation={fb['decimation_target']}")
+                    glb = _run_to_glb(fb)
+                    break
+                except RuntimeError as retry_exc:
+                    if not _is_cuda_oom(retry_exc):
+                        raise
+                    _free_cuda_memory()
+            if glb is None:
+                raise RuntimeError(f"TRELLIS.2 export OOM after retries: {exc}") from exc
+        elif export_device == "cpu" and torch.cuda.is_available() and "device" in str(exc).lower():
             logger.warning("TRELLIS.2 CPU export device error, retry CUDA: %s", exc)
             _mesh_to_device(mesh, "cuda")
             to_glb_kw["remesh"] = os.getenv("TRELLIS2_REMESH", "1").lower() in ("1", "true", "yes")
-            glb = _call_to_glb(o_voxel, to_glb_kw)
+            glb = _run_to_glb(to_glb_kw)
         else:
             raise
     output.parent.mkdir(parents=True, exist_ok=True)

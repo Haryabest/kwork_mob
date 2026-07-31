@@ -853,6 +853,14 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         "NOBG_STRICT_SEGMENTATION",
         "NOBG_SENSITIVITY",
         "NOBG_CONFIDENCE",
+        "WORKER_MAX_QUALITY",
+        "COMPRESS_SKIP",
+        "TRELLIS2_DECIMATION",
+        "TRELLIS2_SIMPLIFY_TARGET_FACES",
+        "TRELLIS2_TEXTURE_SIZE",
+        "TRELLIS2_EXTENSION_WEBP",
+        "TRELLIS2_EXPORT_TEXTURE_MAX",
+        "TRELLIS2_RECONSTRUCT_RESOLUTION",
     ):
         if str(base_env.get(key) or "").strip():
             merged_env[key] = base_env[key]
