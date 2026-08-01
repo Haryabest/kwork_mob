@@ -334,14 +334,14 @@ def _comfyui_mesh_ops_env() -> dict[str, str]:
         "TRELLIS2_REMESH_BAND": "1",
         "TRELLIS2_REMESH_PROJECT": "0",
         "TRELLIS2_DUAL_CONTOURING_RESOLUTION": "auto",
-        "TRELLIS2_REMOVE_FLOATERS": "1",
+        "TRELLIS2_REMOVE_FLOATERS": "0",
         "TRELLIS2_REMOVE_INNER_FACES": "1",
         "TRELLIS2_SIMPLIFY_TARGET_FACES": "300000",
         "TRELLIS2_DECIMATION": "300000",
         "TRELLIS2_SIMPLIFY_METHOD": "cumesh",
         "TRELLIS2_REORIENT_VERTICES": "90",
         "TRELLIS2_FILL_HOLES": "1",
-        "TRELLIS2_HOLE_ITERATIONS": "1",
+        "TRELLIS2_HOLE_ITERATIONS": "2",
         "TRELLIS2_HOLE_FILL_ALGORITHM": "flood_fill",
         "TRELLIS2_SMOOTH_NORMALS": "1",
     }
@@ -351,7 +351,7 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
     """ComfyUI Trellis2 Mesh With Voxel Advanced Generator defaults."""
     return {
         "TRELLIS_STAGED_PIPELINE": "1",
-        "TRELLIS2_PIPELINE_TYPE": "1024_cascade",
+        "TRELLIS2_PIPELINE_TYPE": "1024",
         "TRELLIS2_REFINE_SHAPE": "1",
         "TRELLIS2_SS_STEPS": "30",
         "TRELLIS2_SS_GUIDANCE": "7.5",
@@ -368,10 +368,10 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_MAX_NUM_TOKENS": "9999",
         "TRELLIS2_MAX_VIEWS": "4",
         "TRELLIS2_SS_RESOLUTION": "32",
-        "TRELLIS2_GENERATE_TEXTURE_SLAT": "0",
+        "TRELLIS2_GENERATE_TEXTURE_SLAT": "1",
         "TRELLIS2_USE_TILED_DECODER": "1",
         "TRELLIS2_SAMPLER": "euler",
-        "TRELLIS2_KEEP_ONLY_SHELL": "1",
+        "TRELLIS2_KEEP_ONLY_SHELL": "0",
         "TRELLIS2_DINO_LOCK": "0",
         "TRELLIS2_DINO_SUBSTEPS": "4",
         "TRELLIS2_DINO_FOUNDATION_CAP": "1",
@@ -863,6 +863,11 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         "TRELLIS2_RECONSTRUCT_RESOLUTION",
         "TRELLIS2_REMESH",
         "TRELLIS2_PIPELINE_TYPE",
+        "TRELLIS2_KEEP_ONLY_SHELL",
+        "TRELLIS2_GENERATE_TEXTURE_SLAT",
+        "TRELLIS2_FILL_HOLES",
+        "TRELLIS2_HOLE_ITERATIONS",
+        "TRELLIS2_REMOVE_FLOATERS",
     ):
         if str(base_env.get(key) or "").strip():
             merged_env[key] = base_env[key]

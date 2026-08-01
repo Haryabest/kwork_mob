@@ -172,12 +172,12 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
     mesh = out_meshes[0]
     _release_vram_before_export(pipe)
     _free_cuda_memory()
-    _mesh_to_cpu(mesh)
     ops_meta = apply_pre_export_ops(mesh)
     _progress(
         f"mesh ops reorient={ops_meta.get('reorient_deg')} "
         f"holes={ops_meta.get('holes_filled_passes')} smooth={ops_meta.get('smooth_normals')}"
     )
+    _mesh_to_cpu(mesh)
     _free_cuda_memory()
     _progress("export GLB (cumesh to_glb из env)")
     _export_trellis2_mesh(mesh, output, task_dir=task_dir)
