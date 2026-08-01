@@ -189,14 +189,6 @@ def main(task_dir: str) -> None:
     from pipeline_env import is_stub_pipeline, is_trellis2
 
     if is_stub_pipeline() or is_trellis2():
-        if is_trellis2():
-            from apply_hole_filling import _fill_open3d, _fill_trimesh
-
-            tmp = root / "retopo_filled.glb"
-            if _fill_open3d(src, tmp) or _fill_trimesh(src, tmp):
-                shutil.move(str(tmp), str(dst))
-                print(f"[retopology] trellis2 hole fill → {dst.name} ({dst.stat().st_size} bytes)")
-                return
         shutil.copy2(src, dst)
         tag = "stub" if is_stub_pipeline() else "trellis2"
         print(f"[retopology] {tag} copy {src.name} → {dst.name} ({dst.stat().st_size} bytes)")

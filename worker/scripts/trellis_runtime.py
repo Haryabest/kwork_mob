@@ -530,7 +530,7 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
 
     reconstruct_res = (os.getenv("TRELLIS2_RECONSTRUCT_RESOLUTION") or "").strip()
     if max_quality_mode():
-        texture_size = int(os.getenv("TRELLIS2_TEXTURE_SIZE", "2048"))
+        texture_size = max(2048, int(os.getenv("TRELLIS2_TEXTURE_SIZE", "2048")))
     elif task_dir:
         texture_size = _texture_size_for_task(task_dir)
     else:
@@ -783,9 +783,15 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
         raise RuntimeError("TRELLIS.2 вернул пустой результат")
 
     mesh = meshes[0]
-    _mesh_to_cpu(mesh)
     _release_vram_before_export(pipe)
     _free_cuda_memory()
+    try:
+        from trellis_mesh_ops import apply_pre_export_ops
+
+        apply_pre_export_ops(mesh)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("TRELLIS.2 pre-export ops skipped: %s", exc)
+    _mesh_to_cpu(mesh)
     _progress("export GLB…")
     _export_trellis2_mesh(mesh, output, task_dir=task_dir)
     if not output.exists() or output.stat().st_size < 1000:

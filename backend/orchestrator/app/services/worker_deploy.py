@@ -870,6 +870,7 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         "TRELLIS2_REMOVE_FLOATERS",
         "TRELLIS2_MAX_NUM_TOKENS",
         "NOBG_REFINE_FOREGROUND",
+        "TRELLIS_STAGED_PIPELINE",
     ):
         if str(base_env.get(key) or "").strip():
             merged_env[key] = base_env[key]

@@ -24,7 +24,7 @@ def main(task_dir: str) -> None:
             if is_production_trellis():
                 preflight_cuda()
             try:
-                staged = os.getenv("TRELLIS_STAGED_PIPELINE", "0").lower() in ("1", "true", "yes")
+                staged = os.getenv("TRELLIS_STAGED_PIPELINE", "1").lower() in ("1", "true", "yes")
                 if staged:
                     from trellis_staged import run_comfy_staged
 
