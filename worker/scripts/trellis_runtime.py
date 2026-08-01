@@ -465,15 +465,22 @@ def _cap_decimation(decimation: int, low_vram: bool, grid_size: int | None) -> i
 
 
 def _resolve_remesh_enabled(export_device: str) -> bool:
-    raw = os.getenv("TRELLIS2_REMESH")
-    if raw is not None:
-        enabled = str(raw).strip().lower() in ("1", "true", "yes")
-    else:
-        vram = _cuda_vram_gb()
-        enabled = vram is not None and vram > 20
-    if export_device == "cpu" and enabled:
+    from pipeline_env import max_quality_mode
+
+    if export_device == "cpu":
         return False
-    return enabled
+    raw = (os.getenv("TRELLIS2_REMESH") or "").strip().lower()
+    if max_quality_mode():
+        # remesh=False → дыры и «осколки» voxel mesh; ComfyUI всегда remesh при export
+        if raw in ("0", "false", "no"):
+            logger.warning("max quality: TRELLIS2_REMESH=0 ignored — remesh required for solid mesh")
+        return True
+    if raw in ("1", "true", "yes"):
+        return True
+    if raw in ("0", "false", "no"):
+        return False
+    vram = _cuda_vram_gb()
+    return vram is not None and vram > 20
 
 
 def _is_cuda_oom(exc: BaseException) -> bool:
@@ -571,6 +578,11 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
     }
     if grid_size:
         to_glb_kw["grid_size"] = int(grid_size)
+    # remove_floaters / inner faces — Comfy mesh cleanup (TypeError fallback in _call_to_glb)
+    if os.getenv("TRELLIS2_REMOVE_FLOATERS", "1").lower() in ("1", "true", "yes"):
+        to_glb_kw["remove_floaters"] = True
+    if os.getenv("TRELLIS2_REMOVE_INNER_FACES", "1").lower() in ("1", "true", "yes"):
+        to_glb_kw["remove_inner_faces"] = True
     if os.getenv("TRELLIS2_O_VOXEL_EXTENDED", "0").lower() in ("1", "true", "yes"):
         dual = (os.getenv("TRELLIS2_DUAL_CONTURING_RESOLUTION") or "").strip().lower()
         if dual and dual != "auto":
@@ -578,10 +590,6 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
                 to_glb_kw["dual_contouring_resolution"] = int(dual)
             except ValueError:
                 pass
-        if os.getenv("TRELLIS2_REMOVE_FLOATERS", "1").lower() in ("1", "true", "yes"):
-            to_glb_kw["remove_floaters"] = True
-        if os.getenv("TRELLIS2_REMOVE_INNER_FACES", "1").lower() in ("1", "true", "yes"):
-            to_glb_kw["remove_inner_faces"] = True
 
     _progress(
         f"export config max_quality={max_quality_mode()} "
@@ -622,12 +630,15 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
             _free_cuda_memory()
             if max_quality_mode():
                 fallbacks = [
-                    {**to_glb_kw, "remesh": False},
                     {
                         **to_glb_kw,
-                        "remesh": False,
                         "decimation_target": min(decimation, 200000),
                     },
+                    {
+                        **to_glb_kw,
+                        "decimation_target": min(decimation, 150000),
+                    },
+                    {**to_glb_kw, "remesh": False},
                 ]
             else:
                 fallbacks = [
@@ -645,6 +656,8 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
                         f"OOM retry remesh={fb['remesh']} decimation={fb['decimation_target']}"
                     )
                     glb = _run_to_glb(fb)
+                    if not fb.get("remesh", True):
+                        _progress("export fallback remesh=False — mesh может иметь дыры")
                     break
                 except RuntimeError as retry_exc:
                     if not _is_cuda_oom(retry_exc):
@@ -652,7 +665,7 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
                     _free_cuda_memory()
             if glb is None:
                 hint = (
-                    "16GB VRAM: уменьшите TRELLIS2_DECIMATION (300000) или TRELLIS2_REMESH=0"
+                    "16GB VRAM: уменьшите TRELLIS2_DECIMATION (200000) или TRELLIS2_TEXTURE_SIZE"
                     if max_quality_mode()
                     else ""
                 )
