@@ -29,10 +29,15 @@ def _ss_resolution(pipeline_type: str) -> int:
     override = (os.getenv("TRELLIS2_SS_RESOLUTION") or "").strip()
     if override:
         try:
-            return int(override)
+            val = int(override)
+            # 32 для cascade — официальный default; 64 ломает sparse structure sampler
+            if pipeline_type in ("1024_cascade", "1536_cascade") and val != 32:
+                _progress(f"SS_RESOLUTION={val} ignored for {pipeline_type}, using 32")
+                return 32
+            return val
         except ValueError:
             pass
-    return {"512": 32, "1024": 64, "1024_cascade": 64, "1536_cascade": 32}.get(pipeline_type, 32)
+    return {"512": 32, "1024": 64, "1024_cascade": 32, "1536_cascade": 32}.get(pipeline_type, 32)
 
 
 def _tex_params_with_downsampling(tex_defaults: dict) -> dict:
@@ -111,24 +116,23 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
 
     pipeline_type = _pipeline_type_resolved()
     max_tokens = int(os.getenv("TRELLIS2_MAX_NUM_TOKENS", "999999"))
-    max_views = int(os.getenv("TRELLIS2_MAX_VIEWS", "4"))
     seed = int(os.getenv("TRELLIS2_SEED", "42"))
     gen_tex_slat = os.getenv("TRELLIS2_GENERATE_TEXTURE_SLAT", "1").lower() in ("1", "true", "yes")
+    ss_res = _ss_resolution(pipeline_type)
 
     pipe = get_pipeline()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    _progress(f"stage2 voxel generator pipeline_type={pipeline_type}")
+    _progress(f"stage2 voxel generator pipeline_type={pipeline_type} ss_res={ss_res}")
     torch.manual_seed(seed)
 
     with torch.no_grad():
         cond_512 = pipe.get_cond([image], 512)
         cond_1024 = pipe.get_cond([image], 1024) if pipeline_type != "512" else None
 
-        coords = pipe.sample_sparse_structure(
-            cond_512, _ss_resolution(pipeline_type), max_views, ss_params
-        )
+        # num_samples=1 (одно фото); MAX_VIEWS сюда не передаём — ломает cond vs noise (32 vs 128)
+        coords = pipe.sample_sparse_structure(cond_512, ss_res, 1, ss_params)
         shape_slat, res = _sample_shape_cascade(
             pipe, pipeline_type, cond_512, cond_1024, coords, shape_params, max_tokens
         )
