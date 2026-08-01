@@ -721,8 +721,14 @@ def _sampler_params(prefix: str, defaults: dict) -> dict:
 
 
 def _pipeline_type_resolved() -> str:
-    raw = os.getenv("TRELLIS2_PIPELINE_TYPE", "1024").strip()
-    # как в app.py: 1024 → 1024_cascade (лучше качество, как на YouTube)
+    raw = os.getenv("TRELLIS2_PIPELINE_TYPE", "1024_cascade").strip()
+    staged = os.getenv("TRELLIS_STAGED_PIPELINE", "1").lower() in ("1", "true", "yes")
+    if staged:
+        if raw == "1024":
+            return "1024_cascade"
+        if raw == "1536":
+            return "1536_cascade"
+        return raw
     if raw == "1024":
         return "1024_cascade"
     if raw == "1536":

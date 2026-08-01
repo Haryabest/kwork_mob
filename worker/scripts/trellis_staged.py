@@ -32,7 +32,7 @@ def _ss_resolution(pipeline_type: str) -> int:
             return int(override)
         except ValueError:
             pass
-    return {"512": 32, "1024": 64, "1024_cascade": 32, "1536_cascade": 32}.get(pipeline_type, 32)
+    return {"512": 32, "1024": 64, "1024_cascade": 64, "1536_cascade": 32}.get(pipeline_type, 32)
 
 
 def _tex_params_with_downsampling(tex_defaults: dict) -> dict:
