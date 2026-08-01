@@ -371,7 +371,7 @@ def _release_vram_before_export(pipe) -> None:
 
 
 def _trim_vram_before_decode(pipe) -> None:
-    """После texture slat: выгрузить flow-модели, оставить decode_latent."""
+    """После texture slat: только tex flow off GPU (decoders для decode_latent не трогаем)."""
     import gc
 
     import torch
@@ -387,14 +387,15 @@ def _trim_vram_before_decode(pipe) -> None:
     models = getattr(pipe, "models", None)
     if isinstance(models, dict):
         for key in list(models.keys()):
-            if "flow_model" in key or key.endswith("_encoder"):
-                model = models.pop(key, None)
-                if model is not None and hasattr(model, "cpu"):
-                    try:
-                        model.cpu()
-                    except Exception:  # noqa: BLE001
-                        pass
-                del model
+            if "tex_slat_flow" not in key:
+                continue
+            model = models.pop(key, None)
+            if model is not None and hasattr(model, "cpu"):
+                try:
+                    model.cpu()
+                except Exception:  # noqa: BLE001
+                    pass
+            del model
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

@@ -296,7 +296,7 @@ def _comfyui_rmbg_env() -> dict[str, str]:
         "NOBG_MASK_BLUR": "0",
         "NOBG_MASK_OFFSET": "0",
         "NOBG_INVERT_OUTPUT": "0",
-        "NOBG_REFINE_FOREGROUND": "0",
+        "NOBG_REFINE_FOREGROUND": "1",
         "NOBG_CONFIDENCE": "0.80",
         "NOBG_HARD_FAIL_MIN": "0.35",
         "NOBG_MIN_RATIO": "0.05",
@@ -323,7 +323,7 @@ def _comfyui_mesh_refine_env() -> dict[str, str]:
         "TRELLIS2_MAX_NUM_TOKENS": "999999",
         "TRELLIS2_GENERATE_TEXTURE_SLAT": "1",
         "TRELLIS2_DOWNSAMPLING": "16",
-        "TRELLIS2_RECONSTRUCT_RESOLUTION": "1536",
+        "TRELLIS2_RECONSTRUCT_RESOLUTION": "1024",
     }
 
 
@@ -335,7 +335,7 @@ def _comfyui_mesh_ops_env() -> dict[str, str]:
         "TRELLIS2_REMESH_PROJECT": "0",
         "TRELLIS2_DUAL_CONTOURING_RESOLUTION": "auto",
         "TRELLIS2_REMOVE_FLOATERS": "0",
-        "TRELLIS2_REMOVE_INNER_FACES": "1",
+        "TRELLIS2_REMOVE_INNER_FACES": "0",
         "TRELLIS2_SIMPLIFY_TARGET_FACES": "300000",
         "TRELLIS2_DECIMATION": "300000",
         "TRELLIS2_SIMPLIFY_METHOD": "cumesh",
@@ -365,7 +365,7 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_SHAPE_RESCALE_T": "2",
         "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_START": "0.0",
         "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_END": "1.0",
-        "TRELLIS2_MAX_NUM_TOKENS": "9999",
+        "TRELLIS2_MAX_NUM_TOKENS": "999999",
         "TRELLIS2_MAX_VIEWS": "4",
         "TRELLIS2_SS_RESOLUTION": "32",
         "TRELLIS2_GENERATE_TEXTURE_SLAT": "1",
@@ -868,6 +868,8 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         "TRELLIS2_FILL_HOLES",
         "TRELLIS2_HOLE_ITERATIONS",
         "TRELLIS2_REMOVE_FLOATERS",
+        "TRELLIS2_MAX_NUM_TOKENS",
+        "NOBG_REFINE_FOREGROUND",
     ):
         if str(base_env.get(key) or "").strip():
             merged_env[key] = base_env[key]
