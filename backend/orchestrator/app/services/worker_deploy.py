@@ -330,20 +330,20 @@ def _comfyui_mesh_refine_env() -> dict[str, str]:
 def _comfyui_mesh_ops_env() -> dict[str, str]:
     """ComfyUI: Remesh / Simplify / Voxel→Trimesh / Fill Holes ×2 / Smooth."""
     return {
-        "TRELLIS2_REMESH": "0",
+        "TRELLIS2_REMESH": "1",
         "TRELLIS2_REMESH_BAND": "1",
         "TRELLIS2_REMESH_PROJECT": "0",
         "TRELLIS2_DUAL_CONTOURING_RESOLUTION": "auto",
-        "TRELLIS2_REMOVE_FLOATERS": "0",
-        "TRELLIS2_REMOVE_INNER_FACES": "0",
+        "TRELLIS2_REMOVE_FLOATERS": "1",
+        "TRELLIS2_REMOVE_INNER_FACES": "1",
         "TRELLIS2_SIMPLIFY_TARGET_FACES": "300000",
         "TRELLIS2_DECIMATION": "300000",
         "TRELLIS2_SIMPLIFY_METHOD": "cumesh",
-        "TRELLIS2_REORIENT_VERTICES": "90",
+        "TRELLIS2_REORIENT_VERTICES": "0",
         "TRELLIS2_FILL_HOLES": "1",
-        "TRELLIS2_HOLE_ITERATIONS": "2",
+        "TRELLIS2_HOLE_ITERATIONS": "1",
         "TRELLIS2_HOLE_FILL_ALGORITHM": "flood_fill",
-        "TRELLIS2_SMOOTH_NORMALS": "1",
+        "TRELLIS2_SMOOTH_NORMALS": "0",
     }
 
 

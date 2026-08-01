@@ -2,12 +2,27 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import os
+
+logger = logging.getLogger(__name__)
 
 
 def _env_bool(name: str, default: str = "0") -> bool:
     return os.getenv(name, default).strip().lower() in ("1", "true", "yes")
+
+
+def _is_textured_voxel_mesh(mesh) -> bool:
+    """MeshWithVoxel после decode_latent: attrs+coords не трогать до to_glb."""
+    attrs = getattr(mesh, "attrs", None)
+    coords = getattr(mesh, "coords", None)
+    if attrs is None or coords is None:
+        return False
+    try:
+        return len(attrs) > 0 and len(coords) > 0
+    except TypeError:
+        return True
 
 
 def reorient_mesh(mesh, degrees: float | None = None) -> None:
@@ -96,12 +111,21 @@ def smooth_mesh_normals(mesh) -> bool:
 
 def apply_pre_export_ops(mesh) -> dict:
     """Comfy: Voxel→Trimesh (reorient) + Fill Holes + Smooth Normals."""
+    textured = _is_textured_voxel_mesh(mesh)
     meta = {
-        "reorient_deg": (os.getenv("TRELLIS2_REORIENT_VERTICES") or "0").strip(),
+        "textured_voxel": textured,
+        "reorient_deg": None,
         "holes_filled_passes": 0,
         "smooth_normals": False,
     }
-    reorient_mesh(mesh)
-    meta["holes_filled_passes"] = fill_mesh_holes(mesh)
-    meta["smooth_normals"] = smooth_mesh_normals(mesh)
+    if textured:
+        logger.info(
+            "mesh ops skip reorient/fill_holes on textured voxel mesh (preserves attr_volume)"
+        )
+    else:
+        meta["reorient_deg"] = (os.getenv("TRELLIS2_REORIENT_VERTICES") or "0").strip()
+        reorient_mesh(mesh)
+        meta["holes_filled_passes"] = fill_mesh_holes(mesh)
+    if not textured:
+        meta["smooth_normals"] = smooth_mesh_normals(mesh)
     return meta

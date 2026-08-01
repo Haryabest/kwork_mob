@@ -19,7 +19,7 @@ def test_default_config_has_trellis_keys():
     assert env["TRELLIS2_TEX_GUIDANCE"] == "3"
     assert env["TRELLIS2_MAX_NUM_TOKENS"] == "999999"
     assert env["TRELLIS2_DECIMATION"] == "1000000"
-    assert env["TRELLIS2_REORIENT_VERTICES"] == "90"
+    assert env["TRELLIS2_REORIENT_VERTICES"] == "0"
     assert env["TRELLIS2_SHAPE_REFINE_GUIDANCE"] == "6.5"
     assert cfg["container_name"] == "kwork-worker"
 

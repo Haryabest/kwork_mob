@@ -178,8 +178,9 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
     _free_cuda_memory()
     ops_meta = apply_pre_export_ops(mesh)
     _progress(
-        f"mesh ops reorient={ops_meta.get('reorient_deg')} "
-        f"holes={ops_meta.get('holes_filled_passes')} smooth={ops_meta.get('smooth_normals')}"
+        f"mesh ops textured_voxel={ops_meta.get('textured_voxel')} "
+        f"reorient={ops_meta.get('reorient_deg')} "
+        f"holes={ops_meta.get('holes_filled_passes')}"
     )
     _mesh_to_cpu(mesh)
     _free_cuda_memory()

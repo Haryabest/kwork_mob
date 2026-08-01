@@ -476,6 +476,7 @@ def _resolve_remesh_enabled(export_device: str) -> bool:
     return enabled
 
 
+def _is_cuda_oom(exc: BaseException) -> bool:
     err = str(exc).lower()
     return "out of memory" in err or ("cuda" in err and "error" in err)
 
@@ -620,7 +621,14 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         if _is_cuda_oom(exc):
             _free_cuda_memory()
             if max_quality_mode():
-                fallbacks = [{**to_glb_kw, "remesh": False}]
+                fallbacks = [
+                    {**to_glb_kw, "remesh": False},
+                    {
+                        **to_glb_kw,
+                        "remesh": False,
+                        "decimation_target": min(decimation, 200000),
+                    },
+                ]
             else:
                 fallbacks = [
                     {**to_glb_kw, "remesh": False, "decimation_target": min(decimation, 300000)},
