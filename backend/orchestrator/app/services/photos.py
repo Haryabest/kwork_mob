@@ -16,7 +16,7 @@ VIEW_COUNT = 12
 ALLOWED_PARTIAL_PHOTO_COUNTS = frozenset({1, 3, 5, 6})
 VIEW_INDICES_BY_COUNT: dict[int, list[int]] = {
     1: [0],
-    3: [0, 4, 8],
+    3: [0, 3, 9],  # фронт + лево 90° + право 270°
     5: [0, 2, 4, 6, 8],
     6: [0, 2, 4, 6, 8, 10],
 }

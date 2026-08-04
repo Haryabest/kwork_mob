@@ -52,14 +52,14 @@ const ANGLES = [
 
 const PHOTO_MODES = [
   { count: 1, title: '1 фото', hint: 'Быстрое оформление по одному снимку' },
-  { count: 3, title: '3 фото', hint: 'Фронт и два боковых ракурса (120°)' },
+  { count: 3, title: '3 фото', hint: 'Фронт + лево 90° + право 270°' },
   { count: 5, title: '5 фото', hint: 'Равномерно по кругу каждые 60°' },
   { count: 6, title: '6 фото', hint: 'Шесть ракурсов каждые 60°' },
 ] as const;
 
 const VIEW_INDICES: Record<number, number[]> = {
   1: [0],
-  3: [0, 4, 8],
+  3: [0, 3, 9],
   5: [0, 2, 4, 6, 8],
   6: [0, 2, 4, 6, 8, 10],
 };
