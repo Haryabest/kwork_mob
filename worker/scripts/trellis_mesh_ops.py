@@ -67,18 +67,31 @@ def reorient_mesh(mesh, degrees: float | None = None) -> None:
         pass
 
 
+def _max_hole_perimeter() -> float:
+    """CuMesh fill_holes: default 3e-2 слишком мал для мелких дыр сзади на unit AABB."""
+    raw = (os.getenv("TRELLIS2_MAX_HOLE_PERIMETER") or "0.25").strip()
+    try:
+        return max(3e-2, float(raw))
+    except ValueError:
+        return 0.25
+
+
 def fill_mesh_holes(mesh, *, iterations: int | None = None) -> int:
     if not _env_bool("TRELLIS2_FILL_HOLES", "1"):
         return 0
     iters = iterations if iterations is not None else max(
-        1, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "5"))
+        1, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "8"))
     )
     if not hasattr(mesh, "fill_holes"):
         return 0
+    peri = _max_hole_perimeter()
     filled = 0
     for _ in range(iters):
         try:
-            mesh.fill_holes()
+            try:
+                mesh.fill_holes(max_hole_perimeter=peri)
+            except TypeError:
+                mesh.fill_holes()
             filled += 1
         except RuntimeError as exc:
             if "out of memory" in str(exc).lower() or "cuda error" in str(exc).lower():
@@ -117,15 +130,18 @@ def apply_pre_export_ops(mesh) -> dict:
         "reorient_deg": None,
         "holes_filled_passes": 0,
         "smooth_normals": False,
+        "max_hole_perimeter": _max_hole_perimeter(),
     }
+    # attrs — voxel volume; fill_holes меняет только vertices/faces → PBR в to_glb сохраняется.
     if textured:
         logger.info(
-            "mesh ops skip reorient/fill_holes on textured voxel mesh (preserves attr_volume)"
+            "mesh ops: fill_holes on textured voxel (skip reorient); peri=%.3f",
+            meta["max_hole_perimeter"],
         )
+        meta["holes_filled_passes"] = fill_mesh_holes(mesh)
     else:
         meta["reorient_deg"] = (os.getenv("TRELLIS2_REORIENT_VERTICES") or "0").strip()
         reorient_mesh(mesh)
         meta["holes_filled_passes"] = fill_mesh_holes(mesh)
-    if not textured:
         meta["smooth_normals"] = smooth_mesh_normals(mesh)
     return meta
