@@ -47,7 +47,7 @@ def _photo_count_hint(task_dir: Path | None = None) -> int | None:
 # Исходные слоты до expand — как backend photos.VIEW_INDICES_BY_COUNT.
 _VIEW_INDICES_BY_COUNT: dict[int, list[int]] = {
     1: [0],
-    3: [0, 4, 8],
+    3: [0, 3, 9],
     5: [0, 2, 4, 6, 8],
     6: [0, 2, 4, 6, 8, 10],
     12: list(range(12)),
@@ -668,7 +668,8 @@ def _select_files(files: list[Path], task_dir: Path | None = None) -> list[Path]
     unique = _unique_by_content(files)
 
     # Явно одно фото / единственный уникальный кадр → только front.
-    if photo_count == 1 or (photo_count is None and len(unique) <= 1 and _view00_only()):
+    # При 2+ уникальных НЕ режем до view_00 даже если NOBG_VIEW00_ONLY=1 и photo_count потерян.
+    if photo_count == 1 or (len(unique) <= 1 and _view00_only()):
         for f in files:
             if f.name.lower().startswith("view_00"):
                 print(f"[remove_background] single-image: только {f.name} (NOBG_VIEW00_ONLY)")
@@ -683,8 +684,9 @@ def _select_files(files: list[Path], task_dir: Path | None = None) -> list[Path]
             path = by_idx.get(idx)
             if path is not None:
                 selected.append(path)
+        selected = _unique_by_content(selected)
 
-    if len(selected) < 2:
+    if len(selected) < min(2, len(unique)):
         selected = unique
 
     # Не применяем linspace-срезку: при 3 фото и max=2 это давало [0,2] без середины.

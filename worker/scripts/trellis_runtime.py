@@ -34,7 +34,8 @@ _pipeline_kind: str | None = None
 # Совпадает с backend photos.VIEW_INDICES_BY_COUNT — исходные слоты до expand.
 VIEW_INDICES_BY_COUNT: dict[int, list[int]] = {
     1: [0],
-    3: [0, 4, 8],
+    # Фронт + левый бок 90° + правый бок 270° (раньше [0,4,8] — слабое покрытие боков)
+    3: [0, 3, 9],
     5: [0, 2, 4, 6, 8],
     6: [0, 2, 4, 6, 8, 10],
     12: list(range(12)),
@@ -145,6 +146,7 @@ def pick_input_images(photos_dir: Path, task_dir: Path | None = None) -> list[Pa
     photo_count = _photo_count_hint(task_dir)
     max_views = _max_views()
     seed_indices = _seed_indices_for_count(photo_count)
+    unique = _unique_by_content(images)
 
     selected: list[Path] = []
     if seed_indices:
@@ -153,11 +155,12 @@ def pick_input_images(photos_dir: Path, task_dir: Path | None = None) -> list[Pa
             path = by_idx.get(idx)
             if path is not None:
                 selected.append(path)
-        # nobg мог сохранить только часть — добираем уникальным контентом
-        if len(selected) < 2:
-            selected = _unique_by_content(images)
+        selected = _unique_by_content(selected)
+        # expand-копии / старые слоты [0,4,8] / nobg только front → добираем уникальным контентом
+        if len(selected) < min(2, len(unique)):
+            selected = unique
     else:
-        selected = _unique_by_content(images)
+        selected = unique
 
     if not selected:
         selected = images[:1]
@@ -166,8 +169,12 @@ def pick_input_images(photos_dir: Path, task_dir: Path | None = None) -> list[Pa
     if len(selected) > max_views:
         selected = selected[:max_views]
 
+    mode = multi_image_mode() if len(selected) > 1 else "single"
     names = ", ".join(p.name for p in selected)
-    _progress(f"input views={len(selected)} max={max_views} photo_count={photo_count}: {names}")
+    _progress(
+        f"input views={len(selected)} max={max_views} photo_count={photo_count} "
+        f"multi-image inject mode={mode}: {names}"
+    )
     return selected
 
 
@@ -230,10 +237,10 @@ def inject_sampler_multi_image(
 
 
 def multi_image_mode() -> Literal["stochastic", "multidiffusion"]:
-    raw = (os.getenv("TRELLIS2_MULTI_IMAGE_MODE") or "stochastic").strip().lower()
-    if raw in ("multidiffusion", "multi", "avg", "average"):
-        return "multidiffusion"
-    return "stochastic"
+    raw = (os.getenv("TRELLIS2_MULTI_IMAGE_MODE") or "multidiffusion").strip().lower()
+    if raw in ("stochastic", "cycle", "round_robin"):
+        return "stochastic"
+    return "multidiffusion"
 
 
 def preflight_cuda() -> None:
