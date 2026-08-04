@@ -102,11 +102,15 @@ def _orchestrator_http_base() -> str:
     return base.rstrip("/")
 
 
-def build_pipeline(upsell_options: list | None) -> list[str]:
+def build_pipeline(upsell_options: list | None, *, photo_count: int | None = None) -> list[str]:
     opts = set(upsell_options or [])
     steps = list(PIPELINE_STEPS)
+    auto_holes = os.getenv("TRELLIS2_AUTO_HOLE_FILL", "1").lower() in ("1", "true", "yes")
+    need_holes = "hole_filling" in opts or (
+        auto_holes and photo_count is not None and int(photo_count) >= 3
+    )
     # hole_filling после retopology
-    if "hole_filling" in opts:
+    if need_holes and "apply_hole_filling.py" not in steps:
         idx = steps.index("retopology.py") + 1
         steps.insert(idx, UPSELL_AFTER_RETOPO["hole_filling"])
     for code, script in UPSELL_AFTER_VALIDATE.items():
@@ -695,7 +699,14 @@ class WorkerAgent:
             )
 
             models_bucket = payload.get("models_bucket") or "models"
-            pipeline = IMPORT_PIPELINE if is_import else build_pipeline(payload.get("upsell_options"))
+            pipeline = (
+                IMPORT_PIPELINE
+                if is_import
+                else build_pipeline(
+                    payload.get("upsell_options"),
+                    photo_count=int(payload.get("photo_count") or meta.get("photo_count") or 12),
+                )
+            )
             t0 = time.monotonic()
 
             for step in pipeline:

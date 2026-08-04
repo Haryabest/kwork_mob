@@ -185,11 +185,11 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
         else:
             out_meshes = meshes
 
-        # Крупные дыры на боках после multi-view — ещё один проход fill_holes.
-        if out_meshes and n_views > 1:
-            hole_iters = max(2, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "3")))
+        # Зашивка дыр после decode (мелкие/средние boundary loops).
+        if out_meshes:
+            hole_iters = max(3, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "5")))
             filled = fill_mesh_holes(out_meshes[0], iterations=hole_iters)
-            _progress(f"post-decode fill_holes passes={filled} (multi-view)")
+            _progress(f"post-decode fill_holes passes={filled} views={n_views}")
 
     if not out_meshes:
         raise RuntimeError("staged pipeline: пустой результат")

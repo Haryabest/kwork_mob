@@ -71,7 +71,7 @@ def fill_mesh_holes(mesh, *, iterations: int | None = None) -> int:
     if not _env_bool("TRELLIS2_FILL_HOLES", "1"):
         return 0
     iters = iterations if iterations is not None else max(
-        1, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "3"))
+        1, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "5"))
     )
     if not hasattr(mesh, "fill_holes"):
         return 0
