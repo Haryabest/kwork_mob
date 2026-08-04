@@ -516,6 +516,8 @@ class WorkerAgent:
                 env["TASK_USER_ID"] = str(meta.get("user_id") or 0)
                 env["TASK_ORDER_ID"] = str(meta.get("order_id") or 0)
                 env["TASK_COMPANY_ID"] = str(meta.get("company_id") or 0)
+                env["PHOTO_COUNT"] = str(meta.get("photo_count") or 12)
+                env["TASK_PHOTO_COUNT"] = env["PHOTO_COUNT"]
                 env["TRELLIS2_TEXTURE_SIZE"] = str(_texture_size_for_meta(meta))
             except Exception:  # noqa: BLE001
                 pass
@@ -681,6 +683,7 @@ class WorkerAgent:
                 "company_id": payload.get("company_id"),
                 "category": payload.get("category"),
                 "tier": payload.get("tier"),
+                "photo_count": int(payload.get("photo_count") or 12),
                 "target_marketplace": payload.get("target_marketplace") or "ozon",
                 "upsell_options": payload.get("upsell_options") or [],
                 "scale_calibration": payload.get("scale_calibration"),

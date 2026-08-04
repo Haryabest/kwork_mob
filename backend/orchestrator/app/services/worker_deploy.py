@@ -368,7 +368,7 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_START": "0.0",
         "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_END": "1.0",
         "TRELLIS2_MAX_NUM_TOKENS": "999999",
-        "TRELLIS2_MAX_VIEWS": "1",
+        "TRELLIS2_MAX_VIEWS": "6",
         "TRELLIS2_GENERATE_TEXTURE_SLAT": "1",
         "TRELLIS2_USE_TILED_DECODER": "1",
         "TRELLIS2_SAMPLER": "euler",

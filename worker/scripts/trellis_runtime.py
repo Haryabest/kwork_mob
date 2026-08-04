@@ -16,15 +16,30 @@ Env:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
+import re
 import sys
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator, Literal
 
 logger = logging.getLogger("trellis_runtime")
 
 _pipeline = None
 _pipeline_kind: str | None = None
+
+# Совпадает с backend photos.VIEW_INDICES_BY_COUNT — исходные слоты до expand.
+VIEW_INDICES_BY_COUNT: dict[int, list[int]] = {
+    1: [0],
+    3: [0, 4, 8],
+    5: [0, 2, 4, 6, 8],
+    6: [0, 2, 4, 6, 8, 10],
+    12: list(range(12)),
+}
+_VIEW_NAME_RE = re.compile(r"^view_(\d+)", re.IGNORECASE)
 
 
 def _progress(msg: str) -> None:
@@ -44,18 +59,181 @@ def _ensure_path() -> Path:
     return root
 
 
-def _pick_front_image(photos_dir: Path) -> Path:
+def _view_index(path: Path) -> int:
+    m = _VIEW_NAME_RE.match(path.stem)
+    return int(m.group(1)) if m else 10_000
+
+
+def _file_fingerprint(path: Path) -> bytes:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        while True:
+            chunk = fh.read(65536)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.digest()
+
+
+def _photo_count_hint(task_dir: Path | None = None) -> int | None:
+    raw = (os.getenv("PHOTO_COUNT") or os.getenv("TASK_PHOTO_COUNT") or "").strip()
+    if raw.isdigit():
+        return int(raw)
+    if task_dir is not None:
+        meta_path = task_dir / "task_meta.json"
+        if meta_path.is_file():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                value = meta.get("photo_count")
+                if isinstance(value, int) and value > 0:
+                    return value
+            except Exception:  # noqa: BLE001
+                pass
+    return None
+
+
+def _max_views() -> int:
+    raw = (os.getenv("TRELLIS2_MAX_VIEWS") or "6").strip()
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 6
+
+
+def _list_view_images(photos_dir: Path) -> list[Path]:
     images = sorted(
-        p
-        for p in photos_dir.iterdir()
-        if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+        (
+            p
+            for p in photos_dir.iterdir()
+            if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+        ),
+        key=_view_index,
     )
     if not images:
         raise RuntimeError(f"Нет изображений в {photos_dir}")
-    for p in images:
-        if p.name.startswith("view_00"):
-            return p
-    return images[0]
+    return images
+
+
+def _unique_by_content(images: list[Path]) -> list[Path]:
+    """После expand копии одинаковы — оставляем по одному файлу на контент, в порядке view_XX."""
+    seen: dict[bytes, Path] = {}
+    for path in images:
+        fp = _file_fingerprint(path)
+        if fp not in seen:
+            seen[fp] = path
+    return list(seen.values())
+
+
+def _seed_indices_for_count(photo_count: int | None) -> list[int] | None:
+    if photo_count is None:
+        return None
+    if photo_count in VIEW_INDICES_BY_COUNT:
+        return VIEW_INDICES_BY_COUNT[photo_count]
+    if photo_count >= 12:
+        return list(range(12))
+    return None
+
+
+def pick_input_images(photos_dir: Path, task_dir: Path | None = None) -> list[Path]:
+    """
+    Входы для TRELLIS.2: все уникальные исходные ракурсы (1/3/5/6/12), без пропуска середины.
+
+    Раньше брали только view_00; при MAX_VIEWS=2 + linspace по 3 уникальным
+    получались первая и третья — средняя (view_04) выпадала.
+    """
+    images = _list_view_images(photos_dir)
+    photo_count = _photo_count_hint(task_dir)
+    max_views = _max_views()
+    seed_indices = _seed_indices_for_count(photo_count)
+
+    selected: list[Path] = []
+    if seed_indices:
+        by_idx = {_view_index(p): p for p in images}
+        for idx in seed_indices:
+            path = by_idx.get(idx)
+            if path is not None:
+                selected.append(path)
+        # nobg мог сохранить только часть — добираем уникальным контентом
+        if len(selected) < 2:
+            selected = _unique_by_content(images)
+    else:
+        selected = _unique_by_content(images)
+
+    if not selected:
+        selected = images[:1]
+
+    # Берём первые N в угловом порядке — НЕ linspace (linspace(0,2,2)==[0,2] режет середину).
+    if len(selected) > max_views:
+        selected = selected[:max_views]
+
+    names = ", ".join(p.name for p in selected)
+    _progress(f"input views={len(selected)} max={max_views} photo_count={photo_count}: {names}")
+    return selected
+
+
+def _pick_front_image(photos_dir: Path) -> Path:
+    return pick_input_images(photos_dir)[0]
+
+
+def _prepare_multi_cond(cond: dict) -> dict:
+    """neg_cond оставляем batch=1, как в TRELLIS v1 run_multi_image."""
+    neg = cond.get("neg_cond")
+    if neg is not None and hasattr(neg, "shape") and neg.shape[0] > 1:
+        cond = {**cond, "neg_cond": neg[:1]}
+    return cond
+
+
+@contextmanager
+def inject_sampler_multi_image(
+    sampler,
+    num_images: int,
+    mode: Literal["stochastic", "multidiffusion"] = "stochastic",
+) -> Iterator[None]:
+    """
+    Multi-view conditioning без смены num_samples.
+    Stochastic: на каждом denoising-шаге берём следующий view (цикл).
+    """
+    if num_images <= 1:
+        yield
+        return
+
+    import torch
+
+    old = sampler._inference_model
+    step_i = [0]
+
+    if mode == "stochastic":
+
+        def _new_inference_model(self, model, x_t, t, cond, *args, **kwargs):
+            idx = step_i[0] % num_images
+            step_i[0] += 1
+            if torch.is_tensor(cond) and cond.shape[0] > 1:
+                cond = cond[idx : idx + 1]
+            return old(model, x_t, t, cond, *args, **kwargs)
+
+    elif mode == "multidiffusion":
+
+        def _new_inference_model(self, model, x_t, t, cond, *args, **kwargs):
+            if not (torch.is_tensor(cond) and cond.shape[0] > 1):
+                return old(model, x_t, t, cond, *args, **kwargs)
+            preds = [old(model, x_t, t, cond[i : i + 1], *args, **kwargs) for i in range(cond.shape[0])]
+            return sum(preds) / len(preds)
+
+    else:
+        raise ValueError(f"Unsupported multi-image mode: {mode}")
+
+    sampler._inference_model = _new_inference_model.__get__(sampler, type(sampler))
+    try:
+        yield
+    finally:
+        sampler._inference_model = old
+
+
+def multi_image_mode() -> Literal["stochastic", "multidiffusion"]:
+    raw = (os.getenv("TRELLIS2_MULTI_IMAGE_MODE") or "stochastic").strip().lower()
+    if raw in ("multidiffusion", "multi", "avg", "average"):
+        return "multidiffusion"
+    return "stochastic"
 
 
 def preflight_cuda() -> None:
@@ -78,11 +256,11 @@ def preflight_cuda() -> None:
 
 
 def _require_nobg_dir(task_dir: Path) -> Path:
-    """TRELLIS.2: один вход view_00 из photos_nobg после remove_background (§6.2)."""
+    """TRELLIS.2: входы из photos_nobg после remove_background (§6.2)."""
     photos_nobg = task_dir / "photos_nobg"
     if not photos_nobg.is_dir() or not any(photos_nobg.iterdir()):
         raise RuntimeError(
-            "TRELLIS.2 требует photos_nobg/view_00 — сначала выполните remove_background.py"
+            "TRELLIS.2 требует photos_nobg/* — сначала выполните remove_background.py"
         )
     return photos_nobg
 
@@ -758,7 +936,7 @@ def _pipeline_type_resolved() -> str:
 
 
 def run_trellis2(task_dir: Path, output: Path) -> Path:
-    """TRELLIS.2: image→3D с native PBR (view_00 из photos_nobg)."""
+    """TRELLIS.2: image→3D с native PBR (1+ уникальных view из photos_nobg)."""
     import torch
     from PIL import Image
 
@@ -766,45 +944,48 @@ def run_trellis2(task_dir: Path, output: Path) -> Path:
     attn = _resolve_attn_backend()
     _sync_trellis_attn_modules(attn)
     photos_dir = _require_nobg_dir(task_dir)
-    front = _pick_front_image(photos_dir)
-    image = Image.open(front).convert("RGBA")
-    logger.info("TRELLIS.2 input=%s (single-image, photos_nobg/view_00)", front.name)
+    paths = pick_input_images(photos_dir, task_dir=task_dir)
+    images = [Image.open(p).convert("RGBA") for p in paths]
+    logger.info(
+        "TRELLIS.2 inputs=%s (%s-image)",
+        ",".join(p.name for p in paths),
+        len(images),
+    )
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
     pipe = get_pipeline()
     pipeline_type = _pipeline_type_resolved()
-    _progress(f"inference start pipeline_type={pipeline_type} …")
-    run_kwargs = {
-        "preprocess_image": False,
-        "pipeline_type": pipeline_type,
-        "tex_slat_sampler_params": _sampler_params(
-            "TEX",
-            # HF Space defaults (Material Generation)
-            {"steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.0, "rescale_t": 3.0},
-        ),
-        "shape_slat_sampler_params": _sampler_params(
-            "SHAPE",
-            # HF Space defaults (Shape Generation)
-            {"steps": 12, "guidance_strength": 7.5, "guidance_rescale": 0.5, "rescale_t": 3.0},
-        ),
-        "sparse_structure_sampler_params": _sampler_params(
-            "SS",
-            # HF Space defaults (Sparse Structure)
-            {"steps": 12, "guidance_strength": 7.5, "guidance_rescale": 0.7, "rescale_t": 5.0},
-        ),
-    }
-    max_tokens = os.getenv("TRELLIS2_MAX_NUM_TOKENS", "").strip()
-    if max_tokens:
-        run_kwargs["max_num_tokens"] = int(max_tokens)
-    logger.info(
-        "TRELLIS.2 run pipeline_type=%s tex_steps=%s texture_size=%s",
-        pipeline_type,
-        run_kwargs["tex_slat_sampler_params"].get("steps"),
-        _texture_size_for_task(task_dir),
-    )
-    meshes = pipe.run(image, **run_kwargs)
+    _progress(f"inference start pipeline_type={pipeline_type} views={len(images)} …")
+
+    if len(images) == 1:
+        run_kwargs = {
+            "preprocess_image": False,
+            "pipeline_type": pipeline_type,
+            "tex_slat_sampler_params": _sampler_params(
+                "TEX",
+                {"steps": 12, "guidance_strength": 1.0, "guidance_rescale": 0.0, "rescale_t": 3.0},
+            ),
+            "shape_slat_sampler_params": _sampler_params(
+                "SHAPE",
+                {"steps": 12, "guidance_strength": 7.5, "guidance_rescale": 0.5, "rescale_t": 3.0},
+            ),
+            "sparse_structure_sampler_params": _sampler_params(
+                "SS",
+                {"steps": 12, "guidance_strength": 7.5, "guidance_rescale": 0.7, "rescale_t": 5.0},
+            ),
+        }
+        max_tokens = os.getenv("TRELLIS2_MAX_NUM_TOKENS", "").strip()
+        if max_tokens:
+            run_kwargs["max_num_tokens"] = int(max_tokens)
+        meshes = pipe.run(images[0], **run_kwargs)
+    else:
+        # Multi-view: get_cond(B=N) + sampler injection; num_samples остаётся 1.
+        from trellis_staged import run_comfy_staged
+
+        return run_comfy_staged(task_dir, output)
+
     _progress("inference done, offload mesh + free pipeline VRAM…")
     if not meshes:
         raise RuntimeError("TRELLIS.2 вернул пустой результат")

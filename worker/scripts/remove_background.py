@@ -27,6 +27,33 @@ def _view00_only() -> bool:
     return ver in ("2", "trellis2", "trellis.2")
 
 
+def _photo_count_hint(task_dir: Path | None = None) -> int | None:
+    raw = (os.getenv("PHOTO_COUNT") or os.getenv("TASK_PHOTO_COUNT") or "").strip()
+    if raw.isdigit():
+        return int(raw)
+    if task_dir is not None:
+        meta_path = task_dir / "task_meta.json"
+        if meta_path.is_file():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                value = meta.get("photo_count")
+                if isinstance(value, int) and value > 0:
+                    return value
+            except Exception:  # noqa: BLE001
+                pass
+    return None
+
+
+# Исходные слоты до expand — как backend photos.VIEW_INDICES_BY_COUNT.
+_VIEW_INDICES_BY_COUNT: dict[int, list[int]] = {
+    1: [0],
+    3: [0, 4, 8],
+    5: [0, 2, 4, 6, 8],
+    6: [0, 2, 4, 6, 8, 10],
+    12: list(range(12)),
+}
+
+
 def _mask_ratio(mask: np.ndarray) -> float:
     m = mask.astype(bool)
     if m.size == 0:
@@ -595,14 +622,86 @@ def _photo_files(photos: Path) -> list[Path]:
     return views if views else all_images
 
 
-def _select_files(files: list[Path]) -> list[Path]:
-    if not _view00_only():
+def _view_index(path: Path) -> int:
+    name = path.stem.lower()
+    if name.startswith("view_"):
+        try:
+            return int(name.split("_", 1)[1])
+        except ValueError:
+            return 10_000
+    return 10_000
+
+
+def _file_fingerprint(path: Path) -> bytes:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        while True:
+            chunk = fh.read(65536)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.digest()
+
+
+def _unique_by_content(files: list[Path]) -> list[Path]:
+    seen: dict[bytes, Path] = {}
+    for path in sorted(files, key=_view_index):
+        fp = _file_fingerprint(path)
+        if fp not in seen:
+            seen[fp] = path
+    return list(seen.values())
+
+
+def _select_files(files: list[Path], task_dir: Path | None = None) -> list[Path]:
+    """
+    Для multi-photo (3/5/6/12) обрабатываем все исходные ракурсы, не только view_00.
+
+    NOBG_VIEW00_ONLY=1 остаётся ускорением для режима 1 фото; при photo_count>1
+    игнорируется, иначе боковые снимки не доходят до TRELLIS.
+    """
+    if not files:
         return files
-    for f in files:
-        if f.name.lower().startswith("view_00"):
-            print(f"[remove_background] TRELLIS.2: только {f.name} (NOBG_VIEW00_ONLY)")
-            return [f]
-    return files[:1]
+
+    photo_count = _photo_count_hint(task_dir)
+    unique = _unique_by_content(files)
+
+    # Явно одно фото / единственный уникальный кадр → только front.
+    if photo_count == 1 or (photo_count is None and len(unique) <= 1 and _view00_only()):
+        for f in files:
+            if f.name.lower().startswith("view_00"):
+                print(f"[remove_background] single-image: только {f.name} (NOBG_VIEW00_ONLY)")
+                return [f]
+        return files[:1]
+
+    seed_indices = _VIEW_INDICES_BY_COUNT.get(photo_count or 0)
+    selected: list[Path] = []
+    if seed_indices:
+        by_idx = {_view_index(p): p for p in files}
+        for idx in seed_indices:
+            path = by_idx.get(idx)
+            if path is not None:
+                selected.append(path)
+
+    if len(selected) < 2:
+        selected = unique
+
+    # Не применяем linspace-срезку: при 3 фото и max=2 это давало [0,2] без середины.
+    max_raw = (os.getenv("TRELLIS2_MAX_VIEWS") or "6").strip()
+    try:
+        max_views = max(1, int(max_raw))
+    except ValueError:
+        max_views = 6
+    if len(selected) > max_views:
+        selected = selected[:max_views]
+
+    names = ", ".join(p.name for p in selected)
+    print(
+        f"[remove_background] multi-view: {len(selected)} кадров "
+        f"(photo_count={photo_count}, unique={len(unique)}): {names}"
+    )
+    return selected
 
 
 def _stub_copy_nobg(files: list[Path], out: Path) -> list[dict]:
@@ -623,7 +722,7 @@ def main(task_dir: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     photos.mkdir(parents=True, exist_ok=True)
 
-    files = _select_files(_photo_files(photos))
+    files = _select_files(_photo_files(photos), task_dir=root)
     if not files:
         print(f"[remove_background] нет фото в {photos}")
         raise SystemExit(2)
