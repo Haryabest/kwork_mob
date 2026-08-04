@@ -1,4 +1,8 @@
-"""Hole filling §17: зашивка дыр в меше (trimesh / Open3D)."""
+"""Hole filling §17: зашивка дыр.
+
+Важно: для TRELLIS.2 GLB с PBR-текстурами trimesh/open3d re-export
+убивает maps → серый меш. Такие файлы не трогаем (copy as-is).
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,25 @@ import os
 import shutil
 import sys
 from pathlib import Path
+
+
+def _glb_has_textures(path: Path) -> bool:
+    """Грубая проверка: JSON/бинарный chunk GLB содержит image/*."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return False
+    if len(data) < 20:
+        return False
+    markers = (
+        b"image/png",
+        b"image/jpeg",
+        b"image/jpg",
+        b"image/webp",
+        b'"mimeType"',
+        b"KHR_texture",
+    )
+    return any(m in data for m in markers)
 
 
 def _fill_trimesh(src: Path, dst: Path) -> bool:
@@ -34,7 +57,6 @@ def _fill_trimesh(src: Path, dst: Path) -> bool:
         except Exception:  # noqa: BLE001
             pass
 
-        # Несколько проходов: мелкие дыры + broken topology
         iters = max(1, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "5")))
         for _ in range(iters):
             try:
@@ -47,18 +69,11 @@ def _fill_trimesh(src: Path, dst: Path) -> bool:
             except Exception:  # noqa: BLE001
                 pass
 
-        # Broken faces / inverted normals
         try:
             trimesh.repair.broken_faces(mesh, color=None)
         except Exception:  # noqa: BLE001
             pass
-        try:
-            if not mesh.is_watertight and hasattr(trimesh.repair, "fill_holes"):
-                trimesh.repair.fill_holes(mesh)
-        except Exception:  # noqa: BLE001
-            pass
 
-        # Убрать крошечные floating islands
         try:
             components = mesh.split(only_watertight=False)
             if len(components) > 1:
@@ -117,6 +132,24 @@ def main(task_dir: str) -> None:
     if not src.exists():
         raise SystemExit("mesh missing for hole_filling")
     dst = root / "retopo.glb"
+
+    # TRELLIS.2 PBR: не пересобирать через trimesh — слетают текстуры.
+    force = os.getenv("TRELLIS2_HOLE_FILL_FORCE", "0").lower() in ("1", "true", "yes")
+    if _glb_has_textures(src) and not force:
+        if src.resolve() != dst.resolve():
+            shutil.copy2(src, dst)
+        method = "skipped_textured"
+        print(
+            "[hole_filling] skipped_textured — GLB с PBR maps; "
+            "зашивка только в trellis (fill_holes до export). "
+            "Force: TRELLIS2_HOLE_FILL_FORCE=1 (сломает текстуры)."
+        )
+        meta_path = root / "task_meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+        meta["hole_filling"] = {"applied": False, "method": method}
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        return
+
     tmp = root / "retopo_filled.glb"
     ok = _fill_trimesh(src, tmp) or _fill_open3d(src, tmp)
     if ok:

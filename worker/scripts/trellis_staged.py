@@ -152,8 +152,10 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
 
         _progress("stage3 mesh: decode shape + fill holes (Comfy node 1)")
         meshes, subs = pipe.decode_shape_slat(shape_slat, res)
+        hole_iters = max(5, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "5")))
         if meshes:
-            fill_mesh_holes(meshes[0])
+            filled = fill_mesh_holes(meshes[0], iterations=hole_iters)
+            _progress(f"stage3 fill_holes passes={filled}")
 
         _free_cuda_memory()
 
@@ -166,7 +168,8 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
             meshes, subs = pipe.decode_shape_slat(shape_slat, res)
             if meshes:
                 _progress("fill holes after refiner (Comfy node 2)")
-                fill_mesh_holes(meshes[0])
+                filled = fill_mesh_holes(meshes[0], iterations=hole_iters)
+                _progress(f"stage5 fill_holes passes={filled}")
             _free_cuda_memory()
 
         tex_slat = None
@@ -184,12 +187,9 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
             out_meshes = pipe.decode_latent(shape_slat, tex_slat, res)
         else:
             out_meshes = meshes
-
-        # Зашивка дыр после decode (мелкие/средние boundary loops).
-        if out_meshes:
-            hole_iters = max(3, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "5")))
-            filled = fill_mesh_holes(out_meshes[0], iterations=hole_iters)
-            _progress(f"post-decode fill_holes passes={filled} views={n_views}")
+            # без текстуры можно ещё раз зашить
+            if out_meshes:
+                fill_mesh_holes(out_meshes[0], iterations=hole_iters)
 
     if not out_meshes:
         raise RuntimeError("staged pipeline: пустой результат")

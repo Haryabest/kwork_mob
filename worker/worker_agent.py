@@ -105,7 +105,7 @@ def _orchestrator_http_base() -> str:
 def build_pipeline(upsell_options: list | None, *, photo_count: int | None = None) -> list[str]:
     opts = set(upsell_options or [])
     steps = list(PIPELINE_STEPS)
-    auto_holes = os.getenv("TRELLIS2_AUTO_HOLE_FILL", "1").lower() in ("1", "true", "yes")
+    auto_holes = os.getenv("TRELLIS2_AUTO_HOLE_FILL", "0").lower() in ("1", "true", "yes")
     need_holes = "hole_filling" in opts or (
         auto_holes and photo_count is not None and int(photo_count) >= 3
     )

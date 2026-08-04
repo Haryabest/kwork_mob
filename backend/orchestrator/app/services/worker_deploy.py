@@ -373,7 +373,7 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_MAX_VIEWS": "6",
         "TRELLIS2_MULTI_IMAGE_MODE": "multidiffusion",
         "TRELLIS2_HOLE_ITERATIONS": "5",
-        "TRELLIS2_AUTO_HOLE_FILL": "1",
+        "TRELLIS2_AUTO_HOLE_FILL": "0",
         "TRELLIS2_GENERATE_TEXTURE_SLAT": "1",
         "TRELLIS2_USE_TILED_DECODER": "1",
         "TRELLIS2_SAMPLER": "euler",

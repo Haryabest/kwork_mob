@@ -142,17 +142,38 @@ export function ModelViewer3D({
       camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 1000);
       camera.position.set(1.5, 1.1, 2.2);
 
-      scene.add(new THREE.AmbientLight(0xffffff, 0.85));
-      const key = new THREE.DirectionalLight(0xffffff, 1.05);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x444466, 0.65);
+      hemi.position.set(0, 2, 0);
+      scene.add(hemi);
+      const key = new THREE.DirectionalLight(0xffffff, 1.15);
       key.position.set(3, 5, 2);
-      const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+      const fill = new THREE.DirectionalLight(0xffffff, 0.45);
       fill.position.set(-2, 1, -1);
-      scene.add(key, fill);
+      const rim = new THREE.DirectionalLight(0xffffff, 0.35);
+      rim.position.set(0, 2, -3);
+      scene.add(key, fill, rim);
 
       controls = new OrbitControls(camera, canvas);
       controls.enableDamping = true;
       controls.autoRotate = autoRotate;
       controls.autoRotateSpeed = 1.2;
+
+      const prepMaterials = (root: THREE.Object3D) => {
+        root.traverse((obj) => {
+          const mesh = obj as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          for (const mat of mats) {
+            if (!mat) continue;
+            const std = mat as THREE.MeshStandardMaterial;
+            if (std.map) std.map.colorSpace = THREE.SRGBColorSpace;
+            if (std.emissiveMap) std.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+            std.side = THREE.DoubleSide;
+            std.needsUpdate = true;
+          }
+        });
+      };
 
       const applySize = () => {
         if (!renderer || !camera || disposed) return;
@@ -175,6 +196,7 @@ export function ModelViewer3D({
         src,
         (gltf) => {
           if (disposed || !scene || !controls || !camera) return;
+          prepMaterials(gltf.scene);
           scene.add(gltf.scene);
           fitCameraToObject(camera, gltf.scene, controls);
           controls.update();
