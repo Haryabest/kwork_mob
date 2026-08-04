@@ -32,6 +32,7 @@ _pipeline = None
 _pipeline_kind: str | None = None
 
 # Совпадает с backend photos.VIEW_INDICES_BY_COUNT — исходные слоты до expand.
+# 3 фото: фронт + лево 90° + право 270° (не 120°/240° — те ближе к тылу и дают дыры на боках).
 VIEW_INDICES_BY_COUNT: dict[int, list[int]] = {
     1: [0],
     # Фронт + левый бок 90° + правый бок 270° (раньше [0,4,8] — слабое покрытие боков)
@@ -93,7 +94,8 @@ def _photo_count_hint(task_dir: Path | None = None) -> int | None:
     return None
 
 
-def _max_views() -> int:
+def _max_views_cap() -> int:
+    """Верхний предел. Для multi-photo никогда не режем ниже числа seed-ракурсов."""
     raw = (os.getenv("TRELLIS2_MAX_VIEWS") or "6").strip()
     try:
         return max(1, int(raw))
@@ -137,14 +139,14 @@ def _seed_indices_for_count(photo_count: int | None) -> list[int] | None:
 
 def pick_input_images(photos_dir: Path, task_dir: Path | None = None) -> list[Path]:
     """
-    Входы для TRELLIS.2: все уникальные исходные ракурсы (1/3/5/6/12), без пропуска середины.
+    Входы для TRELLIS.2: все уникальные исходные ракурсы (1/3/5/6/12).
 
-    Раньше брали только view_00; при MAX_VIEWS=2 + linspace по 3 уникальным
-    получались первая и третья — средняя (view_04) выпадала.
+    Важно: TRELLIS2_MAX_VIEWS=1 в старом .env.worker не должен убивать 3-фото заказ
+    (иначе снова только view_00 → дыры на боках).
     """
     images = _list_view_images(photos_dir)
     photo_count = _photo_count_hint(task_dir)
-    max_views = _max_views()
+    max_cap = _max_views_cap()
     seed_indices = _seed_indices_for_count(photo_count)
     unique = _unique_by_content(images)
 
@@ -165,15 +167,17 @@ def pick_input_images(photos_dir: Path, task_dir: Path | None = None) -> list[Pa
     if not selected:
         selected = images[:1]
 
-    # Берём первые N в угловом порядке — НЕ linspace (linspace(0,2,2)==[0,2] режет середину).
-    if len(selected) > max_views:
-        selected = selected[:max_views]
+    # Multi-photo: всегда все seed/unique. MAX_VIEWS режет только «лишнее» сверху.
+    min_required = len(selected) if (photo_count and photo_count > 1) or len(selected) > 1 else 1
+    effective_cap = max(max_cap, min_required) if min_required > 1 else max_cap
+    if len(selected) > effective_cap:
+        selected = selected[:effective_cap]
 
     mode = multi_image_mode() if len(selected) > 1 else "single"
     names = ", ".join(p.name for p in selected)
     _progress(
-        f"input views={len(selected)} max={max_views} photo_count={photo_count} "
-        f"multi-image inject mode={mode}: {names}"
+        f"input views={len(selected)} cap={effective_cap}(cfg={max_cap}) "
+        f"photo_count={photo_count} multi-image inject mode={mode}: {names}"
     )
     return selected
 
@@ -198,7 +202,8 @@ def inject_sampler_multi_image(
 ) -> Iterator[None]:
     """
     Multi-view conditioning без смены num_samples.
-    Stochastic: на каждом denoising-шаге берём следующий view (цикл).
+    Stochastic: цикл по view на denoising-шагах.
+    Multidiffusion: усреднение предсказаний всех view (лучше для боков).
     """
     if num_images <= 1:
         yield
@@ -209,36 +214,48 @@ def inject_sampler_multi_image(
     old = sampler._inference_model
     step_i = [0]
 
+    def _slice_cond(cond, idx: int):
+        if torch.is_tensor(cond) and cond.shape[0] > 1:
+            return cond[idx : idx + 1]
+        return cond
+
     if mode == "stochastic":
 
         def _new_inference_model(self, model, x_t, t, cond, *args, **kwargs):
             idx = step_i[0] % num_images
             step_i[0] += 1
-            if torch.is_tensor(cond) and cond.shape[0] > 1:
-                cond = cond[idx : idx + 1]
-            return old(model, x_t, t, cond, *args, **kwargs)
+            return old(model, x_t, t, _slice_cond(cond, idx), *args, **kwargs)
 
     elif mode == "multidiffusion":
 
         def _new_inference_model(self, model, x_t, t, cond, *args, **kwargs):
             if not (torch.is_tensor(cond) and cond.shape[0] > 1):
                 return old(model, x_t, t, cond, *args, **kwargs)
-            preds = [old(model, x_t, t, cond[i : i + 1], *args, **kwargs) for i in range(cond.shape[0])]
-            return sum(preds) / len(preds)
+            # Усредняем только «позитивную» ветку: для каждого view полный CFG с общим neg_cond.
+            preds = [
+                old(model, x_t, t, cond[i : i + 1], *args, **kwargs)
+                for i in range(cond.shape[0])
+            ]
+            out = preds[0]
+            for p in preds[1:]:
+                out = out + p
+            return out / len(preds)
 
     else:
         raise ValueError(f"Unsupported multi-image mode: {mode}")
 
     sampler._inference_model = _new_inference_model.__get__(sampler, type(sampler))
     try:
+        _progress(f"multi-image inject mode={mode} views={num_images}")
         yield
     finally:
         sampler._inference_model = old
 
 
 def multi_image_mode() -> Literal["stochastic", "multidiffusion"]:
+    # multidiffusion лучше держит бока (центр+лево+право); stochastic часто оставляет дыры сзади.
     raw = (os.getenv("TRELLIS2_MULTI_IMAGE_MODE") or "multidiffusion").strip().lower()
-    if raw in ("stochastic", "cycle", "round_robin"):
+    if raw in ("stochastic", "cycle", "stoch", "round_robin"):
         return "stochastic"
     return "multidiffusion"
 

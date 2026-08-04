@@ -689,19 +689,21 @@ def _select_files(files: list[Path], task_dir: Path | None = None) -> list[Path]
     if len(selected) < min(2, len(unique)):
         selected = unique
 
-    # Не применяем linspace-срезку: при 3 фото и max=2 это давало [0,2] без середины.
+    # Multi-photo: не даём TRELLIS2_MAX_VIEWS=1 выкинуть боковые кадры.
     max_raw = (os.getenv("TRELLIS2_MAX_VIEWS") or "6").strip()
     try:
-        max_views = max(1, int(max_raw))
+        max_cap = max(1, int(max_raw))
     except ValueError:
-        max_views = 6
-    if len(selected) > max_views:
-        selected = selected[:max_views]
+        max_cap = 6
+    min_required = len(selected) if (photo_count and photo_count > 1) or len(selected) > 1 else 1
+    effective_cap = max(max_cap, min_required) if min_required > 1 else max_cap
+    if len(selected) > effective_cap:
+        selected = selected[:effective_cap]
 
     names = ", ".join(p.name for p in selected)
     print(
         f"[remove_background] multi-view: {len(selected)} кадров "
-        f"(photo_count={photo_count}, unique={len(unique)}): {names}"
+        f"(photo_count={photo_count}, unique={len(unique)}, cap={effective_cap}): {names}"
     )
     return selected
 
