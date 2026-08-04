@@ -2,6 +2,9 @@
 
 import { Center, Loader, Text } from '@mantine/core';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 type Props = {
   src: string;
@@ -11,35 +14,43 @@ type Props = {
   borderRadius?: number | string;
 };
 
-type ModelViewerEl = HTMLElement & {
-  loaded?: boolean;
-  updateFraming?: () => void;
-  dismissPoster?: () => void;
-};
-
 function resolveMinHeight(height: number | string): number {
   if (typeof height === 'number' && Number.isFinite(height) && height > 0) return height;
-  return 360;
+  return 400;
+}
+
+function fitCameraToObject(
+  camera: THREE.PerspectiveCamera,
+  object: THREE.Object3D,
+  controls: OrbitControls,
+) {
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const dist = maxDim * 1.85;
+  camera.position.set(center.x + dist * 0.55, center.y + dist * 0.35, center.z + dist);
+  camera.near = Math.max(dist / 100, 0.01);
+  camera.far = dist * 100;
+  camera.updateProjectionMatrix();
+  controls.target.copy(center);
 }
 
 export function ModelViewer3D({
   src,
-  height = 360,
+  height = 400,
   autoRotate = false,
   background = 'rgba(0,87,184,0.04)',
   borderRadius = 12,
 }: Props) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const viewerRef = useRef<ModelViewerEl | null>(null);
-  const [scriptReady, setScriptReady] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [box, setBox] = useState({ w: 0, h: 0 });
+  const [status, setStatus] = useState('Загрузка 3D…');
   const minH = resolveMinHeight(height);
-  const sized = box.w >= 64 && box.h >= 64;
 
-  // Контейнер всегда в DOM — иначе ResizeObserver не видит размер.
-  const containerStyle: React.CSSProperties = {
+  const wrapStyle: CSSProperties = {
     position: 'relative',
     width: '100%',
     height: typeof height === 'number' ? height : height,
@@ -50,112 +61,151 @@ export function ModelViewer3D({
   };
 
   useEffect(() => {
-    if (typeof customElements === 'undefined') return;
-    if (customElements.get('model-viewer')) {
-      setScriptReady(true);
-      return;
-    }
-    customElements
-      .whenDefined('model-viewer')
-      .then(() => setScriptReady(true))
-      .catch(() => setFailed(true));
-  }, []);
+    const wrap = wrapRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !canvas || !src) return;
 
-  useEffect(() => {
-    setLoaded(false);
+    let disposed = false;
+    let raf = 0;
+    let renderer: THREE.WebGLRenderer | null = null;
+    let controls: OrbitControls | null = null;
+    let scene: THREE.Scene | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+
     setFailed(false);
-  }, [src]);
+    setReady(false);
+    setStatus('Подготовка области…');
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
+    const boot = () => {
+      if (disposed) return;
 
-    const measure = () => {
-      const r = el.getBoundingClientRect();
-      // clientWidth надёжнее при transform/subpixel
-      const w = Math.max(0, Math.floor(el.clientWidth || r.width));
-      const h = Math.max(0, Math.floor(el.clientHeight || r.height));
-      setBox((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
-    };
+      const w0 = Math.max(64, Math.floor(wrap.clientWidth || wrap.getBoundingClientRect().width || 320));
+      const h0 = Math.max(
+        64,
+        Math.floor(wrap.clientHeight || wrap.getBoundingClientRect().height || minH),
+      );
 
-    measure();
-    const ro = new ResizeObserver(() => {
-      // после layout
-      requestAnimationFrame(measure);
-    });
-    ro.observe(el);
-    window.addEventListener('resize', measure);
-    const t1 = window.setTimeout(measure, 0);
-    const t2 = window.setTimeout(measure, 100);
-    const t3 = window.setTimeout(measure, 300);
+      // Размер canvas ДО WebGL context — иначе "Attachment has zero size"
+      canvas.width = w0;
+      canvas.height = h0;
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      canvas.style.display = 'block';
 
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-      window.clearTimeout(t3);
-    };
-  }, [height]);
-
-  // Явные px на host + resize после появления
-  useEffect(() => {
-    const el = viewerRef.current;
-    if (!el || !sized) return;
-    el.style.width = `${box.w}px`;
-    el.style.height = `${box.h}px`;
-    el.style.maxWidth = '100%';
-    el.style.display = 'block';
-    try {
-      el.updateFraming?.();
-    } catch {
-      /* ignore */
-    }
-    window.dispatchEvent(new Event('resize'));
-  }, [box.w, box.h, sized, src]);
-
-  useEffect(() => {
-    const el = viewerRef.current;
-    if (!el || !src || !scriptReady || !sized) return;
-
-    let done = false;
-    const finishOk = () => {
-      if (done) return;
-      done = true;
-      setLoaded(true);
       try {
-        el.updateFraming?.();
-      } catch {
-        /* ignore */
+        renderer = new THREE.WebGLRenderer({
+          canvas,
+          antialias: true,
+          alpha: true,
+          powerPreference: 'high-performance',
+        });
+      } catch (e) {
+        console.error('[ModelViewer3D] WebGL', e);
+        setFailed(true);
+        return;
       }
-    };
-    const finishErr = () => {
-      if (done) return;
-      done = true;
-      setFailed(true);
+
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(w0, h0, false);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+      scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(45, w0 / h0, 0.01, 1000);
+      camera.position.set(1.5, 1.1, 2.2);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+      const key = new THREE.DirectionalLight(0xffffff, 1.05);
+      key.position.set(3, 5, 2);
+      const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+      fill.position.set(-2, 1, -1);
+      scene.add(key, fill);
+
+      controls = new OrbitControls(camera, canvas);
+      controls.enableDamping = true;
+      controls.autoRotate = autoRotate;
+      controls.autoRotateSpeed = 1.2;
+
+      const applySize = () => {
+        if (!renderer || disposed) return;
+        const w = Math.max(64, Math.floor(wrap.clientWidth || 0));
+        const h = Math.max(64, Math.floor(wrap.clientHeight || minH));
+        if (w < 64 || h < 64) return;
+        canvas.width = w;
+        canvas.height = h;
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      };
+
+      resizeObserver = new ResizeObserver(() => requestAnimationFrame(applySize));
+      resizeObserver.observe(wrap);
+      applySize();
+
+      setStatus('Загрузка GLB…');
+      const loader = new GLTFLoader();
+      loader.load(
+        src,
+        (gltf) => {
+          if (disposed || !scene || !controls) return;
+          scene.add(gltf.scene);
+          fitCameraToObject(camera, gltf.scene, controls);
+          controls.update();
+          setReady(true);
+          setStatus('');
+        },
+        undefined,
+        (err) => {
+          console.error('[ModelViewer3D] GLB', err);
+          if (!disposed) setFailed(true);
+        },
+      );
+
+      const tick = () => {
+        if (disposed || !renderer || !scene || !controls) return;
+        controls.update();
+        renderer.render(scene, camera);
+        raf = window.requestAnimationFrame(tick);
+      };
+      tick();
     };
 
-    const onLoad = () => finishOk();
-    const onError = () => finishErr();
-    el.addEventListener('load', onLoad);
-    el.addEventListener('error', onError);
-    if (el.loaded) finishOk();
-
-    const t = window.setTimeout(() => {
-      if (el.loaded) finishOk();
-      else if (!done) finishErr();
-    }, 45000);
+    // Дождаться layout (иначе clientWidth=0 на первом тике)
+    const t0 = window.setTimeout(boot, 0);
 
     return () => {
-      window.clearTimeout(t);
-      el.removeEventListener('load', onLoad);
-      el.removeEventListener('error', onError);
+      disposed = true;
+      window.clearTimeout(t0);
+      window.cancelAnimationFrame(raf);
+      resizeObserver?.disconnect();
+      controls?.dispose();
+      if (renderer) {
+        renderer.dispose();
+        renderer.forceContextLoss();
+      }
+      scene?.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        mesh.geometry?.dispose?.();
+        const mat = mesh.material;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose?.());
+        else if (mat) (mat as THREE.Material).dispose?.();
+      });
     };
-  }, [src, scriptReady, sized, box.w, box.h]);
+  }, [src, autoRotate, minH]);
 
   return (
-    <div ref={containerRef} style={containerStyle}>
-      {(!scriptReady || !sized || !loaded) && !failed && (
+    <div ref={wrapRef} style={wrapStyle}>
+      <canvas
+        ref={canvasRef}
+        width={640}
+        height={400}
+        style={{
+          display: 'block',
+          width: '100%',
+          height: '100%',
+          borderRadius,
+        }}
+      />
+      {(!ready || failed) && (
         <Center
           style={{
             position: 'absolute',
@@ -163,50 +213,23 @@ export function ModelViewer3D({
             zIndex: 1,
             background,
             borderRadius,
-            pointerEvents: 'none',
+            pointerEvents: failed ? 'auto' : 'none',
           }}
         >
-          <Loader color="brand" size="sm" />
-          <Text size="sm" c="#6d6c77" ml="sm">
-            {!scriptReady ? 'Инициализация 3D…' : !sized ? 'Подготовка области…' : 'Загрузка GLB…'}
-          </Text>
+          {failed ? (
+            <Text c="#6d6c77" ta="center" px="md" size="sm">
+              Не удалось отобразить GLB в браузере. Файл на сервере есть — попробуйте «Скачать GLB».
+            </Text>
+          ) : (
+            <>
+              <Loader color="brand" size="sm" />
+              <Text size="sm" c="#6d6c77" ml="sm">
+                {status || 'Загрузка 3D…'}
+              </Text>
+            </>
+          )}
         </Center>
       )}
-
-      {failed && !loaded && (
-        <Center style={{ position: 'absolute', inset: 0, zIndex: 2, background, borderRadius }}>
-          <Text c="#6d6c77" ta="center" px="md" size="sm">
-            Не удалось отобразить GLB в браузере. Файл на сервере есть — попробуйте «Скачать GLB».
-          </Text>
-        </Center>
-      )}
-
-      {/* src только после ненулевого размера — иначе WebGL canvas 0×0 */}
-      {scriptReady && sized ? (
-        <model-viewer
-          ref={(node) => {
-            viewerRef.current = node as ModelViewerEl | null;
-          }}
-          // eslint-disable-next-line react/no-unknown-property
-          src={src}
-          camera-controls=""
-          {...(autoRotate ? { 'auto-rotate': '' } : {})}
-          touch-action="pan-y"
-          exposure="1"
-          shadow-intensity="0.4"
-          camera-orbit="0deg 75deg 120%"
-          min-camera-orbit="auto auto 50%"
-          max-camera-orbit="auto auto 200%"
-          style={{
-            display: 'block',
-            width: box.w,
-            height: box.h,
-            maxWidth: '100%',
-            background: 'transparent',
-            borderRadius,
-          }}
-        />
-      ) : null}
     </div>
   );
 }

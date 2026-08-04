@@ -3,6 +3,7 @@
 import { Badge, Center, Loader, Stack, Text, Title } from '@mantine/core';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { ModelViewer3D } from '../../../components/ModelViewer3D';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -71,13 +72,7 @@ export default function ShareViewerPage() {
             </Center>
           ) : url ? (
             <>
-              <model-viewer
-                src={url}
-                camera-controls
-                auto-rotate
-                touch-action="pan-y"
-                style={{ width: '100%', height: 560, background: 'transparent', pointerEvents: 'auto' }}
-              />
+              <ModelViewer3D src={url} height={560} autoRotate background="transparent" borderRadius={16} />
               <div
                 aria-hidden
                 style={{
@@ -99,6 +94,7 @@ export default function ShareViewerPage() {
                   opacity: 0.75,
                   letterSpacing: 1,
                   textShadow: '0 1px 2px rgba(255,255,255,0.8)',
+                  zIndex: 2,
                 }}
               >
                 {watermark}
