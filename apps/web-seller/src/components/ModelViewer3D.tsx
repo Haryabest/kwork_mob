@@ -44,7 +44,8 @@ export function ModelViewer3D({
   borderRadius = 12,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // canvas создаём сами в effect — React не должен трогать width/height (сброс WebGL)
+  const hostRef = useRef<HTMLDivElement | null>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [status, setStatus] = useState('Загрузка 3D…');
@@ -62,35 +63,63 @@ export function ModelViewer3D({
 
   useEffect(() => {
     const wrap = wrapRef.current;
-    const canvas = canvasRef.current;
-    if (!wrap || !canvas || !src) return;
+    const host = hostRef.current;
+    if (!wrap || !host || !src) return;
 
     let disposed = false;
     let raf = 0;
     let renderer: THREE.WebGLRenderer | null = null;
     let controls: OrbitControls | null = null;
     let scene: THREE.Scene | null = null;
+    let camera: THREE.PerspectiveCamera | null = null;
     let resizeObserver: ResizeObserver | null = null;
 
     setFailed(false);
     setReady(false);
     setStatus('Подготовка области…');
 
-    const boot = () => {
+    const canvas = document.createElement('canvas');
+    canvas.style.display = 'block';
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.borderRadius = typeof borderRadius === 'number' ? `${borderRadius}px` : String(borderRadius);
+    host.replaceChildren(canvas);
+
+    const measure = () => {
+      const w = Math.max(2, Math.floor(wrap.clientWidth || wrap.getBoundingClientRect().width || 0));
+      const h = Math.max(
+        2,
+        Math.floor(wrap.clientHeight || wrap.getBoundingClientRect().height || 0),
+      );
+      return { w, h };
+    };
+
+    const waitForLayout = (): Promise<{ w: number; h: number }> =>
+      new Promise((resolve) => {
+        let tries = 0;
+        const tick = () => {
+          if (disposed) return;
+          const { w, h } = measure();
+          if (w >= 64 && h >= 64) {
+            resolve({ w, h });
+            return;
+          }
+          tries += 1;
+          if (tries > 60) {
+            resolve({ w: Math.max(w, 320), h: Math.max(h, minH) });
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
+
+    (async () => {
+      const { w, h } = await waitForLayout();
       if (disposed) return;
 
-      const w0 = Math.max(64, Math.floor(wrap.clientWidth || wrap.getBoundingClientRect().width || 320));
-      const h0 = Math.max(
-        64,
-        Math.floor(wrap.clientHeight || wrap.getBoundingClientRect().height || minH),
-      );
-
-      // Размер canvas ДО WebGL context — иначе "Attachment has zero size"
-      canvas.width = w0;
-      canvas.height = h0;
-      canvas.style.width = '100%';
-      canvas.style.height = '100%';
-      canvas.style.display = 'block';
+      canvas.width = w;
+      canvas.height = h;
 
       try {
         renderer = new THREE.WebGLRenderer({
@@ -106,11 +135,11 @@ export function ModelViewer3D({
       }
 
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      renderer.setSize(w0, h0, false);
+      renderer.setSize(w, h, false);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
 
       scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(45, w0 / h0, 0.01, 1000);
+      camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 1000);
       camera.position.set(1.5, 1.1, 2.2);
 
       scene.add(new THREE.AmbientLight(0xffffff, 0.85));
@@ -126,27 +155,26 @@ export function ModelViewer3D({
       controls.autoRotateSpeed = 1.2;
 
       const applySize = () => {
-        if (!renderer || disposed) return;
-        const w = Math.max(64, Math.floor(wrap.clientWidth || 0));
-        const h = Math.max(64, Math.floor(wrap.clientHeight || minH));
-        if (w < 64 || h < 64) return;
-        canvas.width = w;
-        canvas.height = h;
-        renderer.setSize(w, h, false);
-        camera.aspect = w / h;
+        if (!renderer || !camera || disposed) return;
+        const next = measure();
+        if (next.w < 2 || next.h < 2) return; // не трогаем buffer нулём
+        if (canvas.width === next.w && canvas.height === next.h) return;
+        canvas.width = next.w;
+        canvas.height = next.h;
+        renderer.setSize(next.w, next.h, false);
+        camera.aspect = next.w / next.h;
         camera.updateProjectionMatrix();
       };
 
       resizeObserver = new ResizeObserver(() => requestAnimationFrame(applySize));
       resizeObserver.observe(wrap);
-      applySize();
 
       setStatus('Загрузка GLB…');
       const loader = new GLTFLoader();
       loader.load(
         src,
         (gltf) => {
-          if (disposed || !scene || !controls) return;
+          if (disposed || !scene || !controls || !camera) return;
           scene.add(gltf.scene);
           fitCameraToObject(camera, gltf.scene, controls);
           controls.update();
@@ -161,20 +189,19 @@ export function ModelViewer3D({
       );
 
       const tick = () => {
-        if (disposed || !renderer || !scene || !controls) return;
-        controls.update();
-        renderer.render(scene, camera);
+        if (disposed || !renderer || !scene || !camera || !controls) return;
+        // не рисуем в нулевой buffer
+        if (canvas.width >= 2 && canvas.height >= 2) {
+          controls.update();
+          renderer.render(scene, camera);
+        }
         raf = window.requestAnimationFrame(tick);
       };
       tick();
-    };
-
-    // Дождаться layout (иначе clientWidth=0 на первом тике)
-    const t0 = window.setTimeout(boot, 0);
+    })();
 
     return () => {
       disposed = true;
-      window.clearTimeout(t0);
       window.cancelAnimationFrame(raf);
       resizeObserver?.disconnect();
       controls?.dispose();
@@ -189,22 +216,13 @@ export function ModelViewer3D({
         if (Array.isArray(mat)) mat.forEach((m) => m.dispose?.());
         else if (mat) (mat as THREE.Material).dispose?.();
       });
+      host.replaceChildren();
     };
-  }, [src, autoRotate, minH]);
+  }, [src, autoRotate, minH, borderRadius]);
 
   return (
-    <div ref={wrapRef} style={wrapStyle}>
-      <canvas
-        ref={canvasRef}
-        width={640}
-        height={400}
-        style={{
-          display: 'block',
-          width: '100%',
-          height: '100%',
-          borderRadius,
-        }}
-      />
+    <div ref={wrapRef} style={wrapStyle} data-viewer="three-v2">
+      <div ref={hostRef} style={{ width: '100%', height: '100%' }} />
       {(!ready || failed) && (
         <Center
           style={{
