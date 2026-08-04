@@ -1,7 +1,7 @@
 'use client';
 
 import { Center, Loader, Text } from '@mantine/core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 type Props = {
   src: string;
@@ -14,28 +14,40 @@ type Props = {
 type ModelViewerEl = HTMLElement & {
   loaded?: boolean;
   updateFraming?: () => void;
+  dismissPoster?: () => void;
 };
 
 function resolveMinHeight(height: number | string): number {
-  if (typeof height === 'number' && Number.isFinite(height)) return height;
-  return 320;
+  if (typeof height === 'number' && Number.isFinite(height) && height > 0) return height;
+  return 360;
 }
 
 export function ModelViewer3D({
   src,
-  height = 320,
+  height = 360,
   autoRotate = false,
   background = 'rgba(0,87,184,0.04)',
   borderRadius = 12,
 }: Props) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const viewerRef = useRef<ModelViewerEl | null>(null);
   const [scriptReady, setScriptReady] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [viewerEl, setViewerEl] = useState<ModelViewerEl | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const minH = resolveMinHeight(height);
-  const sized = box.w >= 2 && box.h >= 2;
+  const sized = box.w >= 64 && box.h >= 64;
+
+  // Контейнер всегда в DOM — иначе ResizeObserver не видит размер.
+  const containerStyle: React.CSSProperties = {
+    position: 'relative',
+    width: '100%',
+    height: typeof height === 'number' ? height : height,
+    minHeight: minH,
+    overflow: 'hidden',
+    background,
+    borderRadius,
+  };
 
   useEffect(() => {
     if (typeof customElements === 'undefined') return;
@@ -60,29 +72,50 @@ export function ModelViewer3D({
 
     const measure = () => {
       const r = el.getBoundingClientRect();
-      const w = Math.max(0, Math.floor(r.width));
-      const h = Math.max(0, Math.floor(r.height));
+      // clientWidth надёжнее при transform/subpixel
+      const w = Math.max(0, Math.floor(el.clientWidth || r.width));
+      const h = Math.max(0, Math.floor(el.clientHeight || r.height));
       setBox((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
     };
 
     measure();
-    const ro = new ResizeObserver(() => measure());
+    const ro = new ResizeObserver(() => {
+      // после layout
+      requestAnimationFrame(measure);
+    });
     ro.observe(el);
     window.addEventListener('resize', measure);
-    // первый кадр после layout (часто 0×0 на mount)
-    const raf = window.requestAnimationFrame(measure);
-    const t = window.setTimeout(measure, 50);
+    const t1 = window.setTimeout(measure, 0);
+    const t2 = window.setTimeout(measure, 100);
+    const t3 = window.setTimeout(measure, 300);
 
     return () => {
       ro.disconnect();
       window.removeEventListener('resize', measure);
-      window.cancelAnimationFrame(raf);
-      window.clearTimeout(t);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
     };
-  }, [height, scriptReady]);
+  }, [height]);
+
+  // Явные px на host + resize после появления
+  useEffect(() => {
+    const el = viewerRef.current;
+    if (!el || !sized) return;
+    el.style.width = `${box.w}px`;
+    el.style.height = `${box.h}px`;
+    el.style.maxWidth = '100%';
+    el.style.display = 'block';
+    try {
+      el.updateFraming?.();
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new Event('resize'));
+  }, [box.w, box.h, sized, src]);
 
   useEffect(() => {
-    const el = viewerEl;
+    const el = viewerRef.current;
     if (!el || !src || !scriptReady || !sized) return;
 
     let done = false;
@@ -104,10 +137,8 @@ export function ModelViewer3D({
 
     const onLoad = () => finishOk();
     const onError = () => finishErr();
-
     el.addEventListener('load', onLoad);
     el.addEventListener('error', onError);
-
     if (el.loaded) finishOk();
 
     const t = window.setTimeout(() => {
@@ -120,41 +151,11 @@ export function ModelViewer3D({
       el.removeEventListener('load', onLoad);
       el.removeEventListener('error', onError);
     };
-  }, [viewerEl, src, scriptReady, sized]);
-
-  const onViewerRef = useCallback((node: ModelViewerEl | null) => {
-    setViewerEl(node);
-  }, []);
-
-  if (!scriptReady) {
-    return (
-      <Center h={typeof height === 'number' ? height : minH}>
-        <Loader color="brand" size="sm" />
-      </Center>
-    );
-  }
-
-  if (failed && !loaded) {
-    return (
-      <Center h={typeof height === 'number' ? height : minH} style={{ background, borderRadius }}>
-        <Text c="#6d6c77" ta="center" px="md" size="sm">
-          Не удалось отобразить GLB в браузере. Файл на сервере есть — попробуйте «Скачать GLB».
-        </Text>
-      </Center>
-    );
-  }
+  }, [src, scriptReady, sized, box.w, box.h]);
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        position: 'relative',
-        width: '100%',
-        height,
-        minHeight: typeof height === 'number' ? undefined : minH,
-      }}
-    >
-      {(!loaded || !sized) && (
+    <div ref={containerRef} style={containerStyle}>
+      {(!scriptReady || !sized || !loaded) && !failed && (
         <Center
           style={{
             position: 'absolute',
@@ -167,14 +168,26 @@ export function ModelViewer3D({
         >
           <Loader color="brand" size="sm" />
           <Text size="sm" c="#6d6c77" ml="sm">
-            Загрузка 3D…
+            {!scriptReady ? 'Инициализация 3D…' : !sized ? 'Подготовка области…' : 'Загрузка GLB…'}
           </Text>
         </Center>
       )}
-      {sized ? (
+
+      {failed && !loaded && (
+        <Center style={{ position: 'absolute', inset: 0, zIndex: 2, background, borderRadius }}>
+          <Text c="#6d6c77" ta="center" px="md" size="sm">
+            Не удалось отобразить GLB в браузере. Файл на сервере есть — попробуйте «Скачать GLB».
+          </Text>
+        </Center>
+      )}
+
+      {/* src только после ненулевого размера — иначе WebGL canvas 0×0 */}
+      {scriptReady && sized ? (
         <model-viewer
-          key={src}
-          ref={onViewerRef}
+          ref={(node) => {
+            viewerRef.current = node as ModelViewerEl | null;
+          }}
+          // eslint-disable-next-line react/no-unknown-property
           src={src}
           camera-controls=""
           {...(autoRotate ? { 'auto-rotate': '' } : {})}
@@ -186,9 +199,10 @@ export function ModelViewer3D({
           max-camera-orbit="auto auto 200%"
           style={{
             display: 'block',
-            width: '100%',
-            height: '100%',
-            background,
+            width: box.w,
+            height: box.h,
+            maxWidth: '100%',
+            background: 'transparent',
             borderRadius,
           }}
         />

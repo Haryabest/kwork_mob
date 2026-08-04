@@ -420,7 +420,7 @@ export default function ModelDetailPage() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         }}
       >
-        <Surface style={{ minHeight: 320 }}>
+        <Surface style={{ minHeight: 400 }}>
           <Title order={4} mb="md">
             Предпросмотр GLB
           </Title>
@@ -432,7 +432,7 @@ export default function ModelDetailPage() {
               </Text>
             </Center>
           ) : previewUrl ? (
-            <ModelViewer3D src={previewUrl} height={320} />
+            <ModelViewer3D src={previewUrl} height={400} />
           ) : (
             <Text c="#6d6c77" ta="center" py={100}>
               GLB недоступен — перелогиньтесь или обновите страницу
