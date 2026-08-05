@@ -632,9 +632,46 @@ def _export_hole_perimeter() -> float:
         return 1.0
 
 
+def _cumesh_cleanup(mesh, peri: float, orig_fill) -> None:
+    """Comfy/o_voxel cleanup: дубликаты → non-manifold → мелкие куски → зашивка."""
+    for name, args in (
+        ("remove_duplicate_faces", ()),
+        ("repair_non_manifold_edges", ()),
+        ("remove_small_connected_components", (1e-5,)),
+    ):
+        fn = getattr(mesh, name, None)
+        if fn is None:
+            continue
+        try:
+            fn(*args)
+        except Exception:  # noqa: BLE001
+            pass
+    for stage in (peri * 0.4, peri, peri * 1.5):
+        try:
+            orig_fill(mesh, max_hole_perimeter=max(3e-2, stage))
+        except TypeError:
+            try:
+                orig_fill(mesh)
+            except Exception:  # noqa: BLE001
+                pass
+            break
+        except Exception:  # noqa: BLE001
+            break
+    unify = getattr(mesh, "unify_face_orientations", None)
+    if unify is not None:
+        try:
+            unify()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 @contextmanager
-def _patch_cumesh_fill_holes(peri: float):
-    """Подмена CuMesh.fill_holes на время to_glb — поднимает max_hole_perimeter."""
+def _patch_cumesh_holes(peri: float):
+    """
+    to_glb: max_hole_perimeter захардкожен 3e-2, а ветка remesh=True после
+    dual contouring делает только simplify() — без зашивки и cleanup.
+    Патчим fill_holes (перим.) и simplify (cleanup после), чтобы дыр не оставалось.
+    """
     try:
         import cumesh
     except Exception:  # noqa: BLE001
@@ -644,12 +681,11 @@ def _patch_cumesh_fill_holes(peri: float):
     if cls is None or not hasattr(cls, "fill_holes"):
         yield
         return
-    orig = cls.fill_holes
+    orig_fill = cls.fill_holes
+    orig_simplify = getattr(cls, "simplify", None)
 
-    def _patched(self, *args, **kwargs):
-        # positional max_hole_perimeter или kw
+    def _patched_fill(self, *args, **kwargs):
         if args:
-            # fill_holes(max_hole_perimeter) — подменяем если меньше нашего
             try:
                 cur = float(args[0])
             except (TypeError, ValueError):
@@ -657,31 +693,40 @@ def _patch_cumesh_fill_holes(peri: float):
             if cur < peri:
                 args = (peri,) + args[1:]
         else:
-            cur = kwargs.get("max_hole_perimeter")
+            raw = kwargs.get("max_hole_perimeter")
             try:
-                cur_f = float(cur) if cur is not None else 0.0
+                cur = float(raw) if raw is not None else 0.0
             except (TypeError, ValueError):
-                cur_f = 0.0
-            if cur is None or cur_f < peri:
+                cur = 0.0
+            if cur < peri:
                 kwargs["max_hole_perimeter"] = peri
         try:
-            return orig(self, *args, **kwargs)
+            return orig_fill(self, *args, **kwargs)
         except TypeError:
-            return orig(self)
+            return orig_fill(self)
 
-    cls.fill_holes = _patched
+    def _patched_simplify(self, *args, **kwargs):
+        result = orig_simplify(self, *args, **kwargs)
+        _cumesh_cleanup(self, peri, orig_fill)
+        return result
+
+    cls.fill_holes = _patched_fill
+    if orig_simplify is not None:
+        cls.simplify = _patched_simplify
     try:
-        _progress(f"to_glb fill_holes perimeter={peri:.3f} (patched)")
+        _progress(f"to_glb hole patch: perimeter={peri:.3f}, cleanup after simplify")
         yield
     finally:
-        cls.fill_holes = orig
+        cls.fill_holes = orig_fill
+        if orig_simplify is not None:
+            cls.simplify = orig_simplify
 
 
 def _call_to_glb(o_voxel, to_glb_kw: dict):
     peri = _export_hole_perimeter()
     # Форки ComfyUI принимают fill_holes_perimeter; stock microsoft — нет (TypeError → clean).
     kw = {**to_glb_kw, "fill_holes_perimeter": peri}
-    with _patch_cumesh_fill_holes(peri):
+    with _patch_cumesh_holes(peri):
         try:
             return o_voxel.postprocess.to_glb(**kw)
         except TypeError as exc:
@@ -817,8 +862,10 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         and os.getenv("TRELLIS2_EXTENSION_WEBP", "0").lower() in ("1", "true", "yes")
     )
 
-    remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "1"))
-    remesh_project = float(os.getenv("TRELLIS2_REMESH_PROJECT", "0"))
+    # band шире 1 воксела закрывает разрывы DC; project=0.9 (default o_voxel) прижимает
+    # внешнюю оболочку к исходной поверхности — при 0 остаются щели между шеллами.
+    remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "2"))
+    remesh_project = float(os.getenv("TRELLIS2_REMESH_PROJECT", "0.9"))
     remesh_enabled = _resolve_remesh_enabled(export_device)
     if export_device == "cpu" and remesh_enabled:
         remesh_enabled = False

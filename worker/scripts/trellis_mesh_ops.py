@@ -83,6 +83,8 @@ def fill_mesh_holes(mesh, *, iterations: int | None = None) -> int:
         1, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "8"))
     )
     if not hasattr(mesh, "fill_holes"):
+        # MeshWithVoxel из decode_latent не умеет fill_holes — зашивка идёт в to_glb (cumesh patch)
+        logger.info("fill_holes unsupported on %s — зашивка на этапе to_glb", type(mesh).__name__)
         return 0
     peri = _max_hole_perimeter()
     # Сначала мелкие, потом крупнее — меньше артефактов на больших петлях.

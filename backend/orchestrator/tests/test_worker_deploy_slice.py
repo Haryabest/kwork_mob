@@ -8,7 +8,7 @@ from app.services import worker_deploy as wd
 def test_default_config_has_trellis_keys():
     cfg = wd.default_config()
     env = cfg["env"]
-    assert env["TRELLIS2_PIPELINE_TYPE"] == "1536"
+    assert env["TRELLIS2_PIPELINE_TYPE"] == "1024_cascade"
     assert env["WORKER_PIPELINE_MODE"] == "trellis"
     assert env["QUALITY_THRESHOLD"] == "0.35"
     assert env["TRELLIS2_LOW_VRAM"] == "1"
@@ -18,10 +18,22 @@ def test_default_config_has_trellis_keys():
     assert env["TRELLIS2_TEX_STEPS"] == "12"
     assert env["TRELLIS2_TEX_GUIDANCE"] == "3"
     assert env["TRELLIS2_MAX_NUM_TOKENS"] == "999999"
-    assert env["TRELLIS2_DECIMATION"] == "1000000"
+    assert env["TRELLIS2_DECIMATION"] == "300000"
     assert env["TRELLIS2_REORIENT_VERTICES"] == "0"
     assert env["TRELLIS2_SHAPE_REFINE_GUIDANCE"] == "6.5"
     assert cfg["container_name"] == "kwork-worker"
+
+
+def test_default_config_hole_free_mesh_settings():
+    """Дыры в GLB: remesh + project 0.9 + широкая зашивка (см. o_voxel to_glb)."""
+    env = wd.default_config()["env"]
+    assert env["TRELLIS2_REMESH"] == "1"
+    assert env["TRELLIS2_REMESH_BAND"] == "2"
+    assert env["TRELLIS2_REMESH_PROJECT"] == "0.9"
+    assert env["TRELLIS2_MAX_HOLE_PERIMETER"] == "1.0"
+    assert env["TRELLIS2_HOLE_ITERATIONS"] == "12"
+    assert env["TRELLIS2_REMOVE_FLOATERS"] == "1"
+    assert env["TRELLIS2_MULTI_IMAGE_MODE"] == "multidiffusion"
 
 
 def test_env_presets():

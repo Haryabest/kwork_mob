@@ -44,16 +44,29 @@ def test_expand_views_to_twelve_fills_missing():
     assert copy_obj.call_count == 9
 
 
+def _jpeg_bytes(color: tuple[int, int, int]) -> bytes:
+  import io
+
+  from PIL import Image
+
+  buf = io.BytesIO()
+  Image.new("RGB", (8, 8), color).save(buf, format="JPEG")
+  return buf.getvalue()
+
+
 @pytest.mark.asyncio
 async def test_upload_files_for_count_partial_expands():
   file_a = MagicMock()
-  file_a.read = AsyncMock(return_value=b"a")
+  file_a.read = AsyncMock(return_value=_jpeg_bytes((255, 0, 0)))
+  file_a.filename = "a.jpg"
   file_a.content_type = "image/jpeg"
   file_b = MagicMock()
-  file_b.read = AsyncMock(return_value=b"b")
+  file_b.read = AsyncMock(return_value=_jpeg_bytes((0, 255, 0)))
+  file_b.filename = "b.jpg"
   file_b.content_type = "image/jpeg"
   file_c = MagicMock()
-  file_c.read = AsyncMock(return_value=b"c")
+  file_c.read = AsyncMock(return_value=_jpeg_bytes((0, 0, 255)))
+  file_c.filename = "c.jpg"
   file_c.content_type = "image/jpeg"
 
   with patch.object(photos_svc.minio_service, "ensure_buckets"), patch.object(

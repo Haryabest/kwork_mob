@@ -335,8 +335,8 @@ def _comfyui_mesh_ops_env() -> dict[str, str]:
     """ComfyUI: Remesh / Simplify / Voxel→Trimesh / Fill Holes ×2 / Smooth."""
     return {
         "TRELLIS2_REMESH": "1",
-        "TRELLIS2_REMESH_BAND": "1",
-        "TRELLIS2_REMESH_PROJECT": "0",
+        "TRELLIS2_REMESH_BAND": "2",
+        "TRELLIS2_REMESH_PROJECT": "0.9",
         "TRELLIS2_O_VOXEL_EXTENDED": "1",
         "TRELLIS2_DUAL_CONTOURING_RESOLUTION": "auto",
         "TRELLIS2_REMOVE_FLOATERS": "1",
@@ -871,6 +871,8 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         "TRELLIS2_EXPORT_TEXTURE_MAX",
         "TRELLIS2_RECONSTRUCT_RESOLUTION",
         "TRELLIS2_REMESH",
+        "TRELLIS2_REMESH_BAND",
+        "TRELLIS2_REMESH_PROJECT",
         "TRELLIS2_PIPELINE_TYPE",
         "TRELLIS2_KEEP_ONLY_SHELL",
         "TRELLIS2_GENERATE_TEXTURE_SLAT",

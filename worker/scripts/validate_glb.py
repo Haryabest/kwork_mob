@@ -68,6 +68,21 @@ def _pbr_score(root: Path) -> float:
     return 0.75
 
 
+def _boundary_edges(trimesh, geometries) -> int:
+    """Рёбра с одной смежной гранью = контуры дыр. 0 → меш закрыт."""
+    total = 0
+    for g in geometries:
+        edges = getattr(g, "edges_sorted", None)
+        if edges is None or len(edges) == 0:
+            continue
+        try:
+            groups = trimesh.grouping.group_rows(edges, require_count=1)
+            total += int(len(groups))
+        except Exception:  # noqa: BLE001
+            continue
+    return total
+
+
 def _geometry_score(model_path: Path) -> tuple[float, dict]:
     """Реальная проверка геометрии GLB через trimesh (§5.4).
 
@@ -114,6 +129,7 @@ def _geometry_score(model_path: Path) -> tuple[float, dict]:
     }
     if faces == 0 or vertices == 0:
         return 0.0, {**meta, "reason": "empty_geometry"}
+    meta["boundary_edges"] = _boundary_edges(trimesh, geometries)
     if faces >= MIN_FACES and vertices >= MIN_VERTICES:
         watertight = all(getattr(g, "is_watertight", True) for g in geometries if hasattr(g, "faces"))
         meta["watertight"] = watertight
@@ -196,9 +212,11 @@ def main(task_dir: str) -> None:
         raise SystemExit(f"gltf_validator failed: {report['gltf_validator']}")
     report_path = root / "quality_report.json"
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    geom = report.get("geometry") or {}
     print(
         f"[validate_glb] ok size={size} quality_score={report['quality_score']} "
-        f"threshold={report['threshold']}"
+        f"threshold={report['threshold']} "
+        f"watertight={geom.get('watertight')} boundary_edges={geom.get('boundary_edges')}"
     )
     if not report["passed"]:
         raise SystemExit(
