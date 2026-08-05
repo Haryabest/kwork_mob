@@ -104,6 +104,8 @@ CONFIG_ENV_KEYS = (
     "TRELLIS2_SS_RESOLUTION",
     "TRELLIS2_MAX_VIEWS",
     "TRELLIS2_MULTI_IMAGE_MODE",
+    "TRELLIS2_MULTI_IMAGE_MODE_TEX",
+    "TRELLIS2_PREFILL_HOLES",
     "TRELLIS2_USE_TILED_DECODER",
     "TRELLIS2_SAMPLER",
     "TRELLIS2_FILL_HOLES",
@@ -373,7 +375,10 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_END": "1.0",
         "TRELLIS2_MAX_NUM_TOKENS": "999999",
         "TRELLIS2_MAX_VIEWS": "6",
-        "TRELLIS2_MULTI_IMAGE_MODE": "multidiffusion",
+        # Геометрия: stochastic (multidiffusion усредняет невидимый тыл → дыры сзади)
+        "TRELLIS2_MULTI_IMAGE_MODE": "stochastic",
+        "TRELLIS2_MULTI_IMAGE_MODE_TEX": "multidiffusion",
+        "TRELLIS2_PREFILL_HOLES": "1",
         "TRELLIS2_HOLE_ITERATIONS": "12",
         "TRELLIS2_MAX_HOLE_PERIMETER": "1.0",
         "TRELLIS2_AUTO_HOLE_FILL": "0",
@@ -887,6 +892,8 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         "TRELLIS_STAGED_PIPELINE",
         "TRELLIS2_MAX_VIEWS",
         "TRELLIS2_MULTI_IMAGE_MODE",
+        "TRELLIS2_MULTI_IMAGE_MODE_TEX",
+        "TRELLIS2_PREFILL_HOLES",
     ):
         if str(base_env.get(key) or "").strip():
             merged_env[key] = base_env[key]

@@ -252,12 +252,25 @@ def inject_sampler_multi_image(
         sampler._inference_model = old
 
 
-def multi_image_mode() -> Literal["stochastic", "multidiffusion"]:
-    # multidiffusion лучше держит бока (центр+лево+право); stochastic часто оставляет дыры сзади.
-    raw = (os.getenv("TRELLIS2_MULTI_IMAGE_MODE") or "multidiffusion").strip().lower()
-    if raw in ("stochastic", "cycle", "stoch", "round_robin"):
+def _normalize_multi_mode(raw: str, default: str) -> Literal["stochastic", "multidiffusion"]:
+    value = (raw or "").strip().lower() or default
+    if value in ("stochastic", "cycle", "stoch", "round_robin"):
         return "stochastic"
     return "multidiffusion"
+
+
+def multi_image_mode(stage: str = "geometry") -> Literal["stochastic", "multidiffusion"]:
+    """
+    Геометрия (sparse structure / shape): stochastic.
+    Ракурсы не покрывают тыл, а multidiffusion усредняет несогласованные предсказания
+    невидимых зон → occupancy проваливается ниже порога и сзади появляются дыры.
+    Текстура: multidiffusion — усреднение цвета безопасно и убирает швы между ракурсами.
+    """
+    if stage == "texture":
+        return _normalize_multi_mode(
+            os.getenv("TRELLIS2_MULTI_IMAGE_MODE_TEX") or "", "multidiffusion"
+        )
+    return _normalize_multi_mode(os.getenv("TRELLIS2_MULTI_IMAGE_MODE") or "", "stochastic")
 
 
 def preflight_cuda() -> None:
@@ -665,6 +678,36 @@ def _cumesh_cleanup(mesh, peri: float, orig_fill) -> None:
             pass
 
 
+def cumesh_prefill_holes(vertices, faces, peri: float):
+    """
+    Зашивка до to_glb: строим CuMesh сами и чистим топологию.
+    Не зависит от monkey-patch (cumesh — C-расширение, подмена методов может быть запрещена).
+    Возвращает (vertices, faces) — исходные при любой ошибке.
+    """
+    try:
+        import cumesh
+    except Exception as exc:  # noqa: BLE001
+        _progress(f"prefill skipped: cumesh недоступен ({exc})")
+        return vertices, faces
+    cls = getattr(cumesh, "CuMesh", None)
+    if cls is None:
+        _progress("prefill skipped: cumesh.CuMesh отсутствует")
+        return vertices, faces
+    try:
+        mesh = cls()
+        mesh.init(vertices, faces)
+        before = int(getattr(mesh, "num_faces", 0) or 0)
+        _cumesh_cleanup(mesh, peri, cls.fill_holes)
+        after = int(getattr(mesh, "num_faces", 0) or 0)
+        new_v, new_f = mesh.read()
+        _progress(f"prefill holes peri={peri:.2f} faces {before} → {after}")
+        return new_v, new_f
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cumesh prefill failed: %s", exc)
+        _progress(f"prefill failed ({exc}) — экспорт из исходного меша")
+        return vertices, faces
+
+
 @contextmanager
 def _patch_cumesh_holes(peri: float):
     """
@@ -710,16 +753,24 @@ def _patch_cumesh_holes(peri: float):
         _cumesh_cleanup(self, peri, orig_fill)
         return result
 
-    cls.fill_holes = _patched_fill
-    if orig_simplify is not None:
-        cls.simplify = _patched_simplify
+    # pybind11-типы запрещают подмену атрибутов — тогда работает только prefill.
+    patched = False
     try:
-        _progress(f"to_glb hole patch: perimeter={peri:.3f}, cleanup after simplify")
+        cls.fill_holes = _patched_fill
+        if orig_simplify is not None:
+            cls.simplify = _patched_simplify
+        patched = True
+    except (AttributeError, TypeError) as exc:
+        _progress(f"to_glb hole patch НЕ применён ({exc}) — зашивка только prefill")
+    try:
+        if patched:
+            _progress(f"to_glb hole patch: perimeter={peri:.3f}, cleanup after simplify")
         yield
     finally:
-        cls.fill_holes = orig_fill
-        if orig_simplify is not None:
-            cls.simplify = orig_simplify
+        if patched:
+            cls.fill_holes = orig_fill
+            if orig_simplify is not None:
+                cls.simplify = orig_simplify
 
 
 def _call_to_glb(o_voxel, to_glb_kw: dict):
@@ -870,9 +921,20 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
     if export_device == "cpu" and remesh_enabled:
         remesh_enabled = False
         logger.info("TRELLIS.2 CPU export: remesh disabled (o_voxel needs CUDA)")
+
+    export_vertices, export_faces = mesh.vertices, mesh.faces
+    if export_device == "cuda" and os.getenv("TRELLIS2_PREFILL_HOLES", "1").lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        export_vertices, export_faces = cumesh_prefill_holes(
+            export_vertices, export_faces, _export_hole_perimeter()
+        )
+
     to_glb_kw: dict = {
-        "vertices": mesh.vertices,
-        "faces": mesh.faces,
+        "vertices": export_vertices,
+        "faces": export_faces,
         "attr_volume": mesh.attrs,
         "coords": mesh.coords,
         "attr_layout": mesh.layout,
