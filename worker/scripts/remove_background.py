@@ -47,7 +47,8 @@ def _photo_count_hint(task_dir: Path | None = None) -> int | None:
 # Исходные слоты до expand — как backend photos.VIEW_INDICES_BY_COUNT.
 _VIEW_INDICES_BY_COUNT: dict[int, list[int]] = {
     1: [0],
-    3: [0, 3, 6],
+    # Фронт + лево 90° + право 270° — как backend photos.VIEW_INDICES_BY_COUNT
+    3: [0, 3, 9],
     5: [0, 2, 4, 6, 8],
     6: [0, 2, 4, 6, 8, 10],
     12: list(range(12)),

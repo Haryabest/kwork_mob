@@ -346,8 +346,8 @@ def _comfyui_mesh_ops_env() -> dict[str, str]:
         "TRELLIS2_SIMPLIFY_METHOD": "cumesh",
         "TRELLIS2_REORIENT_VERTICES": "0",
         "TRELLIS2_FILL_HOLES": "1",
-        "TRELLIS2_HOLE_ITERATIONS": "8",
-        "TRELLIS2_MAX_HOLE_PERIMETER": "0.25",
+        "TRELLIS2_HOLE_ITERATIONS": "12",
+        "TRELLIS2_MAX_HOLE_PERIMETER": "1.0",
         "TRELLIS2_HOLE_FILL_ALGORITHM": "flood_fill",
         "TRELLIS2_SMOOTH_NORMALS": "0",
     }
@@ -374,8 +374,8 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_MAX_NUM_TOKENS": "999999",
         "TRELLIS2_MAX_VIEWS": "6",
         "TRELLIS2_MULTI_IMAGE_MODE": "multidiffusion",
-        "TRELLIS2_HOLE_ITERATIONS": "8",
-        "TRELLIS2_MAX_HOLE_PERIMETER": "0.25",
+        "TRELLIS2_HOLE_ITERATIONS": "12",
+        "TRELLIS2_MAX_HOLE_PERIMETER": "1.0",
         "TRELLIS2_AUTO_HOLE_FILL": "0",
         "TRELLIS2_GENERATE_TEXTURE_SLAT": "1",
         "TRELLIS2_USE_TILED_DECODER": "1",
@@ -884,6 +884,7 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         "NOBG_REFINE_FOREGROUND",
         "TRELLIS_STAGED_PIPELINE",
         "TRELLIS2_MAX_VIEWS",
+        "TRELLIS2_MULTI_IMAGE_MODE",
     ):
         if str(base_env.get(key) or "").strip():
             merged_env[key] = base_env[key]

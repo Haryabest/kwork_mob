@@ -15,15 +15,15 @@ def _write(path: Path, payload: bytes) -> Path:
     return path
 
 
-def test_pick_three_seed_views_keeps_front_left_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """3 фото: фронт + лево + тыл — все три должны попасть в TRELLIS."""
+def test_pick_three_seed_views_keeps_front_left_right(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """3 фото: фронт + лево 90° + право 270° — все три должны попасть в TRELLIS."""
     photos = tmp_path / "photos_nobg"
     _write(photos / "view_00.png", b"front-unique-bytes-aaa")
     _write(photos / "view_03.png", b"left-unique-bytes-bbb")
-    _write(photos / "view_06.png", b"back-unique-bytes-ccc")
+    _write(photos / "view_09.png", b"right-unique-bytes-ccc")
     # expand-копии не должны подменять выбор
     _write(photos / "view_01.png", b"front-unique-bytes-aaa")
-    _write(photos / "view_09.png", b"left-unique-bytes-bbb")
+    _write(photos / "view_06.png", b"left-unique-bytes-bbb")
 
     monkeypatch.setenv("PHOTO_COUNT", "3")
     monkeypatch.setenv("TRELLIS2_MAX_VIEWS", "6")
@@ -31,7 +31,7 @@ def test_pick_three_seed_views_keeps_front_left_back(tmp_path: Path, monkeypatch
 
     picked = pick_input_images(photos, task_dir=tmp_path)
     names = [p.name for p in picked]
-    assert names == ["view_00.png", "view_03.png", "view_06.png"]
+    assert names == ["view_00.png", "view_03.png", "view_09.png"]
 
 
 def test_pick_legacy_048_fallback_to_unique(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

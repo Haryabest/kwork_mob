@@ -152,7 +152,7 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
 
         _progress("stage3 mesh: decode shape + fill holes (Comfy node 1)")
         meshes, subs = pipe.decode_shape_slat(shape_slat, res)
-        hole_iters = max(8, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "8")))
+        hole_iters = max(8, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "12")))
         if meshes:
             filled = fill_mesh_holes(meshes[0], iterations=hole_iters)
             _progress(f"stage3 fill_holes passes={filled}")
@@ -187,13 +187,15 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
             out_meshes = pipe.decode_latent(shape_slat, tex_slat, res)
         else:
             out_meshes = meshes
-            if out_meshes:
-                fill_mesh_holes(out_meshes[0], iterations=hole_iters)
 
     if not out_meshes:
         raise RuntimeError("staged pipeline: пустой результат")
 
     mesh = out_meshes[0]
+    # decode_latent даёт новый mesh — shape fill_holes не переносится; закрываем до export.
+    hole_iters = max(8, int(os.getenv("TRELLIS2_HOLE_ITERATIONS", "12")))
+    filled_final = fill_mesh_holes(mesh, iterations=hole_iters)
+    _progress(f"post-decode fill_holes passes={filled_final}")
     _release_vram_before_export(pipe)
     _free_cuda_memory()
     ops_meta = apply_pre_export_ops(mesh)

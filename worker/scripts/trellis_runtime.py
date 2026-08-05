@@ -623,19 +623,79 @@ def _mesh_to_cpu(mesh) -> None:
     _mesh_to_device(mesh, "cpu")
 
 
-def _call_to_glb(o_voxel, to_glb_kw: dict):
+def _export_hole_perimeter() -> float:
+    """to_glb внутри o_voxel хардкодит 3e-2 — крупные дыры (3-фото) не закрываются."""
+    raw = (os.getenv("TRELLIS2_MAX_HOLE_PERIMETER") or "1.0").strip()
     try:
-        return o_voxel.postprocess.to_glb(**to_glb_kw)
-    except TypeError as exc:
-        if "unexpected keyword" not in str(exc):
-            raise
-        clean = {
-            k: v
-            for k, v in to_glb_kw.items()
-            if k not in ("remove_floaters", "remove_inner_faces", "dual_contouring_resolution")
-        }
-        logger.warning("TRELLIS.2 to_glb fallback: %s", exc)
-        return o_voxel.postprocess.to_glb(**clean)
+        return max(0.25, float(raw))
+    except ValueError:
+        return 1.0
+
+
+@contextmanager
+def _patch_cumesh_fill_holes(peri: float):
+    """Подмена CuMesh.fill_holes на время to_glb — поднимает max_hole_perimeter."""
+    try:
+        import cumesh
+    except Exception:  # noqa: BLE001
+        yield
+        return
+    cls = getattr(cumesh, "CuMesh", None)
+    if cls is None or not hasattr(cls, "fill_holes"):
+        yield
+        return
+    orig = cls.fill_holes
+
+    def _patched(self, *args, **kwargs):
+        # positional max_hole_perimeter или kw
+        if args:
+            # fill_holes(max_hole_perimeter) — подменяем если меньше нашего
+            try:
+                cur = float(args[0])
+            except (TypeError, ValueError):
+                cur = 0.0
+            if cur < peri:
+                args = (peri,) + args[1:]
+        else:
+            cur = kwargs.get("max_hole_perimeter")
+            try:
+                cur_f = float(cur) if cur is not None else 0.0
+            except (TypeError, ValueError):
+                cur_f = 0.0
+            if cur is None or cur_f < peri:
+                kwargs["max_hole_perimeter"] = peri
+        try:
+            return orig(self, *args, **kwargs)
+        except TypeError:
+            return orig(self)
+
+    cls.fill_holes = _patched
+    try:
+        _progress(f"to_glb fill_holes perimeter={peri:.3f} (patched)")
+        yield
+    finally:
+        cls.fill_holes = orig
+
+
+def _call_to_glb(o_voxel, to_glb_kw: dict):
+    peri = _export_hole_perimeter()
+    # Форки ComfyUI принимают fill_holes_perimeter; stock microsoft — нет (TypeError → clean).
+    kw = {**to_glb_kw, "fill_holes_perimeter": peri}
+    with _patch_cumesh_fill_holes(peri):
+        try:
+            return o_voxel.postprocess.to_glb(**kw)
+        except TypeError as exc:
+            if "unexpected keyword" not in str(exc):
+                raise
+            drop = {
+                "remove_floaters",
+                "remove_inner_faces",
+                "dual_contouring_resolution",
+                "fill_holes_perimeter",
+            }
+            clean = {k: v for k, v in kw.items() if k not in drop}
+            logger.warning("TRELLIS.2 to_glb fallback: %s", exc)
+            return o_voxel.postprocess.to_glb(**clean)
 
 
 def _cuda_vram_gb() -> float | None:

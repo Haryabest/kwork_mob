@@ -68,12 +68,12 @@ def reorient_mesh(mesh, degrees: float | None = None) -> None:
 
 
 def _max_hole_perimeter() -> float:
-    """CuMesh fill_holes: default TRELLIS 3e-2 слишком мал; 0.5 закрывает мелкие/средние дыры."""
-    raw = (os.getenv("TRELLIS2_MAX_HOLE_PERIMETER") or "0.5").strip()
+    """CuMesh fill_holes: stock to_glb = 3e-2 — крупные дыры на 3-фото не закрывает."""
+    raw = (os.getenv("TRELLIS2_MAX_HOLE_PERIMETER") or "1.0").strip()
     try:
-        return max(3e-2, float(raw))
+        return max(0.25, float(raw))
     except ValueError:
-        return 0.5
+        return 1.0
 
 
 def fill_mesh_holes(mesh, *, iterations: int | None = None) -> int:
