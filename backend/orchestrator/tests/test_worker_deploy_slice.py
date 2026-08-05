@@ -28,14 +28,13 @@ def test_default_config_hole_free_mesh_settings():
     """Дыры в GLB: remesh + project 0.9 + широкая зашивка (см. o_voxel to_glb)."""
     env = wd.default_config()["env"]
     assert env["TRELLIS2_REMESH"] == "1"
-    assert env["TRELLIS2_REMESH_BAND"] == "2"
+    assert env["TRELLIS2_REMESH_BAND"] == "3"
     assert env["TRELLIS2_REMESH_PROJECT"] == "0.9"
     assert env["TRELLIS2_MAX_HOLE_PERIMETER"] == "1.0"
     assert env["TRELLIS2_HOLE_ITERATIONS"] == "12"
     assert env["TRELLIS2_REMOVE_FLOATERS"] == "1"
     assert env["TRELLIS2_PREFILL_HOLES"] == "1"
-    # тыл не покрыт ракурсами: усреднение по view роняет occupancy → дыры сзади
-    assert env["TRELLIS2_MULTI_IMAGE_MODE"] == "stochastic"
+    assert env["TRELLIS2_MULTI_IMAGE_MODE"] == "multidiffusion"
     assert env["TRELLIS2_MULTI_IMAGE_MODE_TEX"] == "multidiffusion"
 
 

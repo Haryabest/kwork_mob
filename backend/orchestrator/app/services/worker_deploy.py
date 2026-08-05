@@ -337,7 +337,7 @@ def _comfyui_mesh_ops_env() -> dict[str, str]:
     """ComfyUI: Remesh / Simplify / Voxel→Trimesh / Fill Holes ×2 / Smooth."""
     return {
         "TRELLIS2_REMESH": "1",
-        "TRELLIS2_REMESH_BAND": "2",
+        "TRELLIS2_REMESH_BAND": "3",
         "TRELLIS2_REMESH_PROJECT": "0.9",
         "TRELLIS2_O_VOXEL_EXTENDED": "1",
         "TRELLIS2_DUAL_CONTOURING_RESOLUTION": "auto",
@@ -375,8 +375,8 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         "TRELLIS2_SHAPE_GUIDANCE_INTERVAL_END": "1.0",
         "TRELLIS2_MAX_NUM_TOKENS": "999999",
         "TRELLIS2_MAX_VIEWS": "6",
-        # Геометрия: stochastic (multidiffusion усредняет невидимый тыл → дыры сзади)
-        "TRELLIS2_MULTI_IMAGE_MODE": "stochastic",
+        # Геометрия multidiffusion — бока целые; тыл закрываем remesh+prefill
+        "TRELLIS2_MULTI_IMAGE_MODE": "multidiffusion",
         "TRELLIS2_MULTI_IMAGE_MODE_TEX": "multidiffusion",
         "TRELLIS2_PREFILL_HOLES": "1",
         "TRELLIS2_HOLE_ITERATIONS": "12",

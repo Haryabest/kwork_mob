@@ -106,7 +106,7 @@ const ENV_FIELDS: { key: string; label: string; secret?: boolean }[] = [
   { key: 'TRELLIS2_TEX_GUIDANCE_INTERVAL_START', label: 'TRELLIS2_TEX_GUIDANCE_INTERVAL_START' },
   { key: 'TRELLIS2_TEX_GUIDANCE_INTERVAL_END', label: 'TRELLIS2_TEX_GUIDANCE_INTERVAL_END' },
   { key: 'TRELLIS2_MAX_VIEWS', label: 'TRELLIS2_MAX_VIEWS' },
-  { key: 'TRELLIS2_MULTI_IMAGE_MODE', label: 'TRELLIS2_MULTI_IMAGE_MODE — геометрия (stochastic)' },
+  { key: 'TRELLIS2_MULTI_IMAGE_MODE', label: 'TRELLIS2_MULTI_IMAGE_MODE — геометрия (multidiffusion)' },
   { key: 'TRELLIS2_MULTI_IMAGE_MODE_TEX', label: 'TRELLIS2_MULTI_IMAGE_MODE_TEX — текстура (multidiffusion)' },
   { key: 'TRELLIS2_SS_RESOLUTION', label: 'TRELLIS2_SS_RESOLUTION' },
   { key: 'TRELLIS2_SAMPLER', label: 'TRELLIS2_SAMPLER (euler)' },

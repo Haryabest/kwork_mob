@@ -261,16 +261,15 @@ def _normalize_multi_mode(raw: str, default: str) -> Literal["stochastic", "mult
 
 def multi_image_mode(stage: str = "geometry") -> Literal["stochastic", "multidiffusion"]:
     """
-    Геометрия (sparse structure / shape): stochastic.
-    Ракурсы не покрывают тыл, а multidiffusion усредняет несогласованные предсказания
-    невидимых зон → occupancy проваливается ниже порога и сзади появляются дыры.
-    Текстура: multidiffusion — усреднение цвета безопасно и убирает швы между ракурсами.
+    Геометрия: multidiffusion — бока/лево стабильны (stochastic даёт дыры на боках).
+    Текстура: multidiffusion — без швов между ракурсами.
+    Тыл при 3 фото не снимается — дыры сзади закрываем prefill/remesh на export.
     """
     if stage == "texture":
         return _normalize_multi_mode(
             os.getenv("TRELLIS2_MULTI_IMAGE_MODE_TEX") or "", "multidiffusion"
         )
-    return _normalize_multi_mode(os.getenv("TRELLIS2_MULTI_IMAGE_MODE") or "", "stochastic")
+    return _normalize_multi_mode(os.getenv("TRELLIS2_MULTI_IMAGE_MODE") or "", "multidiffusion")
 
 
 def preflight_cuda() -> None:
@@ -645,21 +644,9 @@ def _export_hole_perimeter() -> float:
         return 1.0
 
 
-def _cumesh_cleanup(mesh, peri: float, orig_fill) -> None:
-    """Comfy/o_voxel cleanup: дубликаты → non-manifold → мелкие куски → зашивка."""
-    for name, args in (
-        ("remove_duplicate_faces", ()),
-        ("repair_non_manifold_edges", ()),
-        ("remove_small_connected_components", (1e-5,)),
-    ):
-        fn = getattr(mesh, name, None)
-        if fn is None:
-            continue
-        try:
-            fn(*args)
-        except Exception:  # noqa: BLE001
-            pass
-    for stage in (peri * 0.4, peri, peri * 1.5):
+def _cumesh_fill_stages(mesh, peri: float, orig_fill) -> None:
+    """Только зашивка — без remove_small (иначе съедает боковые фрагменты)."""
+    for stage in (peri * 0.4, peri, min(2.0, peri * 1.5)):
         try:
             orig_fill(mesh, max_hole_perimeter=max(3e-2, stage))
         except TypeError:
@@ -670,6 +657,29 @@ def _cumesh_cleanup(mesh, peri: float, orig_fill) -> None:
             break
         except Exception:  # noqa: BLE001
             break
+
+
+def _cumesh_cleanup(mesh, peri: float, orig_fill) -> None:
+    """Полная чистка после remesh/simplify в to_glb."""
+    for name, args in (
+        ("remove_duplicate_faces", ()),
+        ("repair_non_manifold_edges", ()),
+    ):
+        fn = getattr(mesh, name, None)
+        if fn is None:
+            continue
+        try:
+            fn(*args)
+        except Exception:  # noqa: BLE001
+            pass
+    if os.getenv("TRELLIS2_REMOVE_SMALL_COMPONENTS", "1").lower() in ("1", "true", "yes"):
+        fn = getattr(mesh, "remove_small_connected_components", None)
+        if fn is not None:
+            try:
+                fn(1e-5)
+            except Exception:  # noqa: BLE001
+                pass
+    _cumesh_fill_stages(mesh, peri, orig_fill)
     unify = getattr(mesh, "unify_face_orientations", None)
     if unify is not None:
         try:
@@ -697,7 +707,7 @@ def cumesh_prefill_holes(vertices, faces, peri: float):
         mesh = cls()
         mesh.init(vertices, faces)
         before = int(getattr(mesh, "num_faces", 0) or 0)
-        _cumesh_cleanup(mesh, peri, cls.fill_holes)
+        _cumesh_fill_stages(mesh, peri, cls.fill_holes)
         after = int(getattr(mesh, "num_faces", 0) or 0)
         new_v, new_f = mesh.read()
         _progress(f"prefill holes peri={peri:.2f} faces {before} → {after}")
@@ -913,9 +923,8 @@ def _export_trellis2_mesh(mesh, output: Path, *, task_dir: Path | None = None) -
         and os.getenv("TRELLIS2_EXTENSION_WEBP", "0").lower() in ("1", "true", "yes")
     )
 
-    # band шире 1 воксела закрывает разрывы DC; project=0.9 (default o_voxel) прижимает
-    # внешнюю оболочку к исходной поверхности — при 0 остаются щели между шеллами.
-    remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "2"))
+    # band=3: шире полоса DC — мостит разрывы на тыле (3 фото без ракурса 180°)
+    remesh_band = float(os.getenv("TRELLIS2_REMESH_BAND", "3"))
     remesh_project = float(os.getenv("TRELLIS2_REMESH_PROJECT", "0.9"))
     remesh_enabled = _resolve_remesh_enabled(export_device)
     if export_device == "cpu" and remesh_enabled:
