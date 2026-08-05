@@ -194,6 +194,34 @@ def _prepare_multi_cond(cond: dict) -> dict:
     return cond
 
 
+def _synthetic_back_view_enabled(photo_count: int | None, n_views: int) -> bool:
+    """3 фото без ракурса 180° — добавляем зеркальный фронт только для геометрии."""
+    if os.getenv("TRELLIS2_SYNTHETIC_BACK_VIEW", "1").lower() in ("0", "false", "no"):
+        return False
+    if photo_count == 3:
+        return n_views == 3
+    return photo_count is None and n_views == 3
+
+
+def geometry_view_images(images, task_dir: Path | None = None):
+    """
+  Возвращает (images_for_geom, added_synthetic_back).
+  Текстуру не трогаем — только sparse structure / shape slat.
+  """
+    from PIL import Image
+
+    n = len(images)
+    photo_count = _photo_count_hint(task_dir)
+    if not _synthetic_back_view_enabled(photo_count, n):
+        return list(images), False
+    front = images[0]
+    if not isinstance(front, Image.Image):
+        return list(images), False
+    back = front.transpose(Image.FLIP_LEFT_RIGHT)
+    _progress("synthetic back view: mirror front → pseudo 180° for geometry (3-photo)")
+    return [*images, back], True
+
+
 @contextmanager
 def inject_sampler_multi_image(
     sampler,

@@ -105,6 +105,7 @@ CONFIG_ENV_KEYS = (
     "TRELLIS2_MAX_VIEWS",
     "TRELLIS2_MULTI_IMAGE_MODE",
     "TRELLIS2_MULTI_IMAGE_MODE_TEX",
+    "TRELLIS2_SYNTHETIC_BACK_VIEW",
     "TRELLIS2_PREFILL_HOLES",
     "TRELLIS2_USE_TILED_DECODER",
     "TRELLIS2_SAMPLER",
@@ -378,6 +379,7 @@ def _comfyui_trellis_voxel_env() -> dict[str, str]:
         # Геометрия multidiffusion — бока целые; тыл закрываем remesh+prefill
         "TRELLIS2_MULTI_IMAGE_MODE": "multidiffusion",
         "TRELLIS2_MULTI_IMAGE_MODE_TEX": "multidiffusion",
+        "TRELLIS2_SYNTHETIC_BACK_VIEW": "1",
         "TRELLIS2_PREFILL_HOLES": "1",
         "TRELLIS2_HOLE_ITERATIONS": "12",
         "TRELLIS2_MAX_HOLE_PERIMETER": "1.0",
@@ -893,6 +895,7 @@ async def apply_config(*, user_id: int | None = None) -> dict[str, Any]:
         "TRELLIS2_MAX_VIEWS",
         "TRELLIS2_MULTI_IMAGE_MODE",
         "TRELLIS2_MULTI_IMAGE_MODE_TEX",
+        "TRELLIS2_SYNTHETIC_BACK_VIEW",
         "TRELLIS2_PREFILL_HOLES",
     ):
         if str(base_env.get(key) or "").strip():

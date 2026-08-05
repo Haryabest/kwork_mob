@@ -34,6 +34,7 @@ def test_default_config_hole_free_mesh_settings():
     assert env["TRELLIS2_HOLE_ITERATIONS"] == "12"
     assert env["TRELLIS2_REMOVE_FLOATERS"] == "1"
     assert env["TRELLIS2_PREFILL_HOLES"] == "1"
+    assert env["TRELLIS2_SYNTHETIC_BACK_VIEW"] == "1"
     assert env["TRELLIS2_MULTI_IMAGE_MODE"] == "multidiffusion"
     assert env["TRELLIS2_MULTI_IMAGE_MODE_TEX"] == "multidiffusion"
 

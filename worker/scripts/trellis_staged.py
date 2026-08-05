@@ -104,7 +104,9 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
     photos_dir = _require_nobg_dir(task_dir)
     paths = pick_input_images(photos_dir, task_dir=task_dir)
     images = [Image.open(p).convert("RGBA") for p in paths]
-    n_views = len(images)
+    geom_images, synth_back = geometry_view_images(images, task_dir=task_dir)
+    n_views_tex = len(images)
+    n_views_geom = len(geom_images)
     geom_mode = multi_image_mode("geometry")
     tex_mode = multi_image_mode("texture")
 
@@ -132,24 +134,31 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
 
     _progress(
         f"stage2 voxel generator pipeline_type={pipeline_type} ss_res={ss_res} "
-        f"views={n_views} geom_mode={geom_mode if n_views > 1 else 'single'} "
-        f"tex_mode={tex_mode if n_views > 1 else 'single'}"
+        f"views_geom={n_views_geom} views_tex={n_views_tex} "
+        f"synth_back={synth_back} geom_mode={geom_mode if n_views_geom > 1 else 'single'} "
+        f"tex_mode={tex_mode if n_views_tex > 1 else 'single'}"
     )
     torch.manual_seed(seed)
 
     with torch.no_grad():
-        # Multi-view: cond batch=N; num_samples остаётся 1 (не путать с MAX_VIEWS).
-        cond_512 = _prepare_multi_cond(pipe.get_cond(images, 512))
-        cond_1024 = (
+        # Геометрия: 3 реальных + зеркальный фронт (псевдо-тыл). Текстура: только реальные фото.
+        cond_geom_512 = _prepare_multi_cond(pipe.get_cond(geom_images, 512))
+        cond_geom_1024 = (
+            _prepare_multi_cond(pipe.get_cond(geom_images, 1024))
+            if pipeline_type != "512"
+            else None
+        )
+        cond_tex_512 = _prepare_multi_cond(pipe.get_cond(images, 512))
+        cond_tex_1024 = (
             _prepare_multi_cond(pipe.get_cond(images, 1024)) if pipeline_type != "512" else None
         )
 
-        with inject_sampler_multi_image(pipe.sparse_structure_sampler, n_views, mode=geom_mode):
-            coords = pipe.sample_sparse_structure(cond_512, ss_res, 1, ss_params)
+        with inject_sampler_multi_image(pipe.sparse_structure_sampler, n_views_geom, mode=geom_mode):
+            coords = pipe.sample_sparse_structure(cond_geom_512, ss_res, 1, ss_params)
 
-        with inject_sampler_multi_image(pipe.shape_slat_sampler, n_views, mode=geom_mode):
+        with inject_sampler_multi_image(pipe.shape_slat_sampler, n_views_geom, mode=geom_mode):
             shape_slat, res = _sample_shape_cascade(
-                pipe, pipeline_type, cond_512, cond_1024, coords, shape_params, max_tokens
+                pipe, pipeline_type, cond_geom_512, cond_geom_1024, coords, shape_params, max_tokens
             )
 
         _progress("stage3 mesh: decode shape + fill holes (Comfy node 1)")
@@ -163,9 +172,9 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
 
         if os.getenv("TRELLIS2_REFINE_SHAPE", "1").lower() in ("1", "true", "yes"):
             _progress("stage5 mesh refiner: shape slat")
-            with inject_sampler_multi_image(pipe.shape_slat_sampler, n_views, mode=geom_mode):
+            with inject_sampler_multi_image(pipe.shape_slat_sampler, n_views_geom, mode=geom_mode):
                 shape_slat, res = _sample_shape_cascade(
-                    pipe, pipeline_type, cond_512, cond_1024, coords, shape_refine_params, max_tokens
+                    pipe, pipeline_type, cond_geom_512, cond_geom_1024, coords, shape_refine_params, max_tokens
                 )
             meshes, subs = pipe.decode_shape_slat(shape_slat, res)
             if meshes:
@@ -177,9 +186,9 @@ def run_comfy_staged(task_dir: Path, output: Path) -> Path:
         tex_slat = None
         if gen_tex_slat:
             _progress("stage6 texturing: texture slat (Mesh Refiner tex)")
-            cond_tex = cond_1024 if cond_1024 is not None else cond_512
+            cond_tex = cond_tex_1024 if cond_tex_1024 is not None else cond_tex_512
             tex_key = "tex_slat_flow_model_1024" if pipeline_type != "512" else "tex_slat_flow_model_512"
-            with inject_sampler_multi_image(pipe.tex_slat_sampler, n_views, mode=tex_mode):
+            with inject_sampler_multi_image(pipe.tex_slat_sampler, n_views_tex, mode=tex_mode):
                 tex_slat = pipe.sample_tex_slat(cond_tex, pipe.models[tex_key], shape_slat, tex_params)
             _free_cuda_memory()
 
