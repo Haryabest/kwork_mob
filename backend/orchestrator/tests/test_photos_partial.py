@@ -10,7 +10,7 @@ from app.services import photos as photos_svc
 
 def test_indices_for_photo_count():
     assert photos_svc.indices_for_photo_count(1) == [0]
-    assert photos_svc.indices_for_photo_count(3) == [0, 3, 9]
+    assert photos_svc.indices_for_photo_count(3) == [0, 3, 6]
     assert photos_svc.indices_for_photo_count(5) == [0, 2, 4, 6, 8]
     assert photos_svc.indices_for_photo_count(6) == [0, 2, 4, 6, 8, 10]
     assert photos_svc.indices_for_photo_count(12) == list(range(12))
@@ -28,7 +28,7 @@ def test_circular_distance():
 
 
 def test_expand_views_to_twelve_fills_missing():
-    exists = {0, 3, 9}
+    exists = {0, 3, 6}
 
     def fake_exists(_bucket, key):
         for i in exists:
@@ -67,6 +67,6 @@ async def test_upload_files_for_count_partial_expands():
       photo_count=3,
     )
   assert out["photo_count"] == 3
-  assert out["uploaded_indices"] == [0, 3, 9]
+  assert out["uploaded_indices"] == [0, 3, 6]
   assert upload_bytes.call_count == 3
   expand.assert_called_once_with("task-1")

@@ -68,12 +68,12 @@ def reorient_mesh(mesh, degrees: float | None = None) -> None:
 
 
 def _max_hole_perimeter() -> float:
-    """CuMesh fill_holes: default 3e-2 слишком мал для мелких дыр сзади на unit AABB."""
-    raw = (os.getenv("TRELLIS2_MAX_HOLE_PERIMETER") or "0.25").strip()
+    """CuMesh fill_holes: default TRELLIS 3e-2 слишком мал; 0.5 закрывает мелкие/средние дыры."""
+    raw = (os.getenv("TRELLIS2_MAX_HOLE_PERIMETER") or "0.5").strip()
     try:
         return max(3e-2, float(raw))
     except ValueError:
-        return 0.25
+        return 0.5
 
 
 def fill_mesh_holes(mesh, *, iterations: int | None = None) -> int:
@@ -85,20 +85,25 @@ def fill_mesh_holes(mesh, *, iterations: int | None = None) -> int:
     if not hasattr(mesh, "fill_holes"):
         return 0
     peri = _max_hole_perimeter()
+    # Сначала мелкие, потом крупнее — меньше артефактов на больших петлях.
+    stages = sorted({max(3e-2, peri * 0.4), peri, min(2.0, peri * 1.5)})
     filled = 0
-    for _ in range(iters):
-        try:
+    for stage_peri in stages:
+        for _ in range(iters):
             try:
-                mesh.fill_holes(max_hole_perimeter=peri)
-            except TypeError:
-                mesh.fill_holes()
-            filled += 1
-        except RuntimeError as exc:
-            if "out of memory" in str(exc).lower() or "cuda error" in str(exc).lower():
+                try:
+                    mesh.fill_holes(max_hole_perimeter=stage_peri)
+                except TypeError:
+                    mesh.fill_holes()
+                    filled += 1
+                    return filled
+                filled += 1
+            except RuntimeError as exc:
+                if "out of memory" in str(exc).lower() or "cuda error" in str(exc).lower():
+                    return filled
                 break
-            break
-        except Exception:  # noqa: BLE001
-            break
+            except Exception:  # noqa: BLE001
+                break
     return filled
 
 

@@ -15,15 +15,15 @@ def _write(path: Path, payload: bytes) -> Path:
     return path
 
 
-def test_pick_three_seed_views_keeps_all_sides(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """3 фото: фронт + лево + право — все три должны попасть в TRELLIS."""
+def test_pick_three_seed_views_keeps_front_left_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """3 фото: фронт + лево + тыл — все три должны попасть в TRELLIS."""
     photos = tmp_path / "photos_nobg"
     _write(photos / "view_00.png", b"front-unique-bytes-aaa")
     _write(photos / "view_03.png", b"left-unique-bytes-bbb")
-    _write(photos / "view_09.png", b"right-unique-bytes-ccc")
+    _write(photos / "view_06.png", b"back-unique-bytes-ccc")
     # expand-копии не должны подменять выбор
     _write(photos / "view_01.png", b"front-unique-bytes-aaa")
-    _write(photos / "view_06.png", b"left-unique-bytes-bbb")
+    _write(photos / "view_09.png", b"left-unique-bytes-bbb")
 
     monkeypatch.setenv("PHOTO_COUNT", "3")
     monkeypatch.setenv("TRELLIS2_MAX_VIEWS", "6")
@@ -31,11 +31,11 @@ def test_pick_three_seed_views_keeps_all_sides(tmp_path: Path, monkeypatch: pyte
 
     picked = pick_input_images(photos, task_dir=tmp_path)
     names = [p.name for p in picked]
-    assert names == ["view_00.png", "view_03.png", "view_09.png"]
+    assert names == ["view_00.png", "view_03.png", "view_06.png"]
 
 
 def test_pick_legacy_048_fallback_to_unique(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Старые заказы со слотами [0,4,8]: если новых [0,3,9] нет — берём уникальный контент."""
+    """Старые заказы со слотами [0,4,8]: если [0,3,6] нет — берём уникальный контент."""
     photos = tmp_path / "photos_nobg"
     _write(photos / "view_00.png", b"front-unique-bytes-aaa")
     _write(photos / "view_04.png", b"side-unique-bytes-bbb")
@@ -49,8 +49,8 @@ def test_pick_legacy_048_fallback_to_unique(tmp_path: Path, monkeypatch: pytest.
     assert names == ["view_00.png", "view_04.png", "view_08.png"]
 
 
-def test_pick_ignores_max_views_one_for_multi_photo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Регрессия дыр на боках: MAX_VIEWS=1 в старом .env не должен резать 3-фото до view_00."""
+def test_pick_legacy_039_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Старые 3-фото [0,3,9] без тыла — всё равно берём три уникальных."""
     photos = tmp_path / "photos_nobg"
     _write(photos / "view_00.png", b"a")
     _write(photos / "view_03.png", b"b")
