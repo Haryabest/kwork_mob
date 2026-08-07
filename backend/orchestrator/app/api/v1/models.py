@@ -415,20 +415,12 @@ async def download_model(
     )
     ttl = int(settings.MODEL_PRESIGN_TTL_SECONDS or 1800)
     raw = model.glb_url if format == "glb" else model.usdz_url
-    if format == "usdz" and not raw and model.glb_url:
-        url = _presign_glb(model)
-        if not url:
-            raise HTTPException(404, "Файл модели отсутствует")
-        await db.commit()
-        return {
-            "download_url": url,
-            "format": "glb",
-            "fallback": True,
-            "message": "USDZ ещё не сгенерирован — отдан GLB",
-            "expires_in": ttl,
-            "file_sha256": model.file_sha256,
-            **dl_meta,
-        }
+    if format == "usdz" and not raw:
+        raise HTTPException(
+            404,
+            "USDZ ещё не сгенерирован. Создайте новый заказ или перегенерируйте модель — "
+            "USDZ создаётся автоматически после генерации GLB.",
+        )
     parsed = _parse_s3(raw)
     if not parsed:
         raise HTTPException(404, f"Файл {format} отсутствует")

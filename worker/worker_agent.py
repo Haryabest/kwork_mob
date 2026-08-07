@@ -83,13 +83,19 @@ PIPELINE_STEPS = [
     "generate_thumbnail.py",
 ]
 
+USDZ_EXPORT_STEP = "export_usdz_tryon.py"
+
 # апсейлы §17 — hole_filling после retopology (на retopo.glb); остальные после validate
 UPSELL_AFTER_RETOPO = {"hole_filling": "apply_hole_filling.py"}
 UPSELL_AFTER_VALIDATE = {
     "real_scale": "apply_real_scale.py",
     "video_360": "render_video_360.py",
-    "virtual_tryon": "export_usdz_tryon.py",
+    "virtual_tryon": USDZ_EXPORT_STEP,
 }
+
+
+def _auto_usdz_enabled() -> bool:
+    return os.getenv("TRELLIS2_AUTO_USDZ", "1").strip().lower() in ("1", "true", "yes")
 
 
 def _orchestrator_http_base() -> str:
@@ -113,10 +119,26 @@ def build_pipeline(upsell_options: list | None, *, photo_count: int | None = Non
     if need_holes and "apply_hole_filling.py" not in steps:
         idx = steps.index("retopology.py") + 1
         steps.insert(idx, UPSELL_AFTER_RETOPO["hole_filling"])
+    if _auto_usdz_enabled() and USDZ_EXPORT_STEP not in steps:
+        steps.append(USDZ_EXPORT_STEP)
     for code, script in UPSELL_AFTER_VALIDATE.items():
-        if code in opts:
+        if code in opts and script not in steps:
             steps.append(script)
     return steps
+
+
+def resolve_pipeline(
+    upsell_options: list | None,
+    *,
+    photo_count: int | None = None,
+    is_import: bool = False,
+) -> list[str]:
+    if is_import:
+        steps = list(IMPORT_PIPELINE)
+        if _auto_usdz_enabled() and USDZ_EXPORT_STEP not in steps:
+            steps.append(USDZ_EXPORT_STEP)
+        return steps
+    return build_pipeline(upsell_options, photo_count=photo_count)
 
 
 def _texture_size_for_meta(meta: dict) -> int:
@@ -699,13 +721,10 @@ class WorkerAgent:
             )
 
             models_bucket = payload.get("models_bucket") or "models"
-            pipeline = (
-                IMPORT_PIPELINE
-                if is_import
-                else build_pipeline(
-                    payload.get("upsell_options"),
-                    photo_count=int(payload.get("photo_count") or meta.get("photo_count") or 12),
-                )
+            pipeline = resolve_pipeline(
+                payload.get("upsell_options"),
+                photo_count=int(payload.get("photo_count") or meta.get("photo_count") or 12),
+                is_import=is_import,
             )
             t0 = time.monotonic()
 

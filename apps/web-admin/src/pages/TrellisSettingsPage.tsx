@@ -116,6 +116,7 @@ const ENV_FIELDS: { key: string; label: string; secret?: boolean }[] = [
   { key: 'TRELLIS2_SYNTHETIC_BACK_VIEW', label: 'TRELLIS2_SYNTHETIC_BACK_VIEW (1=зеркальный фронт для тыла, 3 фото)' },
   { key: 'TRELLIS2_PREFILL_HOLES', label: 'TRELLIS2_PREFILL_HOLES (1=зашивка до to_glb)' },
   { key: 'TRELLIS2_AUTO_HOLE_FILL', label: 'TRELLIS2_AUTO_HOLE_FILL (0=off, PBR safe)' },
+  { key: 'TRELLIS2_AUTO_USDZ', label: 'TRELLIS2_AUTO_USDZ (1=USDZ после GLB)' },
   { key: 'TRELLIS2_USE_TILED_DECODER', label: 'TRELLIS2_USE_TILED_DECODER' },
   { key: 'TRELLIS2_GENERATE_TEXTURE_SLAT', label: 'TRELLIS2_GENERATE_TEXTURE_SLAT' },
   { key: 'QUALITY_THRESHOLD', label: 'QUALITY_THRESHOLD (0.3–0.45, не 1.0)' },

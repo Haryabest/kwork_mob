@@ -1,19 +1,97 @@
-"""Virtual Try-On §17: настоящий USDZ (usd_from_gltf / zip USDZ package)."""
+"""USDZ для Wildberries / iOS AR Quick Look (GLB → USDZ)."""
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
 
+def _glb_source(root: Path) -> Path:
+    for name in ("model.glb", "retopo.glb", "raw_mesh.glb"):
+        p = root / name
+        if p.exists() and p.stat().st_size > 500:
+            return p
+    raise SystemExit("GLB missing for USDZ export")
+
+
+def _blender_usdz(glb: Path, usdz: Path) -> bool:
+    blender = os.getenv("BLENDER_BIN") or shutil.which("blender")
+    if not blender:
+        return False
+    usdz.parent.mkdir(parents=True, exist_ok=True)
+    if usdz.exists():
+        usdz.unlink()
+    script = f"""
+import bpy
+import sys
+
+glb = {str(glb)!r}
+usdz = {str(usdz)!r}
+
+bpy.ops.wm.read_factory_settings(use_empty=True)
+try:
+    bpy.ops.import_scene.gltf(filepath=glb)
+except Exception as exc:
+    print(f"import_scene.gltf failed: {{exc}}", file=sys.stderr)
+    sys.exit(1)
+
+if not bpy.context.scene.objects:
+    print("no objects after gltf import", file=sys.stderr)
+    sys.exit(2)
+
+kwargs = {{
+    "filepath": usdz,
+    "export_textures": True,
+    "relative_paths": True,
+}}
+try:
+    kwargs["generate_preview_surface"] = True
+    bpy.ops.wm.usd_export(**kwargs)
+except TypeError:
+    kwargs.pop("generate_preview_surface", None)
+    bpy.ops.wm.usd_export(**kwargs)
+except Exception as exc:
+    print(f"usd_export failed: {{exc}}", file=sys.stderr)
+    sys.exit(3)
+
+if not Path(usdz).exists() or Path(usdz).stat().st_size < 100:
+    print("usdz file empty or missing", file=sys.stderr)
+    sys.exit(4)
+print("blender_usdz_ok")
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as tf:
+        tf.write(script)
+        py_path = tf.name
+    try:
+        r = subprocess.run(
+            [blender, "-b", "--python", py_path],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=int(os.getenv("USDZ_EXPORT_TIMEOUT_SEC", "300")),
+        )
+        if r.returncode != 0:
+            tail = (r.stderr or r.stdout or "")[-600:]
+            print(f"[export_usdz] blender rc={r.returncode}: {tail}")
+            return False
+        ok = usdz.exists() and usdz.stat().st_size > 100
+        if ok:
+            print(f"[export_usdz] blender → {usdz.name} ({usdz.stat().st_size} bytes)")
+        return ok
+    except Exception as exc:  # noqa: BLE001
+        print(f"[export_usdz] blender failed: {exc}")
+        return False
+    finally:
+        Path(py_path).unlink(missing_ok=True)
+
+
 def _try_usd_from_gltf(glb: Path, usdz: Path) -> bool:
-    for cmd_name in ("usd_from_gltf", "usdARKitChecker"):
-        # usd_from_gltf outputs .usdc then we zip; tool may write usdz directly
-        pass
     cmd = shutil.which("usd_from_gltf")
     if not cmd:
         return False
@@ -25,97 +103,65 @@ def _try_usd_from_gltf(glb: Path, usdz: Path) -> bool:
             capture_output=True,
             text=True,
             check=False,
+            timeout=180,
         )
         if r.returncode != 0:
-            print(f"[export_usdz] usd_from_gltf: {r.stderr[-400:]}")
+            print(f"[export_usdz] usd_from_gltf: {(r.stderr or '')[-400:]}")
             return False
-        # find produced usdz/usdc
         produced = list(out_dir.glob("**/*.usdz"))
         if produced:
             shutil.copy2(produced[0], usdz)
             shutil.rmtree(out_dir, ignore_errors=True)
-            return True
+            return usdz.stat().st_size > 100
         usdc = list(out_dir.glob("**/*.usdc")) + list(out_dir.glob("**/*.usda"))
         if usdc:
-            return _pack_usdz(usdc[0], glb, usdz)
+            ok = _pack_usdz_archive(usdc[0], glb, usdz)
+            shutil.rmtree(out_dir, ignore_errors=True)
+            return ok
         return False
     except Exception as exc:  # noqa: BLE001
         print(f"[export_usdz] usd_from_gltf failed: {exc}")
         return False
 
 
-def _pack_usdz(usd_file: Path, glb: Path, usdz: Path) -> bool:
-    """Минимальный Apple USDZ: zip без compression с usda + glb."""
+def _pack_usdz_archive(usd_file: Path, glb: Path, usdz: Path) -> bool:
+    """Zip USD + textures/GLB без compression (Apple USDZ)."""
     try:
-        usda = f"""#usda 1.0
-(
-    defaultPrim = "Root"
-    metersPerUnit = 1
-    upAxis = "Y"
-)
-
-def Xform "Root" {{
-    def Mesh "Model" {{
-        # Reference payload; AR Quick Look uses packaged assets
-        asset info:identifier = @{glb.name}@
-    }}
-}}
-"""
-        tmp = usdz.with_suffix(".build")
-        if tmp.exists():
-            shutil.rmtree(tmp)
-        tmp.mkdir()
-        (tmp / "model.usda").write_text(usda, encoding="utf-8")
-        shutil.copy2(glb, tmp / glb.name)
+        if usdz.exists():
+            usdz.unlink()
         with zipfile.ZipFile(usdz, "w", compression=zipfile.ZIP_STORED) as zf:
-            for f in tmp.rglob("*"):
-                if f.is_file():
-                    zf.write(f, f.relative_to(tmp).as_posix())
-        shutil.rmtree(tmp, ignore_errors=True)
-        return usdz.exists() and usdz.stat().st_size > 0
+            zf.write(usd_file, usd_file.name)
+            if glb.exists():
+                zf.write(glb, glb.name)
+        return usdz.exists() and usdz.stat().st_size > 100
     except Exception as exc:  # noqa: BLE001
         print(f"[export_usdz] pack failed: {exc}")
         return False
 
 
-def _blender_usdz(glb: Path, usdz: Path) -> bool:
-    blender = os.getenv("BLENDER_BIN") or shutil.which("blender")
-    if not blender:
-        return False
-    script = f"""
-import bpy
-bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.gltf(filepath=r'{glb.as_posix()}')
-bpy.ops.wm.usd_export(filepath=r'{usdz.as_posix()}', export_materials=True)
-"""
-    py = usdz.parent / "_blender_usdz.py"
-    py.write_text(script, encoding="utf-8")
-    try:
-        r = subprocess.run(
-            [blender, "-b", "-P", str(py)],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=180,
-        )
-        return r.returncode == 0 and usdz.exists()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[export_usdz] blender failed: {exc}")
-        return False
-    finally:
-        py.unlink(missing_ok=True)
+def export_usdz(glb: Path, usdz: Path) -> str:
+    usdz.parent.mkdir(parents=True, exist_ok=True)
+    if usdz.exists():
+        usdz.unlink()
+    for name, fn in (
+        ("blender", _blender_usdz),
+        ("usd_from_gltf", _try_usd_from_gltf),
+    ):
+        if fn(glb, usdz):
+            return name
+    raise RuntimeError("USDZ export failed (blender/usd_from_gltf)")
 
 
 def main(task_dir: str) -> None:
     root = Path(task_dir)
-    glb = root / "model.glb"
-    if not glb.exists():
-        raise SystemExit("model.glb missing")
+    glb = _glb_source(root)
     usdz = root / "model.usdz"
-    if _try_usd_from_gltf(glb, usdz) or _blender_usdz(glb, usdz) or _pack_usdz(glb, glb, usdz):
-        print(f"[export_usdz] → {usdz} ({usdz.stat().st_size} bytes)")
-        return
-    raise SystemExit("USDZ export failed")
+    method = export_usdz(glb, usdz)
+    meta_path = root / "task_meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    meta["usdz_export"] = {"method": method, "bytes": usdz.stat().st_size}
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    print(f"[export_usdz] {method} → {usdz} ({usdz.stat().st_size} bytes)")
 
 
 if __name__ == "__main__":
