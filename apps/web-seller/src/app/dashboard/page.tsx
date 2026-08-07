@@ -3,12 +3,15 @@
 import { Button, Group, Stack, Text, Title, Skeleton, Image } from '@mantine/core';
 import { IconBox, IconCash, IconCamera, IconUsers, IconShoppingCart } from '@tabler/icons-react';
 import Link from 'next/link';
+import { useDisclosure } from '@mantine/hooks';
 import { SellerShell } from '../../components/SellerShell';
 import { EmptyState, PageHeader, Surface } from '../../components/ui';
+import { PHOTO_COUNT_MODES, PhotoCountModal } from '../../components/PhotoCountModal';
 import { useDashboard } from '../../hooks/useDashboard';
 
 export default function DashboardPage() {
   const { data, isLoading: loading } = useDashboard();
+  const [shootOpen, { open: openShoot, close: closeShoot }] = useDisclosure(false);
   const me = data?.me ?? null;
   const orders = data?.orders ?? [];
   const models = data?.models ?? [];
@@ -37,11 +40,12 @@ export default function DashboardPage() {
 
   return (
     <SellerShell>
+      <PhotoCountModal opened={shootOpen} onClose={closeShoot} />
       <PageHeader
         title={me?.full_name ? `Здравствуйте, ${me.full_name.split(' ')[0]}` : 'Главная'}
         description="Баланс, статистика и быстрый старт генерации 3D-моделей"
         action={
-          <Button component={Link} href="/orders/new" leftSection={<IconCamera size={16} />}>
+          <Button leftSection={<IconCamera size={16} />} onClick={openShoot}>
             Снять товар
           </Button>
         }
@@ -101,7 +105,7 @@ export default function DashboardPage() {
           {models.length === 0 ? (
             <EmptyState
               title="Пока нет моделей"
-              hint="Загрузите 12 ракурсов или снимите товар в мобильном приложении"
+              hint="Загрузите фото товара и создайте первую 3D-модель"
               actionLabel="Новый заказ"
               actionHref="/orders/new"
             />
@@ -135,9 +139,11 @@ export default function DashboardPage() {
                       <Text fw={600} size="sm">
                         {m.display_name || `${m.uuid.slice(0, 8)}…`}
                       </Text>
-                      <Text size="xs" c="#6d6c77">
-                        {m.publish_status || 'not_published'}
-                      </Text>
+                      {m.created_at ? (
+                        <Text size="xs" c="#6d6c77">
+                          {new Date(m.created_at).toLocaleDateString('ru-RU')}
+                        </Text>
+                      ) : null}
                     </div>
                   </Group>
                   <Button component={Link} href={`/models/${m.uuid}`} size="xs" variant="light">
@@ -154,9 +160,10 @@ export default function DashboardPage() {
             Быстрые действия
           </Title>
           <Stack gap="sm">
-            <Button component={Link} href="/orders/new" leftSection={<IconCamera size={16} />} fullWidth>
-              Снять товар / загрузить 12 фото
+            <Button leftSection={<IconCamera size={16} />} fullWidth onClick={openShoot}>
+              Снять товар
             </Button>
+            <SimpleGridActions />
             <Button component={Link} href="/balance" variant="light" leftSection={<IconCash size={16} />} fullWidth>
               Пополнить баланс
             </Button>
@@ -167,5 +174,30 @@ export default function DashboardPage() {
         </Surface>
       </div>
     </SellerShell>
+  );
+}
+
+function SimpleGridActions() {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gap: '0.5rem',
+      }}
+    >
+      {PHOTO_COUNT_MODES.map((m) => (
+        <Button
+          key={m.count}
+          component={Link}
+          href={`/orders/new?photo_count=${m.count}`}
+          variant="light"
+          leftSection={<IconCamera size={14} />}
+          size="compact-sm"
+        >
+          {m.title}
+        </Button>
+      ))}
+    </div>
   );
 }

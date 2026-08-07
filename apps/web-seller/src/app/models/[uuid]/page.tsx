@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  Badge,
   Button,
   Group,
   Modal,
@@ -13,7 +12,7 @@ import {
   Loader,
   Center,
 } from '@mantine/core';
-import { IconDownload, IconLink, IconShare2, IconStar, IconTrash, IconClock } from '@tabler/icons-react';
+import { IconDownload, IconShare2, IconStar, IconTrash, IconClock, IconLink } from '@tabler/icons-react';
 import { useDisclosure } from '@mantine/hooks';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -25,14 +24,6 @@ import { PageHeader, Surface } from '../../../components/ui';
 import { api, apiMessage, getPromoErrorMeta } from '../../../services/api';
 import { loadModelPreviewBlobUrl, revokeModelPreviewUrl } from '../../../lib/modelPreview';
 
-type PubLink = {
-  id: number;
-  marketplace: string;
-  url: string;
-  status: string;
-  error_message?: string | null;
-};
-
 type Model = {
   uuid: string;
   order_id: number;
@@ -41,8 +32,6 @@ type Model = {
   category?: string | null;
   glb_url?: string | null;
   usdz_url?: string | null;
-  publish_status?: string;
-  publication_links?: PubLink[];
   created_at?: string;
   storage?: {
     source_expires_at?: string;
@@ -54,29 +43,6 @@ type Model = {
   };
 };
 
-const PUBLISH_LABEL: Record<string, string> = {
-  not_published: 'Не опубликована',
-  import_validating: 'Проверка импорта',
-  imported: 'Импортировано',
-  import_failed: 'Ошибка импорта',
-  published_wildberries: 'Опубликовано WB',
-  published_ozon: 'Опубликовано Ozon',
-  published_both: 'WB + Ozon',
-  verified_wb: 'Верифицировано WB',
-  verified_ozon: 'Верифицировано Ozon',
-};
-
-type UploadLog = {
-  id: number;
-  marketplace: string;
-  sku: string;
-  status: string;
-  attempt: number;
-  error_message?: string | null;
-  external_ref?: string | null;
-  created_at?: string | null;
-};
-
 export default function ModelDetailPage() {
   const params = useParams<{ uuid: string }>();
   const uuid = params.uuid;
@@ -85,13 +51,6 @@ export default function ModelDetailPage() {
   const [previewLoading, setPreviewLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [publishOpen, { open: openPublish, close: closePublish }] = useDisclosure(false);
-  const [linkOpen, { open: openLink, close: closeLink }] = useDisclosure(false);
-  const [apiUploadOpen, { open: openApiUpload, close: closeApiUpload }] = useDisclosure(false);
-  const [marketplace, setMarketplace] = useState<string | null>('ozon');
-  const [apiMarketplace, setApiMarketplace] = useState<string | null>('wb');
-  const [sku, setSku] = useState('');
-  const [productUrl, setProductUrl] = useState('');
   const [rateOpen, { open: openRate, close: closeRate }] = useDisclosure(false);
   const [regenOpen, { open: openRegen, close: closeRegen }] = useDisclosure(false);
   const [promocode, setPromocode] = useState('');
@@ -103,12 +62,6 @@ export default function ModelDetailPage() {
   const [promoWarnOpen, { open: openPromoWarn, close: closePromoWarn }] = useDisclosure(false);
   const [promoWarnText, setPromoWarnText] = useState('');
   const [rating, setRating] = useState<string | null>('5');
-  const [mpStatus, setMpStatus] = useState<{
-    upload_enabled: boolean;
-    credentials: { wb: boolean; ozon: boolean };
-    last_attempt?: { wb?: UploadLog | null; ozon?: UploadLog | null };
-    recent_logs?: UploadLog[];
-  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,22 +86,6 @@ export default function ModelDetailPage() {
 
   useEffect(() => {
     void load();
-    api
-      .get<{
-        upload_enabled: boolean;
-        credentials: { wb: boolean; ozon: boolean };
-        last_attempt?: { wb?: UploadLog | null; ozon?: UploadLog | null };
-        recent_logs?: UploadLog[];
-      }>(`/models/${uuid}/marketplace-upload/status`)
-      .then(({ data }) => setMpStatus(data))
-      .catch(() =>
-        api
-          .get<{ upload_enabled: boolean; credentials: { wb: boolean; ozon: boolean } }>(
-            '/company/marketplace/status',
-          )
-          .then(({ data }) => setMpStatus(data))
-          .catch(() => undefined),
-      );
     return () => {
       setPreviewUrl((prev) => {
         revokeModelPreviewUrl(prev);
@@ -298,73 +235,6 @@ export default function ModelDetailPage() {
     }
   }
 
-  async function apiUpload() {
-    if (!apiMarketplace || sku.trim().length < 1) {
-      return notifications.show({ color: 'red', message: 'Укажите маркетплейс и SKU' });
-    }
-    setBusy(true);
-    try {
-      const { data } = await api.post<{
-        ok: boolean;
-        publish_status?: string;
-        external_ref?: string;
-        attempts?: Array<{ attempt: number; status: string; error?: string | null }>;
-      }>(`/models/${uuid}/marketplace-upload`, {
-        marketplace: apiMarketplace,
-        sku: sku.trim(),
-      });
-      notifications.show({
-        color: 'teal',
-        message: `API upload: ${data.publish_status || 'ok'}${data.external_ref ? ` · ${data.external_ref}` : ''}`,
-      });
-      closeApiUpload();
-      setSku('');
-      await load();
-    } catch (e) {
-      notifications.show({ color: 'red', message: apiMessage(e) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function markPublished() {
-    if (!marketplace) return;
-    setBusy(true);
-    try {
-      const { data } = await api.post<{ publish_status: string }>(`/models/${uuid}/publish/mark`, {
-        marketplace,
-      });
-      notifications.show({ color: 'teal', message: `Статус: ${data.publish_status}` });
-      closePublish();
-      await load();
-    } catch (e) {
-      notifications.show({ color: 'red', message: apiMessage(e) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function addLink() {
-    setBusy(true);
-    try {
-      const { data } = await api.post<{ status: string; error_message?: string }>(
-        `/models/${uuid}/publication/links`,
-        { url: productUrl },
-      );
-      notifications.show({
-        color: data.status === 'verified' ? 'teal' : 'yellow',
-        message: data.status === 'verified' ? 'Верификация успешна + бонус' : `Статус: ${data.status}`,
-      });
-      closeLink();
-      setProductUrl('');
-      await load();
-    } catch (e) {
-      notifications.show({ color: 'red', message: apiMessage(e) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function createShare() {
     setBusy(true);
     try {
@@ -404,13 +274,8 @@ export default function ModelDetailPage() {
   return (
     <SellerShell>
       <PageHeader
-        title="Модель"
-        description={model.uuid}
-        action={
-          <Badge variant="light" color="brand" size="lg">
-            {PUBLISH_LABEL[model.publish_status || ''] || model.publish_status || '—'}
-          </Badge>
-        }
+        title={model.display_name?.trim() || 'Модель'}
+        description={model.created_at ? new Date(model.created_at).toLocaleString('ru-RU') : undefined}
       />
 
       <div
@@ -422,7 +287,7 @@ export default function ModelDetailPage() {
       >
         <Surface style={{ minHeight: 400 }}>
           <Title order={4} mb="md">
-            Предпросмотр GLB
+            Предпросмотр
           </Title>
           {previewLoading ? (
             <Center py={100}>
@@ -438,14 +303,11 @@ export default function ModelDetailPage() {
               GLB недоступен — перелогиньтесь или обновите страницу
             </Text>
           )}
-          <Text size="xs" c="#6d6c77" mt="sm">
-            Заказ #{model.order_id}
-          </Text>
         </Surface>
 
         <Surface>
           <Title order={4} mb="md">
-            Скачать и опубликовать
+            Скачать
           </Title>
           <Stack gap="sm">
             <Button leftSection={<IconDownload size={16} />} loading={busy} onClick={() => void download('glb')}>
@@ -496,19 +358,6 @@ export default function ModelDetailPage() {
             >
               Удалить (в корзину)
             </Button>
-            <Button variant="light" leftSection={<IconLink size={16} />} onClick={openLink}>
-              Добавить ссылку на карточку WB/Ozon
-            </Button>
-            <Button
-              variant="light"
-              leftSection={<IconShare2 size={16} />}
-              onClick={openApiUpload}
-            >
-              Загрузить через API WB/Ozon
-            </Button>
-            <Button variant="light" leftSection={<IconShare2 size={16} />} onClick={openPublish}>
-              Я опубликовал на маркетплейсе
-            </Button>
             <Button variant="light" leftSection={<IconShare2 size={16} />} loading={busy} onClick={() => void createShare()}>
               Поделиться (публичная ссылка)
             </Button>
@@ -518,36 +367,6 @@ export default function ModelDetailPage() {
             <Button variant="subtle" leftSection={<IconStar size={16} />} onClick={openRate}>
               Оценить качество
             </Button>
-          </Stack>
-
-          {(model.publication_links || []).length > 0 && (
-            <Stack gap={6} mt="xl">
-              <Text size="sm" fw={600}>
-                Ссылки верификации
-              </Text>
-              {model.publication_links!.map((l) => (
-                <Group key={l.id} justify="space-between" wrap="nowrap">
-                  <Text size="xs" lineClamp={1} style={{ flex: 1 }}>
-                    {l.marketplace}: {l.url}
-                  </Text>
-                  <Badge size="sm" color={l.status === 'verified' ? 'teal' : l.status === 'failed' ? 'red' : 'gray'}>
-                    {l.status}
-                  </Badge>
-                </Group>
-              ))}
-            </Stack>
-          )}
-
-          <Stack gap={6} mt="xl">
-            <Text size="sm" fw={600}>
-              Инструкция
-            </Text>
-            <Text size="sm" c="#6d6c77">
-              Ozon: Контент → 3D-модель → загрузить GLB.
-            </Text>
-            <Text size="sm" c="#6d6c77">
-              Wildberries: Карточка товара → 3D → USDZ (или GLB, если USDZ ещё нет).
-            </Text>
           </Stack>
         </Surface>
       </div>
@@ -590,98 +409,6 @@ export default function ModelDetailPage() {
           )}
           <Button loading={busy} onClick={() => void regenerate()}>
             Создать заказ на перегенерацию
-          </Button>
-        </Stack>
-      </Modal>
-
-      <Modal opened={linkOpen} onClose={closeLink} title="Ссылка на карточку товара" centered radius="lg">
-        <Stack>
-          <TextInput
-            label="URL Wildberries или Ozon"
-            placeholder="https://www.wildberries.ru/catalog/..."
-            value={productUrl}
-            onChange={(e) => setProductUrl(e.currentTarget.value)}
-          />
-          <Button loading={busy} onClick={() => void addLink()} disabled={productUrl.length < 12}>
-            Проверить и сохранить
-          </Button>
-        </Stack>
-      </Modal>
-
-      <Modal opened={apiUploadOpen} onClose={closeApiUpload} title="Загрузка через API (§7.6)" centered radius="lg">
-        <Stack>
-          <Group gap="xs">
-            <Badge color={mpStatus?.upload_enabled ? 'teal' : 'gray'}>
-              API: {mpStatus?.upload_enabled ? 'включён' : 'выключен'}
-            </Badge>
-            <Badge color={mpStatus?.credentials.wb ? 'teal' : 'orange'}>WB key</Badge>
-            <Badge color={mpStatus?.credentials.ozon ? 'teal' : 'orange'}>Ozon key</Badge>
-          </Group>
-          {!mpStatus?.credentials.wb && !mpStatus?.credentials.ozon ? (
-            <Text size="sm" c="#6d6c77">
-              Настройте ключи в{' '}
-              <Link href="/team/marketplace" style={{ color: 'var(--mantine-color-brand-6)' }}>
-                Команда → Marketplace API
-              </Link>{' '}
-              или попросите admin включить глобальные credentials.
-            </Text>
-          ) : (
-            <Text size="sm" c="#6d6c77">
-              GLB загружается напрямую в маркетплейс. При ошибке — скачайте GLB и опубликуйте вручную.
-            </Text>
-          )}
-          <Select
-            label="Маркетплейс"
-            data={[
-              { value: 'wb', label: 'Wildberries' },
-              { value: 'ozon', label: 'Ozon' },
-            ]}
-            value={apiMarketplace}
-            onChange={setApiMarketplace}
-          />
-          <TextInput
-            label="SKU / артикул карточки"
-            placeholder="12345678"
-            value={sku}
-            onChange={(e) => setSku(e.currentTarget.value)}
-          />
-          <Button loading={busy} onClick={() => void apiUpload()} disabled={sku.trim().length < 1}>
-            Отправить 3D-модель
-          </Button>
-          {(mpStatus?.recent_logs || []).length > 0 && (
-            <Stack gap={4}>
-              <Text size="sm" fw={600}>
-                Последние попытки API
-              </Text>
-              {mpStatus!.recent_logs!.slice(0, 5).map((l) => (
-                <Group key={l.id} justify="space-between" wrap="nowrap">
-                  <Text size="xs" lineClamp={1} style={{ flex: 1 }}>
-                    {l.marketplace} · {l.sku} · попытка {l.attempt}
-                  </Text>
-                  <Badge size="sm" color={l.status === 'success' ? 'teal' : 'red'}>
-                    {l.status}
-                  </Badge>
-                </Group>
-              ))}
-            </Stack>
-          )}
-        </Stack>
-      </Modal>
-
-      <Modal opened={publishOpen} onClose={closePublish} title="Отметить публикацию" centered radius="lg">
-        <Stack>
-          <Select
-            label="Маркетплейс"
-            data={[
-              { value: 'ozon', label: 'Ozon' },
-              { value: 'wildberries', label: 'Wildberries' },
-              { value: 'both', label: 'Оба' },
-            ]}
-            value={marketplace}
-            onChange={setMarketplace}
-          />
-          <Button loading={busy} onClick={() => void markPublished()}>
-            Подтвердить
           </Button>
         </Stack>
       </Modal>

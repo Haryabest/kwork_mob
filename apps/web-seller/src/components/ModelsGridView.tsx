@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, Text } from '@mantine/core';
+import { Text } from '@mantine/core';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { FixedSizeGrid as Grid } from 'react-window';
@@ -9,31 +9,19 @@ type ModelCard = {
   uuid: string;
   order_id: number;
   display_name?: string | null;
-  publish_status?: string;
-  order_status?: string | null;
   created_at?: string;
 };
 
 type Props = {
   items: ModelCard[];
-  publishBadgeColor: (status?: string | null, orderStatus?: string | null) => string;
-  publishLabel: (status?: string | null, orderStatus?: string | null) => string;
   virtualized?: boolean;
 };
 
 const CARD_W = 220;
-const CARD_H = 268;
+const CARD_H = 248;
 const GAP = 16;
 
-function ModelCardTile({
-  model,
-  publishBadgeColor,
-  publishLabel,
-}: {
-  model: ModelCard;
-  publishBadgeColor: Props['publishBadgeColor'];
-  publishLabel: Props['publishLabel'];
-}) {
+function ModelCardTile({ model }: { model: ModelCard }) {
   const [thumb, setThumb] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -92,20 +80,11 @@ function ModelCardTile({
         #{model.order_id}
         {model.created_at ? ` · ${new Date(model.created_at).toLocaleDateString('ru-RU')}` : ''}
       </Text>
-      <Badge
-        variant="light"
-        color={publishBadgeColor(model.publish_status, model.order_status)}
-        size="sm"
-        mt={4}
-        w="fit-content"
-      >
-        {publishLabel(model.publish_status, model.order_status)}
-      </Badge>
     </Link>
   );
 }
 
-export function ModelsGridView({ items, publishBadgeColor, publishLabel, virtualized }: Props) {
+export function ModelsGridView({ items, virtualized }: Props) {
   const [width, setWidth] = useState(960);
   useEffect(() => {
     const el = document.getElementById('models-grid-host');
@@ -138,15 +117,11 @@ export function ModelsGridView({ items, publishBadgeColor, publishLabel, virtual
         const model = items[idx];
         return (
           <div style={style}>
-            <ModelCardTile
-              model={model}
-              publishBadgeColor={publishBadgeColor}
-              publishLabel={publishLabel}
-            />
+            <ModelCardTile model={model} />
           </div>
         );
       },
-    [columnCount, items, publishBadgeColor, publishLabel],
+    [columnCount, items],
   );
 
   if (!virtualized) {
@@ -160,12 +135,7 @@ export function ModelsGridView({ items, publishBadgeColor, publishLabel, virtual
         }}
       >
         {items.map((m) => (
-          <ModelCardTile
-            key={m.uuid}
-            model={m}
-            publishBadgeColor={publishBadgeColor}
-            publishLabel={publishLabel}
-          />
+          <ModelCardTile key={m.uuid} model={m} />
         ))}
       </div>
     );

@@ -2,6 +2,7 @@
 
 import {
   AppShell,
+  ActionIcon,
   Badge,
   Box,
   Burger,
@@ -11,18 +12,16 @@ import {
   Stack,
   Text,
   ThemeIcon,
-  ActionIcon,
   Avatar,
-  Indicator,
   Menu,
   UnstyledButton,
   useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
 import {
   IconBox,
   IconCash,
-  IconBell,
   IconHome2,
   IconHeadset,
   IconLogout,
@@ -36,7 +35,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AuthGuard } from './AuthGuard';
 import { api } from '../services/api';
 import { GRADIENT_PRIMARY } from '../theme/brand';
@@ -69,11 +68,11 @@ function SellerShellInner({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [opened, { toggle, close }] = useDisclosure();
   const [balance, setBalance] = useState<number | null>(null);
-  const [unread, setUnread] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [userLabel, setUserLabel] = useState('3D');
   const isMobile = useMediaQuery('(max-width: 767px)');
-  const { live: queueLive, pendingCount: queuePending, clearPending } = useQueueWs();
+  const { live: queueLive, pendingCount: queuePending, lastEvent, clearPending } = useQueueWs();
+  const lastNotifiedOrderRef = useRef<number | null>(null);
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const cycleTheme = () => {
     const next = colorScheme === 'auto' ? 'light' : colorScheme === 'light' ? 'dark' : 'auto';
@@ -96,11 +95,20 @@ function SellerShellInner({ children }: { children: ReactNode }) {
         setUserLabel(label);
       })
       .catch(() => setBalance(null));
-    api
-      .get<{ unread?: number }>('/user/notifications', { params: { limit: 1, offset: 0 } })
-      .then(({ data }) => setUnread(data.unread ?? 0))
-      .catch(() => setUnread(0));
   }, [pathname]);
+
+  useEffect(() => {
+    if (!lastEvent || lastEvent.status !== 'completed') return;
+    if (lastNotifiedOrderRef.current === lastEvent.order_id) return;
+    lastNotifiedOrderRef.current = lastEvent.order_id;
+    notifications.show({
+      title: 'Модель готова',
+      message: `Заказ #${lastEvent.order_id} завершён`,
+      color: 'teal',
+      autoClose: 12000,
+      withCloseButton: true,
+    });
+  }, [lastEvent]);
 
   return (
     <AppShell
@@ -149,24 +157,6 @@ function SellerShellInner({ children }: { children: ReactNode }) {
               >
                 {balance == null ? '…' : `${balance.toLocaleString('ru-RU')} ₽`}
               </Badge>
-              <Indicator
-                inline
-                disabled={unread === 0}
-                label={unread > 99 ? '99+' : unread}
-                size={18}
-                color="red"
-              >
-                <ActionIcon
-                  component={Link}
-                  href="/notifications"
-                  variant="subtle"
-                  aria-label={t.shell.notifications}
-                  size="lg"
-                  visibleFrom="sm"
-                >
-                  <IconBell size={19} />
-                </ActionIcon>
-              </Indicator>
               <Menu shadow="md" width={190}>
                 <Menu.Target>
                   <UnstyledButton style={{ minHeight: 44 }}>
@@ -232,22 +222,6 @@ function SellerShellInner({ children }: { children: ReactNode }) {
                   />
                 );
               })}
-              <NavLink
-                component={Link}
-                href="/notifications"
-                label={t.shell.notifications}
-                leftSection={<IconBell size={18} stroke={1.5} />}
-                rightSection={
-                  unread > 0 ? (
-                    <Badge size="xs" color="red" circle>
-                      {unread > 99 ? '99+' : unread}
-                    </Badge>
-                  ) : null
-                }
-                active={pathname === '/notifications'}
-                onClick={() => close()}
-                hiddenFrom="sm"
-              />
             </Stack>
           </AppShell.Section>
         </AppShell.Navbar>

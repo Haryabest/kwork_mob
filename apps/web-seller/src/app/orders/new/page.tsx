@@ -135,6 +135,12 @@ export default function NewOrderPage() {
         }
       })
       .catch(() => undefined);
+
+    const params = new URLSearchParams(window.location.search);
+    const pc = params.get('photo_count');
+    if (pc && ['1', '3', '5', '6'].includes(pc)) {
+      selectPhotoMode(Number(pc));
+    }
   }, []);
 
   function onCategoryChange(v: string | null) {

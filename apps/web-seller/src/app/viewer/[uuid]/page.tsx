@@ -384,29 +384,29 @@ export default function ViewerPage() {
       </div>
 
       <header className={styles.overlayTop}>
-        <div className={styles.leftCol}>
-        <Button
-          className={styles.actionBtn}
-          variant="default"
-          size="compact-sm"
-          leftSection={<IconArrowLeft size={16} />}
-          onClick={() => router.back()}
-          w="fit-content"
-        >
-          Назад
-        </Button>
+        <div className={styles.backCol}>
+          <Button
+            className={styles.actionBtn}
+            variant="default"
+            size="compact-sm"
+            leftSection={<IconArrowLeft size={16} />}
+            onClick={() => router.back()}
+            w="fit-content"
+          >
+            Назад
+          </Button>
+        </div>
 
-        <div className={styles.titleBlock}>
-          <div className={styles.titleMain}>3DVektor · интерактивный просмотр</div>
+        <div className={styles.titleCenter}>
           <div className={styles.titleSub}>Название модели</div>
           {editingName ? (
-            <Group gap={6} mt={6} wrap="nowrap">
+            <Group gap={6} className={styles.nameEditRow} wrap="nowrap">
               <TextInput
                 value={nameDraft}
                 onChange={(e) => setNameDraft(e.currentTarget.value)}
                 size="xs"
                 maxLength={120}
-                style={{ flex: 1 }}
+                style={{ flex: 1, maxWidth: 280 }}
               />
               <ActionIcon
                 variant="light"
@@ -419,7 +419,7 @@ export default function ViewerPage() {
               </ActionIcon>
             </Group>
           ) : (
-            <Group gap={6} mt={6} className={styles.nameRow}>
+            <Group gap={6} className={styles.nameRow}>
               <Text fw={600} size="sm" style={{ wordBreak: 'break-word' }}>
                 {displayName}
               </Text>
@@ -436,7 +436,6 @@ export default function ViewerPage() {
               </ActionIcon>
             </Group>
           )}
-        </div>
         </div>
 
         <div className={styles.actionsCol}>

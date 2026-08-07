@@ -58,38 +58,8 @@ const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
 
 const PUBLISH_FILTER_OPTIONS = [
   { value: 'published', label: 'Опубликованные' },
-  { value: 'draft', label: 'Черновики / не опубликовано' },
+  { value: 'draft', label: 'Черновики' },
 ];
-
-function publishBadgeColor(status?: string | null, orderStatus?: string | null): string {
-  if (orderStatus === 'blocked_nsfw') return 'red';
-  switch (status) {
-    case 'import_validating':
-      return 'blue';
-    case 'imported':
-      return 'teal';
-    case 'import_failed':
-      return 'red';
-    case 'rejected':
-      return 'red';
-    case 'pending_verify':
-      return 'yellow';
-    case 'published':
-      return 'green';
-    default:
-      if (status?.includes('published') || status?.includes('verified')) return 'teal';
-      return 'brand';
-  }
-}
-
-function publishLabel(status?: string | null, orderStatus?: string | null): string {
-  if (orderStatus === 'blocked_nsfw') return 'NSFW блок';
-  if (!status) return '—';
-  if (status.includes('verified')) return 'Верифицировано';
-  if (status.includes('published')) return 'Опубликовано';
-  if (status === 'not_published') return 'Не опубликовано';
-  return status;
-}
 
 const MANAGE_ROLES = new Set(['owner', 'manager']);
 const PAGE_SIZE_OPTIONS = [
@@ -329,18 +299,13 @@ export default function ModelsPage() {
         {!loading && items.length === 0 ? (
           <EmptyState
             title="Моделей пока нет"
-            hint="Создайте заказ с 12 ракурсами или снимите товар в приложении"
+            hint="Загрузите фото товара и создайте первую 3D-модель"
             actionLabel="Создать заказ"
             actionHref="/orders/new"
           />
         ) : viewMode === 'grid' ? (
           <>
-            <ModelsGridView
-              items={items}
-              publishBadgeColor={publishBadgeColor}
-              publishLabel={publishLabel}
-              virtualized={useVirtualGrid}
-            />
+            <ModelsGridView items={items} virtualized={useVirtualGrid} />
             {totalPages > 1 && (
               <Group justify="center" mt="md">
                 <Pagination total={totalPages} value={page} onChange={setPage} />
